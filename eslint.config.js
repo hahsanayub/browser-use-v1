@@ -1,0 +1,123 @@
+import tsPlugin from '@typescript-eslint/eslint-plugin';
+import tsParser from '@typescript-eslint/parser';
+import prettierPlugin from 'eslint-plugin-prettier';
+import importPlugin from 'eslint-plugin-import';
+import js from '@eslint/js';
+import prettierConfig from 'eslint-config-prettier';
+
+export default [
+  js.configs.recommended,
+  {
+    files: ['**/*.ts', '**/*.tsx'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: 2019,
+        sourceType: 'module',
+      },
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+        Buffer: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        module: 'readonly',
+        require: 'readonly',
+        global: 'readonly',
+        Atomics: 'readonly',
+        SharedArrayBuffer: 'readonly',
+        // Vitest globals
+        describe: 'readonly',
+        it: 'readonly',
+        test: 'readonly',
+        expect: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+        vi: 'readonly',
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+      prettier: prettierPlugin,
+      import: importPlugin,
+    },
+    rules: {
+      ...tsPlugin.configs.recommended.rules,
+      'no-case-declarations': 'off',
+      'no-useless-return': 'off',
+      'no-self-compare': 'off',
+      'no-multi-assign': 'off',
+      'guard-for-in': 'off',
+      'no-cond-assign': 'off',
+      'no-else-return': 'off',
+      'default-case': 'off',
+      'no-restricted-globals': 'off',
+      '@typescript-eslint/ban-types': 'off',
+      'no-use-before-define': 'off',
+      'no-console': 'off',
+      'no-nested-ternary': 'off',
+      'func-names': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unnecessary-type-constraint': 'off',
+      'no-return-assign': 'off',
+      'consistent-return': 'off',
+      'no-self-assign': 'off',
+      'no-lone-blocks': 'off',
+      'prefer-const': 'off',
+      'no-plusplus': 'off',
+      'no-shadow': 'off',
+      'prefer-destructuring': 'off',
+      '@typescript-eslint/ban-ts-comment': 'off',
+      'no-param-reassign': 'off',
+      'no-useless-constructor': 0,
+      'class-methods-use-this': 0,
+      'no-underscore-dangle': 0,
+      '@typescript-eslint/no-non-null-assertion': 0,
+      '@typescript-eslint/interface-name-prefix': 0,
+      '@typescript-eslint/explicit-function-return-type': 0,
+      'max-classes-per-file': 0,
+      'no-await-in-loop': 'off',
+      'no-restricted-syntax': 'off',
+      'import/no-extraneous-dependencies': [
+        'error',
+        {
+          devDependencies: true,
+        },
+      ],
+      'import/prefer-default-export': 'off',
+      'prettier/prettier': ['error'],
+      'import/extensions': [
+        'error',
+        'ignorePackages',
+        {
+          js: 'never',
+          ts: 'never',
+        },
+      ],
+    },
+    settings: {
+      'import/resolver': {
+        node: {
+          extensions: ['.js', '.ts'],
+        },
+      },
+    },
+  },
+  prettierConfig,
+  {
+    ignores: [
+      'build/**',
+      'coverage/**',
+      '**/*.html',
+      '**/.git/**',
+      '**/.svn/**',
+      '**/.hg/**',
+      '**/node_modules/**',
+      '**/*/*.snap.ts',
+      '**/*/*.snap.tsx',
+      'dist/**',
+    ],
+  },
+];
