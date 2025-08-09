@@ -42,6 +42,8 @@ export interface PageView {
   };
   /** Timestamp when the view was captured */
   timestamp: number;
+  /** Optional raw DOM state structure for advanced reasoning */
+  domState?: DOMState;
 }
 
 export interface DOMProcessingOptions {
@@ -57,4 +59,17 @@ export interface DOMProcessingOptions {
   maxTextLength?: number;
   /** Whether to include hidden elements */
   includeHidden?: boolean;
+}
+
+/**
+ * Raw DOM state captured from in-page buildDomTree.js.
+ * Fields are best-effort and may vary across sites.
+ */
+export interface DOMState {
+  /** Tree structure representing the page (if available) */
+  elementTree?: unknown;
+  /** Node map keyed by internal id */
+  map: Record<string, any>;
+  /** CSS/XPath selector map keyed by internal id */
+  selectorMap: Record<string, string>;
 }

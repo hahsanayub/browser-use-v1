@@ -9,6 +9,7 @@ import type {
   PageView,
   InteractiveElement,
   DOMProcessingOptions,
+  DOMState,
 } from '../types/dom';
 import { getLogger } from './logging';
 
@@ -29,7 +30,7 @@ export class DOMService {
     }
     // convert to unsigned hex
     return (hash >>> 0).toString(16);
-    }
+  }
 
   constructor() {}
 
@@ -54,23 +55,24 @@ export class DOMService {
       this.logger.debug('Processing page view', { url });
 
       // Use injected buildDomTree.js to get structured DOM state and interactive elements
-      const [title, viewport, isLoading, domHtml, interactiveElements] =
+      const [title, viewport, isLoading, domResult, interactiveElements] =
         await Promise.all([
           page.title(),
           page.viewportSize(),
           this.isPageLoading(page),
-          this.buildAndSerializeDom(page, options),
-          this.extractInteractiveElementsFromBuild(page, options),
+          this.buildDomState(page, options),
+          this.extractInteractiveElementsFromBuild(page),
         ]);
 
       const pageView: PageView = {
-        html: domHtml,
+        html: JSON.stringify(domResult),
         interactiveElements,
         url,
         title,
         isLoading,
         viewport: viewport || { width: 1280, height: 720 },
         timestamp: Date.now(),
+        domState: domResult,
       };
 
       // Cache the result
@@ -91,12 +93,17 @@ export class DOMService {
   /**
    * Compute a compact signature for current DOM state to detect changes
    */
-  async getDomSignature(page: Page, options: DOMProcessingOptions = {}): Promise<string> {
+  async getDomSignature(
+    page: Page,
+    options: DOMProcessingOptions = {}
+  ): Promise<string> {
     try {
-      const dom = await this.buildAndSerializeDom(page, options);
-      return DOMService.computeStringHash(dom);
+      const dom = await this.buildDomState(page, options);
+      return DOMService.computeStringHash(JSON.stringify(dom));
     } catch (error) {
-      this.logger.debug('Failed to compute DOM signature', { error: (error as Error).message });
+      this.logger.debug('Failed to compute DOM signature', {
+        error: (error as Error).message,
+      });
       return '';
     }
   }
@@ -104,64 +111,92 @@ export class DOMService {
   /**
    * Process HTML content to make it more suitable for LLM consumption
    */
-  // Build DOM in browser context using provided buildDomTree.js and return compact HTML representation
-  private async buildAndSerializeDom(page: Page, options: DOMProcessingOptions): Promise<string> {
+  // Build DOM in browser context using provided buildDomTree.js and return DOMState
+  private async buildDomState(
+    page: Page,
+    options: DOMProcessingOptions
+  ): Promise<DOMState> {
     if (!this.buildDomTreeScript) {
       const scriptPath = pathResolve(process.cwd(), 'src/dom/buildDomTree.js');
       try {
         this.buildDomTreeScript = await fs.readFile(scriptPath, 'utf-8');
-      } catch (e) {
-        this.logger.warn('buildDomTree.js not found; returning raw HTML as fallback');
-        return await page.content();
+      } catch {
+        this.logger.warn(
+          'buildDomTree.js not found; returning raw HTML as fallback'
+        );
+        return {
+          elementTree: undefined,
+          map: {},
+          selectorMap: { root: 'html' },
+        };
       }
     }
     const result: any = await page
       .evaluate(
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore - dynamic function body for browser context
         (payload: { script: string; args: any }) => {
-          // eslint-disable-next-line no-new-func
           const fn = new Function('args', `return (${payload.script})(args);`);
           return fn(payload.args);
         },
-        { script: this.buildDomTreeScript, args: { doHighlightElements: false, viewportExpansion: 0, debugMode: false, ...options } }
+        {
+          script: this.buildDomTreeScript,
+          args: {
+            doHighlightElements: false,
+            viewportExpansion: 0,
+            debugMode: false,
+            ...options,
+          },
+        }
       )
       .catch(async () => {
-      // Fallback evaluate path to avoid double wrapping
+        // Fallback evaluate path to avoid double wrapping
         const domState: any = await page.evaluate(
-          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          // @ts-ignore
           (payload: { script: string; args: any }) => {
-            // eslint-disable-next-line no-new-func
-            const fn = new Function('args', `return (${payload.script})(args);`);
+            const fn = new Function(
+              'args',
+              `return (${payload.script})(args);`
+            );
             return fn(payload.args);
           },
-          { script: this.buildDomTreeScript!, args: { doHighlightElements: false, viewportExpansion: 0, debugMode: false, ...options } }
+          {
+            script: this.buildDomTreeScript!,
+            args: {
+              doHighlightElements: false,
+              viewportExpansion: 0,
+              debugMode: false,
+              ...options,
+            },
+          }
         );
         return domState;
       });
 
-    // If above wrapper succeeded, it returned { result }, reconstruct minimal html
-    try {
-      // Best-effort: stringify dom state structure
-      return JSON.stringify(result);
-    } catch {
-      return '';
+    // Normalize to DOMState shape
+    const map: Record<string, any> = result?.map || {};
+    const selectorMap: Record<string, string> = {};
+    for (const id of Object.keys(map)) {
+      const node = map[id];
+      if (node?.xpath) selectorMap[id] = `xpath=/${node.xpath}`;
+      else if (node?.tagName) selectorMap[id] = node.tagName;
     }
+    const domState: DOMState = {
+      elementTree: result?.tree ?? result?.root ?? undefined,
+      map,
+      selectorMap,
+    };
+    return domState;
   }
 
   /**
    * Extract interactive elements from the page
    */
   private async extractInteractiveElementsFromBuild(
-    page: Page,
-    _options: DOMProcessingOptions
+    page: Page
   ): Promise<InteractiveElement[]> {
     if (!this.buildDomTreeScript) {
       const scriptPath = pathResolve(process.cwd(), 'src/dom/buildDomTree.js');
       try {
         this.buildDomTreeScript = await fs.readFile(scriptPath, 'utf-8');
-      } catch (e) {
+      } catch {
         // Fallback to a lightweight query when script missing
         const elements = await page.$$eval(
           'a, button, input, textarea, select, [role="button"]',
@@ -170,10 +205,13 @@ export class DOMService {
               id: `interactive_${i}`,
               tagName: el.tagName.toLowerCase(),
               type: el.getAttribute('type') || el.tagName.toLowerCase(),
-              attributes: Array.from(el.attributes).reduce((acc, a) => {
-                acc[a.name] = a.value;
-                return acc;
-              }, {} as Record<string, string>),
+              attributes: Array.from(el.attributes).reduce(
+                (acc, a) => {
+                  acc[a.name] = a.value;
+                  return acc;
+                },
+                {} as Record<string, string>
+              ),
               selector: el.id ? `#${el.id}` : el.tagName.toLowerCase(),
             }))
         );
@@ -182,14 +220,18 @@ export class DOMService {
     }
     try {
       const domState: any = await page.evaluate(
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
         (payload: { script: string; args: any }) => {
-          // eslint-disable-next-line no-new-func
           const fn = new Function('args', `return (${payload.script})(args);`);
           return fn(payload.args);
         },
-        { script: this.buildDomTreeScript!, args: { doHighlightElements: false, viewportExpansion: 0, debugMode: false } }
+        {
+          script: this.buildDomTreeScript!,
+          args: {
+            doHighlightElements: false,
+            viewportExpansion: 0,
+            debugMode: false,
+          },
+        }
       );
 
       // Walk domState.map to gather interactive nodes with highlightIndex or attributes heuristics
@@ -210,9 +252,9 @@ export class DOMService {
         });
       }
       return elements;
-    } catch (error) {
+    } catch (e) {
       this.logger.warn('Failed to build interactive elements from script', {
-        error: (error as Error).message,
+        error: (e as Error).message,
       });
       return [];
     }
@@ -225,7 +267,7 @@ export class DOMService {
     try {
       const loadState = await page.evaluate(() => document.readyState);
       return loadState !== 'complete';
-    } catch (error) {
+    } catch {
       return false;
     }
   }
@@ -415,7 +457,9 @@ export class DOMService {
   private generateSelector(element: Element): string {
     // Try ID first
     if (element.id) {
-      const esc = (globalThis as any).CSS?.escape || ((s: string) => s.replace(/([#.:\[\],>+~ ])/g, '\\$1'));
+      const esc =
+        (globalThis as any).CSS?.escape ||
+        ((s: string) => s.replace(/[^a-zA-Z0-9_-]/g, '\\$&'));
       return `#${esc(element.id)}`;
     }
 

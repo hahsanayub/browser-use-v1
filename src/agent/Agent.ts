@@ -211,7 +211,15 @@ export class Agent {
     pageView: PageView
   ): Promise<AgentThought> {
     // Derive dynamic available actions for this page (name + description)
-    const available = registry.list().map((a) => ({ name: a.name, description: a.description }));
+    const activePage = this.browserContext.getActivePage();
+    const availableList = registry.list().filter((a) => {
+      try {
+        return activePage ? (typeof a.isAvailableForPage === 'function' ? !!a.isAvailableForPage(activePage) : true) : true;
+      } catch {
+        return true;
+      }
+    });
+    const available = availableList.map((a) => ({ name: a.name, description: a.description }));
     const availableActions = available.map((a) => a.name);
 
     const messages: LLMMessage[] = [
@@ -246,17 +254,20 @@ export class Agent {
 
       // Parse JSON response safely
       const thoughtData = JsonParser.parse(response.content);
-      const thought = validateAgentThought(thoughtData);
+      let thought = validateAgentThought(thoughtData);
 
       // Enforce dynamic action availability
       if (!availableActions.includes(thought.nextAction.action)) {
         this.logger.warn('Model proposed unsupported action; coercing to screenshot', {
           proposed: thought.nextAction.action,
         });
-        thought.nextAction = {
+        thought = {
+          ...thought,
+          nextAction: {
           action: 'screenshot',
           reasoning: 'Proposed action was not available; taking screenshot instead',
-        } as any;
+          } as any,
+        };
       }
 
       this.logger.debug('LLM response received', {

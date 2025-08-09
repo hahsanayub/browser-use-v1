@@ -5,12 +5,17 @@ import { getLogger } from './logging';
  * Ensure the given page is responsive. If not, attempt recovery by closing and reopening.
  * Returns a healthy page to continue with (may be a new instance).
  */
-export async function ensureHealthyPage(page: Page): Promise<Page> {
+export async function ensureHealthyPage(page: Page): Promise<{
+  page: Page;
+  recovered: boolean;
+  fromUrl?: string | null;
+  toUrl?: string | null;
+}> {
   const logger = getLogger();
 
   // Quick ping with short timeout
   const isHealthy = await pingPage(page, 1000);
-  if (isHealthy) return page;
+  if (isHealthy) return { page, recovered: false };
 
   logger.warn('Page is unresponsive, attempting recovery');
 
@@ -49,7 +54,7 @@ export async function ensureHealthyPage(page: Page): Promise<Page> {
     try {
       await newPage.goto(url, { waitUntil: 'domcontentloaded', timeout: 5000 });
       logger.info('Recovered page and navigated back to previous URL', { url });
-      return newPage;
+      return { page: newPage, recovered: true, fromUrl: url, toUrl: url };
     } catch (e) {
       logger.warn('Failed to navigate to previous URL during recovery', {
         url,
@@ -62,12 +67,27 @@ export async function ensureHealthyPage(page: Page): Promise<Page> {
   try {
     await newPage.goto('about:blank');
   } catch {}
-  return newPage;
+  return { page: newPage, recovered: true, fromUrl: url, toUrl: 'about:blank' };
 }
 
-export async function withHealthCheck<T>(page: Page, fn: (healthyPage: Page) => Promise<T>): Promise<T> {
-  const healthy = await ensureHealthyPage(page);
-  return await fn(healthy);
+export async function withHealthCheck(page: Page, fn: (healthyPage: Page) => Promise<{
+  success: boolean;
+  message: string;
+  error?: string;
+  metadata?: Record<string, any>;
+}>): Promise<{ success: boolean; message: string; error?: string; metadata?: Record<string, any> }> {
+  const { page: healthy, recovered, fromUrl, toUrl } = await ensureHealthyPage(page);
+  const result = await fn(healthy);
+  if (recovered) {
+    result.metadata = {
+      ...(result.metadata || {}),
+      recovered: true,
+      fromUrl: fromUrl ?? undefined,
+      toUrl: toUrl ?? undefined,
+      recoveredAt: Date.now(),
+    };
+  }
+  return result;
 }
 
 async function pingPage(page: Page, timeoutMs: number): Promise<boolean> {

@@ -47,7 +47,15 @@ class TypeActions {
 // goto
 class GotoActions {
   @action('goto', 'Navigate to a URL', z.object({ url: z.string().url() }), {
-    isAvailableForPage: (page) => page && !page.isClosed(),
+    isAvailableForPage: (page) => {
+      if (!page || page.isClosed()) return false;
+      try {
+        const url = page.url();
+        // 示例：禁止在 example.org 域名上执行 goto（可按需调整）
+        if (url.includes('example.org')) return false;
+      } catch {}
+      return true;
+    },
   })
   static async goto({ params, page }: { params: { url: string }; page: Page }): Promise<ActionResult> {
     const { url } = params;
