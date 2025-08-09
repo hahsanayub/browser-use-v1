@@ -67,6 +67,8 @@ export default [
       'no-lone-blocks': 'off',
       'prefer-const': 'off',
       'no-plusplus': 'off',
+      'no-undef': 'off',
+      'import/no-extraneous-dependencies': 'off',
       'no-shadow': 'off',
       'prefer-destructuring': 'off',
       '@typescript-eslint/ban-ts-comment': 'off',
@@ -80,12 +82,6 @@ export default [
       'max-classes-per-file': 0,
       'no-await-in-loop': 'off',
       'no-restricted-syntax': 'off',
-      'import/no-extraneous-dependencies': [
-        'error',
-        {
-          devDependencies: true,
-        },
-      ],
       'import/prefer-default-export': 'off',
       'prettier/prettier': ['error'],
       'import/extensions': [
