@@ -7,7 +7,17 @@ export interface AgentHistory {
   /** Step number in the execution */
   step: number;
   /** Action that was taken */
-  action: any; // Will be properly typed as Action when imported
+  action: {
+    action: string;
+    selector?: string;
+    text?: string;
+    url?: string;
+    scroll?: { direction: 'up' | 'down' | 'left' | 'right'; amount?: number };
+    wait?: { type: 'time' | 'element' | 'navigation'; value: number | string; timeout?: number };
+    key?: string;
+    reasoning?: string;
+    expectedOutcome?: string;
+  };
   /** Result of the action */
   result: ActionResult;
   /** Page state at the time of action */

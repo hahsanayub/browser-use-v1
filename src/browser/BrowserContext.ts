@@ -189,7 +189,7 @@ export class BrowserContext {
    * Check if context is still valid and connected
    */
   isValid(): boolean {
-    return this.context !== null && !this.context.browser()?.isConnected();
+    return this.context !== null && Boolean(this.context.browser()?.isConnected());
   }
 
   /**

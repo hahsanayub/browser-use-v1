@@ -5,6 +5,7 @@
 // Main exports
 export { Controller } from './controller/index';
 export type { ControllerConfig } from './controller/index';
+export { action, registry, ActionRegistry } from './controller/index';
 
 // Browser components
 export { Browser, BrowserContext } from './browser/index';

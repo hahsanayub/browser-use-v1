@@ -33,7 +33,11 @@ export class Agent {
   constructor(
     browserContext: BrowserContext,
     llmClient: BaseLLMClient,
-    config: AgentConfig = {}
+    config: AgentConfig = {},
+    private actDelegate?: (
+      actionName: string,
+      params: Record<string, unknown>
+    ) => Promise<ActionResult>
   ) {
     this.browserContext = browserContext;
     this.llmClient = llmClient;
@@ -77,8 +81,9 @@ export class Agent {
         this.logger.debug(`Starting step ${this.currentStep}`, { objective });
 
         try {
-          // Get current page view
+          // Get current page view & signature
           const pageView = await this.domService.getPageView(page);
+          const beforeSig = await this.domService.getDomSignature(page);
 
           // Generate response from LLM
           const thought = await this.think(objective, pageView);
@@ -96,11 +101,17 @@ export class Agent {
             break;
           }
 
-          // Execute the action
+          // Execute the action (single or multi-act chain)
           const result = await this.executeAction(page, thought.nextAction);
 
           // Add to history
           this.addToHistory(thought.nextAction, result, pageView);
+
+          // Detect DOM change to decide whether to continue planning or re-observe
+          const afterSig = await this.domService.getDomSignature(page);
+          if (afterSig && beforeSig && afterSig !== beforeSig) {
+            this.logger.debug('DOM changed after action, re-observing');
+          }
 
           // Handle failures
           if (!result.success) {
@@ -255,45 +266,41 @@ export class Agent {
       reasoning: action.reasoning,
     });
 
-    try {
-      switch (action.action) {
-        case 'click':
-          return await this.executeClick(page, action);
-
-        case 'type':
-          return await this.executeType(page, action);
-
-        case 'goto':
-          return await this.executeGoto(page, action);
-
-        case 'scroll':
-          return await this.executeScroll(page, action);
-
-        case 'wait':
-          return await this.executeWait(page, action);
-
-        case 'key':
-          return await this.executeKey(page, action);
-
-        case 'hover':
-          return await this.executeHover(page, action);
-
-        case 'screenshot':
-          return await this.executeScreenshot(page);
-
-        case 'finish':
-          return {
-            success: true,
-            message: 'Task marked as complete',
-          };
-
-        default:
-          return {
-            success: false,
-            message: `Unknown action: ${action.action}`,
-            error: 'UNKNOWN_ACTION',
-          };
+    // Prefer Controller registry if provided
+    if (this.actDelegate) {
+      try {
+        const params: Record<string, unknown> = {};
+        if (action.selector) params.selector = action.selector;
+        if (action.text) params.text = action.text;
+        if (action.url) params.url = action.url;
+        if (action.scroll) {
+          params.direction = action.scroll.direction;
+          if (action.scroll.amount !== undefined) {
+            params.amount = action.scroll.amount;
+          }
+        }
+        if (action.wait) {
+          params.type = action.wait.type;
+          params.value = action.wait.value;
+          if (action.wait.timeout !== undefined) {
+            params.timeout = action.wait.timeout;
+          }
+        }
+        if (action.key) params.key = action.key;
+        return await this.actDelegate(action.action, params);
+      } catch (error) {
+        return {
+          success: false,
+          message: `Action failed: ${(error as Error).message}`,
+          error: (error as Error).message,
+        };
       }
+    }
+
+    // Fallback to local implementations
+    try {
+      const result = await this.dispatchActionViaPage(page, action);
+      return result;
     } catch (error) {
       return {
         success: false,
@@ -306,270 +313,113 @@ export class Agent {
   /**
    * Execute click action
    */
-  private async executeClick(
-    page: Page,
-    action: Action
-  ): Promise<ActionResult> {
-    if (!action.selector) {
-      return {
-        success: false,
-        message: 'Click action requires a selector',
-        error: 'MISSING_SELECTOR',
-      };
-    }
-
-    try {
-      await page.click(action.selector, { timeout: this.config.actionTimeout });
-
-      // Wait for potential navigation or page changes
-      await page.waitForTimeout(1000);
-
-      return {
-        success: true,
-        message: `Successfully clicked element: ${action.selector}`,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: `Failed to click element: ${action.selector}`,
-        error: (error as Error).message,
-      };
-    }
+  private async executeClick(page: Page, action: Action): Promise<ActionResult> {
+    return this.actDelegate
+      ? this.actDelegate('click', { selector: action.selector! })
+      : { success: false, message: 'No dispatcher', error: 'NO_DISPATCH' };
   }
 
   /**
    * Execute type action
    */
   private async executeType(page: Page, action: Action): Promise<ActionResult> {
-    if (!action.selector || !action.text) {
-      return {
-        success: false,
-        message: 'Type action requires both selector and text',
-        error: 'MISSING_PARAMETERS',
-      };
-    }
-
-    try {
-      // Clear existing text first
-      await page.fill(action.selector, '');
-      await page.type(action.selector, action.text, {
-        delay: 50, // Simulate human typing
-        timeout: this.config.actionTimeout,
-      });
-
-      return {
-        success: true,
-        message: `Successfully typed text into element: ${action.selector}`,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: `Failed to type into element: ${action.selector}`,
-        error: (error as Error).message,
-      };
-    }
+    return this.actDelegate
+      ? this.actDelegate('type', { selector: action.selector!, text: action.text! })
+      : { success: false, message: 'No dispatcher', error: 'NO_DISPATCH' };
   }
 
   /**
    * Execute goto action
    */
   private async executeGoto(page: Page, action: Action): Promise<ActionResult> {
-    if (!action.url) {
-      return {
-        success: false,
-        message: 'Goto action requires a URL',
-        error: 'MISSING_URL',
-      };
-    }
-
-    try {
-      await page.goto(action.url, {
-        waitUntil: 'domcontentloaded',
-        timeout: this.config.actionTimeout,
-      });
-
-      return {
-        success: true,
-        message: `Successfully navigated to: ${action.url}`,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: `Failed to navigate to: ${action.url}`,
-        error: (error as Error).message,
-      };
-    }
+    return this.actDelegate
+      ? this.actDelegate('goto', { url: action.url! })
+      : { success: false, message: 'No dispatcher', error: 'NO_DISPATCH' };
   }
 
   /**
    * Execute scroll action
    */
-  private async executeScroll(
-    page: Page,
-    action: Action
-  ): Promise<ActionResult> {
-    try {
-      const scrollConfig = action.scroll || { direction: 'down', amount: 3 };
-      const scrollPixels = scrollConfig.amount * 300; // 300px per unit
-
-      const scrollDirection = {
-        x:
-          scrollConfig.direction === 'left'
-            ? -scrollPixels
-            : scrollConfig.direction === 'right'
-              ? scrollPixels
-              : 0,
-        y:
-          scrollConfig.direction === 'up'
-            ? -scrollPixels
-            : scrollConfig.direction === 'down'
-              ? scrollPixels
-              : 0,
-      };
-
-      await page.mouse.wheel(scrollDirection.x, scrollDirection.y);
-      await page.waitForTimeout(500); // Wait for scroll to complete
-
-      return {
-        success: true,
-        message: `Successfully scrolled ${scrollConfig.direction} by ${scrollConfig.amount} units`,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: 'Failed to scroll',
-        error: (error as Error).message,
-      };
-    }
+  private async executeScroll(page: Page, action: Action): Promise<ActionResult> {
+    const direction = action.scroll?.direction ?? 'down';
+    const amount = action.scroll?.amount ?? 3;
+    return this.actDelegate
+      ? this.actDelegate('scroll', { direction, amount })
+      : { success: false, message: 'No dispatcher', error: 'NO_DISPATCH' };
   }
 
   /**
    * Execute wait action
    */
   private async executeWait(page: Page, action: Action): Promise<ActionResult> {
-    try {
-      const waitConfig = action.wait || {
-        type: 'time',
-        value: 2000,
-        timeout: 5000,
-      };
-
-      switch (waitConfig.type) {
-        case 'time':
-          await page.waitForTimeout(waitConfig.value as number);
-          break;
-
-        case 'element':
-          await page.waitForSelector(waitConfig.value as string, {
-            timeout: waitConfig.timeout,
-          });
-          break;
-
-        case 'navigation':
-          await page.waitForURL(waitConfig.value as string, {
-            timeout: waitConfig.timeout,
-          });
-          break;
-      }
-
-      return {
-        success: true,
-        message: `Successfully waited for ${waitConfig.type}: ${waitConfig.value}`,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: 'Wait action failed',
-        error: (error as Error).message,
-      };
-    }
+    const type = action.wait?.type ?? 'time';
+    const value = action.wait?.value ?? 1000;
+    const timeout = action.wait?.timeout;
+    const params: Record<string, unknown> = { type, value };
+    if (timeout !== undefined) params.timeout = timeout;
+    return this.actDelegate
+      ? this.actDelegate('wait', params)
+      : { success: false, message: 'No dispatcher', error: 'NO_DISPATCH' };
   }
 
   /**
    * Execute key action
    */
   private async executeKey(page: Page, action: Action): Promise<ActionResult> {
-    if (!action.key) {
-      return {
-        success: false,
-        message: 'Key action requires a key parameter',
-        error: 'MISSING_KEY',
-      };
-    }
-
-    try {
-      await page.keyboard.press(action.key);
-      await page.waitForTimeout(500); // Wait for any resulting changes
-
-      return {
-        success: true,
-        message: `Successfully pressed key: ${action.key}`,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: `Failed to press key: ${action.key}`,
-        error: (error as Error).message,
-      };
-    }
+    return this.actDelegate
+      ? this.actDelegate('key', { key: action.key! })
+      : { success: false, message: 'No dispatcher', error: 'NO_DISPATCH' };
   }
 
   /**
    * Execute hover action
    */
-  private async executeHover(
-    page: Page,
-    action: Action
-  ): Promise<ActionResult> {
-    if (!action.selector) {
-      return {
-        success: false,
-        message: 'Hover action requires a selector',
-        error: 'MISSING_SELECTOR',
-      };
-    }
-
-    try {
-      await page.hover(action.selector, { timeout: this.config.actionTimeout });
-      await page.waitForTimeout(500); // Wait for hover effects
-
-      return {
-        success: true,
-        message: `Successfully hovered over element: ${action.selector}`,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: `Failed to hover over element: ${action.selector}`,
-        error: (error as Error).message,
-      };
-    }
+  private async executeHover(page: Page, action: Action): Promise<ActionResult> {
+    return this.actDelegate
+      ? this.actDelegate('hover', { selector: action.selector! })
+      : { success: false, message: 'No dispatcher', error: 'NO_DISPATCH' };
   }
 
   /**
    * Execute screenshot action
    */
   private async executeScreenshot(page: Page): Promise<ActionResult> {
-    try {
-      const screenshot = await page.screenshot({
-        fullPage: true,
-        type: 'png',
-      });
+    return this.actDelegate
+      ? this.actDelegate('screenshot', {})
+      : { success: false, message: 'No dispatcher', error: 'NO_DISPATCH' };
+  }
 
-      return {
-        success: true,
-        message: 'Screenshot taken successfully',
-        metadata: {
-          screenshotSize: screenshot.length,
-          timestamp: Date.now(),
-        },
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: 'Failed to take screenshot',
-        error: (error as Error).message,
-      };
+  // temporary adapter: in this iteration, keep local implementations to avoid breaking behavior,
+  // but expose a single dispatch point to facilitate Controller-based act() refactor next steps.
+  private async dispatchActionViaPage(
+    page: Page,
+    action: Action
+  ): Promise<ActionResult> {
+    switch (action.action) {
+      case 'click':
+        return this.executeClick(page, action);
+      case 'type':
+        return this.executeType(page, action);
+      case 'goto':
+        return this.executeGoto(page, action);
+      case 'scroll':
+        return this.executeScroll(page, action);
+      case 'wait':
+        return this.executeWait(page, action);
+      case 'key':
+        return this.executeKey(page, action);
+      case 'hover':
+        return this.executeHover(page, action);
+      case 'screenshot':
+        return this.executeScreenshot(page);
+      case 'finish':
+        return { success: true, message: 'Task marked as complete' };
+      default:
+        return {
+          success: false,
+          message: `Unknown action: ${action.action}`,
+          error: 'UNKNOWN_ACTION',
+        };
     }
   }
 

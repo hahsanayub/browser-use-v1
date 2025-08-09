@@ -75,10 +75,7 @@ export function generatePageContextPrompt(
 ): string {
   const interactiveElementsList = pageView.interactiveElements
     .slice(0, 20) // Limit to prevent token overflow
-    .map(
-      (el) =>
-        `- ${el.selector}: ${el.tagName} (${el.type}) - "${el.text?.substring(0, 100) || 'No text'}"`
-    )
+    .map((el) => `- ${el.selector}: ${el.tagName} (${el.type})`)
     .join('\n');
 
   const historyText =

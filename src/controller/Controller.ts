@@ -13,8 +13,12 @@ import {
   addCleanupFunction,
 } from '../services/signal-handler';
 import type { AppConfig } from '../config/schema';
-import type { AgentHistory, AgentConfig } from '../types/agent';
+import type { AgentHistory, AgentConfig, ActionResult } from '../types/agent';
 import type { BrowserContextConfig } from '../types/browser';
+import { registry } from './singleton';
+import { z } from 'zod';
+// ensure builtin actions are registered
+import './actions';
 
 export interface ControllerConfig {
   /** Configuration override (optional) */
@@ -161,7 +165,12 @@ export class Controller {
         ...agentConfig,
       };
 
-      this.agent = new Agent(this.browserContext, llmClient, finalAgentConfig);
+      this.agent = new Agent(
+        this.browserContext,
+        llmClient,
+        finalAgentConfig,
+        async (name, params) => this.act(name, params)
+      );
       this.logger.info('Agent created successfully');
     }
 
@@ -210,6 +219,51 @@ export class Controller {
       this.logger.error('Task execution failed', error as Error, { objective });
       throw error;
     }
+  }
+
+  /**
+   * Execute a registered action via the registry
+   */
+  async act(
+    actionName: string,
+    params: Record<string, unknown> = {}
+  ): Promise<ActionResult> {
+    if (!this.browserContext) {
+      throw new Error('Browser context not initialized');
+    }
+
+    const action = registry.get(actionName);
+    if (!action) {
+      return {
+        success: false,
+        message: `Unknown action: ${actionName}`,
+        error: 'UNKNOWN_ACTION',
+      };
+    }
+
+    // validate params
+    let validatedParams: Record<string, unknown> = {};
+    try {
+      validatedParams = (action.paramSchema as z.ZodTypeAny).parse(params);
+    } catch (error) {
+      return {
+        success: false,
+        message: `Invalid params for action: ${actionName}`,
+        error: (error as Error).message,
+      };
+    }
+
+    // ensure page
+    let page = this.browserContext.getActivePage();
+    if (!page) {
+      page = await this.browserContext.newPage();
+    }
+
+    return await action.execute({
+      params: validatedParams,
+      page,
+      context: {},
+    });
   }
 
   /**

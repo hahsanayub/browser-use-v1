@@ -3,7 +3,8 @@
  */
 
 import { Page } from 'playwright';
-import { JSDOM } from 'jsdom';
+import { promises as fs } from 'fs';
+import { resolve as pathResolve } from 'path';
 import type {
   PageView,
   InteractiveElement,
@@ -18,6 +19,17 @@ export class DOMService {
   private logger = getLogger();
   private cache: Map<string, { view: PageView; timestamp: number }> = new Map();
   private cacheTimeout: number = 5000; // 5 seconds cache timeout
+  private buildDomTreeScript: string | null = null;
+  private static computeStringHash(input: string): string {
+    // Simple 32-bit hash
+    let hash = 0;
+    for (let i = 0; i < input.length; i++) {
+      hash = (hash << 5) - hash + input.charCodeAt(i);
+      hash |= 0;
+    }
+    // convert to unsigned hex
+    return (hash >>> 0).toString(16);
+    }
 
   constructor() {}
 
@@ -41,25 +53,18 @@ export class DOMService {
     try {
       this.logger.debug('Processing page view', { url });
 
-      // Get page content and metadata
-      const [html, title, viewport, isLoading] = await Promise.all([
-        page.content(),
-        page.title(),
-        page.viewportSize(),
-        this.isPageLoading(page),
-      ]);
-
-      // Process HTML content
-      const processedHTML = await this.processHTML(page, html, options);
-
-      // Extract interactive elements
-      const interactiveElements = await this.extractInteractiveElements(
-        page,
-        options
-      );
+      // Use injected buildDomTree.js to get structured DOM state and interactive elements
+      const [title, viewport, isLoading, domHtml, interactiveElements] =
+        await Promise.all([
+          page.title(),
+          page.viewportSize(),
+          this.isPageLoading(page),
+          this.buildAndSerializeDom(page, options),
+          this.extractInteractiveElementsFromBuild(page, options),
+        ]);
 
       const pageView: PageView = {
-        html: processedHTML,
+        html: domHtml,
         interactiveElements,
         url,
         title,
@@ -84,120 +89,105 @@ export class DOMService {
   }
 
   /**
+   * Compute a compact signature for current DOM state to detect changes
+   */
+  async getDomSignature(page: Page, options: DOMProcessingOptions = {}): Promise<string> {
+    try {
+      const dom = await this.buildAndSerializeDom(page, options);
+      return DOMService.computeStringHash(dom);
+    } catch (error) {
+      this.logger.debug('Failed to compute DOM signature', { error: (error as Error).message });
+      return '';
+    }
+  }
+
+  /**
    * Process HTML content to make it more suitable for LLM consumption
    */
-  private async processHTML(
-    page: Page,
-    html: string,
-    options: DOMProcessingOptions
-  ): Promise<string> {
-    const defaultOptions: DOMProcessingOptions = {
-      removeScripts: true,
-      removeStyles: true,
-      removeComments: true,
-      markInteractive: true,
-      maxTextLength: 200,
-      includeHidden: false,
-      ...options,
-    };
-
-    try {
-      // Create JSDOM instance
-      const dom = new JSDOM(html);
-      const document = dom.window.document;
-
-      // Remove unwanted elements
-      if (defaultOptions.removeScripts) {
-        this.removeElements(document, 'script');
-      }
-
-      if (defaultOptions.removeStyles) {
-        this.removeElements(document, 'style');
-        this.removeElements(document, 'link[rel="stylesheet"]');
-      }
-
-      if (defaultOptions.removeComments) {
-        this.removeComments(document);
-      }
-
-      // Remove hidden elements if not including them
-      if (!defaultOptions.includeHidden) {
-        await this.removeHiddenElements(page, document);
-      }
-
-      // Mark interactive elements
-      if (defaultOptions.markInteractive) {
-        await this.markInteractiveElements(page, document);
-      }
-
-      // Simplify and clean up content
-      this.simplifyContent(document, defaultOptions);
-
-      return document.documentElement.outerHTML;
-    } catch (error) {
-      this.logger.warn('Failed to process HTML, returning original', {
-        error: (error as Error).message,
+  // Build DOM in browser context using provided buildDomTree.js and return compact HTML representation
+  private async buildAndSerializeDom(page: Page, options: DOMProcessingOptions): Promise<string> {
+    if (!this.buildDomTreeScript) {
+      const scriptPath = pathResolve(process.cwd(), 'src/dom/buildDomTree.js');
+      this.buildDomTreeScript = await fs.readFile(scriptPath, 'utf-8');
+    }
+    const result: any = await page
+      .evaluate(
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore - dynamic function body for browser context
+        (payload: { script: string; args: any }) => {
+          // eslint-disable-next-line no-new-func
+          const fn = new Function('args', `return (${payload.script})(args);`);
+          return fn(payload.args);
+        },
+        { script: this.buildDomTreeScript, args: { doHighlightElements: false, viewportExpansion: 0, debugMode: false, ...options } }
+      )
+      .catch(async () => {
+      // Fallback evaluate path to avoid double wrapping
+        const domState: any = await page.evaluate(
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-ignore
+          (payload: { script: string; args: any }) => {
+            // eslint-disable-next-line no-new-func
+            const fn = new Function('args', `return (${payload.script})(args);`);
+            return fn(payload.args);
+          },
+          { script: this.buildDomTreeScript!, args: { doHighlightElements: false, viewportExpansion: 0, debugMode: false, ...options } }
+        );
+        return domState;
       });
-      return html;
+
+    // If above wrapper succeeded, it returned { result }, reconstruct minimal html
+    try {
+      // Best-effort: stringify dom state structure
+      return JSON.stringify(result);
+    } catch {
+      return '';
     }
   }
 
   /**
    * Extract interactive elements from the page
    */
-  private async extractInteractiveElements(
+  private async extractInteractiveElementsFromBuild(
     page: Page,
-    options: DOMProcessingOptions
+    _options: DOMProcessingOptions
   ): Promise<InteractiveElement[]> {
+    if (!this.buildDomTreeScript) {
+      const scriptPath = pathResolve(process.cwd(), 'src/dom/buildDomTree.js');
+      this.buildDomTreeScript = await fs.readFile(scriptPath, 'utf-8');
+    }
     try {
-      const elements = await page.$$eval(
-        'button, a, input, textarea, select, [role="button"], [onclick], [tabindex]',
-        (elements) => {
-          return elements
-            .map((element, index) => {
-              const rect = element.getBoundingClientRect();
-              const isVisible =
-                rect.width > 0 &&
-                rect.height > 0 &&
-                window.getComputedStyle(element).visibility !== 'hidden' &&
-                window.getComputedStyle(element).display !== 'none';
-
-              if (!isVisible) return null;
-
-              // Generate unique selector
-              const selector = this.generateSelector(element);
-
-              return {
-                id: `interactive_${index}`,
-                tagName: element.tagName.toLowerCase(),
-                type:
-                  element.getAttribute('type') || element.tagName.toLowerCase(),
-                text: element.textContent?.trim().substring(0, 100) || '',
-                attributes: Array.from(element.attributes).reduce(
-                  (acc, attr) => {
-                    acc[attr.name] = attr.value;
-                    return acc;
-                  },
-                  {} as Record<string, string>
-                ),
-                selector,
-                boundingBox: {
-                  x: Math.round(rect.x),
-                  y: Math.round(rect.y),
-                  width: Math.round(rect.width),
-                  height: Math.round(rect.height),
-                },
-              };
-            })
-            .filter(Boolean);
-        }
+      const domState: any = await page.evaluate(
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        (payload: { script: string; args: any }) => {
+          // eslint-disable-next-line no-new-func
+          const fn = new Function('args', `return (${payload.script})(args);`);
+          return fn(payload.args);
+        },
+        { script: this.buildDomTreeScript!, args: { doHighlightElements: false, viewportExpansion: 0, debugMode: false } }
       );
 
-      return elements.filter(
-        (el): el is NonNullable<typeof el> => el !== null
-      ) as InteractiveElement[];
+      // Walk domState.map to gather interactive nodes with highlightIndex or attributes heuristics
+      const elements: InteractiveElement[] = [];
+      const map: Record<string, any> = domState?.map || {};
+      for (const id of Object.keys(map)) {
+        const node = map[id];
+        if (!node || typeof node !== 'object') continue;
+        if (!node.isInteractive) continue;
+        const selector = node.xpath ? `xpath=/${node.xpath}` : node.tagName;
+        elements.push({
+          id,
+          tagName: node.tagName || 'node',
+          type: node.tagName || 'node',
+          text: undefined,
+          attributes: (node.attributes as Record<string, string>) || {},
+          selector,
+        });
+      }
+      return elements;
     } catch (error) {
-      this.logger.warn('Failed to extract interactive elements', {
+      this.logger.warn('Failed to build interactive elements from script', {
         error: (error as Error).message,
       });
       return [];
@@ -401,7 +391,8 @@ export class DOMService {
   private generateSelector(element: Element): string {
     // Try ID first
     if (element.id) {
-      return `#${CSS.escape(element.id)}`;
+      const esc = (globalThis as any).CSS?.escape || ((s: string) => s.replace(/([#.:\[\],>+~ ])/g, '\\$1'));
+      return `#${esc(element.id)}`;
     }
 
     // Try combination of tag and classes
