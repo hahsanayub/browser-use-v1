@@ -9,7 +9,10 @@ class ClickActions {
   @action(
     'click',
     'Click an element by CSS selector',
-    z.object({ selector: z.string().min(1) })
+    z.object({ selector: z.string().min(1) }),
+    {
+      isAvailableForPage: (page) => page && !page.isClosed(),
+    }
   )
   static async click({ params, page }: { params: { selector: string }; page: Page }): Promise<ActionResult> {
     const { selector } = params;
@@ -26,7 +29,10 @@ class TypeActions {
   @action(
     'type',
     'Type text into an input by selector',
-    z.object({ selector: z.string().min(1), text: z.string() })
+    z.object({ selector: z.string().min(1), text: z.string() }),
+    {
+      isAvailableForPage: (page) => page && !page.isClosed(),
+    }
   )
   static async type({ params, page }: { params: { selector: string; text: string }; page: Page }): Promise<ActionResult> {
     const { selector, text } = params;
@@ -40,7 +46,9 @@ class TypeActions {
 
 // goto
 class GotoActions {
-  @action('goto', 'Navigate to a URL', z.object({ url: z.string().url() }))
+  @action('goto', 'Navigate to a URL', z.object({ url: z.string().url() }), {
+    isAvailableForPage: (page) => page && !page.isClosed(),
+  })
   static async goto({ params, page }: { params: { url: string }; page: Page }): Promise<ActionResult> {
     const { url } = params;
     return withHealthCheck(page, async (p) => {
@@ -58,7 +66,10 @@ class ScrollActions {
     z.object({
       direction: z.enum(['up', 'down', 'left', 'right']).default('down'),
       amount: z.number().min(1).max(10).default(3),
-    })
+    }),
+    {
+      isAvailableForPage: (page) => page && !page.isClosed(),
+    }
   )
   static async scroll({ params, page }: { params: { direction: 'up'|'down'|'left'|'right'; amount?: number }; page: Page }): Promise<ActionResult> {
     const pixels = (params.amount ?? 3) * 300;
@@ -81,7 +92,10 @@ class WaitActions {
       type: z.enum(['time', 'element', 'navigation']).default('time'),
       value: z.union([z.number(), z.string()]),
       timeout: z.number().min(100).max(60000).default(5000),
-    })
+    }),
+    {
+      isAvailableForPage: (page) => page && !page.isClosed(),
+    }
   )
   static async wait({ params, page }: { params: { type: 'time'|'element'|'navigation'; value: number|string; timeout?: number }; page: Page }): Promise<ActionResult> {
     return withHealthCheck(page, async (p) => {
@@ -99,7 +113,9 @@ class WaitActions {
 
 // key
 class KeyActions {
-  @action('key', 'Press a keyboard key', z.object({ key: z.string().min(1) }))
+  @action('key', 'Press a keyboard key', z.object({ key: z.string().min(1) }), {
+    isAvailableForPage: (page) => page && !page.isClosed(),
+  })
   static async key({ params, page }: { params: { key: string }; page: Page }): Promise<ActionResult> {
     return withHealthCheck(page, async (p) => {
       await p.keyboard.press(params.key);
@@ -111,7 +127,9 @@ class KeyActions {
 
 // hover
 class HoverActions {
-  @action('hover', 'Hover over an element', z.object({ selector: z.string().min(1) }))
+  @action('hover', 'Hover over an element', z.object({ selector: z.string().min(1) }), {
+    isAvailableForPage: (page) => page && !page.isClosed(),
+  })
   static async hover({ params, page }: { params: { selector: string }; page: Page }): Promise<ActionResult> {
     return withHealthCheck(page, async (p) => {
       await p.hover(params.selector);
@@ -123,7 +141,9 @@ class HoverActions {
 
 // screenshot
 class ScreenshotActions {
-  @action('screenshot', 'Take a full-page screenshot')
+  @action('screenshot', 'Take a full-page screenshot', z.object({}).optional(), {
+    isAvailableForPage: (page) => page && !page.isClosed(),
+  })
   static async screenshot({ page }: { params: Record<string, unknown>; page: Page }): Promise<ActionResult> {
     return withHealthCheck(page, async (p) => {
       const image = await p.screenshot({ fullPage: true, type: 'png' });

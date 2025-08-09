@@ -210,8 +210,9 @@ export class Agent {
     objective: string,
     pageView: PageView
   ): Promise<AgentThought> {
-    // Derive dynamic available actions for this page
-    const availableActions = registry.names();
+    // Derive dynamic available actions for this page (name + description)
+    const available = registry.list().map((a) => ({ name: a.name, description: a.description }));
+    const availableActions = available.map((a) => a.name);
 
     const messages: LLMMessage[] = [
       {
@@ -227,8 +228,8 @@ export class Agent {
         content:
           generatePageContextPrompt(objective, pageView, this.history) +
           `\n\n## Available Actions (this step)\n` +
-          availableActions.map((n) => `- ${n}`).join('\n') +
-          `\n\nOnly choose one of the available actions above in nextAction.action.`,
+          available.map((a) => `- ${a.name}: ${a.description}`).join('\n') +
+          `\n\nOnly choose one of the available actions above in nextAction.action. Respond ONLY with valid JSON.`,
       },
     ];
 

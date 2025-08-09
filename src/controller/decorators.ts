@@ -12,7 +12,10 @@ export type ActionHandler = (args: {
 export function action(
   name: string,
   description: string,
-  paramSchema: z.ZodTypeAny = z.object({})
+  paramSchema: z.ZodTypeAny = z.object({}),
+  options?: {
+    isAvailableForPage?: (page: Page) => Promise<boolean> | boolean;
+  }
 ): MethodDecorator {
   return function (
     _target: any,
@@ -20,7 +23,7 @@ export function action(
     descriptor: PropertyDescriptor
   ) {
     const execute = descriptor.value as ActionHandler;
-    registry.register({ name, description, paramSchema, execute });
+    registry.register({ name, description, paramSchema, execute, ...(options ?? {}) });
   };
 }
 

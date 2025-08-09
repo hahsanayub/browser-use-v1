@@ -13,6 +13,8 @@ export interface RegisteredAction {
     page: Page;
     context: Record<string, unknown>;
   }) => Promise<ActionResult>;
+  /** Optional predicate to determine if action is available for current page */
+  isAvailableForPage?: (page: Page) => Promise<boolean> | boolean;
 }
 
 /**
@@ -46,15 +48,21 @@ export class ActionRegistry {
    * Each variant is an object keyed by action name and mapping to its param schema.
    * Example: z.union([ z.object({ click: z.object({selector:z.string()}) }), ... ])
    */
-  buildDynamicActionSchemaForPage(_page?: Page): z.ZodUnion<any> {
+  buildDynamicActionSchemaForPage(page?: Page): z.ZodUnion<any> {
     const variants: z.ZodObject<any, any, any, any, any>[] = [];
     for (const action of this.actions.values()) {
+      if (page && action.isAvailableForPage) {
+        const available = action.isAvailableForPage(page);
+        if (typeof available === 'boolean' && !available) {
+          continue;
+        }
+      }
       const obj = z.object({ [action.name]: action.paramSchema });
       variants.push(obj as unknown as z.ZodObject<any, any, any, any, any>);
     }
     // If no actions, fallback to an empty object to prevent z.union() crash
     if (variants.length === 0) {
-      return z.union([z.object({})]) as unknown as z.ZodUnion<any>;
+      return z.union([z.object({}), z.object({})]) as unknown as z.ZodUnion<any>;
     }
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore - Variadic union typing
