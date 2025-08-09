@@ -16,7 +16,7 @@ export {
   type AgentThought,
 } from './views';
 export {
-  SYSTEM_PROMPT,
+  SystemPrompt,
   generatePageContextPrompt,
   generateErrorRecoveryPrompt,
   generateCompletionVerificationPrompt,

@@ -44,4 +44,10 @@ export interface AgentConfig {
   continueOnFailure?: boolean;
   /** Custom instructions to add to system prompt */
   customInstructions?: string;
+  /** Whether to use the flash prompt variant */
+  flashMode?: boolean;
+  /** Whether to enable detailed thinking in prompt/output */
+  useThinking?: boolean;
+  /** Max actions per step for prompt placeholder replacement */
+  maxActionsPerStep?: number;
 }

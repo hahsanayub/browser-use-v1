@@ -1,6 +1,55 @@
 /**
  * System prompts and prompt templates for the AI agent
  */
+import { readFile } from 'node:fs/promises';
+
+/**
+ * Dynamically load system prompts from markdown files based on configuration.
+ */
+export class SystemPrompt {
+  /**
+   * Load the appropriate system prompt file.
+   * - flashMode: use `system-prompt-flash.md`
+   * - useThinking: if explicitly false, use `system-prompt-no-thinking.md`
+   * - default: `system-prompt.md`
+   */
+  static async load(options: {
+    flashMode?: boolean;
+    useThinking?: boolean;
+    placeholders?: Record<string, string | number>;
+  } = {}): Promise<string> {
+    const { flashMode, useThinking, placeholders } = options;
+    let filename = 'system-prompt.md';
+    if (flashMode) filename = 'system-prompt-flash.md';
+    else if (useThinking === false) filename = 'system-prompt-no-thinking.md';
+
+    const candidates: URL[] = [
+      new URL(`./prompt/${filename}`, import.meta.url),
+      // Fallback to source tree when running from dist
+      new URL(`../../src/agent/prompt/${filename}`, import.meta.url),
+    ];
+
+    let content: string | null = null;
+    for (const candidate of candidates) {
+      try {
+        content = await readFile(candidate, 'utf-8');
+        break;
+      } catch {}
+    }
+    if (content == null) {
+      throw new Error(`Failed to load system prompt file: ${filename}`);
+    }
+
+    if (placeholders) {
+      for (const [key, value] of Object.entries(placeholders)) {
+        const pattern = new RegExp(`\\{${key}\\}`, 'g');
+        content = content.replace(pattern, String(value));
+      }
+    }
+
+    return content;
+  }
+}
 
 /**
  * Main system prompt that defines the agent's behavior and capabilities

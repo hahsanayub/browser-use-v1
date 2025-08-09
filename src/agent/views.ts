@@ -82,36 +82,30 @@ export type Action = z.infer<typeof ActionSchema>;
  * Agent's thinking and planning schema
  */
 export const AgentThoughtSchema = z.object({
-  /** Current understanding of the page */
-  observation: z
+  /** Optional chain-of-thought or structured thinking block */
+  thinking: z.string().optional(),
+
+  /** One-sentence evaluation of previous goal */
+  evaluation_previous_goal: z
     .string()
-    .describe('What the agent observes on the current page'),
+    .optional()
+    .describe('Evaluation of the previous step goal'),
 
-  /** Analysis of the current situation */
-  analysis: z
+  /** Short memory for progress tracking */
+  memory: z
     .string()
-    .describe('Analysis of the current state and what needs to be done'),
+    .describe(
+      '1-3 sentences of memory of this step and overall progress to guide future steps'
+    ),
 
-  /** Plan for achieving the objective */
-  plan: z.string().describe('Step-by-step plan to achieve the objective'),
+  /** Next immediate goal */
+  next_goal: z
+    .string()
+    .optional()
+    .describe('Next immediate goal to achieve in one sentence'),
 
-  /** Next action to take */
-  nextAction: ActionSchema,
-
-  /** Optional list of next actions to take in sequence */
-  nextActions: z.array(ActionSchema).optional(),
-
-  /** Progress assessment (0-100) */
-  progressPercent: z
-    .number()
-    .min(0)
-    .max(100)
-    .describe('Estimated progress towards the objective'),
-
-  /** Whether the objective has been completed */
-  isComplete: z
-    .boolean()
-    .describe('Whether the main objective has been achieved'),
+  /** Actions to execute in sequence for this step */
+  action: z.array(ActionSchema).min(1),
 });
 
 export type AgentThought = z.infer<typeof AgentThoughtSchema>;

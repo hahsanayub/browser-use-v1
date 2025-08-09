@@ -10,11 +10,7 @@ import type { LLMMessage } from '../types/llm';
 import type { PageView } from '../types/dom';
 import type { AgentHistory, ActionResult, AgentConfig } from '../types/agent';
 import { validateAgentThought, type Action, type AgentThought } from './views';
-import {
-  SYSTEM_PROMPT,
-  generatePageContextPrompt,
-  generateStuckRecoveryPrompt,
-} from './prompts';
+import { SystemPrompt, generatePageContextPrompt, generateStuckRecoveryPrompt } from './prompts';
 import { getLogger } from '../services/logging';
 import { JsonParser } from '../services/json-parser';
 import { registry } from '../controller/singleton';
@@ -90,30 +86,21 @@ export class Agent {
           // Generate response from LLM
           const thought = await this.think(objective, pageView);
 
-          // Check if task is complete
-          if (thought.isComplete || thought.nextAction.action === 'finish') {
-            this.logger.info('Task completed', { step: this.currentStep });
-
-            const finishResult: ActionResult = {
-              success: true,
-              message: 'Task completed successfully',
-            };
-
-            this.addToHistory(thought.nextAction, finishResult, pageView);
-            break;
+          // Execute the action sequence proposed by the model
+          const actionsToRun = [...(thought as any).action];
+          if (!actionsToRun || actionsToRun.length === 0) {
+            throw new Error('Model returned no actions to execute');
           }
-
-          // Execute the action (single or multi-act chain)
-          const actionsToRun = [
-            thought.nextAction,
-            ...((thought as any).nextActions ?? []),
-          ];
           let result = { success: true, message: 'no-op' } as ActionResult;
           for (const act of actionsToRun) {
             const beforeSigForAct = await this.domService.getDomSignature(page);
             result = await this.executeAction(page, act);
             this.addToHistory(act, result, pageView);
             const afterSigForAct = await this.domService.getDomSignature(page);
+            if (act.action === 'finish') {
+              this.logger.info('Task completed', { step: this.currentStep });
+              break;
+            }
             if (
               afterSigForAct &&
               beforeSigForAct &&
@@ -142,7 +129,7 @@ export class Agent {
               `Action failed (${consecutiveFailures}/${maxConsecutiveFailures})`,
               {
                 step: this.currentStep,
-                action: thought.nextAction.action,
+                action: 'sequence',
                 error: result.error,
               }
             );
@@ -238,11 +225,17 @@ export class Agent {
     }));
     const availableActions = available.map((a) => a.name);
 
+    const systemContent = await SystemPrompt.load({
+      flashMode: this.config.flashMode,
+      useThinking: this.config.useThinking,
+      placeholders: { max_actions: String(this.config.maxActionsPerStep ?? 3) },
+    });
+
     const messages: LLMMessage[] = [
       {
         role: 'system',
         content:
-          SYSTEM_PROMPT +
+          systemContent +
           (this.config.customInstructions
             ? `\n\n## Additional Instructions:\n${this.config.customInstructions}`
             : ''),
@@ -252,8 +245,7 @@ export class Agent {
         content:
           generatePageContextPrompt(objective, pageView, this.history) +
           `\n\n## Available Actions (this step)\n` +
-          available.map((a) => `- ${a.name}: ${a.description}`).join('\n') +
-          `\n\nOnly choose one of the available actions above in nextAction.action. Respond ONLY with valid JSON.`,
+          available.map((a) => `- ${a.name}: ${a.description}`).join('\n'),
       },
     ];
 
@@ -270,48 +262,54 @@ export class Agent {
 
       // Parse JSON response safely
       const thoughtData = JsonParser.parse(response.content);
+      // Normalize action array if returned as keyed objects
+      if (Array.isArray((thoughtData as any).action)) {
+        (thoughtData as any).action = (thoughtData as any).action.map((item: any) => {
+          if (item && typeof item === 'object' && !('action' in item)) {
+            const entries = Object.entries(item);
+            if (entries.length === 1) {
+              const [name, params] = entries[0];
+              const normalized: any = { action: name, reasoning: 'Auto-executed based on plan to progress toward goal.' };
+              if (params && typeof params === 'object') {
+                Object.assign(normalized, params);
+              }
+              return normalized;
+            }
+          }
+          return item;
+        });
+      }
       let thought = validateAgentThought(thoughtData);
 
-      // Enforce dynamic action availability
-      if (!availableActions.includes(thought.nextAction.action)) {
-        this.logger.warn(
-          'Model proposed unsupported action; coercing to screenshot',
-          {
-            proposed: thought.nextAction.action,
-          }
-        );
-        thought = {
-          ...thought,
-          nextAction: {
-            action: 'screenshot',
-            reasoning:
-              'Proposed action was not available; taking screenshot instead',
-          } as any,
-        };
+      // Enforce dynamic action availability for each proposed action
+      const filteredActions = thought.action.filter((a) =>
+        availableActions.includes(a.action)
+      );
+      if (filteredActions.length === 0) {
+        this.logger.warn('No supported actions proposed; coercing to screenshot');
+        filteredActions.push({
+          action: 'screenshot',
+          reasoning: 'Fallback to screenshot due to unsupported actions',
+        } as any);
       }
+      thought = { ...thought, action: filteredActions } as AgentThought;
 
       this.logger.debug('LLM response received', {
         step: this.currentStep,
-        action: thought.nextAction.action,
-        progress: thought.progressPercent,
+        actionCount: thought.action.length,
       });
 
       return thought;
     } catch (error) {
       this.logger.error('Failed to get LLM response', error as Error);
 
-      // Fallback: try to take a screenshot and finish
+      // Fallback minimal output: take a screenshot
       return {
-        observation: 'Failed to analyze page due to LLM error',
-        analysis: 'Cannot proceed due to communication error',
-        plan: 'Take screenshot and finish task',
-        nextAction: {
-          action: 'screenshot',
-          reasoning: 'Taking screenshot before finishing due to error',
-        },
-        progressPercent: 0,
-        isComplete: false,
-      };
+        memory: 'Failed to analyze page due to LLM error',
+        action: [
+          { action: 'screenshot', reasoning: 'Taking screenshot before finishing due to error' } as any,
+        ],
+      } as any;
     }
   }
 
@@ -515,8 +513,13 @@ export class Agent {
     const pageView = await this.domService.getPageView(page);
 
     // Ask LLM for recovery strategy
+    const systemContent = await SystemPrompt.load({
+      flashMode: this.config.flashMode,
+      useThinking: this.config.useThinking,
+      placeholders: { max_actions: String(this.config.maxActionsPerStep ?? 3) },
+    });
     const messages: LLMMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: systemContent },
       {
         role: 'user',
         content: generateStuckRecoveryPrompt(
@@ -533,11 +536,33 @@ export class Agent {
     try {
       const response = await this.llmClient.generateResponse(messages);
       const thoughtData = JsonParser.parse(response.content);
+      // Normalize potential keyed action objects
+      if (Array.isArray((thoughtData as any).action)) {
+        (thoughtData as any).action = (thoughtData as any).action.map((item: any) => {
+          if (item && typeof item === 'object' && !('action' in item)) {
+            const entries = Object.entries(item);
+            if (entries.length === 1) {
+              const [name, params] = entries[0];
+              const normalized: any = { action: name, reasoning: 'Auto-executed during recovery.' };
+              if (params && typeof params === 'object') {
+                Object.assign(normalized, params);
+              }
+              return normalized;
+            }
+          }
+          return item;
+        });
+      }
       const thought = validateAgentThought(thoughtData);
 
-      // Execute recovery action
-      const result = await this.executeAction(page, thought.nextAction);
-      this.addToHistory(thought.nextAction, result, pageView);
+      // Execute first recovery action only
+      const first = (thought as any).action?.[0];
+      if (first) {
+        const result = await this.executeAction(page, first);
+        this.addToHistory(first, result, pageView);
+      } else {
+        this.logger.warn('Recovery LLM response returned no action');
+      }
     } catch (error) {
       this.logger.error('Recovery attempt failed', error as Error);
     }
