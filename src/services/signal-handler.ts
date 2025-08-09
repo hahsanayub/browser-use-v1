@@ -22,6 +22,7 @@ export class SignalHandler {
   private config: SignalHandlerConfig;
   private cleanupFunctions: CleanupFunction[] = [];
   private isShuttingDown: boolean = false;
+  private receivedOnce: boolean = false;
   private logger = getLogger();
 
   constructor(config: SignalHandlerConfig = {}) {
@@ -107,6 +108,13 @@ export class SignalHandler {
         this.logger.warn(`Received ${signal} during shutdown, forcing exit`);
       }
       process.exit(1);
+    }
+
+    // Implement "first Ctrl+C pauses, second forces exit" semantics for SIGINT
+    if (signal === 'SIGINT' && !this.receivedOnce) {
+      this.receivedOnce = true;
+      this.logger.info('Received SIGINT (Ctrl+C). Press again quickly to force exit.');
+      return; // Pause without shutting down yet
     }
 
     this.isShuttingDown = true;

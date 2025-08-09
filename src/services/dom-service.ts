@@ -108,7 +108,12 @@ export class DOMService {
   private async buildAndSerializeDom(page: Page, options: DOMProcessingOptions): Promise<string> {
     if (!this.buildDomTreeScript) {
       const scriptPath = pathResolve(process.cwd(), 'src/dom/buildDomTree.js');
-      this.buildDomTreeScript = await fs.readFile(scriptPath, 'utf-8');
+      try {
+        this.buildDomTreeScript = await fs.readFile(scriptPath, 'utf-8');
+      } catch (e) {
+        this.logger.warn('buildDomTree.js not found; returning raw HTML as fallback');
+        return await page.content();
+      }
     }
     const result: any = await page
       .evaluate(
@@ -154,7 +159,26 @@ export class DOMService {
   ): Promise<InteractiveElement[]> {
     if (!this.buildDomTreeScript) {
       const scriptPath = pathResolve(process.cwd(), 'src/dom/buildDomTree.js');
-      this.buildDomTreeScript = await fs.readFile(scriptPath, 'utf-8');
+      try {
+        this.buildDomTreeScript = await fs.readFile(scriptPath, 'utf-8');
+      } catch (e) {
+        // Fallback to a lightweight query when script missing
+        const elements = await page.$$eval(
+          'a, button, input, textarea, select, [role="button"]',
+          (els) =>
+            els.map((el, i) => ({
+              id: `interactive_${i}`,
+              tagName: el.tagName.toLowerCase(),
+              type: el.getAttribute('type') || el.tagName.toLowerCase(),
+              attributes: Array.from(el.attributes).reduce((acc, a) => {
+                acc[a.name] = a.value;
+                return acc;
+              }, {} as Record<string, string>),
+              selector: el.id ? `#${el.id}` : el.tagName.toLowerCase(),
+            }))
+        );
+        return elements as unknown as InteractiveElement[];
+      }
     }
     try {
       const domState: any = await page.evaluate(

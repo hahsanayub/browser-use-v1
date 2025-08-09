@@ -102,10 +102,21 @@ export class Agent {
           }
 
           // Execute the action (single or multi-act chain)
-          const result = await this.executeAction(page, thought.nextAction);
+          const actionsToRun = [thought.nextAction, ...(thought as any).nextActions ?? []];
+          let result = { success: true, message: 'no-op' } as ActionResult;
+          for (const act of actionsToRun) {
+            const beforeSigForAct = await this.domService.getDomSignature(page);
+            result = await this.executeAction(page, act);
+            this.addToHistory(act, result, pageView);
+            const afterSigForAct = await this.domService.getDomSignature(page);
+            if (afterSigForAct && beforeSigForAct && afterSigForAct !== beforeSigForAct) {
+              this.logger.debug('DOM changed during multi-act; breaking to re-observe');
+              break;
+            }
+            if (!result.success) break;
+          }
 
-          // Add to history
-          this.addToHistory(thought.nextAction, result, pageView);
+          // Already added during multi-act loop
 
           // Detect DOM change to decide whether to continue planning or re-observe
           const afterSig = await this.domService.getDomSignature(page);

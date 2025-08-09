@@ -98,6 +98,9 @@ export const AgentThoughtSchema = z.object({
   /** Next action to take */
   nextAction: ActionSchema,
 
+  /** Optional list of next actions to take in sequence */
+  nextActions: z.array(ActionSchema).optional(),
+
   /** Progress assessment (0-100) */
   progressPercent: z
     .number()
