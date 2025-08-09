@@ -35,6 +35,31 @@ export class ActionRegistry {
   list(): RegisteredAction[] {
     return Array.from(this.actions.values());
   }
+
+  /** Get action names */
+  names(): string[] {
+    return Array.from(this.actions.keys());
+  }
+
+  /**
+   * Build a dynamic Zod union schema representing available actions for a page.
+   * Each variant is an object keyed by action name and mapping to its param schema.
+   * Example: z.union([ z.object({ click: z.object({selector:z.string()}) }), ... ])
+   */
+  buildDynamicActionSchemaForPage(_page?: Page): z.ZodUnion<any> {
+    const variants: z.ZodObject<any, any, any, any, any>[] = [];
+    for (const action of this.actions.values()) {
+      const obj = z.object({ [action.name]: action.paramSchema });
+      variants.push(obj as unknown as z.ZodObject<any, any, any, any, any>);
+    }
+    // If no actions, fallback to an empty object to prevent z.union() crash
+    if (variants.length === 0) {
+      return z.union([z.object({})]) as unknown as z.ZodUnion<any>;
+    }
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore - Variadic union typing
+    return z.union(variants);
+  }
 }
 
 

@@ -253,11 +253,9 @@ export class Controller {
       };
     }
 
-    // ensure page
+    // Controller负责获取和注入核心依赖
     let page = this.browserContext.getActivePage();
-    if (!page) {
-      page = await this.browserContext.newPage();
-    }
+    if (!page) page = await this.browserContext.newPage();
 
     return await action.execute({
       params: validatedParams,

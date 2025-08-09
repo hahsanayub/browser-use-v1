@@ -17,6 +17,7 @@ import {
 } from './prompts';
 import { getLogger } from '../services/logging';
 import { JsonParser } from '../services/json-parser';
+import { registry } from '../controller/singleton';
 
 /**
  * Agent class for intelligent web automation
@@ -209,6 +210,9 @@ export class Agent {
     objective: string,
     pageView: PageView
   ): Promise<AgentThought> {
+    // Derive dynamic available actions for this page
+    const availableActions = registry.names();
+
     const messages: LLMMessage[] = [
       {
         role: 'system',
@@ -220,7 +224,11 @@ export class Agent {
       },
       {
         role: 'user',
-        content: generatePageContextPrompt(objective, pageView, this.history),
+        content:
+          generatePageContextPrompt(objective, pageView, this.history) +
+          `\n\n## Available Actions (this step)\n` +
+          availableActions.map((n) => `- ${n}`).join('\n') +
+          `\n\nOnly choose one of the available actions above in nextAction.action.`,
       },
     ];
 
@@ -238,6 +246,17 @@ export class Agent {
       // Parse JSON response safely
       const thoughtData = JsonParser.parse(response.content);
       const thought = validateAgentThought(thoughtData);
+
+      // Enforce dynamic action availability
+      if (!availableActions.includes(thought.nextAction.action)) {
+        this.logger.warn('Model proposed unsupported action; coercing to screenshot', {
+          proposed: thought.nextAction.action,
+        });
+        thought.nextAction = {
+          action: 'screenshot',
+          reasoning: 'Proposed action was not available; taking screenshot instead',
+        } as any;
+      }
 
       this.logger.debug('LLM response received', {
         step: this.currentStep,
