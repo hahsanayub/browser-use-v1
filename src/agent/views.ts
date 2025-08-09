@@ -81,34 +81,46 @@ export type Action = z.infer<typeof ActionSchema>;
 /**
  * Agent's thinking and planning schema
  */
-export const AgentThoughtSchema = z.object({
-  /** Optional chain-of-thought or structured thinking block */
-  thinking: z.string().optional(),
+/**
+ * Factory to build AgentThought schema with dynamic action schema, aligned with prompt output structure.
+ */
+export function createAgentThoughtSchema(dynamicActionSchema: z.ZodTypeAny) {
+  return z.object({
+    /** Optional chain-of-thought or structured thinking block */
+    thinking: z.string().optional(),
 
-  /** One-sentence evaluation of previous goal */
-  evaluation_previous_goal: z
-    .string()
-    .optional()
-    .describe('Evaluation of the previous step goal'),
+    /** One-sentence evaluation of previous goal */
+    evaluation_previous_goal: z
+      .string()
+      .optional()
+      .describe('Evaluation of the previous step goal'),
 
-  /** Short memory for progress tracking */
-  memory: z
-    .string()
-    .describe(
-      '1-3 sentences of memory of this step and overall progress to guide future steps'
-    ),
+    /** Short memory for progress tracking */
+    memory: z
+      .string()
+      .describe(
+        '1-3 sentences of memory of this step and overall progress to guide future steps'
+      ),
 
-  /** Next immediate goal */
-  next_goal: z
-    .string()
-    .optional()
-    .describe('Next immediate goal to achieve in one sentence'),
+    /** Next immediate goal */
+    next_goal: z
+      .string()
+      .optional()
+      .describe('Next immediate goal to achieve in one sentence'),
 
-  /** Actions to execute in sequence for this step */
-  action: z.array(ActionSchema).min(1),
-});
+    /** Actions to execute in sequence for this step (dynamic union per page) */
+    action: z.array(dynamicActionSchema).min(1),
+  });
+}
 
-export type AgentThought = z.infer<typeof AgentThoughtSchema>;
+// AgentThought represents the normalized internal shape after parsing dynamic schema
+export type AgentThought = {
+  thinking?: string;
+  evaluation_previous_goal?: string;
+  memory: string;
+  next_goal?: string;
+  action: Action[];
+};
 
 /**
  * Validation function for agent responses
@@ -124,9 +136,17 @@ export function validateAction(data: unknown): Action {
 /**
  * Validation function for agent thoughts
  */
+// Backward-compat validator retained for compatibility in external callers; expects already-normalized shape
 export function validateAgentThought(data: unknown): AgentThought {
+  const schema = z.object({
+    thinking: z.string().optional(),
+    evaluation_previous_goal: z.string().optional(),
+    memory: z.string(),
+    next_goal: z.string().optional(),
+    action: z.array(ActionSchema).min(1),
+  });
   try {
-    return AgentThoughtSchema.parse(data);
+    return schema.parse(data);
   } catch (error) {
     throw new Error(`Invalid agent thought format: ${error}`);
   }

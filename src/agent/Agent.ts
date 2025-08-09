@@ -9,7 +9,7 @@ import { BaseLLMClient } from '../llm/base-client';
 import type { LLMMessage } from '../types/llm';
 import type { PageView } from '../types/dom';
 import type { AgentHistory, ActionResult, AgentConfig } from '../types/agent';
-import { validateAgentThought, type Action, type AgentThought } from './views';
+import { validateAgentThought, type Action, type AgentThought, createAgentThoughtSchema } from './views';
 import { SystemPrompt, generatePageContextPrompt, generateStuckRecoveryPrompt } from './prompts';
 import { getLogger } from '../services/logging';
 import { JsonParser } from '../services/json-parser';
@@ -279,7 +279,10 @@ export class Agent {
           return item;
         });
       }
-      let thought = validateAgentThought(thoughtData);
+      // Build dynamic schema for this page and validate
+      const dynamicActionSchema = registry.buildDynamicActionSchemaForPage(activePage);
+      const AgentThoughtSchemaForStep = createAgentThoughtSchema(dynamicActionSchema);
+      let thought = AgentThoughtSchemaForStep.parse(thoughtData) as AgentThought;
 
       // Enforce dynamic action availability for each proposed action
       const filteredActions = thought.action.filter((a) =>
@@ -553,7 +556,9 @@ export class Agent {
           return item;
         });
       }
-      const thought = validateAgentThought(thoughtData);
+      const dynamicActionSchema = registry.buildDynamicActionSchemaForPage(page);
+      const AgentThoughtSchemaForStep = createAgentThoughtSchema(dynamicActionSchema);
+      const thought = AgentThoughtSchemaForStep.parse(thoughtData) as AgentThought;
 
       // Execute first recovery action only
       const first = (thought as any).action?.[0];

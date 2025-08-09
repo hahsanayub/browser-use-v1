@@ -5,7 +5,7 @@
 export { Agent } from './Agent';
 export {
   ActionSchema,
-  AgentThoughtSchema,
+  createAgentThoughtSchema,
   validateAction,
   validateAgentThought,
   createFinishAction,
