@@ -73,7 +73,8 @@ export async function validateLLMConfig(config: LLMConfig): Promise<boolean> {
  * Get supported providers
  */
 export function getSupportedProviders(): string[] {
-  return ['openai', 'anthropic', 'custom'];
+  // Keep 'google' to match schema; although not implemented, it is a recognized option
+  return ['openai', 'anthropic', 'google', 'custom'];
 }
 
 /**

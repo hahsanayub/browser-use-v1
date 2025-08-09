@@ -16,6 +16,7 @@ import {
   generateStuckRecoveryPrompt,
 } from './prompts';
 import { getLogger } from '../services/logging';
+import { JsonParser } from '../services/json-parser';
 
 /**
  * Agent class for intelligent web automation
@@ -234,8 +235,8 @@ export class Agent {
         maxTokens: 2000,
       });
 
-      // Parse JSON response
-      const thoughtData = JSON.parse(response.content);
+      // Parse JSON response safely
+      const thoughtData = JsonParser.parse(response.content);
       const thought = validateAgentThought(thoughtData);
 
       this.logger.debug('LLM response received', {
@@ -468,7 +469,7 @@ export class Agent {
 
     try {
       const response = await this.llmClient.generateResponse(messages);
-      const thoughtData = JSON.parse(response.content);
+      const thoughtData = JsonParser.parse(response.content);
       const thought = validateAgentThought(thoughtData);
 
       // Execute recovery action

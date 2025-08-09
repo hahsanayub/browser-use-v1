@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Page } from 'playwright';
 import { action } from './decorators';
 import type { ActionResult } from '../types/agent';
+import { withHealthCheck } from '../services/health-check';
 
 // click
 class ClickActions {
@@ -12,9 +13,11 @@ class ClickActions {
   )
   static async click({ params, page }: { params: { selector: string }; page: Page }): Promise<ActionResult> {
     const { selector } = params;
-    await page.click(selector);
-    await page.waitForTimeout(300);
-    return { success: true, message: `Clicked ${selector}` };
+    return withHealthCheck(page, async (p) => {
+      await p.click(selector);
+      await p.waitForTimeout(300);
+      return { success: true, message: `Clicked ${selector}` };
+    });
   }
 }
 
@@ -27,9 +30,11 @@ class TypeActions {
   )
   static async type({ params, page }: { params: { selector: string; text: string }; page: Page }): Promise<ActionResult> {
     const { selector, text } = params;
-    await page.fill(selector, '');
-    await page.type(selector, text, { delay: 30 });
-    return { success: true, message: `Typed into ${selector}` };
+    return withHealthCheck(page, async (p) => {
+      await p.fill(selector, '');
+      await p.type(selector, text, { delay: 30 });
+      return { success: true, message: `Typed into ${selector}` };
+    });
   }
 }
 
@@ -38,8 +43,10 @@ class GotoActions {
   @action('goto', 'Navigate to a URL', z.object({ url: z.string().url() }))
   static async goto({ params, page }: { params: { url: string }; page: Page }): Promise<ActionResult> {
     const { url } = params;
-    await page.goto(url, { waitUntil: 'domcontentloaded' });
-    return { success: true, message: `Navigated to ${url}` };
+    return withHealthCheck(page, async (p) => {
+      await p.goto(url, { waitUntil: 'domcontentloaded' });
+      return { success: true, message: `Navigated to ${url}` };
+    });
   }
 }
 
@@ -57,9 +64,11 @@ class ScrollActions {
     const pixels = (params.amount ?? 3) * 300;
     const dx = params.direction === 'left' ? -pixels : params.direction === 'right' ? pixels : 0;
     const dy = params.direction === 'up' ? -pixels : params.direction === 'down' ? pixels : 0;
-    await page.mouse.wheel(dx, dy);
-    await page.waitForTimeout(200);
-    return { success: true, message: `Scrolled ${params.direction} ${params.amount ?? 3}` };
+    return withHealthCheck(page, async (p) => {
+      await p.mouse.wheel(dx, dy);
+      await p.waitForTimeout(200);
+      return { success: true, message: `Scrolled ${params.direction} ${params.amount ?? 3}` };
+    });
   }
 }
 
@@ -75,14 +84,16 @@ class WaitActions {
     })
   )
   static async wait({ params, page }: { params: { type: 'time'|'element'|'navigation'; value: number|string; timeout?: number }; page: Page }): Promise<ActionResult> {
-    if (params.type === 'time') {
-      await page.waitForTimeout(params.value as number);
-    } else if (params.type === 'element') {
-      await page.waitForSelector(params.value as string, { timeout: params.timeout });
-    } else {
-      await page.waitForURL(params.value as string, { timeout: params.timeout });
-    }
-    return { success: true, message: `Waited for ${params.type}` };
+    return withHealthCheck(page, async (p) => {
+      if (params.type === 'time') {
+        await p.waitForTimeout(params.value as number);
+      } else if (params.type === 'element') {
+        await p.waitForSelector(params.value as string, { timeout: params.timeout });
+      } else {
+        await p.waitForURL(params.value as string, { timeout: params.timeout });
+      }
+      return { success: true, message: `Waited for ${params.type}` };
+    });
   }
 }
 
@@ -90,9 +101,11 @@ class WaitActions {
 class KeyActions {
   @action('key', 'Press a keyboard key', z.object({ key: z.string().min(1) }))
   static async key({ params, page }: { params: { key: string }; page: Page }): Promise<ActionResult> {
-    await page.keyboard.press(params.key);
-    await page.waitForTimeout(100);
-    return { success: true, message: `Pressed ${params.key}` };
+    return withHealthCheck(page, async (p) => {
+      await p.keyboard.press(params.key);
+      await p.waitForTimeout(100);
+      return { success: true, message: `Pressed ${params.key}` };
+    });
   }
 }
 
@@ -100,9 +113,11 @@ class KeyActions {
 class HoverActions {
   @action('hover', 'Hover over an element', z.object({ selector: z.string().min(1) }))
   static async hover({ params, page }: { params: { selector: string }; page: Page }): Promise<ActionResult> {
-    await page.hover(params.selector);
-    await page.waitForTimeout(100);
-    return { success: true, message: `Hovered ${params.selector}` };
+    return withHealthCheck(page, async (p) => {
+      await p.hover(params.selector);
+      await p.waitForTimeout(100);
+      return { success: true, message: `Hovered ${params.selector}` };
+    });
   }
 }
 
@@ -110,12 +125,14 @@ class HoverActions {
 class ScreenshotActions {
   @action('screenshot', 'Take a full-page screenshot')
   static async screenshot({ page }: { params: Record<string, unknown>; page: Page }): Promise<ActionResult> {
-    const image = await page.screenshot({ fullPage: true, type: 'png' });
-    return {
-      success: true,
-      message: 'Screenshot taken',
-      metadata: { size: image.length, timestamp: Date.now() },
-    };
+    return withHealthCheck(page, async (p) => {
+      const image = await p.screenshot({ fullPage: true, type: 'png' });
+      return {
+        success: true,
+        message: 'Screenshot taken',
+        metadata: { size: image.length, timestamp: Date.now() },
+      };
+    });
   }
 }
 

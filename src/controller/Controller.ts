@@ -262,7 +262,7 @@ export class Controller {
     return await action.execute({
       params: validatedParams,
       page,
-      context: {},
+      context: { browserContext: this.browserContext },
     });
   }
 
@@ -278,11 +278,16 @@ export class Controller {
 
     try {
       let page = this.browserContext.getActivePage();
-
       if (!page) {
         page = await this.browserContext.newPage();
       }
-
+      // Minimal health check: recreate page if unresponsive
+      try {
+        await page.evaluate(() => true, { timeout: 1000 });
+      } catch {
+        await page.close().catch(() => {});
+        page = await this.browserContext.newPage();
+      }
       await page.goto(url, { waitUntil: 'domcontentloaded' });
       this.logger.info('Navigation completed', { url });
     } catch (error) {

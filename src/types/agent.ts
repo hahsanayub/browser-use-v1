@@ -2,22 +2,16 @@
  * Agent-related type definitions
  */
 
-// Forward declaration - Action will be imported from agent module
+import type { Action } from '../agent/views';
+
+export type ErrorAction = { action: 'error'; reasoning?: string };
+export type HistoryAction = Action | ErrorAction;
+
 export interface AgentHistory {
   /** Step number in the execution */
   step: number;
   /** Action that was taken */
-  action: {
-    action: string;
-    selector?: string;
-    text?: string;
-    url?: string;
-    scroll?: { direction: 'up' | 'down' | 'left' | 'right'; amount?: number };
-    wait?: { type: 'time' | 'element' | 'navigation'; value: number | string; timeout?: number };
-    key?: string;
-    reasoning?: string;
-    expectedOutcome?: string;
-  };
+  action: HistoryAction;
   /** Result of the action */
   result: ActionResult;
   /** Page state at the time of action */

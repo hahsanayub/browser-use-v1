@@ -69,8 +69,8 @@ export function generatePageContextPrompt(
   },
   history: Array<{
     step: number;
-    action: any;
-    result: any;
+    action: { action: string; selector?: string; url?: string; text?: string };
+    result: { success: boolean; message: string; error?: string };
   }> = []
 ): string {
   const interactiveElementsList = pageView.interactiveElements
