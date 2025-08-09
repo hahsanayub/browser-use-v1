@@ -104,15 +104,24 @@ export class Agent {
           }
 
           // Execute the action (single or multi-act chain)
-          const actionsToRun = [thought.nextAction, ...(thought as any).nextActions ?? []];
+          const actionsToRun = [
+            thought.nextAction,
+            ...((thought as any).nextActions ?? []),
+          ];
           let result = { success: true, message: 'no-op' } as ActionResult;
           for (const act of actionsToRun) {
             const beforeSigForAct = await this.domService.getDomSignature(page);
             result = await this.executeAction(page, act);
             this.addToHistory(act, result, pageView);
             const afterSigForAct = await this.domService.getDomSignature(page);
-            if (afterSigForAct && beforeSigForAct && afterSigForAct !== beforeSigForAct) {
-              this.logger.debug('DOM changed during multi-act; breaking to re-observe');
+            if (
+              afterSigForAct &&
+              beforeSigForAct &&
+              afterSigForAct !== beforeSigForAct
+            ) {
+              this.logger.debug(
+                'DOM changed during multi-act; breaking to re-observe'
+              );
               break;
             }
             if (!result.success) break;
@@ -214,12 +223,19 @@ export class Agent {
     const activePage = this.browserContext.getActivePage();
     const availableList = registry.list().filter((a) => {
       try {
-        return activePage ? (typeof a.isAvailableForPage === 'function' ? !!a.isAvailableForPage(activePage) : true) : true;
+        return activePage
+          ? typeof a.isAvailableForPage === 'function'
+            ? !!a.isAvailableForPage(activePage)
+            : true
+          : true;
       } catch {
         return true;
       }
     });
-    const available = availableList.map((a) => ({ name: a.name, description: a.description }));
+    const available = availableList.map((a) => ({
+      name: a.name,
+      description: a.description,
+    }));
     const availableActions = available.map((a) => a.name);
 
     const messages: LLMMessage[] = [
@@ -258,14 +274,18 @@ export class Agent {
 
       // Enforce dynamic action availability
       if (!availableActions.includes(thought.nextAction.action)) {
-        this.logger.warn('Model proposed unsupported action; coercing to screenshot', {
-          proposed: thought.nextAction.action,
-        });
+        this.logger.warn(
+          'Model proposed unsupported action; coercing to screenshot',
+          {
+            proposed: thought.nextAction.action,
+          }
+        );
         thought = {
           ...thought,
           nextAction: {
-          action: 'screenshot',
-          reasoning: 'Proposed action was not available; taking screenshot instead',
+            action: 'screenshot',
+            reasoning:
+              'Proposed action was not available; taking screenshot instead',
           } as any,
         };
       }
@@ -356,7 +376,10 @@ export class Agent {
   /**
    * Execute click action
    */
-  private async executeClick(page: Page, action: Action): Promise<ActionResult> {
+  private async executeClick(
+    page: Page,
+    action: Action
+  ): Promise<ActionResult> {
     return this.actDelegate
       ? this.actDelegate('click', { selector: action.selector! })
       : { success: false, message: 'No dispatcher', error: 'NO_DISPATCH' };
@@ -367,7 +390,10 @@ export class Agent {
    */
   private async executeType(page: Page, action: Action): Promise<ActionResult> {
     return this.actDelegate
-      ? this.actDelegate('type', { selector: action.selector!, text: action.text! })
+      ? this.actDelegate('type', {
+          selector: action.selector!,
+          text: action.text!,
+        })
       : { success: false, message: 'No dispatcher', error: 'NO_DISPATCH' };
   }
 
@@ -383,7 +409,10 @@ export class Agent {
   /**
    * Execute scroll action
    */
-  private async executeScroll(page: Page, action: Action): Promise<ActionResult> {
+  private async executeScroll(
+    page: Page,
+    action: Action
+  ): Promise<ActionResult> {
     const direction = action.scroll?.direction ?? 'down';
     const amount = action.scroll?.amount ?? 3;
     return this.actDelegate
@@ -417,7 +446,10 @@ export class Agent {
   /**
    * Execute hover action
    */
-  private async executeHover(page: Page, action: Action): Promise<ActionResult> {
+  private async executeHover(
+    page: Page,
+    action: Action
+  ): Promise<ActionResult> {
     return this.actDelegate
       ? this.actDelegate('hover', { selector: action.selector! })
       : { success: false, message: 'No dispatcher', error: 'NO_DISPATCH' };

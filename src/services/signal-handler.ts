@@ -113,7 +113,9 @@ export class SignalHandler {
     // Implement "first Ctrl+C pauses, second forces exit" semantics for SIGINT
     if (signal === 'SIGINT' && !this.receivedOnce) {
       this.receivedOnce = true;
-      this.logger.info('Received SIGINT (Ctrl+C). Press again quickly to force exit.');
+      this.logger.info(
+        'Received SIGINT (Ctrl+C). Press again quickly to force exit.'
+      );
       return; // Pause without shutting down yet
     }
 

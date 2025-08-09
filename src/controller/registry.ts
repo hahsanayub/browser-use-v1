@@ -62,12 +62,13 @@ export class ActionRegistry {
     }
     // If no actions, fallback to an empty object to prevent z.union() crash
     if (variants.length === 0) {
-      return z.union([z.object({}), z.object({})]) as unknown as z.ZodUnion<any>;
+      return z.union([
+        z.object({}),
+        z.object({}),
+      ]) as unknown as z.ZodUnion<any>;
     }
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore - Variadic union typing
     return z.union(variants);
   }
 }
-
-

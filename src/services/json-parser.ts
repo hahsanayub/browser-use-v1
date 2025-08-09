@@ -11,10 +11,12 @@ export class JsonParser {
     if (direct.success) return direct.value as T;
 
     // Extract from ```json ... ``` fences first
-    const fencedJson = this.extractFencedJson(raw, 'json') ?? this.extractFencedJson(raw);
+    const fencedJson =
+      this.extractFencedJson(raw, 'json') ?? this.extractFencedJson(raw);
     if (fencedJson) {
-      const fromFence = this.tryParse<T>(fencedJson)
-        || this.tryParse<T>(this.minorRepairs(fencedJson));
+      const fromFence =
+        this.tryParse<T>(fencedJson) ||
+        this.tryParse<T>(this.minorRepairs(fencedJson));
       if (fromFence.success) return fromFence.value as T;
     }
 
@@ -33,7 +35,9 @@ export class JsonParser {
     throw new Error('Unable to parse LLM JSON output');
   }
 
-  private static tryParse<T>(text: string): { success: true; value: T } | { success: false } {
+  private static tryParse<T>(
+    text: string
+  ): { success: true; value: T } | { success: false } {
     try {
       const v = JSON.parse(text);
       return { success: true, value: v };
@@ -44,7 +48,9 @@ export class JsonParser {
 
   private static extractFencedJson(text: string, lang?: string): string | null {
     const fence = '```';
-    const pattern = lang ? new RegExp("```\s*" + lang + "\s*\n([\s\S]*?)\n```", 'i') : /```\s*\n([\s\S]*?)\n```/i;
+    const pattern = lang
+      ? new RegExp('```\s*' + lang + '\s*\n([\s\S]*?)\n```', 'i')
+      : /```\s*\n([\s\S]*?)\n```/i;
     const match = text.match(pattern);
     if (!match) return null;
     return match[1].trim();
@@ -55,7 +61,10 @@ export class JsonParser {
     const firstBracket = text.indexOf('[');
     let start = -1;
     let isArray = false;
-    if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+    if (
+      firstBrace !== -1 &&
+      (firstBracket === -1 || firstBrace < firstBracket)
+    ) {
       start = firstBrace;
       isArray = false;
     } else if (firstBracket !== -1) {
@@ -102,7 +111,10 @@ export class JsonParser {
     // Replace single quotes with double quotes where safe (avoid in numbers/booleans)
     // This is heuristic; apply only when looks like JSON-like keys
     if (/\{[\s\S]*?\}/.test(repaired) || /\[[\s\S]*?\]/.test(repaired)) {
-      repaired = repaired.replace(/([,{\[]\s*)'([^'\n\r]+?)'(\s*:\s*)/g, '$1"$2"$3');
+      repaired = repaired.replace(
+        /([,{\[]\s*)'([^'\n\r]+?)'(\s*:\s*)/g,
+        '$1"$2"$3'
+      );
       repaired = repaired.replace(/:\s*'([^'\n\r]*?)'/g, ': "$1"');
     }
     // Remove trailing commas before } or ]
@@ -117,5 +129,3 @@ export class JsonParser {
     return repaired;
   }
 }
-
-

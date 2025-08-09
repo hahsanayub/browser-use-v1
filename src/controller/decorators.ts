@@ -23,8 +23,12 @@ export function action(
     descriptor: PropertyDescriptor
   ) {
     const execute = descriptor.value as ActionHandler;
-    registry.register({ name, description, paramSchema, execute, ...(options ?? {}) });
+    registry.register({
+      name,
+      description,
+      paramSchema,
+      execute,
+      ...(options ?? {}),
+    });
   };
 }
-
-

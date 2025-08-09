@@ -22,8 +22,4 @@ export {
   generateCompletionVerificationPrompt,
   generateStuckRecoveryPrompt,
 } from './prompts';
-export type {
-  AgentHistory,
-  ActionResult,
-  AgentConfig,
-} from '../types/agent';
+export type { AgentHistory, ActionResult, AgentConfig } from '../types/agent';

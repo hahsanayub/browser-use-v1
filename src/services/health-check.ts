@@ -70,13 +70,26 @@ export async function ensureHealthyPage(page: Page): Promise<{
   return { page: newPage, recovered: true, fromUrl: url, toUrl: 'about:blank' };
 }
 
-export async function withHealthCheck(page: Page, fn: (healthyPage: Page) => Promise<{
+export async function withHealthCheck(
+  page: Page,
+  fn: (healthyPage: Page) => Promise<{
+    success: boolean;
+    message: string;
+    error?: string;
+    metadata?: Record<string, any>;
+  }>
+): Promise<{
   success: boolean;
   message: string;
   error?: string;
   metadata?: Record<string, any>;
-}>): Promise<{ success: boolean; message: string; error?: string; metadata?: Record<string, any> }> {
-  const { page: healthy, recovered, fromUrl, toUrl } = await ensureHealthyPage(page);
+}> {
+  const {
+    page: healthy,
+    recovered,
+    fromUrl,
+    toUrl,
+  } = await ensureHealthyPage(page);
   const result = await fn(healthy);
   if (recovered) {
     result.metadata = {
@@ -108,5 +121,3 @@ function safeGetUrl(page: Page): string | null {
     return null;
   }
 }
-
-

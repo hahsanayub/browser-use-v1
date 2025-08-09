@@ -14,7 +14,13 @@ class ClickActions {
       isAvailableForPage: (page) => page && !page.isClosed(),
     }
   )
-  static async click({ params, page }: { params: { selector: string }; page: Page }): Promise<ActionResult> {
+  static async click({
+    params,
+    page,
+  }: {
+    params: { selector: string };
+    page: Page;
+  }): Promise<ActionResult> {
     const { selector } = params;
     return withHealthCheck(page, async (p) => {
       await p.click(selector);
@@ -34,7 +40,13 @@ class TypeActions {
       isAvailableForPage: (page) => page && !page.isClosed(),
     }
   )
-  static async type({ params, page }: { params: { selector: string; text: string }; page: Page }): Promise<ActionResult> {
+  static async type({
+    params,
+    page,
+  }: {
+    params: { selector: string; text: string };
+    page: Page;
+  }): Promise<ActionResult> {
     const { selector, text } = params;
     return withHealthCheck(page, async (p) => {
       await p.fill(selector, '');
@@ -57,7 +69,13 @@ class GotoActions {
       return true;
     },
   })
-  static async goto({ params, page }: { params: { url: string }; page: Page }): Promise<ActionResult> {
+  static async goto({
+    params,
+    page,
+  }: {
+    params: { url: string };
+    page: Page;
+  }): Promise<ActionResult> {
     const { url } = params;
     return withHealthCheck(page, async (p) => {
       await p.goto(url, { waitUntil: 'domcontentloaded' });
@@ -79,14 +97,33 @@ class ScrollActions {
       isAvailableForPage: (page) => page && !page.isClosed(),
     }
   )
-  static async scroll({ params, page }: { params: { direction: 'up'|'down'|'left'|'right'; amount?: number }; page: Page }): Promise<ActionResult> {
+  static async scroll({
+    params,
+    page,
+  }: {
+    params: { direction: 'up' | 'down' | 'left' | 'right'; amount?: number };
+    page: Page;
+  }): Promise<ActionResult> {
     const pixels = (params.amount ?? 3) * 300;
-    const dx = params.direction === 'left' ? -pixels : params.direction === 'right' ? pixels : 0;
-    const dy = params.direction === 'up' ? -pixels : params.direction === 'down' ? pixels : 0;
+    const dx =
+      params.direction === 'left'
+        ? -pixels
+        : params.direction === 'right'
+          ? pixels
+          : 0;
+    const dy =
+      params.direction === 'up'
+        ? -pixels
+        : params.direction === 'down'
+          ? pixels
+          : 0;
     return withHealthCheck(page, async (p) => {
       await p.mouse.wheel(dx, dy);
       await p.waitForTimeout(200);
-      return { success: true, message: `Scrolled ${params.direction} ${params.amount ?? 3}` };
+      return {
+        success: true,
+        message: `Scrolled ${params.direction} ${params.amount ?? 3}`,
+      };
     });
   }
 }
@@ -105,12 +142,24 @@ class WaitActions {
       isAvailableForPage: (page) => page && !page.isClosed(),
     }
   )
-  static async wait({ params, page }: { params: { type: 'time'|'element'|'navigation'; value: number|string; timeout?: number }; page: Page }): Promise<ActionResult> {
+  static async wait({
+    params,
+    page,
+  }: {
+    params: {
+      type: 'time' | 'element' | 'navigation';
+      value: number | string;
+      timeout?: number;
+    };
+    page: Page;
+  }): Promise<ActionResult> {
     return withHealthCheck(page, async (p) => {
       if (params.type === 'time') {
         await p.waitForTimeout(params.value as number);
       } else if (params.type === 'element') {
-        await p.waitForSelector(params.value as string, { timeout: params.timeout });
+        await p.waitForSelector(params.value as string, {
+          timeout: params.timeout,
+        });
       } else {
         await p.waitForURL(params.value as string, { timeout: params.timeout });
       }
@@ -124,7 +173,13 @@ class KeyActions {
   @action('key', 'Press a keyboard key', z.object({ key: z.string().min(1) }), {
     isAvailableForPage: (page) => page && !page.isClosed(),
   })
-  static async key({ params, page }: { params: { key: string }; page: Page }): Promise<ActionResult> {
+  static async key({
+    params,
+    page,
+  }: {
+    params: { key: string };
+    page: Page;
+  }): Promise<ActionResult> {
     return withHealthCheck(page, async (p) => {
       await p.keyboard.press(params.key);
       await p.waitForTimeout(100);
@@ -135,10 +190,21 @@ class KeyActions {
 
 // hover
 class HoverActions {
-  @action('hover', 'Hover over an element', z.object({ selector: z.string().min(1) }), {
-    isAvailableForPage: (page) => page && !page.isClosed(),
-  })
-  static async hover({ params, page }: { params: { selector: string }; page: Page }): Promise<ActionResult> {
+  @action(
+    'hover',
+    'Hover over an element',
+    z.object({ selector: z.string().min(1) }),
+    {
+      isAvailableForPage: (page) => page && !page.isClosed(),
+    }
+  )
+  static async hover({
+    params,
+    page,
+  }: {
+    params: { selector: string };
+    page: Page;
+  }): Promise<ActionResult> {
     return withHealthCheck(page, async (p) => {
       await p.hover(params.selector);
       await p.waitForTimeout(100);
@@ -149,10 +215,20 @@ class HoverActions {
 
 // screenshot
 class ScreenshotActions {
-  @action('screenshot', 'Take a full-page screenshot', z.object({}).optional(), {
-    isAvailableForPage: (page) => page && !page.isClosed(),
-  })
-  static async screenshot({ page }: { params: Record<string, unknown>; page: Page }): Promise<ActionResult> {
+  @action(
+    'screenshot',
+    'Take a full-page screenshot',
+    z.object({}).optional(),
+    {
+      isAvailableForPage: (page) => page && !page.isClosed(),
+    }
+  )
+  static async screenshot({
+    page,
+  }: {
+    params: Record<string, unknown>;
+    page: Page;
+  }): Promise<ActionResult> {
     return withHealthCheck(page, async (p) => {
       const image = await p.screenshot({ fullPage: true, type: 'png' });
       return {
@@ -171,5 +247,3 @@ class FinishActions {
     return { success: true, message: 'Task marked as complete' };
   }
 }
-
-
