@@ -24,6 +24,8 @@ interface AnthropicResponse {
   usage: {
     input_tokens: number;
     output_tokens: number;
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
   };
   model: string;
   stop_reason: string;
@@ -97,16 +99,17 @@ export class AnthropicClient extends BaseLLMClient {
 
       // Anthropic "structured output" equivalent is tool use; for now we only support text output.
       // If responseFormat is requested as json, we guide via system message for stricter adherence.
-      if (
-        requestOptions.responseFormat &&
-        (requestOptions.responseFormat.type === 'json_object' ||
-          requestOptions.responseFormat.type === 'json_schema')
-      ) {
-        requestData.system = `${systemMessage?.content || ''}\nReturn ONLY strict JSON${
-          requestOptions.responseFormat.type === 'json_schema' ?
-            ' matching the provided schema.' :
-            '.'
-        }`.trim();
+      if (requestOptions.responseFormat) {
+        if (requestOptions.responseFormat.type === 'json_schema') {
+          // Force structured output via tool choice by passing a tool schema-like instruction
+          // Since we are using HTTP raw API here, emulate with a stronger system instruction
+          const schema = requestOptions.responseFormat.schema;
+          const sys = `${systemMessage?.content || ''}\nYou MUST produce ONLY a strict JSON object matching this JSON Schema: ${JSON.stringify(schema)}\nNo extra keys, no prose.`.trim();
+          requestData.system = sys;
+        } else if (requestOptions.responseFormat.type === 'json_object') {
+          const sys = `${systemMessage?.content || ''}\nYou MUST produce ONLY a strict JSON object with no additional text.`.trim();
+          requestData.system = sys;
+        }
       }
 
       const maxRetries = typeof this.config.maxRetries === 'number' ? this.config.maxRetries : 0;
@@ -153,11 +156,15 @@ export class AnthropicClient extends BaseLLMClient {
       const llmResponse: LLMResponse = {
         content: textContent,
         usage: {
-          promptTokens: anthropicResponse.usage.input_tokens,
+          promptTokens:
+            anthropicResponse.usage.input_tokens + (anthropicResponse.usage.cache_read_input_tokens || 0),
           completionTokens: anthropicResponse.usage.output_tokens,
           totalTokens:
             anthropicResponse.usage.input_tokens +
             anthropicResponse.usage.output_tokens,
+          promptCachedTokens: anthropicResponse.usage.cache_read_input_tokens ?? null,
+          promptCacheCreationTokens: anthropicResponse.usage.cache_creation_input_tokens ?? null,
+          promptImageTokens: null,
         },
         model: anthropicResponse.model,
         metadata: {

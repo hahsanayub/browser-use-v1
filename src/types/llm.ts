@@ -23,6 +23,12 @@ export interface LLMResponse {
     reasoningTokens?: number;
     /** Optional cached tokens when API indicates cache hits */
     cachedTokens?: number;
+    /** OpenAI: cached prompt tokens (prompt_tokens_details.cached_tokens) */
+    promptCachedTokens?: number | null;
+    /** Anthropic: cache creation input tokens */
+    promptCacheCreationTokens?: number | null;
+    /** Placeholder for future: prompt image tokens if provider exposes */
+    promptImageTokens?: number | null;
   };
   /** Model used for generation */
   model?: string;
@@ -59,9 +65,11 @@ export interface LLMRequestOptions {
   /** response format enforcement */
   responseFormat?: LLMResponseFormat;
   /** service tier override (OpenAI) */
-  serviceTier?: 'auto' | 'default' | 'standard' | 'premium';
+  serviceTier?: 'auto' | 'default' | 'flex' | 'priority' | 'scale';
   /** reasoning effort for O-series models (OpenAI) */
   reasoningEffort?: 'low' | 'medium' | 'high';
+  /** when using json_schema, optionally also embed schema into system prompt */
+  addSchemaToSystemPrompt?: boolean;
 }
 
 export interface LLMClientConfig {
@@ -82,5 +90,5 @@ export interface LLMClientConfig {
   /** Project (OpenAI) */
   project?: string;
   /** Default service tier (OpenAI) */
-  serviceTier?: 'auto' | 'default' | 'standard' | 'premium';
+  serviceTier?: 'auto' | 'default' | 'flex' | 'priority' | 'scale';
 }

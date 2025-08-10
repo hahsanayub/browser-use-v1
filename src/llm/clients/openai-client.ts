@@ -26,6 +26,7 @@ interface OpenAIResponse {
   }>;
   usage: {
     prompt_tokens: number;
+    prompt_tokens_details?: { cached_tokens?: number };
     completion_tokens: number;
     total_tokens: number;
     reasoning_tokens?: number;
@@ -123,6 +124,18 @@ export class OpenAIClient extends BaseLLMClient {
         }
       }
 
+      // Optionally add schema to system prompt for certain models to improve adherence
+      if (
+        requestOptions.responseFormat?.type === 'json_schema' &&
+        requestOptions.addSchemaToSystemPrompt &&
+        openAIMessages.length > 0 &&
+        openAIMessages[0].role === 'system'
+      ) {
+        const schemaText = `\n<json_schema>\n${JSON.stringify(requestOptions.responseFormat.schema)}\n</json_schema>`;
+        openAIMessages[0].content = `${openAIMessages[0].content}${schemaText}`;
+        requestData.messages = openAIMessages;
+      }
+
       const maxRetries = typeof this.config.maxRetries === 'number' ? this.config.maxRetries : 0;
       let attempt = 0;
       let lastError: any;
@@ -162,12 +175,15 @@ export class OpenAIClient extends BaseLLMClient {
         content: choice.message.content,
         usage: {
           promptTokens: openAIResponse.usage.prompt_tokens,
+          promptCachedTokens: openAIResponse.usage.prompt_tokens_details?.cached_tokens ?? null,
           completionTokens:
             (openAIResponse.usage.completion_tokens || 0) +
             (openAIResponse.usage.reasoning_tokens || 0),
           totalTokens: openAIResponse.usage.total_tokens,
           reasoningTokens: openAIResponse.usage.reasoning_tokens,
           cachedTokens: openAIResponse.usage.cached_tokens,
+          promptCacheCreationTokens: null,
+          promptImageTokens: null,
         },
         model: openAIResponse.model,
         metadata: {
