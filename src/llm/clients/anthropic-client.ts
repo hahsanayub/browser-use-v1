@@ -34,6 +34,9 @@ interface AnthropicResponse {
  */
 export class AnthropicClient extends BaseLLMClient {
   private httpClient: AxiosInstance;
+  private async sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
 
   constructor(config: LLMClientConfig) {
     super(config);
@@ -81,19 +84,56 @@ export class AnthropicClient extends BaseLLMClient {
         })
       );
 
-      const requestData = {
+      const requestData: Record<string, any> = {
         model: this.config.model,
         max_tokens: requestOptions.maxTokens || 4000,
         temperature: requestOptions.temperature,
+        top_p: requestOptions.topP,
+        stream: requestOptions.stream,
         messages: anthropicMessages,
         ...(systemMessage && { system: systemMessage.content }),
         ...(requestOptions.stop && { stop_sequences: requestOptions.stop }),
       };
 
-      const response = await this.httpClient.post<AnthropicResponse>(
-        '/v1/messages',
-        requestData
-      );
+      // Anthropic "structured output" equivalent is tool use; for now we only support text output.
+      // If responseFormat is requested as json, we guide via system message for stricter adherence.
+      if (
+        requestOptions.responseFormat &&
+        (requestOptions.responseFormat.type === 'json_object' ||
+          requestOptions.responseFormat.type === 'json_schema')
+      ) {
+        requestData.system = `${systemMessage?.content || ''}\nReturn ONLY strict JSON${
+          requestOptions.responseFormat.type === 'json_schema' ?
+            ' matching the provided schema.' :
+            '.'
+        }`.trim();
+      }
+
+      const maxRetries = typeof this.config.maxRetries === 'number' ? this.config.maxRetries : 0;
+      let attempt = 0;
+      let lastError: any;
+      let response: { data: AnthropicResponse } | undefined;
+      while (attempt <= maxRetries) {
+        try {
+          response = await this.httpClient.post<AnthropicResponse>(
+            '/v1/messages',
+            requestData,
+            requestOptions.timeout ? { timeout: requestOptions.timeout } : undefined
+          );
+          break;
+        } catch (err: any) {
+          lastError = err;
+          const status = err?.response?.status;
+          if (attempt < maxRetries && (status === 429 || status === 408 || (status >= 500 && status < 600))) {
+            const backoffMs = Math.min(1000 * Math.pow(2, attempt), 8000);
+            await this.sleep(backoffMs);
+            attempt += 1;
+            continue;
+          }
+          throw err;
+        }
+      }
+      if (!response) throw lastError || new Error('Anthropic request failed without response');
 
       const anthropicResponse = response.data;
       const requestTime = Date.now() - startTime;

@@ -31,6 +31,14 @@ export const LLMConfigSchema = z.object({
   timeout: z.number().min(1000).default(30000),
   maxTokens: z.number().min(1).default(4000),
   temperature: z.number().min(0).max(2).default(0.7),
+  topP: z.number().min(0).max(1).optional(),
+  frequencyPenalty: z.number().min(-2).max(2).optional(),
+  presencePenalty: z.number().min(-2).max(2).optional(),
+  seed: z.number().optional(),
+  serviceTier: z.enum(['auto', 'default', 'standard', 'premium']).optional(),
+  organization: z.string().optional(),
+  project: z.string().optional(),
+  maxRetries: z.number().min(0).optional(),
 });
 
 // Logging configuration schema

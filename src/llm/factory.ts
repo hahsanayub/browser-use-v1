@@ -24,9 +24,17 @@ export function createLLMClient(config: LLMConfig): BaseLLMClient {
     model: config.model || 'gpt-3.5-turbo',
     baseUrl: config.baseUrl,
     timeout: config.timeout,
+    maxRetries: config.maxRetries,
+    organization: config.organization,
+    project: config.project,
+    serviceTier: config.serviceTier,
     defaultOptions: {
       maxTokens: config.maxTokens,
       temperature: config.temperature,
+      topP: config.topP,
+      frequencyPenalty: config.frequencyPenalty,
+      presencePenalty: config.presencePenalty,
+      seed: config.seed,
     },
   };
 
