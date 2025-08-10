@@ -93,6 +93,7 @@ export class OllamaClient extends BaseLLMClient {
       let response: { data: OllamaChatResponse } | undefined;
       while (attempt <= maxRetries) {
         try {
+          // Prefer chat endpoint if available
           response = await this.httpClient.post<OllamaChatResponse>(
             '/api/chat',
             body,
@@ -100,15 +101,44 @@ export class OllamaClient extends BaseLLMClient {
           );
           break;
         } catch (err: any) {
-          lastError = err;
+          // If chat endpoint is not found, fall back to generate
           const status = err?.response?.status;
-          if (attempt < maxRetries && (status === 429 || status === 408 || (status >= 500 && status < 600))) {
+          const isNotFound = status === 404 || (typeof err?.message === 'string' && err.message.includes('/api/chat'));
+          if (isNotFound) {
+            try {
+              const generateBody: Record<string, any> = {
+                model: this.config.model,
+                prompt: ollamaMessages.map(m => `${m.role}: ${m.content ?? ''}`).join('\n'),
+                stream: requestOptions.stream ?? false,
+              };
+              const genResp = await this.httpClient.post<{ response: string }>(
+                '/api/generate',
+                generateBody,
+                requestOptions.timeout ? { timeout: requestOptions.timeout } : undefined
+              );
+              const requestTime = Date.now() - startTime;
+              const content = (genResp.data as any)?.response ?? '';
+              const llmResponse: LLMResponse = {
+                content,
+                usage: undefined,
+                model: this.config.model,
+                metadata: { requestTime, endpoint: 'generate' },
+              };
+              this.logMetrics(llmResponse, requestTime, messages.length);
+              return llmResponse;
+            } catch (genErr: any) {
+              lastError = genErr;
+            }
+          } else {
+            lastError = err;
+          }
+          if (attempt < maxRetries) {
             const backoffMs = Math.min(1000 * Math.pow(2, attempt), 8000);
             await this.sleep(backoffMs);
             attempt += 1;
             continue;
           }
-          throw err;
+          throw lastError;
         }
       }
       if (!response) throw lastError || new Error('Ollama request failed without response');

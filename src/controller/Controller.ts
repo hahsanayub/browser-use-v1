@@ -86,14 +86,19 @@ export class Controller {
         });
       }
 
+      // Mark initialized before initializing the browser so that dependent
+      // methods that assert initialization can proceed.
+      this.isInitialized = true;
+
       // Auto-initialize browser if requested
       if (this.controllerConfig.autoInitializeBrowser) {
         await this.initializeBrowser();
       }
 
-      this.isInitialized = true;
       this.logger.info('Browser-use controller initialized successfully');
     } catch (error) {
+      // Ensure state reflects failure
+      this.isInitialized = false;
       if (this.logger) {
         this.logger.error('Failed to initialize controller', error as Error);
       } else {

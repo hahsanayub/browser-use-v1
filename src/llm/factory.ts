@@ -17,7 +17,9 @@ import { getLogger } from '../services/logging';
 export function createLLMClient(config: LLMConfig): BaseLLMClient {
   const logger = getLogger();
 
-  if (!config.apiKey) {
+  // Only some providers require API keys. Ollama runs locally and does not.
+  const providerRequiresApiKey = config.provider !== 'ollama';
+  if (providerRequiresApiKey && !config.apiKey) {
     throw new Error(`API key is required for ${config.provider} provider`);
   }
 
