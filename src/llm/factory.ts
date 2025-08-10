@@ -5,6 +5,8 @@
 import { BaseLLMClient } from './base-client';
 import { OpenAIClient } from './clients/openai-client';
 import { AnthropicClient } from './clients/anthropic-client';
+import { OllamaClient } from './clients/ollama-client';
+import { GoogleClient } from './clients/google-client';
 import type { LLMConfig } from '../config/schema';
 import type { LLMClientConfig } from '../types/llm';
 import { getLogger } from '../services/logging';
@@ -51,8 +53,10 @@ export function createLLMClient(config: LLMConfig): BaseLLMClient {
       return new AnthropicClient(clientConfig);
 
     case 'google':
-      // TODO: Implement Google client
-      throw new Error('Google provider not yet implemented');
+      return new GoogleClient(clientConfig);
+
+    case 'ollama':
+      return new OllamaClient(clientConfig);
 
     case 'custom':
       // For custom providers, default to OpenAI-compatible format
@@ -82,7 +86,7 @@ export async function validateLLMConfig(config: LLMConfig): Promise<boolean> {
  */
 export function getSupportedProviders(): string[] {
   // Keep 'google' to match schema; although not implemented, it is a recognized option
-  return ['openai', 'anthropic', 'google', 'custom'];
+  return ['openai', 'anthropic', 'google', 'ollama', 'custom'];
 }
 
 /**
@@ -92,7 +96,8 @@ export function getDefaultModels(): Record<string, string> {
   return {
     openai: 'gpt-3.5-turbo',
     anthropic: 'claude-3-sonnet-20240229',
-    google: 'gemini-pro',
+    google: 'gemini-2.0-flash',
+    ollama: 'llama3.1:8b',
     custom: 'gpt-3.5-turbo',
   };
 }

@@ -23,7 +23,7 @@ export const BrowserConfigSchema = z.object({
 // LLM configuration schema
 export const LLMConfigSchema = z.object({
   provider: z
-    .enum(['openai', 'anthropic', 'google', 'custom'])
+    .enum(['openai', 'anthropic', 'google', 'ollama', 'custom'])
     .default('openai'),
   apiKey: z.string().optional(),
   model: z.string().default('gpt-3.5-turbo'),
@@ -35,7 +35,7 @@ export const LLMConfigSchema = z.object({
   frequencyPenalty: z.number().min(-2).max(2).optional(),
   presencePenalty: z.number().min(-2).max(2).optional(),
   seed: z.number().optional(),
-  serviceTier: z.enum(['auto', 'default', 'standard', 'premium']).optional(),
+  serviceTier: z.enum(['auto', 'default', 'flex', 'priority', 'scale']).optional(),
   organization: z.string().optional(),
   project: z.string().optional(),
   maxRetries: z.number().min(0).optional(),

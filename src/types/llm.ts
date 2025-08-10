@@ -70,6 +70,8 @@ export interface LLMRequestOptions {
   reasoningEffort?: 'low' | 'medium' | 'high';
   /** when using json_schema, optionally also embed schema into system prompt */
   addSchemaToSystemPrompt?: boolean;
+  /** Google Gemini: thinking budget (token budget for internal thoughts) */
+  thinkingBudget?: number;
 }
 
 export interface LLMClientConfig {
