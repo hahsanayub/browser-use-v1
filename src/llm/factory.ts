@@ -24,7 +24,7 @@ export function createLLMClient(config: LLMConfig): BaseLLMClient {
   }
 
   const clientConfig: LLMClientConfig = {
-    apiKey: config.apiKey,
+    apiKey: config.apiKey || '',
     model: config.model || 'gpt-3.5-turbo',
     baseUrl: config.baseUrl,
     timeout: config.timeout,

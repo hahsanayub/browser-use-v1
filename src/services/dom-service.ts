@@ -131,8 +131,9 @@ export class DOMService {
         };
       }
     }
-    const result: any = await page
-      .evaluate(
+    let result: any;
+    try {
+      result = await page.evaluate(
         (payload: { script: string; args: any }) => {
           const fn = new Function('args', `return (${payload.script})(args);`);
           return fn(payload.args);
@@ -146,15 +147,13 @@ export class DOMService {
             ...options,
           },
         }
-      )
-      .catch(async () => {
-        // Fallback evaluate path to avoid double wrapping
-        const domState: any = await page.evaluate(
+      );
+    } catch (primaryError) {
+      // Try a secondary path once more
+      try {
+        result = await page.evaluate(
           (payload: { script: string; args: any }) => {
-            const fn = new Function(
-              'args',
-              `return (${payload.script})(args);`
-            );
+            const fn = new Function('args', `return (${payload.script})(args);`);
             return fn(payload.args);
           },
           {
@@ -167,8 +166,19 @@ export class DOMService {
             },
           }
         );
-        return domState;
-      });
+      } catch (secondaryError) {
+        // If both attempts fail (e.g., due to strict CSP disallowing eval/new Function),
+        // return a minimal fallback DOM state so the agent can continue.
+        this.logger.warn('Falling back to minimal DOM state due to evaluation failure', {
+          error: (secondaryError as Error).message,
+        });
+        return {
+          elementTree: undefined,
+          map: {},
+          selectorMap: { root: 'html' },
+        } as DOMState;
+      }
+    }
 
     // Normalize to DOMState shape
     const map: Record<string, any> = result?.map || {};
@@ -253,10 +263,25 @@ export class DOMService {
       }
       return elements;
     } catch (e) {
+      // Fallback to basic querySelectorAll extraction when script execution is blocked by CSP
       this.logger.warn('Failed to build interactive elements from script', {
         error: (e as Error).message,
       });
-      return [];
+      const elements = await page.$$eval(
+        'a, button, input, textarea, select, [role="button"]',
+        (els) =>
+          els.map((el, i) => ({
+            id: `interactive_${i}`,
+            tagName: el.tagName.toLowerCase(),
+            type: (el.getAttribute('type') || el.tagName.toLowerCase()),
+            attributes: Array.from(el.attributes).reduce((acc, a) => {
+              acc[a.name] = a.value;
+              return acc;
+            }, {} as Record<string, string>),
+            selector: el.id ? `#${el.id}` : el.tagName.toLowerCase(),
+          }))
+      );
+      return elements as unknown as InteractiveElement[];
     }
   }
 
