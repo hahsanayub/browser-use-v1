@@ -104,15 +104,18 @@ export class AnthropicClient extends BaseLLMClient {
           // Force structured output via tool choice by passing a tool schema-like instruction
           // Since we are using HTTP raw API here, emulate with a stronger system instruction
           const schema = requestOptions.responseFormat.schema;
-          const sys = `${systemMessage?.content || ''}\nYou MUST produce ONLY a strict JSON object matching this JSON Schema: ${JSON.stringify(schema)}\nNo extra keys, no prose.`.trim();
+          const sys =
+            `${systemMessage?.content || ''}\nYou MUST produce ONLY a strict JSON object matching this JSON Schema: ${JSON.stringify(schema)}\nNo extra keys, no prose.`.trim();
           requestData.system = sys;
         } else if (requestOptions.responseFormat.type === 'json_object') {
-          const sys = `${systemMessage?.content || ''}\nYou MUST produce ONLY a strict JSON object with no additional text.`.trim();
+          const sys =
+            `${systemMessage?.content || ''}\nYou MUST produce ONLY a strict JSON object with no additional text.`.trim();
           requestData.system = sys;
         }
       }
 
-      const maxRetries = typeof this.config.maxRetries === 'number' ? this.config.maxRetries : 0;
+      const maxRetries =
+        typeof this.config.maxRetries === 'number' ? this.config.maxRetries : 0;
       let attempt = 0;
       let lastError: any;
       let response: { data: AnthropicResponse } | undefined;
@@ -121,13 +124,20 @@ export class AnthropicClient extends BaseLLMClient {
           response = await this.httpClient.post<AnthropicResponse>(
             '/v1/messages',
             requestData,
-            requestOptions.timeout ? { timeout: requestOptions.timeout } : undefined
+            requestOptions.timeout
+              ? { timeout: requestOptions.timeout }
+              : undefined
           );
           break;
         } catch (err: any) {
           lastError = err;
           const status = err?.response?.status;
-          if (attempt < maxRetries && (status === 429 || status === 408 || (status >= 500 && status < 600))) {
+          if (
+            attempt < maxRetries &&
+            (status === 429 ||
+              status === 408 ||
+              (status >= 500 && status < 600))
+          ) {
             const backoffMs = Math.min(1000 * Math.pow(2, attempt), 8000);
             await this.sleep(backoffMs);
             attempt += 1;
@@ -136,7 +146,10 @@ export class AnthropicClient extends BaseLLMClient {
           throw err;
         }
       }
-      if (!response) throw lastError || new Error('Anthropic request failed without response');
+      if (!response)
+        throw (
+          lastError || new Error('Anthropic request failed without response')
+        );
 
       const anthropicResponse = response.data;
       const requestTime = Date.now() - startTime;
@@ -157,13 +170,16 @@ export class AnthropicClient extends BaseLLMClient {
         content: textContent,
         usage: {
           promptTokens:
-            anthropicResponse.usage.input_tokens + (anthropicResponse.usage.cache_read_input_tokens || 0),
+            anthropicResponse.usage.input_tokens +
+            (anthropicResponse.usage.cache_read_input_tokens || 0),
           completionTokens: anthropicResponse.usage.output_tokens,
           totalTokens:
             anthropicResponse.usage.input_tokens +
             anthropicResponse.usage.output_tokens,
-          promptCachedTokens: anthropicResponse.usage.cache_read_input_tokens ?? null,
-          promptCacheCreationTokens: anthropicResponse.usage.cache_creation_input_tokens ?? null,
+          promptCachedTokens:
+            anthropicResponse.usage.cache_read_input_tokens ?? null,
+          promptCacheCreationTokens:
+            anthropicResponse.usage.cache_creation_input_tokens ?? null,
           promptImageTokens: null,
         },
         model: anthropicResponse.model,

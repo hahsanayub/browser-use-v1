@@ -41,7 +41,12 @@ export type JSONSchema = Record<string, any>;
 export type LLMResponseFormat =
   | { type: 'text' }
   | { type: 'json_object' }
-  | { type: 'json_schema'; schema: JSONSchema; name?: string; strict?: boolean };
+  | {
+      type: 'json_schema';
+      schema: JSONSchema;
+      name?: string;
+      strict?: boolean;
+    };
 
 export interface LLMRequestOptions {
   /** Maximum tokens to generate */

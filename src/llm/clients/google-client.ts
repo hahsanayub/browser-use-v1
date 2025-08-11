@@ -7,7 +7,12 @@
 
 import axios, { AxiosInstance } from 'axios';
 import { BaseLLMClient } from '../base-client';
-import type { LLMMessage, LLMResponse, LLMRequestOptions, LLMClientConfig } from '../../types/llm';
+import type {
+  LLMMessage,
+  LLMResponse,
+  LLMRequestOptions,
+  LLMClientConfig,
+} from '../../types/llm';
 
 interface GooglePart {
   text?: string;
@@ -49,11 +54,17 @@ export class GoogleClient extends BaseLLMClient {
     this.httpClient = axios.create({
       baseURL: config.baseUrl || '',
       timeout: config.timeout || 30000,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.apiKey}`,
+      },
     });
   }
 
-  private serializeMessages(messages: LLMMessage[]): { contents: GoogleContent[]; system?: GoogleContent } {
+  private serializeMessages(messages: LLMMessage[]): {
+    contents: GoogleContent[];
+    system?: GoogleContent;
+  } {
     const contents: GoogleContent[] = [];
     let system: GoogleContent | undefined;
     for (const m of messages) {
@@ -69,18 +80,28 @@ export class GoogleClient extends BaseLLMClient {
     return { contents, system };
   }
 
-  async generateResponse(messages: LLMMessage[], options?: LLMRequestOptions): Promise<LLMResponse> {
+  async generateResponse(
+    messages: LLMMessage[],
+    options?: LLMRequestOptions
+  ): Promise<LLMResponse> {
     this.validateMessages(messages);
     const requestOptions = this.mergeOptions(options);
     const start = Date.now();
 
     const { contents, system } = this.serializeMessages(messages);
     const generation_config: Record<string, any> = {};
-    if (requestOptions.temperature != null) generation_config.temperature = requestOptions.temperature;
-    if (requestOptions.topP != null) generation_config.top_p = requestOptions.topP;
-    if (requestOptions.seed != null) generation_config.seed = requestOptions.seed;
-    if (requestOptions.maxTokens != null) generation_config.max_output_tokens = requestOptions.maxTokens;
-    if (requestOptions.thinkingBudget != null) generation_config.thinking_config = { thinking_budget: requestOptions.thinkingBudget };
+    if (requestOptions.temperature != null)
+      generation_config.temperature = requestOptions.temperature;
+    if (requestOptions.topP != null)
+      generation_config.top_p = requestOptions.topP;
+    if (requestOptions.seed != null)
+      generation_config.seed = requestOptions.seed;
+    if (requestOptions.maxTokens != null)
+      generation_config.max_output_tokens = requestOptions.maxTokens;
+    if (requestOptions.thinkingBudget != null)
+      generation_config.thinking_config = {
+        thinking_budget: requestOptions.thinkingBudget,
+      };
 
     const req: GenerateContentRequest = {
       contents,
@@ -92,19 +113,29 @@ export class GoogleClient extends BaseLLMClient {
 
     try {
       const url = `/models/${encodeURIComponent(this.config.model)}:generateContent`;
-      const res = await this.httpClient.post<GenerateContentResponse>(url, req, requestOptions.timeout ? { timeout: requestOptions.timeout } : undefined);
+      const res = await this.httpClient.post<GenerateContentResponse>(
+        url,
+        req,
+        requestOptions.timeout ? { timeout: requestOptions.timeout } : undefined
+      );
       const data = res.data;
       const time = Date.now() - start;
 
-      const imageTokens = data.usage_metadata?.prompt_tokens_details?.filter((d) => d.modality?.toUpperCase() === 'IMAGE').reduce((s, d) => s + (d.token_count || 0), 0) || 0;
+      const imageTokens =
+        data.usage_metadata?.prompt_tokens_details
+          ?.filter((d) => d.modality?.toUpperCase() === 'IMAGE')
+          .reduce((s, d) => s + (d.token_count || 0), 0) || 0;
 
       const llm: LLMResponse = {
         content: data.text || '',
         usage: {
           promptTokens: data.usage_metadata?.prompt_token_count || 0,
-          completionTokens: (data.usage_metadata?.candidates_token_count || 0) + (data.usage_metadata?.thoughts_token_count || 0),
+          completionTokens:
+            (data.usage_metadata?.candidates_token_count || 0) +
+            (data.usage_metadata?.thoughts_token_count || 0),
           totalTokens: data.usage_metadata?.total_token_count || 0,
-          promptCachedTokens: data.usage_metadata?.cached_content_token_count ?? null,
+          promptCachedTokens:
+            data.usage_metadata?.cached_content_token_count ?? null,
           promptCacheCreationTokens: null,
           promptImageTokens: imageTokens || null,
         },
@@ -114,7 +145,10 @@ export class GoogleClient extends BaseLLMClient {
       this.logMetrics(llm, time, messages.length);
       return llm;
     } catch (error: any) {
-      const msg = error?.response?.data?.error?.message || error.message || 'Google request failed';
+      const msg =
+        error?.response?.data?.error?.message ||
+        error.message ||
+        'Google request failed';
       throw this.handleError(error, msg);
     }
   }
@@ -128,5 +162,3 @@ export class GoogleClient extends BaseLLMClient {
     }
   }
 }
-
-

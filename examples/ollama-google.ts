@@ -12,8 +12,9 @@ async function main() {
         provider: 'ollama',
         model: 'qwen3-coder',
         baseUrl: 'http://localhost:11434',
-        temperature: 0.1,
         timeout: 60000,
+        maxTokens: 1024 * 1024,
+        temperature: 0.7,
       },
       browser: {
         headless: false,

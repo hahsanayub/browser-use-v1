@@ -9,8 +9,17 @@ import { BaseLLMClient } from '../llm/base-client';
 import type { LLMMessage } from '../types/llm';
 import type { PageView } from '../types/dom';
 import type { AgentHistory, ActionResult, AgentConfig } from '../types/agent';
-import { validateAgentThought, type Action, type AgentThought, createAgentThoughtSchema } from './views';
-import { SystemPrompt, generatePageContextPrompt, generateStuckRecoveryPrompt } from './prompts';
+import {
+  validateAgentThought,
+  type Action,
+  type AgentThought,
+  createAgentThoughtSchema,
+} from './views';
+import {
+  SystemPrompt,
+  generatePageContextPrompt,
+  generateStuckRecoveryPrompt,
+} from './prompts';
 import { getLogger } from '../services/logging';
 import { JsonParser } from '../services/json-parser';
 import { registry } from '../controller/singleton';
@@ -264,32 +273,44 @@ export class Agent {
       const thoughtData = JsonParser.parse(response.content);
       // Normalize action array if returned as keyed objects
       if (Array.isArray((thoughtData as any).action)) {
-        (thoughtData as any).action = (thoughtData as any).action.map((item: any) => {
-          if (item && typeof item === 'object' && !('action' in item)) {
-            const entries = Object.entries(item);
-            if (entries.length === 1) {
-              const [name, params] = entries[0];
-              const normalized: any = { action: name, reasoning: 'Auto-executed based on plan to progress toward goal.' };
-              if (params && typeof params === 'object') {
-                Object.assign(normalized, params);
+        (thoughtData as any).action = (thoughtData as any).action.map(
+          (item: any) => {
+            if (item && typeof item === 'object' && !('action' in item)) {
+              const entries = Object.entries(item);
+              if (entries.length === 1) {
+                const [name, params] = entries[0];
+                const normalized: any = {
+                  action: name,
+                  reasoning:
+                    'Auto-executed based on plan to progress toward goal.',
+                };
+                if (params && typeof params === 'object') {
+                  Object.assign(normalized, params);
+                }
+                return normalized;
               }
-              return normalized;
             }
+            return item;
           }
-          return item;
-        });
+        );
       }
       // Build dynamic schema for this page and validate
-      const dynamicActionSchema = registry.buildDynamicActionSchemaForPage(activePage);
-      const AgentThoughtSchemaForStep = createAgentThoughtSchema(dynamicActionSchema);
-      let thought = AgentThoughtSchemaForStep.parse(thoughtData) as AgentThought;
+      const dynamicActionSchema =
+        registry.buildDynamicActionSchemaForPage(activePage);
+      const AgentThoughtSchemaForStep =
+        createAgentThoughtSchema(dynamicActionSchema);
+      let thought = AgentThoughtSchemaForStep.parse(
+        thoughtData
+      ) as AgentThought;
 
       // Enforce dynamic action availability for each proposed action
       const filteredActions = thought.action.filter((a) =>
         availableActions.includes(a.action)
       );
       if (filteredActions.length === 0) {
-        this.logger.warn('No supported actions proposed; coercing to screenshot');
+        this.logger.warn(
+          'No supported actions proposed; coercing to screenshot'
+        );
         filteredActions.push({
           action: 'screenshot',
           reasoning: 'Fallback to screenshot due to unsupported actions',
@@ -310,7 +331,10 @@ export class Agent {
       return {
         memory: 'Failed to analyze page due to LLM error',
         action: [
-          { action: 'screenshot', reasoning: 'Taking screenshot before finishing due to error' } as any,
+          {
+            action: 'screenshot',
+            reasoning: 'Taking screenshot before finishing due to error',
+          } as any,
         ],
       } as any;
     }
@@ -541,24 +565,33 @@ export class Agent {
       const thoughtData = JsonParser.parse(response.content);
       // Normalize potential keyed action objects
       if (Array.isArray((thoughtData as any).action)) {
-        (thoughtData as any).action = (thoughtData as any).action.map((item: any) => {
-          if (item && typeof item === 'object' && !('action' in item)) {
-            const entries = Object.entries(item);
-            if (entries.length === 1) {
-              const [name, params] = entries[0];
-              const normalized: any = { action: name, reasoning: 'Auto-executed during recovery.' };
-              if (params && typeof params === 'object') {
-                Object.assign(normalized, params);
+        (thoughtData as any).action = (thoughtData as any).action.map(
+          (item: any) => {
+            if (item && typeof item === 'object' && !('action' in item)) {
+              const entries = Object.entries(item);
+              if (entries.length === 1) {
+                const [name, params] = entries[0];
+                const normalized: any = {
+                  action: name,
+                  reasoning: 'Auto-executed during recovery.',
+                };
+                if (params && typeof params === 'object') {
+                  Object.assign(normalized, params);
+                }
+                return normalized;
               }
-              return normalized;
             }
+            return item;
           }
-          return item;
-        });
+        );
       }
-      const dynamicActionSchema = registry.buildDynamicActionSchemaForPage(page);
-      const AgentThoughtSchemaForStep = createAgentThoughtSchema(dynamicActionSchema);
-      const thought = AgentThoughtSchemaForStep.parse(thoughtData) as AgentThought;
+      const dynamicActionSchema =
+        registry.buildDynamicActionSchemaForPage(page);
+      const AgentThoughtSchemaForStep =
+        createAgentThoughtSchema(dynamicActionSchema);
+      const thought = AgentThoughtSchemaForStep.parse(
+        thoughtData
+      ) as AgentThought;
 
       // Execute first recovery action only
       const first = (thought as any).action?.[0];

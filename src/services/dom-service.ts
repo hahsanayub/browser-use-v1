@@ -153,7 +153,10 @@ export class DOMService {
       try {
         result = await page.evaluate(
           (payload: { script: string; args: any }) => {
-            const fn = new Function('args', `return (${payload.script})(args);`);
+            const fn = new Function(
+              'args',
+              `return (${payload.script})(args);`
+            );
             return fn(payload.args);
           },
           {
@@ -169,9 +172,12 @@ export class DOMService {
       } catch (secondaryError) {
         // If both attempts fail (e.g., due to strict CSP disallowing eval/new Function),
         // return a minimal fallback DOM state so the agent can continue.
-        this.logger.warn('Falling back to minimal DOM state due to evaluation failure', {
-          error: (secondaryError as Error).message,
-        });
+        this.logger.warn(
+          'Falling back to minimal DOM state due to evaluation failure',
+          {
+            error: (secondaryError as Error).message,
+          }
+        );
         return {
           elementTree: undefined,
           map: {},
@@ -273,11 +279,14 @@ export class DOMService {
           els.map((el, i) => ({
             id: `interactive_${i}`,
             tagName: el.tagName.toLowerCase(),
-            type: (el.getAttribute('type') || el.tagName.toLowerCase()),
-            attributes: Array.from(el.attributes).reduce((acc, a) => {
-              acc[a.name] = a.value;
-              return acc;
-            }, {} as Record<string, string>),
+            type: el.getAttribute('type') || el.tagName.toLowerCase(),
+            attributes: Array.from(el.attributes).reduce(
+              (acc, a) => {
+                acc[a.name] = a.value;
+                return acc;
+              },
+              {} as Record<string, string>
+            ),
             selector: el.id ? `#${el.id}` : el.tagName.toLowerCase(),
           }))
       );

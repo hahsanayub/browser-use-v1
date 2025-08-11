@@ -35,7 +35,9 @@ export const LLMConfigSchema = z.object({
   frequencyPenalty: z.number().min(-2).max(2).optional(),
   presencePenalty: z.number().min(-2).max(2).optional(),
   seed: z.number().optional(),
-  serviceTier: z.enum(['auto', 'default', 'flex', 'priority', 'scale']).optional(),
+  serviceTier: z
+    .enum(['auto', 'default', 'flex', 'priority', 'scale'])
+    .optional(),
   organization: z.string().optional(),
   project: z.string().optional(),
   maxRetries: z.number().min(0).optional(),

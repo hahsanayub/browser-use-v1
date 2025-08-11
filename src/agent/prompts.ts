@@ -13,11 +13,13 @@ export class SystemPrompt {
    * - useThinking: if explicitly false, use `system-prompt-no-thinking.md`
    * - default: `system-prompt.md`
    */
-  static async load(options: {
-    flashMode?: boolean;
-    useThinking?: boolean;
-    placeholders?: Record<string, string | number>;
-  } = {}): Promise<string> {
+  static async load(
+    options: {
+      flashMode?: boolean;
+      useThinking?: boolean;
+      placeholders?: Record<string, string | number>;
+    } = {}
+  ): Promise<string> {
     const { flashMode, useThinking, placeholders } = options;
     let filename = 'system-prompt.md';
     if (flashMode) filename = 'system-prompt-flash.md';

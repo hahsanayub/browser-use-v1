@@ -51,7 +51,8 @@ export class OpenAIClient extends BaseLLMClient {
       Authorization: `Bearer ${config.apiKey}`,
       'Content-Type': 'application/json',
     };
-    if (config.organization) headers['OpenAI-Organization'] = config.organization;
+    if (config.organization)
+      headers['OpenAI-Organization'] = config.organization;
     if (config.project) headers['OpenAI-Project'] = config.project;
 
     this.httpClient = axios.create({
@@ -136,7 +137,8 @@ export class OpenAIClient extends BaseLLMClient {
         requestData.messages = openAIMessages;
       }
 
-      const maxRetries = typeof this.config.maxRetries === 'number' ? this.config.maxRetries : 0;
+      const maxRetries =
+        typeof this.config.maxRetries === 'number' ? this.config.maxRetries : 0;
       let attempt = 0;
       let lastError: any;
       let response: { data: OpenAIResponse } | undefined;
@@ -145,14 +147,21 @@ export class OpenAIClient extends BaseLLMClient {
           response = await this.httpClient.post<OpenAIResponse>(
             '/chat/completions',
             requestData,
-            requestOptions.timeout ? { timeout: requestOptions.timeout } : undefined
+            requestOptions.timeout
+              ? { timeout: requestOptions.timeout }
+              : undefined
           );
           break;
         } catch (err: any) {
           lastError = err;
           // Retry on 429, 408, 5xx
           const status = err?.response?.status;
-          if (attempt < maxRetries && (status === 429 || status === 408 || (status >= 500 && status < 600))) {
+          if (
+            attempt < maxRetries &&
+            (status === 429 ||
+              status === 408 ||
+              (status >= 500 && status < 600))
+          ) {
             const backoffMs = Math.min(1000 * Math.pow(2, attempt), 8000);
             await this.sleep(backoffMs);
             attempt += 1;
@@ -161,7 +170,8 @@ export class OpenAIClient extends BaseLLMClient {
           throw err;
         }
       }
-      if (!response) throw lastError || new Error('OpenAI request failed without response');
+      if (!response)
+        throw lastError || new Error('OpenAI request failed without response');
 
       const openAIResponse = response.data;
       const requestTime = Date.now() - startTime;
@@ -175,7 +185,8 @@ export class OpenAIClient extends BaseLLMClient {
         content: choice.message.content,
         usage: {
           promptTokens: openAIResponse.usage.prompt_tokens,
-          promptCachedTokens: openAIResponse.usage.prompt_tokens_details?.cached_tokens ?? null,
+          promptCachedTokens:
+            openAIResponse.usage.prompt_tokens_details?.cached_tokens ?? null,
           completionTokens:
             (openAIResponse.usage.completion_tokens || 0) +
             (openAIResponse.usage.reasoning_tokens || 0),

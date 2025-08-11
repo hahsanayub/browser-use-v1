@@ -4,7 +4,12 @@
 
 import axios, { AxiosInstance } from 'axios';
 import { BaseLLMClient } from '../base-client';
-import type { LLMMessage, LLMResponse, LLMRequestOptions, LLMClientConfig } from '../../types/llm';
+import type {
+  LLMMessage,
+  LLMResponse,
+  LLMRequestOptions,
+  LLMClientConfig,
+} from '../../types/llm';
 
 interface OllamaMessage {
   role: 'system' | 'user' | 'assistant';
@@ -40,7 +45,8 @@ export class OllamaClient extends BaseLLMClient {
     const parts: string[] = [];
     for (const part of content as any[]) {
       if (part?.type === 'text') parts.push(part.text);
-      else if (part?.type === 'refusal') parts.push(`[Refusal] ${part.refusal}`);
+      else if (part?.type === 'refusal')
+        parts.push(`[Refusal] ${part.refusal}`);
     }
     return parts.join('\n');
   }
@@ -57,7 +63,10 @@ export class OllamaClient extends BaseLLMClient {
     return images;
   }
 
-  async generateResponse(messages: LLMMessage[], options?: LLMRequestOptions): Promise<LLMResponse> {
+  async generateResponse(
+    messages: LLMMessage[],
+    options?: LLMRequestOptions
+  ): Promise<LLMResponse> {
     this.validateMessages(messages);
     const requestOptions = this.mergeOptions(options);
     const startTime = Date.now();
@@ -87,7 +96,8 @@ export class OllamaClient extends BaseLLMClient {
     }
 
     try {
-      const maxRetries = typeof this.config.maxRetries === 'number' ? this.config.maxRetries : 0;
+      const maxRetries =
+        typeof this.config.maxRetries === 'number' ? this.config.maxRetries : 0;
       let attempt = 0;
       let lastError: any;
       let response: { data: OllamaChatResponse } | undefined;
@@ -97,24 +107,33 @@ export class OllamaClient extends BaseLLMClient {
           response = await this.httpClient.post<OllamaChatResponse>(
             '/api/chat',
             body,
-            requestOptions.timeout ? { timeout: requestOptions.timeout } : undefined
+            requestOptions.timeout
+              ? { timeout: requestOptions.timeout }
+              : undefined
           );
           break;
         } catch (err: any) {
           // If chat endpoint is not found, fall back to generate
           const status = err?.response?.status;
-          const isNotFound = status === 404 || (typeof err?.message === 'string' && err.message.includes('/api/chat'));
+          const isNotFound =
+            status === 404 ||
+            (typeof err?.message === 'string' &&
+              err.message.includes('/api/chat'));
           if (isNotFound) {
             try {
               const generateBody: Record<string, any> = {
                 model: this.config.model,
-                prompt: ollamaMessages.map(m => `${m.role}: ${m.content ?? ''}`).join('\n'),
+                prompt: ollamaMessages
+                  .map((m) => `${m.role}: ${m.content ?? ''}`)
+                  .join('\n'),
                 stream: requestOptions.stream ?? false,
               };
               const genResp = await this.httpClient.post<{ response: string }>(
                 '/api/generate',
                 generateBody,
-                requestOptions.timeout ? { timeout: requestOptions.timeout } : undefined
+                requestOptions.timeout
+                  ? { timeout: requestOptions.timeout }
+                  : undefined
               );
               const requestTime = Date.now() - startTime;
               const content = (genResp.data as any)?.response ?? '';
@@ -141,7 +160,8 @@ export class OllamaClient extends BaseLLMClient {
           throw lastError;
         }
       }
-      if (!response) throw lastError || new Error('Ollama request failed without response');
+      if (!response)
+        throw lastError || new Error('Ollama request failed without response');
 
       const requestTime = Date.now() - startTime;
       const content = response.data?.message?.content ?? '';
@@ -174,5 +194,3 @@ export class OllamaClient extends BaseLLMClient {
     return [this.config.model];
   }
 }
-
-
