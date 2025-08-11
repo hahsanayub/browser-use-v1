@@ -6,12 +6,7 @@
     debugMode: false,
   }
 ) => {
-  const {
-    doHighlightElements,
-    focusHighlightIndex,
-    viewportExpansion,
-    debugMode,
-  } = args;
+  const { doHighlightElements, focusHighlightIndex, viewportExpansion, debugMode } = args;
   let highlightIndex = 0; // Reset highlight index
 
   // Add caching mechanisms at the top level
@@ -23,7 +18,7 @@
       DOM_CACHE.boundingRects = new WeakMap();
       DOM_CACHE.clientRects = new WeakMap();
       DOM_CACHE.computedStyles = new WeakMap();
-    },
+    }
   };
 
   /**
@@ -98,7 +93,7 @@
 
   const ID = { current: 0 };
 
-  const HIGHLIGHT_CONTAINER_ID = 'playwright-highlight-container';
+  const HIGHLIGHT_CONTAINER_ID = "playwright-highlight-container";
 
   // Add a WeakMap cache for XPath strings
   const xpathCache = new WeakMap();
@@ -137,16 +132,16 @@
       // Create or get highlight container
       let container = document.getElementById(HIGHLIGHT_CONTAINER_ID);
       if (!container) {
-        container = document.createElement('div');
+        container = document.createElement("div");
         container.id = HIGHLIGHT_CONTAINER_ID;
-        container.style.position = 'fixed';
-        container.style.pointerEvents = 'none';
-        container.style.top = '0';
-        container.style.left = '0';
-        container.style.width = '100%';
-        container.style.height = '100%';
+        container.style.position = "fixed";
+        container.style.pointerEvents = "none";
+        container.style.top = "0";
+        container.style.left = "0";
+        container.style.width = "100%";
+        container.style.height = "100%";
         // Use the maximum valid value in zIndex to ensure the element is not blocked by overlapping elements.
-        container.style.zIndex = '2147483647';
+        container.style.zIndex = "2147483647";
         container.style.backgroundColor = 'transparent';
         document.body.appendChild(container);
       }
@@ -158,22 +153,22 @@
 
       // Generate a color based on the index
       const colors = [
-        '#FF0000',
-        '#00FF00',
-        '#0000FF',
-        '#FFA500',
-        '#800080',
-        '#008080',
-        '#FF69B4',
-        '#4B0082',
-        '#FF4500',
-        '#2E8B57',
-        '#DC143C',
-        '#4682B4',
+        "#FF0000",
+        "#00FF00",
+        "#0000FF",
+        "#FFA500",
+        "#800080",
+        "#008080",
+        "#FF69B4",
+        "#4B0082",
+        "#FF4500",
+        "#2E8B57",
+        "#DC143C",
+        "#4682B4",
       ];
       const colorIndex = index % colors.length;
       const baseColor = colors[colorIndex];
-      const backgroundColor = baseColor + '1A'; // 10% opacity version of the color
+      const backgroundColor = baseColor + "1A"; // 10% opacity version of the color
 
       // Get iframe offset if necessary
       let iframeOffset = { x: 0, y: 0 };
@@ -190,12 +185,12 @@
       for (const rect of rects) {
         if (rect.width === 0 || rect.height === 0) continue; // Skip empty rects
 
-        const overlay = document.createElement('div');
-        overlay.style.position = 'fixed';
+        const overlay = document.createElement("div");
+        overlay.style.position = "fixed";
         overlay.style.border = `2px solid ${baseColor}`;
         overlay.style.backgroundColor = backgroundColor;
-        overlay.style.pointerEvents = 'none';
-        overlay.style.boxSizing = 'border-box';
+        overlay.style.pointerEvents = "none";
+        overlay.style.boxSizing = "border-box";
 
         const top = rect.top + iframeOffset.y;
         const left = rect.left + iframeOffset.x;
@@ -211,13 +206,13 @@
 
       // Create and position a single label relative to the first rect
       const firstRect = rects[0];
-      label = document.createElement('div');
-      label.className = 'playwright-highlight-label';
-      label.style.position = 'fixed';
+      label = document.createElement("div");
+      label.className = "playwright-highlight-label";
+      label.style.position = "fixed";
       label.style.background = baseColor;
-      label.style.color = 'white';
-      label.style.padding = '1px 4px';
-      label.style.borderRadius = '4px';
+      label.style.color = "white";
+      label.style.padding = "1px 4px";
+      label.style.borderRadius = "4px";
       label.style.fontSize = `${Math.min(12, Math.max(8, firstRect.height / 2))}px`;
       label.textContent = index.toString();
 
@@ -231,24 +226,16 @@
       let labelLeft = firstRectLeft + firstRect.width - labelWidth - 2;
 
       // Adjust label position if first rect is too small
-      if (
-        firstRect.width < labelWidth + 4 ||
-        firstRect.height < labelHeight + 4
-      ) {
+      if (firstRect.width < labelWidth + 4 || firstRect.height < labelHeight + 4) {
         labelTop = firstRectTop - labelHeight - 2;
         labelLeft = firstRectLeft + firstRect.width - labelWidth; // Align with right edge
         if (labelLeft < iframeOffset.x) labelLeft = firstRectLeft; // Prevent going off-left
       }
 
       // Ensure label stays within viewport bounds slightly better
-      labelTop = Math.max(
-        0,
-        Math.min(labelTop, window.innerHeight - labelHeight)
-      );
-      labelLeft = Math.max(
-        0,
-        Math.min(labelLeft, window.innerWidth - labelWidth)
-      );
+      labelTop = Math.max(0, Math.min(labelTop, window.innerHeight - labelHeight));
+      labelLeft = Math.max(0, Math.min(labelLeft, window.innerWidth - labelWidth));
+
 
       label.style.top = `${labelTop}px`;
       label.style.left = `${labelLeft}px`;
@@ -268,8 +255,7 @@
 
         // Update each overlay
         overlays.forEach((overlayData, i) => {
-          if (i < newRects.length) {
-            // Check if rect still exists
+          if (i < newRects.length) { // Check if rect still exists
             const newRect = newRects[i];
             const newTop = newRect.top + newIframeOffset.y;
             const newLeft = newRect.left + newIframeOffset.x;
@@ -278,8 +264,7 @@
             overlayData.element.style.left = `${newLeft}px`;
             overlayData.element.style.width = `${newRect.width}px`;
             overlayData.element.style.height = `${newRect.height}px`;
-            overlayData.element.style.display =
-              newRect.width === 0 || newRect.height === 0 ? 'none' : 'block';
+            overlayData.element.style.display = (newRect.width === 0 || newRect.height === 0) ? 'none' : 'block';
           } else {
             // If fewer rects now, hide extra overlays
             overlayData.element.style.display = 'none';
@@ -300,28 +285,17 @@
           const firstNewRectLeft = firstNewRect.left + newIframeOffset.x;
 
           let newLabelTop = firstNewRectTop + 2;
-          let newLabelLeft =
-            firstNewRectLeft + firstNewRect.width - labelWidth - 2;
+          let newLabelLeft = firstNewRectLeft + firstNewRect.width - labelWidth - 2;
 
-          if (
-            firstNewRect.width < labelWidth + 4 ||
-            firstNewRect.height < labelHeight + 4
-          ) {
+          if (firstNewRect.width < labelWidth + 4 || firstNewRect.height < labelHeight + 4) {
             newLabelTop = firstNewRectTop - labelHeight - 2;
             newLabelLeft = firstNewRectLeft + firstNewRect.width - labelWidth;
-            if (newLabelLeft < newIframeOffset.x)
-              newLabelLeft = firstNewRectLeft;
+            if (newLabelLeft < newIframeOffset.x) newLabelLeft = firstNewRectLeft;
           }
 
           // Ensure label stays within viewport bounds
-          newLabelTop = Math.max(
-            0,
-            Math.min(newLabelTop, window.innerHeight - labelHeight)
-          );
-          newLabelLeft = Math.max(
-            0,
-            Math.min(newLabelLeft, window.innerWidth - labelWidth)
-          );
+          newLabelTop = Math.max(0, Math.min(newLabelTop, window.innerHeight - labelHeight));
+          newLabelLeft = Math.max(0, Math.min(newLabelLeft, window.innerWidth - labelWidth));
 
           label.style.top = `${newLabelTop}px`;
           label.style.left = `${newLabelLeft}px`;
@@ -331,6 +305,7 @@
           label.style.display = 'none';
         }
       };
+
 
       const throttleFunction = (func, delay) => {
         let lastCall = 0;
@@ -351,7 +326,7 @@
         window.removeEventListener('scroll', throttledUpdatePositions, true);
         window.removeEventListener('resize', throttledUpdatePositions);
         // Remove overlay elements if needed
-        overlays.forEach((overlay) => overlay.element.remove());
+        overlays.forEach(overlay => overlay.element.remove());
         if (label) label.remove();
       };
 
@@ -363,8 +338,7 @@
       // Store cleanup function for later use
       if (cleanupFn) {
         // Keep a reference to cleanup functions in a global array
-        (window._highlightCleanupFunctions =
-          window._highlightCleanupFunctions || []).push(cleanupFn);
+        (window._highlightCleanupFunctions = window._highlightCleanupFunctions || []).push(cleanupFn);
       }
     }
   }
@@ -394,9 +368,8 @@
 
     const tagName = currentElement.nodeName.toLowerCase();
 
-    const siblings = Array.from(currentElement.parentElement.children).filter(
-      (sib) => sib.nodeName.toLowerCase() === tagName
-    );
+    const siblings = Array.from(currentElement.parentElement.children)
+      .filter((sib) => sib.nodeName.toLowerCase() === tagName);
 
     if (siblings.length === 1) {
       return 0; // Only element of its type
@@ -405,6 +378,7 @@
     const index = siblings.indexOf(currentElement) + 1; // 1-based index
     return index;
   }
+
 
   function getXPathTree(element, stopAtBoundary = true) {
     if (xpathCache.has(element)) return xpathCache.get(element);
@@ -424,13 +398,13 @@
 
       const position = getElementPosition(currentElement);
       const tagName = currentElement.nodeName.toLowerCase();
-      const xpathIndex = position > 0 ? `[${position}]` : '';
+      const xpathIndex = position > 0 ? `[${position}]` : "";
       segments.unshift(`${tagName}${xpathIndex}`);
 
       currentElement = currentElement.parentNode;
     }
 
-    const result = segments.join('/');
+    const result = segments.join("/");
     xpathCache.set(element, result);
     return result;
   }
@@ -457,11 +431,9 @@
         } catch (e) {
           // Fallback if checkVisibility is not supported
           const style = window.getComputedStyle(parentElement);
-          return (
-            style.display !== 'none' &&
+          return style.display !== 'none' &&
             style.visibility !== 'hidden' &&
-            style.opacity !== '0'
-          );
+            style.opacity !== '0';
         }
       }
 
@@ -482,14 +454,12 @@
           isAnyRectVisible = true;
 
           // Viewport check for this rect
-          if (
-            !(
-              rect.bottom < -viewportExpansion ||
-              rect.top > window.innerHeight + viewportExpansion ||
-              rect.right < -viewportExpansion ||
-              rect.left > window.innerWidth + viewportExpansion
-            )
-          ) {
+          if (!(
+            rect.bottom < -viewportExpansion ||
+            rect.top > window.innerHeight + viewportExpansion ||
+            rect.right < -viewportExpansion ||
+            rect.left > window.innerWidth + viewportExpansion
+          )) {
             isAnyRectInViewport = true;
             break; // Found a visible rect in viewport, no need to check others
           }
@@ -512,11 +482,9 @@
       } catch (e) {
         // Fallback if checkVisibility is not supported
         const style = window.getComputedStyle(parentElement);
-        return (
-          style.display !== 'none' &&
+        return style.display !== 'none' &&
           style.visibility !== 'hidden' &&
-          style.opacity !== '0'
-        );
+          style.opacity !== '0';
       }
     } catch (e) {
       console.warn('Error checking text node visibility:', e);
@@ -535,27 +503,20 @@
 
     // Always accept body and common container elements
     const alwaysAccept = new Set([
-      'body',
-      'div',
-      'main',
-      'article',
-      'section',
-      'nav',
-      'header',
-      'footer',
+      "body", "div", "main", "article", "section", "nav", "header", "footer"
     ]);
     const tagName = element.tagName.toLowerCase();
 
     if (alwaysAccept.has(tagName)) return true;
 
     const leafElementDenyList = new Set([
-      'svg',
-      'script',
-      'style',
-      'link',
-      'meta',
-      'noscript',
-      'template',
+      "svg",
+      "script",
+      "style",
+      "link",
+      "meta",
+      "noscript",
+      "template",
     ]);
 
     return !leafElementDenyList.has(tagName);
@@ -572,8 +533,8 @@
     return (
       element.offsetWidth > 0 &&
       element.offsetHeight > 0 &&
-      style?.visibility !== 'hidden' &&
-      style?.display !== 'none'
+      style?.visibility !== "hidden" &&
+      style?.display !== "none"
     );
   }
 
@@ -597,45 +558,45 @@
 
     // Define interactive cursors
     const interactiveCursors = new Set([
-      'pointer', // Link/clickable elements
-      'move', // Movable elements
-      'text', // Text selection
-      'grab', // Grabbable elements
-      'grabbing', // Currently grabbing
-      'cell', // Table cell selection
-      'copy', // Copy operation
-      'alias', // Alias creation
+      'pointer',    // Link/clickable elements
+      'move',       // Movable elements
+      'text',       // Text selection
+      'grab',       // Grabbable elements
+      'grabbing',   // Currently grabbing
+      'cell',       // Table cell selection
+      'copy',       // Copy operation
+      'alias',      // Alias creation
       'all-scroll', // Scrollable content
       'col-resize', // Column resize
       'context-menu', // Context menu available
-      'crosshair', // Precise selection
-      'e-resize', // East resize
-      'ew-resize', // East-west resize
-      'help', // Help available
-      'n-resize', // North resize
-      'ne-resize', // Northeast resize
+      'crosshair',  // Precise selection
+      'e-resize',   // East resize
+      'ew-resize',  // East-west resize
+      'help',       // Help available
+      'n-resize',   // North resize
+      'ne-resize',  // Northeast resize
       'nesw-resize', // Northeast-southwest resize
-      'ns-resize', // North-south resize
-      'nw-resize', // Northwest resize
+      'ns-resize',  // North-south resize
+      'nw-resize',  // Northwest resize
       'nwse-resize', // Northwest-southeast resize
       'row-resize', // Row resize
-      's-resize', // South resize
-      'se-resize', // Southeast resize
-      'sw-resize', // Southwest resize
+      's-resize',   // South resize
+      'se-resize',  // Southeast resize
+      'sw-resize',  // Southwest resize
       'vertical-text', // Vertical text selection
-      'w-resize', // West resize
-      'zoom-in', // Zoom in
-      'zoom-out', // Zoom out
+      'w-resize',   // West resize
+      'zoom-in',    // Zoom in
+      'zoom-out'    // Zoom out
     ]);
 
     // Define non-interactive cursors
     const nonInteractiveCursors = new Set([
       'not-allowed', // Action not allowed
-      'no-drop', // Drop not allowed
-      'wait', // Processing
-      'progress', // In progress
-      'initial', // Initial value
-      'inherit', // Inherited value
+      'no-drop',     // Drop not allowed
+      'wait',        // Processing
+      'progress',    // In progress
+      'initial',     // Initial value
+      'inherit'      // Inherited value
       //? Let's just include all potentially clickable elements that are not specifically blocked
       // 'none',        // No cursor
       // 'default',     // Default cursor
@@ -649,7 +610,7 @@
      * @returns {boolean} Whether the element has an interactive pointer.
      */
     function doesElementHaveInteractivePointer(element) {
-      if (element.tagName.toLowerCase() === 'html') return false;
+      if (element.tagName.toLowerCase() === "html") return false;
 
       if (style?.cursor && interactiveCursors.has(style.cursor)) return true;
 
@@ -664,25 +625,25 @@
     }
 
     const interactiveElements = new Set([
-      'a', // Links
-      'button', // Buttons
-      'input', // All input types (text, checkbox, radio, etc.)
-      'select', // Dropdown menus
-      'textarea', // Text areas
-      'details', // Expandable details
-      'summary', // Summary element (clickable part of details)
-      'label', // Form labels (often clickable)
-      'option', // Select options
-      'optgroup', // Option groups
-      'fieldset', // Form fieldsets (can be interactive with legend)
-      'legend', // Fieldset legends
+      "a",          // Links
+      "button",     // Buttons
+      "input",      // All input types (text, checkbox, radio, etc.)
+      "select",     // Dropdown menus
+      "textarea",   // Text areas
+      "details",    // Expandable details
+      "summary",    // Summary element (clickable part of details)
+      "label",      // Form labels (often clickable)
+      "option",     // Select options
+      "optgroup",   // Option groups
+      "fieldset",   // Form fieldsets (can be interactive with legend)
+      "legend",     // Fieldset legends
     ]);
 
     // Define explicit disable attributes and properties
     const explicitDisableTags = new Set([
-      'disabled', // Standard disabled attribute
+      'disabled',           // Standard disabled attribute
       // 'aria-disabled',      // ARIA disabled state
-      'readonly', // Read-only state
+      'readonly',          // Read-only state
       // 'aria-readonly',     // ARIA read-only state
       // 'aria-hidden',       // Hidden from accessibility
       // 'hidden',            // Hidden attribute
@@ -701,11 +662,9 @@
 
       // Check for explicit disable attributes
       for (const disableTag of explicitDisableTags) {
-        if (
-          element.hasAttribute(disableTag) ||
+        if (element.hasAttribute(disableTag) ||
           element.getAttribute(disableTag) === 'true' ||
-          element.getAttribute(disableTag) === ''
-        ) {
+          element.getAttribute(disableTag) === '') {
           return false;
         }
       }
@@ -728,50 +687,48 @@
       return true;
     }
 
-    const role = element.getAttribute('role');
-    const ariaRole = element.getAttribute('aria-role');
+    const role = element.getAttribute("role");
+    const ariaRole = element.getAttribute("aria-role");
 
     // Check for contenteditable attribute
-    if (
-      element.getAttribute('contenteditable') === 'true' ||
-      element.isContentEditable
-    ) {
+    if (element.getAttribute("contenteditable") === "true" || element.isContentEditable) {
       return true;
     }
 
     // Added enhancement to capture dropdown interactive elements
-    if (
-      element.classList &&
-      (element.classList.contains('button') ||
-        element.classList.contains('dropdown-toggle') ||
-        element.getAttribute('data-index') ||
-        element.getAttribute('data-toggle') === 'dropdown' ||
-        element.getAttribute('aria-haspopup') === 'true')
-    ) {
+    if (element.classList && (
+      element.classList.contains("button") ||
+      element.classList.contains('dropdown-toggle') ||
+      element.getAttribute('data-index') ||
+      element.getAttribute('data-toggle') === 'dropdown' ||
+      element.getAttribute('aria-haspopup') === 'true'
+    )) {
       return true;
     }
 
+
     const interactiveRoles = new Set([
-      'button', // Directly clickable element
+      'button',           // Directly clickable element
       // 'link',            // Clickable link
-      'menu', // Menu container (ARIA menus)
-      'menubar', // Menu bar container
-      'menuitem', // Clickable menu item
-      'menuitemradio', // Radio-style menu item (selectable)
+      'menu',            // Menu container (ARIA menus)
+      'menubar',         // Menu bar container
+      'menuitem',        // Clickable menu item
+      'menuitemradio',   // Radio-style menu item (selectable)
       'menuitemcheckbox', // Checkbox-style menu item (toggleable)
-      'radio', // Radio button (selectable)
-      'checkbox', // Checkbox (toggleable)
-      'tab', // Tab (clickable to switch content)
-      'switch', // Toggle switch (clickable to change state)
-      'slider', // Slider control (draggable)
-      'spinbutton', // Number input with up/down controls
-      'combobox', // Dropdown with text input
-      'searchbox', // Search input field
-      'textbox', // Text input field
-      'listbox', // Selectable list
-      'option', // Selectable option in a list
-      'scrollbar', // Scrollable control
+      'radio',           // Radio button (selectable)
+      'checkbox',        // Checkbox (toggleable)
+      'tab',             // Tab (clickable to switch content)
+      'switch',          // Toggle switch (clickable to change state)
+      'slider',          // Slider control (draggable)
+      'spinbutton',      // Number input with up/down controls
+      'combobox',        // Dropdown with text input
+      'searchbox',       // Search input field
+      'textbox',         // Text input field
+      'listbox',         // Selectable list
+      'option',          // Selectable option in a list
+      'scrollbar'        // Scrollable control
     ]);
+
 
     // Basic role/attribute checks
     const hasInteractiveRole =
@@ -780,6 +737,7 @@
       (ariaRole && interactiveRoles.has(ariaRole));
 
     if (hasInteractiveRole) return true;
+
 
     // check whether element has event listeners by window.getEventListeners
     try {
@@ -793,23 +751,10 @@
         }
       }
 
-      const getEventListenersForNode =
-        element?.ownerDocument?.defaultView?.getEventListenersForNode ||
-        window.getEventListenersForNode;
+      const getEventListenersForNode = element?.ownerDocument?.defaultView?.getEventListenersForNode || window.getEventListenersForNode;
       if (typeof getEventListenersForNode === 'function') {
         const listeners = getEventListenersForNode(element);
-        const interactionEvents = [
-          'click',
-          'mousedown',
-          'mouseup',
-          'keydown',
-          'keyup',
-          'submit',
-          'change',
-          'input',
-          'focus',
-          'blur',
-        ];
+        const interactionEvents = ['click', 'mousedown', 'mouseup', 'keydown', 'keyup', 'submit', 'change', 'input', 'focus', 'blur'];
         for (const eventType of interactionEvents) {
           for (const listener of listeners) {
             if (listener.type === eventType) {
@@ -819,12 +764,7 @@
         }
       }
       // Fallback: Check common event attributes if getEventListeners is not available (getEventListeners doesn't work in page.evaluate context)
-      const commonMouseAttrs = [
-        'onclick',
-        'onmousedown',
-        'onmouseup',
-        'ondblclick',
-      ];
+      const commonMouseAttrs = ['onclick', 'onmousedown', 'onmouseup', 'ondblclick'];
       for (const attr of commonMouseAttrs) {
         if (element.hasAttribute(attr) || typeof element[attr] === 'function') {
           return true;
@@ -835,8 +775,9 @@
       // If checking listeners fails, rely on other checks
     }
 
-    return false;
+    return false
   }
+
 
   /**
    * Checks if an element is the topmost element at its position.
@@ -859,19 +800,12 @@
     let isAnyRectInViewport = false;
     for (const rect of rects) {
       // Use the same logic as isInExpandedViewport check
-      if (
-        rect.width > 0 &&
-        rect.height > 0 &&
-        !(
-          // Only check non-empty rects
-          (
-            rect.bottom < -viewportExpansion ||
-            rect.top > window.innerHeight + viewportExpansion ||
-            rect.right < -viewportExpansion ||
-            rect.left > window.innerWidth + viewportExpansion
-          )
-        )
-      ) {
+      if (rect.width > 0 && rect.height > 0 && !( // Only check non-empty rects
+        rect.bottom < -viewportExpansion ||
+        rect.top > window.innerHeight + viewportExpansion ||
+        rect.right < -viewportExpansion ||
+        rect.left > window.innerWidth + viewportExpansion
+      )) {
         isAnyRectInViewport = true;
         break;
       }
@@ -880,6 +814,7 @@
     if (!isAnyRectInViewport) {
       return false; // All rects are outside the viewport area
     }
+
 
     // Find the correct document context and root element
     let doc = element.ownerDocument;
@@ -892,12 +827,8 @@
     // For shadow DOM, we need to check within its own root context
     const shadowRoot = element.getRootNode();
     if (shadowRoot instanceof ShadowRoot) {
-      const centerX =
-        rects[Math.floor(rects.length / 2)].left +
-        rects[Math.floor(rects.length / 2)].width / 2;
-      const centerY =
-        rects[Math.floor(rects.length / 2)].top +
-        rects[Math.floor(rects.length / 2)].height / 2;
+      const centerX = rects[Math.floor(rects.length / 2)].left + rects[Math.floor(rects.length / 2)].width / 2;
+      const centerY = rects[Math.floor(rects.length / 2)].top + rects[Math.floor(rects.length / 2)].height / 2;
 
       try {
         const topEl = shadowRoot.elementFromPoint(centerX, centerY);
@@ -922,10 +853,10 @@
     const checkPoints = [
       // Initially only this was used, but it was not enough
       { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
-      { x: rect.left + margin, y: rect.top + margin }, // top left
+      { x: rect.left + margin, y: rect.top + margin },        // top left
       // { x: rect.right - margin, y: rect.top + margin },    // top right
       // { x: rect.left + margin, y: rect.bottom - margin },  // bottom left
-      { x: rect.right - margin, y: rect.bottom - margin }, // bottom right
+      { x: rect.right - margin, y: rect.bottom - margin },    // bottom right
     ];
 
     return checkPoints.some(({ x, y }) => {
@@ -963,11 +894,7 @@
       // Fallback to getBoundingClientRect if getClientRects is empty,
       // useful for elements like <svg> that might not have client rects but have a bounding box.
       const boundingRect = getCachedBoundingRect(element);
-      if (
-        !boundingRect ||
-        boundingRect.width === 0 ||
-        boundingRect.height === 0
-      ) {
+      if (!boundingRect || boundingRect.width === 0 || boundingRect.height === 0) {
         return false;
       }
       return !(
@@ -982,14 +909,12 @@
     for (const rect of rects) {
       if (rect.width === 0 || rect.height === 0) continue; // Skip empty rects
 
-      if (
-        !(
-          rect.bottom < -viewportExpansion ||
-          rect.top > window.innerHeight + viewportExpansion ||
-          rect.right < -viewportExpansion ||
-          rect.left > window.innerWidth + viewportExpansion
-        )
-      ) {
+      if (!(
+        rect.bottom < -viewportExpansion ||
+        rect.top > window.innerHeight + viewportExpansion ||
+        rect.right < -viewportExpansion ||
+        rect.left > window.innerWidth + viewportExpansion
+      )) {
         return true; // Found at least one rect in the viewport
       }
     }
@@ -1035,61 +960,32 @@
 
     // Fast-path for common interactive elements
     const interactiveElements = new Set([
-      'a',
-      'button',
-      'input',
-      'select',
-      'textarea',
-      'details',
-      'summary',
-      'label',
+      "a", "button", "input", "select", "textarea", "details", "summary", "label"
     ]);
 
     if (interactiveElements.has(tagName)) return true;
 
     // Quick attribute checks without getting full lists
-    const hasQuickInteractiveAttr =
-      element.hasAttribute('onclick') ||
-      element.hasAttribute('role') ||
-      element.hasAttribute('tabindex') ||
-      element.hasAttribute('aria-') ||
-      element.hasAttribute('data-action') ||
-      element.getAttribute('contenteditable') === 'true';
+    const hasQuickInteractiveAttr = element.hasAttribute("onclick") ||
+      element.hasAttribute("role") ||
+      element.hasAttribute("tabindex") ||
+      element.hasAttribute("aria-") ||
+      element.hasAttribute("data-action") ||
+      element.getAttribute("contenteditable") === "true";
 
     return hasQuickInteractiveAttr;
   }
 
   // --- Define constants for distinct interaction check ---
   const DISTINCT_INTERACTIVE_TAGS = new Set([
-    'a',
-    'button',
-    'input',
-    'select',
-    'textarea',
-    'summary',
-    'details',
-    'label',
-    'option',
+    'a', 'button', 'input', 'select', 'textarea', 'summary', 'details', 'label', 'option'
   ]);
   const INTERACTIVE_ROLES = new Set([
-    'button',
-    'link',
-    'menuitem',
-    'menuitemradio',
-    'menuitemcheckbox',
-    'radio',
-    'checkbox',
-    'tab',
-    'switch',
-    'slider',
-    'spinbutton',
-    'combobox',
-    'searchbox',
-    'textbox',
-    'listbox',
-    'option',
-    'scrollbar',
+    'button', 'link', 'menuitem', 'menuitemradio', 'menuitemcheckbox',
+    'radio', 'checkbox', 'tab', 'switch', 'slider', 'spinbutton',
+    'combobox', 'searchbox', 'textbox', 'listbox', 'option', 'scrollbar'
   ]);
+
 
   /**
    * Heuristically determines if an element should be considered as independently interactive,
@@ -1115,8 +1011,7 @@
       typeof element.onclick === 'function';
 
     // Check for semantic class names suggesting interactivity
-    const hasInteractiveClass =
-      /\b(btn|clickable|menu|item|entry|link)\b/i.test(element.className || '');
+    const hasInteractiveClass = /\b(btn|clickable|menu|item|entry|link)\b/i.test(element.className || '');
 
     // Determine whether the element is inside a known interactive container
     const isInKnownContainer = Boolean(
@@ -1127,18 +1022,16 @@
     const hasVisibleChildren = [...element.children].some(isElementVisible);
 
     // Avoid highlighting elements whose parent is <body> (top-level wrappers)
-    const isParentBody =
-      element.parentElement && element.parentElement.isSameNode(document.body);
+    const isParentBody = element.parentElement && element.parentElement.isSameNode(document.body);
 
     return (
-      (isInteractiveElement(element) ||
-        hasInteractiveAttributes ||
-        hasInteractiveClass) &&
+      (isInteractiveElement(element) || hasInteractiveAttributes || hasInteractiveClass) &&
       hasVisibleChildren &&
       isInKnownContainer &&
       !isParentBody
     );
   }
+
 
   /**
    * Checks if an element likely represents a distinct interaction
@@ -1169,25 +1062,15 @@
       return true;
     }
     // Check contenteditable
-    if (
-      element.isContentEditable ||
-      element.getAttribute('contenteditable') === 'true'
-    ) {
+    if (element.isContentEditable || element.getAttribute('contenteditable') === 'true') {
       return true;
     }
     // Check for common testing/automation attributes
-    if (
-      element.hasAttribute('data-testid') ||
-      element.hasAttribute('data-cy') ||
-      element.hasAttribute('data-test')
-    ) {
+    if (element.hasAttribute('data-testid') || element.hasAttribute('data-cy') || element.hasAttribute('data-test')) {
       return true;
     }
     // Check for explicit onclick handler (attribute or property)
-    if (
-      element.hasAttribute('onclick') ||
-      typeof element.onclick === 'function'
-    ) {
+    if (element.hasAttribute('onclick') || typeof element.onclick === 'function') {
       return true;
     }
 
@@ -1195,23 +1078,10 @@
 
     // Check for other common interaction event listeners
     try {
-      const getEventListenersForNode =
-        element?.ownerDocument?.defaultView?.getEventListenersForNode ||
-        window.getEventListenersForNode;
+      const getEventListenersForNode = element?.ownerDocument?.defaultView?.getEventListenersForNode || window.getEventListenersForNode;
       if (typeof getEventListenersForNode === 'function') {
         const listeners = getEventListenersForNode(element);
-        const interactionEvents = [
-          'click',
-          'mousedown',
-          'mouseup',
-          'keydown',
-          'keyup',
-          'submit',
-          'change',
-          'input',
-          'focus',
-          'blur',
-        ];
+        const interactionEvents = ['click', 'mousedown', 'mouseup', 'keydown', 'keyup', 'submit', 'change', 'input', 'focus', 'blur'];
         for (const eventType of interactionEvents) {
           for (const listener of listeners) {
             if (listener.type === eventType) {
@@ -1221,24 +1091,16 @@
         }
       }
       // Fallback: Check common event attributes if getEventListeners is not available (getEventListenersForNode doesn't work in page.evaluate context)
-      const commonEventAttrs = [
-        'onmousedown',
-        'onmouseup',
-        'onkeydown',
-        'onkeyup',
-        'onsubmit',
-        'onchange',
-        'oninput',
-        'onfocus',
-        'onblur',
-      ];
-      if (commonEventAttrs.some((attr) => element.hasAttribute(attr))) {
+      const commonEventAttrs = ['onmousedown', 'onmouseup', 'onkeydown', 'onkeyup', 'onsubmit', 'onchange', 'oninput', 'onfocus', 'onblur'];
+      if (commonEventAttrs.some(attr => element.hasAttribute(attr))) {
         return true;
       }
     } catch (e) {
       // console.warn(`Could not check event listeners for ${element.tagName}:`, e);
       // If checking listeners fails, rely on other checks
     }
+
+
 
     // if the element is not strictly interactive but appears clickable based on heuristic signals
     if (isHeuristicallyInteractive(element)) {
@@ -1271,12 +1133,7 @@
    * @param {boolean} isParentHighlighted - Whether the parent node is highlighted.
    * @returns {boolean} Whether the element was highlighted.
    */
-  function handleHighlighting(
-    nodeData,
-    node,
-    parentIframe,
-    isParentHighlighted
-  ) {
+  function handleHighlighting(nodeData, node, parentIframe, isParentHighlighted) {
     if (!nodeData.isInteractive) return false; // Not interactive, definitely don't highlight
 
     let shouldHighlight = false;
@@ -1328,17 +1185,10 @@
    * @param {boolean} isParentHighlighted - Whether the parent node is highlighted.
    * @returns {string | null} The ID of the node data object, or null if the node is not processed.
    */
-  function buildDomTree(
-    node,
-    parentIframe = null,
-    isParentHighlighted = false
-  ) {
+  function buildDomTree(node, parentIframe = null, isParentHighlighted = false) {
     // Fast rejection checks first
-    if (
-      !node ||
-      node.id === HIGHLIGHT_CONTAINER_ID ||
-      (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.TEXT_NODE)
-    ) {
+    if (!node || node.id === HIGHLIGHT_CONTAINER_ID ||
+      (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.TEXT_NODE)) {
       return null;
     }
 
@@ -1367,10 +1217,7 @@
     }
 
     // Early bailout for non-element nodes except text
-    if (
-      node.nodeType !== Node.ELEMENT_NODE &&
-      node.nodeType !== Node.TEXT_NODE
-    ) {
+    if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.TEXT_NODE) {
       return null;
     }
 
@@ -1389,7 +1236,7 @@
 
       const id = `${ID.current++}`;
       DOM_HASH_MAP[id] = {
-        type: 'TEXT_NODE',
+        type: "TEXT_NODE",
         text: textContent,
         isVisible: isTextNodeVisible(node),
       };
@@ -1408,23 +1255,19 @@
       const style = getCachedComputedStyle(node);
 
       // Skip viewport check for fixed/sticky elements as they may appear anywhere
-      const isFixedOrSticky =
-        style && (style.position === 'fixed' || style.position === 'sticky');
+      const isFixedOrSticky = style && (style.position === 'fixed' || style.position === 'sticky');
 
       // Check if element has actual dimensions using offsetWidth/Height (quick check)
       const hasSize = node.offsetWidth > 0 || node.offsetHeight > 0;
 
       // Use getBoundingClientRect for the quick OUTSIDE check.
       // isInExpandedViewport will do the more accurate check later if needed.
-      if (
-        !rect ||
-        (!isFixedOrSticky &&
-          !hasSize &&
-          (rect.bottom < -viewportExpansion ||
-            rect.top > window.innerHeight + viewportExpansion ||
-            rect.right < -viewportExpansion ||
-            rect.left > window.innerWidth + viewportExpansion))
-      ) {
+      if (!rect || (!isFixedOrSticky && !hasSize && (
+        rect.bottom < -viewportExpansion ||
+        rect.top > window.innerHeight + viewportExpansion ||
+        rect.right < -viewportExpansion ||
+        rect.left > window.innerWidth + viewportExpansion
+      ))) {
         // console.log("Skipping node outside viewport (quick check):", node.tagName, rect);
         return null;
       }
@@ -1454,11 +1297,7 @@
     };
 
     // Get attributes for interactive elements or potential text containers
-    if (
-      isInteractiveCandidate(node) ||
-      node.tagName.toLowerCase() === 'iframe' ||
-      node.tagName.toLowerCase() === 'body'
-    ) {
+    if (isInteractiveCandidate(node) || node.tagName.toLowerCase() === 'iframe' || node.tagName.toLowerCase() === 'body') {
       const attributeNames = node.getAttributeNames?.() || [];
       for (const name of attributeNames) {
         const value = node.getAttribute(name);
@@ -1475,18 +1314,12 @@
 
         // Special handling for ARIA menu containers - check interactivity even if not top element
         const role = node.getAttribute('role');
-        const isMenuContainer =
-          role === 'menu' || role === 'menubar' || role === 'listbox';
+        const isMenuContainer = role === 'menu' || role === 'menubar' || role === 'listbox';
 
         if (nodeData.isTopElement || isMenuContainer) {
           nodeData.isInteractive = isInteractiveElement(node);
           // Call the dedicated highlighting function
-          nodeWasHighlighted = handleHighlighting(
-            nodeData,
-            node,
-            parentIframe,
-            isParentHighlighted
-          );
+          nodeWasHighlighted = handleHighlighting(nodeData, node, parentIframe, isParentHighlighted);
         }
       }
     }
@@ -1496,10 +1329,9 @@
       const tagName = node.tagName.toLowerCase();
 
       // Handle iframes
-      if (tagName === 'iframe') {
+      if (tagName === "iframe") {
         try {
-          const iframeDoc =
-            node.contentDocument || node.contentWindow?.document;
+          const iframeDoc = node.contentDocument || node.contentWindow?.document;
           if (iframeDoc) {
             for (const child of iframeDoc.childNodes) {
               const domElement = buildDomTree(child, node, false);
@@ -1507,66 +1339,47 @@
             }
           }
         } catch (e) {
-          console.warn('Unable to access iframe:', e);
+          console.warn("Unable to access iframe:", e);
         }
       }
       // Handle rich text editors and contenteditable elements
       else if (
         node.isContentEditable ||
-        node.getAttribute('contenteditable') === 'true' ||
-        node.id === 'tinymce' ||
-        node.classList.contains('mce-content-body') ||
-        (tagName === 'body' && node.getAttribute('data-id')?.startsWith('mce_'))
+        node.getAttribute("contenteditable") === "true" ||
+        node.id === "tinymce" ||
+        node.classList.contains("mce-content-body") ||
+        (tagName === "body" && node.getAttribute("data-id")?.startsWith("mce_"))
       ) {
         // Process all child nodes to capture formatted text
         for (const child of node.childNodes) {
-          const domElement = buildDomTree(
-            child,
-            parentIframe,
-            nodeWasHighlighted
-          );
+          const domElement = buildDomTree(child, parentIframe, nodeWasHighlighted);
           if (domElement) nodeData.children.push(domElement);
         }
-      } else {
+      }
+      else {
         // Handle shadow DOM
         if (node.shadowRoot) {
           nodeData.shadowRoot = true;
           for (const child of node.shadowRoot.childNodes) {
-            const domElement = buildDomTree(
-              child,
-              parentIframe,
-              nodeWasHighlighted
-            );
+            const domElement = buildDomTree(child, parentIframe, nodeWasHighlighted);
             if (domElement) nodeData.children.push(domElement);
           }
         }
         // Handle regular elements
         for (const child of node.childNodes) {
           // Pass the highlighted status of the *current* node to its children
-          const passHighlightStatusToChild =
-            nodeWasHighlighted || isParentHighlighted;
-          const domElement = buildDomTree(
-            child,
-            parentIframe,
-            passHighlightStatusToChild
-          );
+          const passHighlightStatusToChild = nodeWasHighlighted || isParentHighlighted;
+          const domElement = buildDomTree(child, parentIframe, passHighlightStatusToChild);
           if (domElement) nodeData.children.push(domElement);
         }
       }
     }
 
     // Skip empty anchor tags only if they have no dimensions and no children
-    if (
-      nodeData.tagName === 'a' &&
-      nodeData.children.length === 0 &&
-      !nodeData.attributes.href
-    ) {
+    if (nodeData.tagName === 'a' && nodeData.children.length === 0 && !nodeData.attributes.href) {
       // Check if the anchor has actual dimensions
       const rect = getCachedBoundingRect(node);
-      const hasSize =
-        (rect && rect.width > 0 && rect.height > 0) ||
-        node.offsetWidth > 0 ||
-        node.offsetHeight > 0;
+      const hasSize = (rect && rect.width > 0 && rect.height > 0) || (node.offsetWidth > 0 || node.offsetHeight > 0);
 
       if (!hasSize) {
         return null;

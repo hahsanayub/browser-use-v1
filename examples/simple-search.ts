@@ -15,7 +15,7 @@ async function main() {
         llmApiKey: process.env.OPENAI_API_KEY,
         llmProvider: 'openai',
         headless: false, // Set to true for headless mode
-        startUrl: 'https://google.com'
+        startUrl: 'https://google.com',
       }
     );
 
@@ -23,12 +23,13 @@ async function main() {
     console.log(`Executed ${history.length} steps:`);
 
     history.forEach((step, index) => {
-      console.log(`${index + 1}. ${step.action.action}: ${step.result.message}`);
+      console.log(
+        `${index + 1}. ${step.action.action}: ${step.result.message}`
+      );
     });
 
     // Cleanup
     await controller.cleanup();
-
   } catch (error) {
     console.error('Error:', error);
     process.exit(1);

@@ -134,10 +134,8 @@ export class DOMService {
     let result: any;
     try {
       result = await page.evaluate(
-        (payload: { script: string; args: any }) => {
-          const fn = new Function('args', `return (${payload.script})(args);`);
-          return fn(payload.args);
-        },
+        (payload: { script: string; args: any }) =>
+          new Function(`return ${payload.script}`)()(payload.args),
         {
           script: this.buildDomTreeScript,
           args: {
@@ -152,13 +150,8 @@ export class DOMService {
       // Try a secondary path once more
       try {
         result = await page.evaluate(
-          (payload: { script: string; args: any }) => {
-            const fn = new Function(
-              'args',
-              `return (${payload.script})(args);`
-            );
-            return fn(payload.args);
-          },
+          (payload: { script: string; args: any }) =>
+            new Function(`return ${payload.script}`)()(payload.args),
           {
             script: this.buildDomTreeScript!,
             args: {
@@ -236,10 +229,8 @@ export class DOMService {
     }
     try {
       const domState: any = await page.evaluate(
-        (payload: { script: string; args: any }) => {
-          const fn = new Function('args', `return (${payload.script})(args);`);
-          return fn(payload.args);
-        },
+        (payload: { script: string; args: any }) =>
+          new Function(`return ${payload.script}`)()(payload.args),
         {
           script: this.buildDomTreeScript!,
           args: {
