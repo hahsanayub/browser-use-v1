@@ -16,32 +16,33 @@ import type {
 
 interface GooglePart {
   text?: string;
-  inline_data?: { mime_type: string; data: string };
+  inlineData?: { mimeType: string; data: string };
 }
 
 interface GoogleContent {
-  role: 'user' | 'model';
+  role?: 'user' | 'model' | 'system';
   parts: GooglePart[];
 }
 
 interface GenerateContentRequest {
   contents: GoogleContent[];
-  system_instruction?: { role: 'system'; parts: GooglePart[] };
-  generation_config?: Record<string, any>;
+  systemInstruction?: { role: 'system'; parts: GooglePart[] };
+  generationConfig?: Record<string, any>;
 }
 
 interface GenerateContentResponseUsage {
-  prompt_token_count?: number;
-  candidates_token_count?: number;
-  total_token_count?: number;
-  cached_content_token_count?: number;
-  prompt_tokens_details?: Array<{ modality: string; token_count?: number }>;
-  thoughts_token_count?: number;
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  totalTokenCount?: number;
+  cachedContentTokenCount?: number | null;
+  promptTokensDetails?: Array<{ modality?: string; tokenCount?: number }>;
 }
 
 interface GenerateContentResponse {
-  text?: string;
-  usage_metadata?: GenerateContentResponseUsage;
+  candidates?: Array<{
+    content?: { role?: string; parts?: GooglePart[] };
+  }>;
+  usageMetadata?: GenerateContentResponseUsage;
 }
 
 export class GoogleClient extends BaseLLMClient {
@@ -49,14 +50,15 @@ export class GoogleClient extends BaseLLMClient {
 
   constructor(config: LLMClientConfig) {
     super(config);
-    // Base URL should be provided for REST proxy that forwards to Google GenAI.
-    // Otherwise, user should prefer the official SDK.
+    // Base URL should point to Google's Generative Language REST API (e.g.,
+    // https://generativelanguage.googleapis.com/v1beta). We authenticate using
+    // API key header per REST spec (not OAuth Bearer).
     this.httpClient = axios.create({
       baseURL: config.baseUrl || '',
       timeout: config.timeout || 30000,
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${config.apiKey}`,
+        'X-Goog-Api-Key': config.apiKey || '',
       },
     });
   }
@@ -89,26 +91,23 @@ export class GoogleClient extends BaseLLMClient {
     const start = Date.now();
 
     const { contents, system } = this.serializeMessages(messages);
-    const generation_config: Record<string, any> = {};
+    const generationConfig: Record<string, any> = {};
     if (requestOptions.temperature != null)
-      generation_config.temperature = requestOptions.temperature;
+      generationConfig.temperature = requestOptions.temperature;
     if (requestOptions.topP != null)
-      generation_config.top_p = requestOptions.topP;
+      generationConfig.topP = requestOptions.topP;
     if (requestOptions.seed != null)
-      generation_config.seed = requestOptions.seed;
+      generationConfig.seed = requestOptions.seed;
     if (requestOptions.maxTokens != null)
-      generation_config.max_output_tokens = requestOptions.maxTokens;
-    if (requestOptions.thinkingBudget != null)
-      generation_config.thinking_config = {
-        thinking_budget: requestOptions.thinkingBudget,
-      };
+      generationConfig.maxOutputTokens = requestOptions.maxTokens;
+    // Avoid sending undocumented fields that may cause 400s
 
     const req: GenerateContentRequest = {
       contents,
-      generation_config,
+      generationConfig,
     };
     if (system) {
-      req.system_instruction = { role: 'system', parts: system.parts };
+      req.systemInstruction = { role: 'system', parts: system.parts };
     }
 
     try {
@@ -122,20 +121,24 @@ export class GoogleClient extends BaseLLMClient {
       const time = Date.now() - start;
 
       const imageTokens =
-        data.usage_metadata?.prompt_tokens_details
-          ?.filter((d) => d.modality?.toUpperCase() === 'IMAGE')
-          .reduce((s, d) => s + (d.token_count || 0), 0) || 0;
+        data.usageMetadata?.promptTokensDetails
+          ?.filter((d) => (d.modality || '').toUpperCase() === 'IMAGE')
+          .reduce((sum, d) => sum + (d.tokenCount || 0), 0) || 0;
+
+      const primaryText =
+        data.candidates?.[0]?.content?.parts
+          ?.map((p) => p.text)
+          .filter(Boolean)
+          .join('\n') || '';
 
       const llm: LLMResponse = {
-        content: data.text || '',
+        content: primaryText,
         usage: {
-          promptTokens: data.usage_metadata?.prompt_token_count || 0,
-          completionTokens:
-            (data.usage_metadata?.candidates_token_count || 0) +
-            (data.usage_metadata?.thoughts_token_count || 0),
-          totalTokens: data.usage_metadata?.total_token_count || 0,
+          promptTokens: data.usageMetadata?.promptTokenCount || 0,
+          completionTokens: data.usageMetadata?.candidatesTokenCount || 0,
+          totalTokens: data.usageMetadata?.totalTokenCount || 0,
           promptCachedTokens:
-            data.usage_metadata?.cached_content_token_count ?? null,
+            data.usageMetadata?.cachedContentTokenCount ?? null,
           promptCacheCreationTokens: null,
           promptImageTokens: imageTokens || null,
         },
@@ -154,11 +157,7 @@ export class GoogleClient extends BaseLLMClient {
   }
 
   async validateConfig(): Promise<boolean> {
-    try {
-      // No universal validation endpoint; assume baseUrl configured or use SDK externally.
-      return true;
-    } catch {
-      return false;
-    }
+    // No universal validation endpoint; assume baseUrl configured or use SDK externally.
+    return true;
   }
 }
