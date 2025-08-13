@@ -9,28 +9,41 @@ import path from 'path';
 import type { BrowserContext as AgentBrowserContext } from '../browser/BrowserContext';
 import type { BrowserSession } from '../browser/BrowserSession';
 
-// Prefer BrowserSession snapshot's selectorMap for index→selector/xpath mapping.
+// Use BrowserSession's enhanced index-based interaction
+async function executeWithBrowserSession<T>(
+  context: { browserSession?: BrowserSession } | undefined,
+  fn: (session: BrowserSession) => Promise<T>
+): Promise<T> {
+  const session = context?.browserSession;
+  if (!session) {
+    throw new Error('BrowserSession not available');
+  }
+  return await fn(session);
+}
+
+// Helper function to resolve index to DOM target
 async function resolveIndexToDomTarget(
   index: number,
   page: Page,
   context?: { browserSession?: BrowserSession }
-): Promise<{ selector: string; xpath?: string }> {
+): Promise<{ xpath: string; selector: string }> {
   const session = context?.browserSession;
   if (session) {
-    try {
-      const summary = await session.getStateSummary(false);
-      const node = summary.selectorMap.get(index);
-      if (node) {
-        const selector = node.xpath
+    const summary = await session.getStateSummary(false);
+    const node = summary.selectorMap.get(index);
+    if (node) {
+      return {
+        xpath: node.xpath ? `/${node.xpath}` : '',
+        selector: node.xpath
           ? `xpath=/${node.xpath}`
-          : node.selector || node.tagName;
-        return { selector, xpath: node.xpath ? `/${node.xpath}` : undefined };
-      }
-    } catch {
-      // fall back to DOM query below
+          : node.selector || node.tagName || '',
+      };
     }
   }
-  throw new Error('Failed to resolve index to dom target');
+  // Fallback: try to find element by data-index attribute
+  const selector = `[data-index="${index}"]`;
+  const xpath = `//*[@data-index="${index}"]`;
+  return { xpath, selector };
 }
 
 // click
@@ -184,45 +197,60 @@ class ScrollActions {
       );
       if (typeof params.index === 'number') {
         try {
-          const target = await resolveIndexToDomTarget(
-            params.index,
-            p,
-            context
-          );
-          const result = await p.evaluate(
-            (payload) => {
-              const { dy, xpath, selector } = payload as {
-                dy: number;
-                xpath?: string;
-                selector?: string;
+          // Use BrowserSession for more robust element handling
+          const session = context?.browserSession;
+          if (session) {
+            const summary = await session.getStateSummary(false);
+            const node = summary.selectorMap.get(params.index);
+            if (node) {
+              const target = {
+                selector: node.xpath
+                  ? `xpath=/${node.xpath}`
+                  : node.selector || node.tagName,
+                xpath: node.xpath ? `/${node.xpath}` : undefined,
               };
-              let node: HTMLElement | null = null;
-              if (xpath) {
-                node = document.evaluate(
-                  xpath,
-                  document,
-                  null,
-                  XPathResult.FIRST_ORDERED_NODE_TYPE,
-                  null
-                ).singleNodeValue as HTMLElement | null;
+              const result = await p.evaluate(
+                (payload) => {
+                  const { dy, xpath, selector } = payload as {
+                    dy: number;
+                    xpath?: string;
+                    selector?: string;
+                  };
+                  let node: HTMLElement | null = null;
+                  if (xpath) {
+                    node = document.evaluate(
+                      xpath,
+                      document,
+                      null,
+                      XPathResult.FIRST_ORDERED_NODE_TYPE,
+                      null
+                    ).singleNodeValue as HTMLElement | null;
+                  }
+                  if (!node && selector) {
+                    node = document.querySelector(
+                      selector
+                    ) as HTMLElement | null;
+                  }
+                  if (!node) return false;
+                  const before = node.scrollTop;
+                  node.scrollTop = before + dy / 3;
+                  return Math.abs(node.scrollTop - before) > 0.5;
+                },
+                {
+                  dy,
+                  xpath: target.xpath,
+                  selector: target.selector.startsWith('xpath=')
+                    ? undefined
+                    : target.selector,
+                }
+              );
+              if (!result) {
+                await p.evaluate((y) => window.scrollBy(0, y as number), dy);
               }
-              if (!node && selector) {
-                node = document.querySelector(selector) as HTMLElement | null;
-              }
-              if (!node) return false;
-              const before = node.scrollTop;
-              node.scrollTop = before + dy / 3;
-              return Math.abs(node.scrollTop - before) > 0.5;
-            },
-            {
-              dy,
-              xpath: target.xpath,
-              selector: target.selector.startsWith('xpath=')
-                ? undefined
-                : target.selector,
+            } else {
+              await p.evaluate((y) => window.scrollBy(0, y as number), dy);
             }
-          );
-          if (!result) {
+          } else {
             await p.evaluate((y) => window.scrollBy(0, y as number), dy);
           }
         } catch {
@@ -370,17 +398,15 @@ class IndexActions {
   )
   static async clickByIndex({
     params,
-    page,
+    page: _page, // eslint-disable-line @typescript-eslint/no-unused-vars
     context,
   }: {
     params: { index: number };
     page: Page;
     context?: { browserSession?: BrowserSession };
   }): Promise<ActionResult> {
-    return withHealthCheck(page, async (p) => {
-      const target = await resolveIndexToDomTarget(params.index, p, context);
-      await p.click(target.selector);
-      await p.waitForTimeout(300);
+    return executeWithBrowserSession(context, async (session) => {
+      await session.clickByIndex(params.index);
       return { success: true, message: `Clicked element #${params.index}` };
     });
   }
@@ -393,24 +419,15 @@ class IndexActions {
   )
   static async inputText({
     params,
-    page,
+    page: _page, // eslint-disable-line @typescript-eslint/no-unused-vars
     context,
   }: {
     params: { index: number; text: string };
     page: Page;
     context?: { browserSession?: BrowserSession };
   }): Promise<ActionResult> {
-    return withHealthCheck(page, async (p) => {
-      const target = await resolveIndexToDomTarget(params.index, p, context);
-      const locator = p.locator(target.selector).first();
-      // Try to clear if it is an input/textarea
-      try {
-        await locator.fill('');
-      } catch {
-        // ignore
-      }
-      await locator.focus();
-      await locator.type(params.text, { delay: 30 });
+    return executeWithBrowserSession(context, async (session) => {
+      await session.typeByIndex(params.index, params.text);
       return {
         success: true,
         message: `Input text into element #${params.index}`,
@@ -428,22 +445,22 @@ class NavActions {
   )
   static async goToUrl({
     params,
-    page,
+    page: _page, // eslint-disable-line @typescript-eslint/no-unused-vars
     context,
   }: {
     params: { url: string; new_tab?: boolean };
     page: Page;
-    context: { browserContext?: AgentBrowserContext };
+    context: {
+      browserContext?: AgentBrowserContext;
+      browserSession?: BrowserSession;
+    };
   }): Promise<ActionResult> {
-    return withHealthCheck(page, async (p) => {
-      if (params.new_tab && context.browserContext) {
-        await context.browserContext.newPage();
-        const newActive = context.browserContext.getActivePage()!;
-        await newActive.goto(params.url, { waitUntil: 'domcontentloaded' });
-        return { success: true, message: `Opened new tab with ${params.url}` };
-      }
-      await p.goto(params.url, { waitUntil: 'domcontentloaded' });
-      return { success: true, message: `Navigated to ${params.url}` };
+    return executeWithBrowserSession(context, async (session) => {
+      await session.navigate(params.url, params.new_tab || false);
+      const message = params.new_tab
+        ? `Opened new tab with ${params.url}`
+        : `Navigated to ${params.url}`;
+      return { success: true, message };
     });
   }
 

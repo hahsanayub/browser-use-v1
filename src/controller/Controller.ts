@@ -139,10 +139,17 @@ export class Controller {
       await this.browserContext.launch();
 
       // Create unified session on top of browser/context
-      this.browserSession = new BrowserSession(
-        this.browser.getBrowser()!,
-        this.browserContext.getContext()!
-      );
+      this.browserSession = new BrowserSession({
+        browser: this.browser.getBrowser()!,
+        context: this.browserContext.getContext()!,
+        config: {
+          keepAlive: false,
+          saveState: true,
+          timeout: this.config.browser.timeout,
+          viewport: this.config.browser.viewport,
+        },
+      });
+      await this.browserSession.start();
 
       this.logger.info('Browser initialized successfully');
     } catch (error) {
@@ -317,9 +324,7 @@ export class Controller {
         await page.close().catch(() => {});
         page = await this.browserContext.newPage();
       }
-      await page.goto(url, { waitUntil: 'domcontentloaded' });
-      // Invalidate session cache after navigation
-      this.browserSession.invalidateCache();
+      await this.browserSession!.navigate(url);
       this.logger.info('Navigation completed', { url });
     } catch (error) {
       this.logger.error('Navigation failed', error as Error, { url });
@@ -473,10 +478,17 @@ export class Controller {
       await this.browserContext.launch();
 
       // Recreate session as well
-      this.browserSession = new BrowserSession(
-        this.browser.getBrowser()!,
-        this.browserContext.getContext()!
-      );
+      this.browserSession = new BrowserSession({
+        browser: this.browser.getBrowser()!,
+        context: this.browserContext.getContext()!,
+        config: {
+          keepAlive: false,
+          saveState: true,
+          timeout: this.config.browser.timeout,
+          viewport: this.config.browser.viewport,
+        },
+      });
+      await this.browserSession.start();
 
       // Reset agent since browser context changed
       this.agent = null;

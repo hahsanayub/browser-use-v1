@@ -41,3 +41,35 @@ export interface BrowserContextConfig {
     height: number;
   };
 }
+
+export interface BrowserSessionConfig {
+  /** Whether to keep browser alive after session ends */
+  keepAlive?: boolean;
+  /** Whether to save cookies/storage state */
+  saveState?: boolean;
+  /** Directory to save recordings/traces */
+  recordingDir?: string;
+  /** Whether to record video */
+  recordVideo?: boolean;
+  /** Whether to record traces for debugging */
+  recordTrace?: boolean;
+  /** Whether to auto-download PDFs */
+  autoDownloadPDFs?: boolean;
+  /** Custom user data directory */
+  userDataDir?: string;
+  /** Custom viewport size */
+  viewport?: {
+    width: number;
+    height: number;
+  };
+  /** Browser launch arguments */
+  args?: string[];
+  /** Whether to run in headless mode */
+  headless?: boolean;
+  /** Custom user agent */
+  userAgent?: string;
+  /** List of allowed domains for security */
+  allowedDomains?: string[];
+  /** Global timeout for operations */
+  timeout?: number;
+}
