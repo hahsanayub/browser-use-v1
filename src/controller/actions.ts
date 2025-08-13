@@ -157,6 +157,86 @@ class ScrollActions {
       };
     });
   }
+
+  @action(
+    'scroll_pages',
+    'Scroll page by number of pages (down=true for down; supports half pages like 0.5)',
+    z.object({
+      down: z.boolean().default(true),
+      num_pages: z.number().positive().default(1),
+      index: z.number().int().min(0).optional(),
+    }),
+    { isAvailableForPage: (page) => page && !page.isClosed() }
+  )
+  static async scrollPages({
+    params,
+    page,
+    context,
+  }: {
+    params: { down: boolean; num_pages: number; index?: number };
+    page: Page;
+    context?: { browserSession?: BrowserSession };
+  }): Promise<ActionResult> {
+    return withHealthCheck(page, async (p) => {
+      const windowHeight = await p.evaluate(() => window.innerHeight);
+      const dy = Math.round(
+        (params.down ? 1 : -1) * windowHeight * params.num_pages
+      );
+      if (typeof params.index === 'number') {
+        try {
+          const target = await resolveIndexToDomTarget(
+            params.index,
+            p,
+            context
+          );
+          const result = await p.evaluate(
+            (payload) => {
+              const { dy, xpath, selector } = payload as {
+                dy: number;
+                xpath?: string;
+                selector?: string;
+              };
+              let node: HTMLElement | null = null;
+              if (xpath) {
+                node = document.evaluate(
+                  xpath,
+                  document,
+                  null,
+                  XPathResult.FIRST_ORDERED_NODE_TYPE,
+                  null
+                ).singleNodeValue as HTMLElement | null;
+              }
+              if (!node && selector) {
+                node = document.querySelector(selector) as HTMLElement | null;
+              }
+              if (!node) return false;
+              const before = node.scrollTop;
+              node.scrollTop = before + dy / 3;
+              return Math.abs(node.scrollTop - before) > 0.5;
+            },
+            {
+              dy,
+              xpath: target.xpath,
+              selector: target.selector.startsWith('xpath=')
+                ? undefined
+                : target.selector,
+            }
+          );
+          if (!result) {
+            await p.evaluate((y) => window.scrollBy(0, y as number), dy);
+          }
+        } catch {
+          await p.evaluate((y) => window.scrollBy(0, y as number), dy);
+        }
+      } else {
+        await p.evaluate((y) => window.scrollBy(0, y as number), dy);
+      }
+      return {
+        success: true,
+        message: `Scrolled ${params.down ? 'down' : 'up'} by ${params.num_pages} pages`,
+      };
+    });
+  }
 }
 
 // wait
@@ -281,7 +361,7 @@ class FinishActions {
 
 // Python-parity actions -------------------------------------------------
 
-class PyIndexActions {
+class IndexActions {
   @action(
     'click_element_by_index',
     'Click an interactive element by index shown on the page overlay',
@@ -339,7 +419,7 @@ class PyIndexActions {
   }
 }
 
-class PyNavActions {
+class NavActions {
   @action(
     'go_to_url',
     'Navigate to URL (optionally in new tab with new_tab=true)',
@@ -383,89 +463,7 @@ class PyNavActions {
   }
 }
 
-class PyScrollActions {
-  @action(
-    'scroll_pages',
-    'Scroll page by number of pages (down=true for down; supports half pages like 0.5)',
-    z.object({
-      down: z.boolean().default(true),
-      num_pages: z.number().positive().default(1),
-      index: z.number().int().min(0).optional(),
-    }),
-    { isAvailableForPage: (page) => page && !page.isClosed() }
-  )
-  static async scrollPages({
-    params,
-    page,
-    context,
-  }: {
-    params: { down: boolean; num_pages: number; index?: number };
-    page: Page;
-    context?: { browserSession?: BrowserSession };
-  }): Promise<ActionResult> {
-    return withHealthCheck(page, async (p) => {
-      const windowHeight = await p.evaluate(() => window.innerHeight);
-      const dy = Math.round(
-        (params.down ? 1 : -1) * windowHeight * params.num_pages
-      );
-      if (typeof params.index === 'number') {
-        try {
-          const target = await resolveIndexToDomTarget(
-            params.index,
-            p,
-            context
-          );
-          const result = await p.evaluate(
-            (payload) => {
-              const { dy, xpath, selector } = payload as {
-                dy: number;
-                xpath?: string;
-                selector?: string;
-              };
-              let node: HTMLElement | null = null;
-              if (xpath) {
-                node = document.evaluate(
-                  xpath,
-                  document,
-                  null,
-                  XPathResult.FIRST_ORDERED_NODE_TYPE,
-                  null
-                ).singleNodeValue as HTMLElement | null;
-              }
-              if (!node && selector) {
-                node = document.querySelector(selector) as HTMLElement | null;
-              }
-              if (!node) return false;
-              const before = node.scrollTop;
-              node.scrollTop = before + dy / 3;
-              return Math.abs(node.scrollTop - before) > 0.5;
-            },
-            {
-              dy,
-              xpath: target.xpath,
-              selector: target.selector.startsWith('xpath=')
-                ? undefined
-                : target.selector,
-            }
-          );
-          if (!result) {
-            await p.evaluate((y) => window.scrollBy(0, y as number), dy);
-          }
-        } catch {
-          await p.evaluate((y) => window.scrollBy(0, y as number), dy);
-        }
-      } else {
-        await p.evaluate((y) => window.scrollBy(0, y as number), dy);
-      }
-      return {
-        success: true,
-        message: `Scrolled ${params.down ? 'down' : 'up'} by ${params.num_pages} pages`,
-      };
-    });
-  }
-}
-
-class PyKeysActions {
+class KeysActions {
   @action(
     'send_keys',
     'Send special keys via page.keyboard.press (e.g., Enter, Escape, Control+V)',
@@ -494,7 +492,7 @@ class PyKeysActions {
   }
 }
 
-class PySearchActions {
+class SearchActions {
   @action(
     'search_google',
     'Search a query in Google (opens results)',
@@ -519,7 +517,7 @@ class PySearchActions {
   }
 }
 
-class PyDropdownActions {
+class DropdownActions {
   @action(
     'get_dropdown_options',
     'Get options from a native dropdown or ARIA menu by element index',
@@ -661,7 +659,7 @@ class PyDropdownActions {
   }
 }
 
-class PySheetsActions {
+class SheetsActions {
   @action(
     'sheets_read_all',
     'Google Sheets: copy all visible sheet contents to memory',
@@ -782,7 +780,7 @@ class PySheetsActions {
   }
 }
 
-class PyScrollToTextAction {
+class ScrollToTextAction {
   @action(
     'scroll_to_text',
     'Scroll to text on page if visible',
@@ -828,7 +826,7 @@ class PyScrollToTextAction {
   }
 }
 
-class PyFileActions {
+class FileActions {
   @action(
     'write_file',
     'Write or append content to a file; extensions allowed: .md, .txt, .json, .csv, .pdf (PDF written as markdown)',
@@ -935,13 +933,12 @@ export default [
   HoverActions,
   ScreenshotActions,
   FinishActions,
-  PyIndexActions,
-  PyNavActions,
-  PyScrollActions,
-  PyKeysActions,
-  PySearchActions,
-  PyDropdownActions,
-  PySheetsActions,
-  PyScrollToTextAction,
-  PyFileActions,
+  IndexActions,
+  NavActions,
+  KeysActions,
+  SearchActions,
+  DropdownActions,
+  SheetsActions,
+  ScrollToTextAction,
+  FileActions,
 ];

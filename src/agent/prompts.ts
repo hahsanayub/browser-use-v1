@@ -18,28 +18,43 @@ export class SystemPrompt {
       flashMode?: boolean;
       useThinking?: boolean;
       placeholders?: Record<string, string | number>;
+      overrideSystemMessage?: string;
+      extendSystemMessage?: string;
     } = {}
   ): Promise<string> {
-    const { flashMode, useThinking, placeholders } = options;
-    let filename = 'system-prompt.md';
-    if (flashMode) filename = 'system-prompt-flash.md';
-    else if (useThinking === false) filename = 'system-prompt-no-thinking.md';
+    const {
+      flashMode,
+      useThinking,
+      placeholders,
+      overrideSystemMessage,
+      extendSystemMessage,
+    } = options;
 
-    const candidates: URL[] = [
-      new URL(`./prompt/${filename}`, import.meta.url),
-      // Fallback to source tree when running from dist
-      new URL(`../../src/agent/prompt/${filename}`, import.meta.url),
-    ];
+    // If caller provides a full override, prefer it
+    let content: string | null = overrideSystemMessage ?? null;
 
-    let content: string | null = null;
-    for (const candidate of candidates) {
-      try {
-        content = await readFile(candidate, 'utf-8');
-        break;
-      } catch {}
-    }
     if (content == null) {
-      throw new Error(`Failed to load system prompt file: ${filename}`);
+      let filename = 'system-prompt.md';
+      if (flashMode) filename = 'system-prompt-flash.md';
+      else if (useThinking === false) filename = 'system-prompt-no-thinking.md';
+
+      const candidates: URL[] = [
+        new URL(`./prompt/${filename}`, import.meta.url),
+        // Fallback to source tree when running from dist
+        new URL(`../../src/agent/prompt/${filename}`, import.meta.url),
+      ];
+
+      for (const candidate of candidates) {
+        try {
+          content = await readFile(candidate, 'utf-8');
+          break;
+        } catch {
+          continue;
+        }
+      }
+      if (content == null) {
+        throw new Error(`Failed to load system prompt file: ${filename}`);
+      }
     }
 
     if (placeholders) {
@@ -47,6 +62,10 @@ export class SystemPrompt {
         const pattern = new RegExp(`\\{${key}\\}`, 'g');
         content = content.replace(pattern, String(value));
       }
+    }
+
+    if (extendSystemMessage) {
+      content = `${content}\n${extendSystemMessage}`;
     }
 
     return content;
@@ -76,37 +95,35 @@ export function generatePageContextPrompt(
   }> = []
 ): string {
   const interactiveElementsList = pageView.interactiveElements
-    .slice(0, 20) // Limit to prevent token overflow
-    .map((el) => `- ${el.selector}: ${el.tagName} (${el.type})`)
+    .slice(0, 20)
+    .map(
+      (el) =>
+        `- ${el.selector}: ${el.tagName} (${el.type})${el.text ? ` — ${el.text}` : ''}`
+    )
     .join('\n');
 
-  const historyText =
+  const historySection =
     history.length > 0
-      ? `\n## Previous Actions:\n${history
-          .slice(-5) // Show last 5 actions
-          .map(
-            (h) =>
-              `Step ${h.step}: ${h.action.action} - ${h.result.success ? 'Success' : 'Failed'}: ${h.result.message}`
-          )
-          .join('\n')}\n`
+      ? `${history
+          .slice(-5)
+          .map((h) => {
+            const status = h.result.success ? 'Success' : 'Failure';
+            return `<step_${h.step}>:\nAction: ${h.action.action}${h.action.selector ? ` (${h.action.selector})` : ''}${h.action.url ? ` [${h.action.url}]` : ''}\nResult: ${status}: ${h.result.message}${h.result.error ? ` — ${h.result.error}` : ''}\n</step_${h.step}>`;
+          })
+          .join('\n')}`
       : '';
 
-  return `## Current Objective:
-${objective}
+  const pageHtmlPreview =
+    pageView.html.substring(0, 8000) +
+    (pageView.html.length > 8000 ? '...[truncated]' : '');
 
-## Current Page:
-- URL: ${pageView.url}
-- Title: ${pageView.title}
-
-## Interactive Elements Available:
-${interactiveElementsList}
-
-${historyText}
-
-## Current Page Content:
-${pageView.html.substring(0, 8000)}${pageView.html.length > 8000 ? '...[truncated]' : ''}
-
-Analyze the current situation and determine the next action to take to achieve the objective.`;
+  return (
+    `<agent_history>\n` +
+    historySection +
+    `\n</agent_history>\n` +
+    `<agent_state>\n<user_request>\n${objective}\n</user_request>\n<file_system>\nNo file system available\n</file_system>\n<todo_contents>\n[Current todo.md is empty, fill it with your plan when applicable]\n</todo_contents>\n</agent_state>\n` +
+    `<browser_state>\nCurrent URL: ${pageView.url}\nTitle: ${pageView.title}\n\nInteractive Elements (visible):\n${interactiveElementsList}\n\nPage HTML Preview:\n${pageHtmlPreview}\n</browser_state>`
+  );
 }
 
 /**

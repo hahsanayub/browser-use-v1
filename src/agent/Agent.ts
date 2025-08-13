@@ -10,7 +10,11 @@ import type { LLMMessage } from '../types/llm';
 import type { PageView } from '../types/dom';
 import type { AgentHistory, ActionResult, AgentConfig } from '../types/agent';
 /* eslint-disable prettier/prettier */
-import { type Action, type AgentThought, createAgentThoughtSchema } from './views';
+import {
+  type Action,
+  type AgentThought,
+  createAgentThoughtSchema,
+} from './views';
 import {
   SystemPrompt,
   generatePageContextPrompt,
@@ -252,10 +256,7 @@ export class Agent {
       },
       {
         role: 'user',
-        content:
-          generatePageContextPrompt(objective, pageView, this.history) +
-          `\n\n## Available Actions (this step)\n` +
-          available.map((a) => `- ${a.name}: ${a.description}`).join('\n'),
+        content: generatePageContextPrompt(objective, pageView, this.history),
       },
     ];
 
@@ -294,13 +295,19 @@ export class Agent {
                 }
                 // Alias normalization for known variants
                 if (normalized.action === 'send_keys') {
-                  if (normalized.keys === undefined && typeof normalized.key === 'string') {
+                  if (
+                    normalized.keys === undefined &&
+                    typeof normalized.key === 'string'
+                  ) {
                     normalized.keys = normalized.key;
                     delete normalized.key;
                   }
                 } else if (normalized.action === 'wait') {
                   // Support { time: 5 } as seconds by default; convert to ms for value
-                  if (normalized.value === undefined && normalized.time !== undefined) {
+                  if (
+                    normalized.value === undefined &&
+                    normalized.time !== undefined
+                  ) {
                     const t = normalized.time;
                     if (typeof t === 'number') {
                       normalized.value = t < 1000 ? t * 1000 : t;
@@ -317,7 +324,8 @@ export class Agent {
                   }
                   // If mistakenly provided selector for wait, coerce to element wait
                   if (
-                    normalized.value === undefined && typeof normalized.selector === 'string'
+                    normalized.value === undefined &&
+                    typeof normalized.selector === 'string'
                   ) {
                     normalized.type = normalized.type ?? 'element';
                     normalized.value = normalized.selector;
@@ -539,12 +547,23 @@ export class Agent {
         if (typeof (action as any).index === 'number') {
           try {
             await this.browserSession.clickByIndex((action as any).index);
-            return { success: true, message: `Clicked by index ${(action as any).index}` };
+            return {
+              success: true,
+              message: `Clicked by index ${(action as any).index}`,
+            };
           } catch (e) {
-            return { success: false, message: (e as Error).message, error: (e as Error).message };
+            return {
+              success: false,
+              message: (e as Error).message,
+              error: (e as Error).message,
+            };
           }
         }
-        return { success: false, message: 'Missing index', error: 'MISSING_INDEX' };
+        return {
+          success: false,
+          message: 'Missing index',
+          error: 'MISSING_INDEX',
+        };
       case 'finish':
         return { success: true, message: 'Task marked as complete' };
       default:
