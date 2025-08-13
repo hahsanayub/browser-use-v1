@@ -3,18 +3,14 @@
  */
 
 import { Page } from 'playwright';
-import { BrowserContext } from '../browser/BrowserContext';
+import { BrowserSession } from '../browser/BrowserSession';
 import { DOMService } from '../services/dom-service';
 import { BaseLLMClient } from '../llm/base-client';
 import type { LLMMessage } from '../types/llm';
 import type { PageView } from '../types/dom';
 import type { AgentHistory, ActionResult, AgentConfig } from '../types/agent';
-import {
-  validateAgentThought,
-  type Action,
-  type AgentThought,
-  createAgentThoughtSchema,
-} from './views';
+/* eslint-disable prettier/prettier */
+import { type Action, type AgentThought, createAgentThoughtSchema } from './views';
 import {
   SystemPrompt,
   generatePageContextPrompt,
@@ -28,7 +24,7 @@ import { registry } from '../controller/singleton';
  * Agent class for intelligent web automation
  */
 export class Agent {
-  private browserContext: BrowserContext;
+  private browserSession: BrowserSession;
   private llmClient: BaseLLMClient;
   private domService: DOMService;
   private config: AgentConfig;
@@ -38,7 +34,7 @@ export class Agent {
   private isRunning = false;
 
   constructor(
-    browserContext: BrowserContext,
+    browserSession: BrowserSession,
     llmClient: BaseLLMClient,
     config: AgentConfig = {},
     private actDelegate?: (
@@ -46,7 +42,7 @@ export class Agent {
       params: Record<string, unknown>
     ) => Promise<ActionResult>
   ) {
-    this.browserContext = browserContext;
+    this.browserSession = browserSession;
     this.llmClient = llmClient;
     this.domService = new DOMService();
     this.config = {
@@ -72,7 +68,7 @@ export class Agent {
     this.logger.info('Agent started', { objective, config: this.config });
 
     try {
-      const page = this.browserContext.getActivePage();
+      const page = this.browserSession.getContext().pages().slice(-1)[0];
       if (!page) {
         throw new Error(
           'No active page found. Create a page in the browser context first.'
@@ -89,11 +85,16 @@ export class Agent {
 
         try {
           // Get current page view & signature
-          const pageView = await this.domService.getPageView(page);
-          const beforeSig = await this.domService.getDomSignature(page);
+          // Step-level snapshot: refresh at start of step
+          const pageView = await this.browserSession.getStateSummary(true);
+          const beforeSig = await this.browserSession.getDomSignature();
 
           // Generate response from LLM
           const thought = await this.think(objective, pageView);
+          this.logger.debug('[LLM response received] ===>>', {
+            step: this.currentStep,
+            response: JSON.stringify(thought, null, 2),
+          });
 
           // Execute the action sequence proposed by the model
           const actionsToRun = [...(thought as any).action];
@@ -102,10 +103,10 @@ export class Agent {
           }
           let result = { success: true, message: 'no-op' } as ActionResult;
           for (const act of actionsToRun) {
-            const beforeSigForAct = await this.domService.getDomSignature(page);
+            const beforeSigForAct = await this.browserSession.getDomSignature();
             result = await this.executeAction(page, act);
             this.addToHistory(act, result, pageView);
-            const afterSigForAct = await this.domService.getDomSignature(page);
+            const afterSigForAct = await this.browserSession.getDomSignature();
             if (act.action === 'finish') {
               this.logger.info('Task completed', { step: this.currentStep });
               break;
@@ -126,7 +127,7 @@ export class Agent {
           // Already added during multi-act loop
 
           // Detect DOM change to decide whether to continue planning or re-observe
-          const afterSig = await this.domService.getDomSignature(page);
+          const afterSig = await this.browserSession.getDomSignature();
           if (afterSig && beforeSig && afterSig !== beforeSig) {
             this.logger.debug('DOM changed after action, re-observing');
           }
@@ -216,7 +217,7 @@ export class Agent {
     pageView: PageView
   ): Promise<AgentThought> {
     // Derive dynamic available actions for this page (name + description)
-    const activePage = this.browserContext.getActivePage();
+    const activePage = this.browserSession.getContext().pages().slice(-1)[0];
     const availableList = registry.list().filter((a) => {
       try {
         return activePage
@@ -271,6 +272,10 @@ export class Agent {
 
       // Parse JSON response safely
       const thoughtData = JsonParser.parse(response.content);
+      this.logger.debug('[LLM response parsed] ===>>', {
+        step: this.currentStep,
+        response: JSON.stringify(thoughtData, null, 2),
+      });
       // Normalize action array if returned as keyed objects
       if (Array.isArray((thoughtData as any).action)) {
         (thoughtData as any).action = (thoughtData as any).action.map(
@@ -286,6 +291,37 @@ export class Agent {
                 };
                 if (params && typeof params === 'object') {
                   Object.assign(normalized, params);
+                }
+                // Alias normalization for known variants
+                if (normalized.action === 'send_keys') {
+                  if (normalized.keys === undefined && typeof normalized.key === 'string') {
+                    normalized.keys = normalized.key;
+                    delete normalized.key;
+                  }
+                } else if (normalized.action === 'wait') {
+                  // Support { time: 5 } as seconds by default; convert to ms for value
+                  if (normalized.value === undefined && normalized.time !== undefined) {
+                    const t = normalized.time;
+                    if (typeof t === 'number') {
+                      normalized.value = t < 1000 ? t * 1000 : t;
+                    } else if (typeof t === 'string') {
+                      const num = Number(t);
+                      normalized.value = Number.isFinite(num)
+                        ? num < 1000
+                          ? num * 1000
+                          : num
+                        : t;
+                    }
+                    if (normalized.type === undefined) normalized.type = 'time';
+                    delete normalized.time;
+                  }
+                  // If mistakenly provided selector for wait, coerce to element wait
+                  if (
+                    normalized.value === undefined && typeof normalized.selector === 'string'
+                  ) {
+                    normalized.type = normalized.type ?? 'element';
+                    normalized.value = normalized.selector;
+                  }
                 }
                 return normalized;
               }
@@ -357,25 +393,12 @@ export class Agent {
     // Prefer Controller registry if provided
     if (this.actDelegate) {
       try {
-        const params: Record<string, unknown> = {};
-        if (action.selector) params.selector = action.selector;
-        if (action.text) params.text = action.text;
-        if (action.url) params.url = action.url;
-        if (action.scroll) {
-          params.direction = action.scroll.direction;
-          if (action.scroll.amount !== undefined) {
-            params.amount = action.scroll.amount;
-          }
-        }
-        if (action.wait) {
-          params.type = action.wait.type;
-          params.value = action.wait.value;
-          if (action.wait.timeout !== undefined) {
-            params.timeout = action.wait.timeout;
-          }
-        }
-        if (action.key) params.key = action.key;
-        return await this.actDelegate(action.action, params);
+        // Pass through all provided params except meta fields, so we support dynamic action shapes
+        const cloned = { ...(action as unknown as Record<string, unknown>) };
+        delete (cloned as any).action;
+        delete (cloned as any).reasoning;
+        delete (cloned as any).expectedOutcome;
+        return await this.actDelegate(action.action, cloned);
       } catch (error) {
         return {
           success: false,
@@ -483,7 +506,7 @@ export class Agent {
   /**
    * Execute screenshot action
    */
-  private async executeScreenshot(page: Page): Promise<ActionResult> {
+  private async executeScreenshot(): Promise<ActionResult> {
     return this.actDelegate
       ? this.actDelegate('screenshot', {})
       : { success: false, message: 'No dispatcher', error: 'NO_DISPATCH' };
@@ -511,7 +534,17 @@ export class Agent {
       case 'hover':
         return this.executeHover(page, action);
       case 'screenshot':
-        return this.executeScreenshot(page);
+        return this.executeScreenshot();
+      case 'click_element_by_index':
+        if (typeof (action as any).index === 'number') {
+          try {
+            await this.browserSession.clickByIndex((action as any).index);
+            return { success: true, message: `Clicked by index ${(action as any).index}` };
+          } catch (e) {
+            return { success: false, message: (e as Error).message, error: (e as Error).message };
+          }
+        }
+        return { success: false, message: 'Missing index', error: 'MISSING_INDEX' };
       case 'finish':
         return { success: true, message: 'Task marked as complete' };
       default:
@@ -534,10 +567,10 @@ export class Agent {
     this.logger.info('Attempting recovery', { consecutiveFailures });
 
     // Take a screenshot first to see current state
-    await this.executeScreenshot(page);
+    await this.executeScreenshot();
 
     // Get fresh page view
-    const pageView = await this.domService.getPageView(page);
+    const pageView = await this.browserSession.getStateSummary(true);
 
     // Ask LLM for recovery strategy
     const systemContent = await SystemPrompt.load({
@@ -577,6 +610,42 @@ export class Agent {
                 };
                 if (params && typeof params === 'object') {
                   Object.assign(normalized, params);
+                }
+                // Alias normalization for known variants in recovery too
+                if (normalized.action === 'send_keys') {
+                  if (
+                    normalized.keys === undefined &&
+                    typeof (normalized as any).key === 'string'
+                  ) {
+                    normalized.keys = (normalized as any).key;
+                    delete (normalized as any).key;
+                  }
+                } else if (normalized.action === 'wait') {
+                  if (
+                    normalized.value === undefined &&
+                    (normalized as any).time !== undefined
+                  ) {
+                    const t = (normalized as any).time;
+                    if (typeof t === 'number') {
+                      normalized.value = t < 1000 ? t * 1000 : t;
+                    } else if (typeof t === 'string') {
+                      const num = Number(t);
+                      normalized.value = Number.isFinite(num)
+                        ? num < 1000
+                          ? num * 1000
+                          : num
+                        : t;
+                    }
+                    if (normalized.type === undefined) normalized.type = 'time';
+                    delete (normalized as any).time;
+                  }
+                  if (
+                    normalized.value === undefined &&
+                    typeof normalized.selector === 'string'
+                  ) {
+                    normalized.type = normalized.type ?? 'element';
+                    normalized.value = normalized.selector;
+                  }
                 }
                 return normalized;
               }

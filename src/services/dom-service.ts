@@ -39,16 +39,19 @@ export class DOMService {
    */
   async getPageView(
     page: Page,
-    options: DOMProcessingOptions = {}
+    options: DOMProcessingOptions = {},
+    forceRefresh: boolean = false
   ): Promise<PageView> {
     const url = page.url();
     const cacheKey = `${url}_${JSON.stringify(options)}`;
 
-    // Check cache first
-    const cached = this.cache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
-      this.logger.debug('Returning cached page view', { url });
-      return cached.view;
+    // Check cache first unless force refresh requested
+    if (!forceRefresh) {
+      const cached = this.cache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
+        this.logger.debug('Returning cached page view', { url });
+        return cached.view;
+      }
     }
 
     try {
@@ -140,7 +143,8 @@ export class DOMService {
           script: this.buildDomTreeScript,
           args: {
             doHighlightElements: false,
-            viewportExpansion: 0,
+            // Expand viewport to include all to ensure highlightIndex stability
+            viewportExpansion: -1,
             debugMode: false,
             ...options,
           },
@@ -156,7 +160,7 @@ export class DOMService {
             script: this.buildDomTreeScript!,
             args: {
               doHighlightElements: false,
-              viewportExpansion: 0,
+              viewportExpansion: -1,
               debugMode: false,
               ...options,
             },
@@ -169,6 +173,7 @@ export class DOMService {
           'Falling back to minimal DOM state due to evaluation failure',
           {
             error: (secondaryError as Error).message,
+            primaryError: (primaryError as Error).message,
           }
         );
         return {
@@ -235,7 +240,7 @@ export class DOMService {
           script: this.buildDomTreeScript!,
           args: {
             doHighlightElements: false,
-            viewportExpansion: 0,
+            viewportExpansion: -1,
             debugMode: false,
           },
         }

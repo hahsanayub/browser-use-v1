@@ -49,23 +49,19 @@ export class ActionRegistry {
    * Example: z.union([ z.object({ click: z.object({selector:z.string()}) }), ... ])
    */
   buildDynamicActionSchemaForPage(page?: Page): z.ZodUnion<any> {
-    const variants: z.ZodObject<any, any, any, any, any>[] = [];
-    for (const action of this.actions.values()) {
-      if (page && action.isAvailableForPage) {
-        const available = action.isAvailableForPage(page);
-        if (typeof available === 'boolean' && !available) {
-          continue;
-        }
+    const variants: z.ZodTypeAny[] = [];
+    for (const a of this.actions.values()) {
+      if (page && a.isAvailableForPage) {
+        const available = a.isAvailableForPage(page);
+        if (typeof available === 'boolean' && !available) continue;
       }
-      const obj = z.object({ [action.name]: action.paramSchema });
-      variants.push(obj as unknown as z.ZodObject<any, any, any, any, any>);
+      // Expect normalized shape: { action: '<name>', ...params }
+      const variant = (z.object({ action: z.literal(a.name) }).and(a.paramSchema)) as z.ZodTypeAny;
+      variants.push(variant);
     }
-    // If no actions, fallback to an empty object to prevent z.union() crash
     if (variants.length === 0) {
-      return z.union([
-        z.object({}),
-        z.object({}),
-      ]) as unknown as z.ZodUnion<any>;
+      const fallback = z.object({ action: z.string() });
+      return z.union([fallback, fallback]) as unknown as z.ZodUnion<any>;
     }
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore - Variadic union typing

@@ -9,17 +9,8 @@ import { z } from 'zod';
  */
 export const ActionSchema = z.object({
   /** Type of action to perform */
-  action: z.enum([
-    'click', // Click on an element
-    'type', // Type text into an input field
-    'scroll', // Scroll the page
-    'goto', // Navigate to a URL
-    'wait', // Wait for a specified time or condition
-    'screenshot', // Take a screenshot
-    'finish', // Complete the task
-    'key', // Press a keyboard key
-    'hover', // Hover over an element
-  ]),
+  // Allow dynamic actions; validation happens against the registry union per step
+  action: z.string(),
 
   /** CSS selector for the target element (required for click, type, hover) */
   selector: z

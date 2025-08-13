@@ -4,10 +4,11 @@
 
 import { Browser } from '../browser/Browser';
 import { BrowserContext } from '../browser/BrowserContext';
+import { BrowserSession } from '../browser/BrowserSession';
 import { Agent } from '../agent/Agent';
 import { createLLMClient } from '../llm/factory';
 import { getConfig } from '../config/index';
-import { initializeLogger, getLogger } from '../services/logging';
+import { initializeLogger } from '../services/logging';
 import {
   initializeSignalHandler,
   addCleanupFunction,
@@ -36,6 +37,7 @@ export class Controller {
   private config: AppConfig;
   private browser: Browser | null = null;
   private browserContext: BrowserContext | null = null;
+  private browserSession: BrowserSession | null = null;
   private agent: Agent | null = null;
   private logger;
   private isInitialized = false;
@@ -136,6 +138,12 @@ export class Controller {
       );
       await this.browserContext.launch();
 
+      // Create unified session on top of browser/context
+      this.browserSession = new BrowserSession(
+        this.browser.getBrowser()!,
+        this.browserContext.getContext()!
+      );
+
       this.logger.info('Browser initialized successfully');
     } catch (error) {
       this.logger.error('Failed to initialize browser', error as Error);
@@ -151,9 +159,9 @@ export class Controller {
       throw new Error('Controller must be initialized first');
     }
 
-    if (!this.browserContext) {
+    if (!this.browserContext || !this.browserSession) {
       throw new Error(
-        'Browser context not initialized. Call initializeBrowser() first.'
+        'Browser not initialized. Call initializeBrowser() first.'
       );
     }
 
@@ -171,7 +179,7 @@ export class Controller {
       };
 
       this.agent = new Agent(
-        this.browserContext,
+        this.browserSession,
         llmClient,
         finalAgentConfig,
         async (name, params) => this.act(name, params)
@@ -193,7 +201,7 @@ export class Controller {
       await this.initialize();
     }
 
-    if (!this.browserContext) {
+    if (!this.browserContext || !this.browserSession) {
       await this.initializeBrowser();
     }
 
@@ -233,7 +241,7 @@ export class Controller {
     actionName: string,
     params: Record<string, unknown> = {}
   ): Promise<ActionResult> {
-    if (!this.browserContext) {
+    if (!this.browserContext || !this.browserSession) {
       throw new Error('Browser context not initialized');
     }
 
@@ -262,18 +270,36 @@ export class Controller {
     let page = this.browserContext.getActivePage();
     if (!page) page = await this.browserContext.newPage();
 
-    return await action.execute({
+    // Pre-signature
+    const beforeSig = await this.browserSession.getDomSignature();
+
+    const result = await action.execute({
       params: validatedParams,
       page,
-      context: { browserContext: this.browserContext },
+      context: {
+        browserContext: this.browserContext,
+        browserSession: this.browserSession,
+      },
     });
+
+    // Post-signature and cache invalidation if changed
+    try {
+      const afterSig = await this.browserSession.getDomSignature();
+      if (beforeSig !== afterSig) {
+        this.browserSession.invalidateCache();
+      }
+    } catch {
+      // ignore signature check failures
+    }
+
+    return result;
   }
 
   /**
    * Navigate to a URL
    */
   async goto(url: string): Promise<void> {
-    if (!this.browserContext) {
+    if (!this.browserContext || !this.browserSession) {
       throw new Error('Browser context not initialized');
     }
 
@@ -292,6 +318,8 @@ export class Controller {
         page = await this.browserContext.newPage();
       }
       await page.goto(url, { waitUntil: 'domcontentloaded' });
+      // Invalidate session cache after navigation
+      this.browserSession.invalidateCache();
       this.logger.info('Navigation completed', { url });
     } catch (error) {
       this.logger.error('Navigation failed', error as Error, { url });
@@ -323,6 +351,11 @@ export class Controller {
    */
   getBrowserContext(): BrowserContext | null {
     return this.browserContext;
+  }
+
+  /** Get the current browser session */
+  getBrowserSession(): BrowserSession | null {
+    return this.browserSession;
   }
 
   /**
@@ -438,6 +471,12 @@ export class Controller {
         contextConfig
       );
       await this.browserContext.launch();
+
+      // Recreate session as well
+      this.browserSession = new BrowserSession(
+        this.browser.getBrowser()!,
+        this.browserContext.getContext()!
+      );
 
       // Reset agent since browser context changed
       this.agent = null;
