@@ -54,6 +54,8 @@ export interface AgentConfig {
   useThinking?: boolean;
   /** Max actions per step for prompt placeholder replacement */
   maxActionsPerStep?: number;
+  /** Maximum length of clickable elements string before truncation */
+  maxClickableElementsLength?: number;
   /** Hooks for step start and end */
   onStepStart?: AgentHook;
   /** Hook for step end */

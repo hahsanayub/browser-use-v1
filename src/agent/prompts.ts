@@ -83,9 +83,11 @@ export function generatePageContextPrompt(
     step: number;
     action: { action: string; selector?: string; url?: string; text?: string };
     result: { success: boolean; message: string; error?: string };
-  }> = []
+  }> = [],
+  maxClickableElementsLength: number = 40000
 ): string {
   let interactiveElementsList: string;
+  let truncatedText = '';
 
   // Use new clickableElementsToString method if elementTree is available
   if (pageView.domState?.elementTree) {
@@ -96,12 +98,17 @@ export function generatePageContextPrompt(
   } else {
     // Fallback to original logic if elementTree is not available
     interactiveElementsList = Object.entries(pageView.domState?.map || {})
-      .slice(0, 40)
       .map(
         ([index, el]) =>
           `[${index}] <${el.tagName}> ${el.text ?? ''} </${el.tagName}>`
       )
       .join('\n');
+  }
+
+  // Apply max length truncation similar to Python version
+  if (interactiveElementsList.length > maxClickableElementsLength) {
+    interactiveElementsList = interactiveElementsList.substring(0, maxClickableElementsLength);
+    truncatedText = ` (truncated to ${maxClickableElementsLength} characters)`;
   }
 
   const historySection =
@@ -120,7 +127,7 @@ export function generatePageContextPrompt(
     historySection +
     `\n</agent_history>\n` +
     `<agent_state>\n<user_request>\n${objective}\n</user_request>\n<file_system>\nNo file system available\n</file_system>\n<todo_contents>\n[Current todo.md is empty, fill it with your plan when applicable]\n</todo_contents>\n</agent_state>\n` +
-    `<browser_state>\nCurrent URL: ${pageView.url}\nTitle: ${pageView.title}\n\nInteractive elements from top layer of the current page inside the viewport:\n${interactiveElementsList}\n</browser_state>`
+    `<browser_state>\nCurrent URL: ${pageView.url}\nTitle: ${pageView.title}\n\nInteractive elements from top layer of the current page inside the viewport${truncatedText}:\n${interactiveElementsList}\n</browser_state>`
   );
 }
 

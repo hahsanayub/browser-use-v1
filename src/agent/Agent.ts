@@ -60,6 +60,7 @@ export class Agent {
       maxSteps: 100,
       actionTimeout: 30000,
       continueOnFailure: true,
+      maxClickableElementsLength: 40000,
       ...config,
     };
 
@@ -304,7 +305,12 @@ export class Agent {
       },
       {
         role: 'user',
-        content: generatePageContextPrompt(objective, pageView, this.history),
+        content: generatePageContextPrompt(
+          objective,
+          pageView,
+          this.history,
+          this.config.maxClickableElementsLength
+        ),
       },
     ];
 
@@ -663,7 +669,12 @@ export class Agent {
       },
       {
         role: 'user',
-        content: generatePageContextPrompt(objective, pageView, this.history),
+        content: generatePageContextPrompt(
+          objective,
+          pageView,
+          this.history,
+          this.config.maxClickableElementsLength
+        ),
       },
     ];
 
