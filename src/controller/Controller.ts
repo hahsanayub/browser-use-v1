@@ -226,7 +226,10 @@ export class Controller {
       }
 
       // Execute the task
-      const history = await agent.run(objective);
+      const history = await agent.run(objective, {
+        onStepStart: agentConfig?.onStepStart,
+        onStepEnd: agentConfig?.onStepEnd,
+      });
 
       this.logger.info('Task execution completed', {
         objective,

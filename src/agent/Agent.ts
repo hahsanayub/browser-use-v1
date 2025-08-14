@@ -8,7 +8,12 @@ import { DOMService } from '../services/dom-service';
 import { BaseLLMClient } from '../llm/base-client';
 import type { LLMMessage } from '../types/llm';
 import type { PageView } from '../types/dom';
-import type { AgentHistory, ActionResult, AgentConfig } from '../types/agent';
+import type {
+  AgentHistory,
+  ActionResult,
+  AgentConfig,
+  AgentState,
+} from '../types/agent';
 /* eslint-disable prettier/prettier */
 import {
   type Action,
@@ -24,7 +29,7 @@ import { getLogger } from '../services/logging';
 import { JsonParser } from '../services/json-parser';
 import { registry } from '../controller/singleton';
 
-export type AgentHook = (agent: Agent) => void;
+export type AgentHook = (agent: Agent) => Promise<void>;
 
 /**
  * Agent class for intelligent web automation
@@ -36,7 +41,7 @@ export class Agent {
   private config: AgentConfig;
   private history: AgentHistory[] = [];
   private logger = getLogger();
-  private currentStep = 0;
+  private state: AgentState;
   private isRunning = false;
 
   constructor(
@@ -57,6 +62,17 @@ export class Agent {
       continueOnFailure: true,
       ...config,
     };
+
+    // Initialize agent state
+    this.state = {
+      n_steps: 0,
+      consecutive_failures: 0,
+      paused: false,
+      stopped: false,
+      last_model_output: null,
+      last_result: null,
+      last_messages: null,
+    };
   }
 
   /**
@@ -67,14 +83,19 @@ export class Agent {
     {
       onStepStart,
       onStepEnd,
-    }: { onStepStart?: AgentHook; onStepEnd?: AgentHook }
+    }: { onStepStart?: AgentHook; onStepEnd?: AgentHook } = {}
   ): Promise<AgentHistory[]> {
     if (this.isRunning) {
       throw new Error('Agent is already running');
     }
 
     this.isRunning = true;
-    this.currentStep = 0;
+    this.state.n_steps = 0;
+    this.state.consecutive_failures = 0;
+    this.state.paused = false;
+    this.state.stopped = false;
+    this.state.last_model_output = null;
+    this.state.last_result = null;
     this.history = [];
 
     this.logger.info('Agent started', { objective, config: this.config });
@@ -87,13 +108,26 @@ export class Agent {
         );
       }
 
-      let consecutiveFailures = 0;
       const maxConsecutiveFailures = 3;
 
-      while (this.currentStep < this.config.maxSteps!) {
-        this.currentStep++;
+      while (this.state.n_steps < this.config.maxSteps!) {
+        // Check if agent should be stopped or paused
+        if (this.state.stopped) {
+          this.logger.info('Agent stopped');
+          break;
+        }
 
-        this.logger.debug(`Starting step ${this.currentStep}`, { objective });
+        // Handle pause state
+        while (this.state.paused) {
+          this.logger.debug('Agent paused, waiting...');
+          await this.sleep(200); // Small delay to prevent CPU spinning
+          if (this.state.stopped) break;
+        }
+
+        this.state.n_steps++;
+        this.state.step_start_time = Date.now();
+
+        this.logger.debug(`Starting step ${this.state.n_steps}`, { objective });
 
         try {
           // Get current page view & signature
@@ -102,13 +136,14 @@ export class Agent {
           const beforeSig = await this.browserSession.getDomSignature();
 
           // Before step hook
-          onStepStart?.(this);
+          await onStepStart?.(this);
 
           // Generate response from LLM
           const thought = await this.think(objective, pageView);
+          this.state.last_model_output = thought;
 
           // After step hook
-          onStepEnd?.(this);
+          await onStepEnd?.(this);
 
           // Execute the action sequence proposed by the model
           const actionsToRun = [...(thought as any).action];
@@ -116,13 +151,15 @@ export class Agent {
             throw new Error('Model returned no actions to execute');
           }
           let result = { success: true, message: 'no-op' } as ActionResult;
+          const results: ActionResult[] = [];
           for (const act of actionsToRun) {
             const beforeSigForAct = await this.browserSession.getDomSignature();
             result = await this.executeAction(page, act);
+            results.push(result);
             this.addToHistory(act, result, pageView);
             const afterSigForAct = await this.browserSession.getDomSignature();
             if (act.action === 'finish') {
-              this.logger.info('Task completed', { step: this.currentStep });
+              this.logger.info('Task completed', { step: this.state.n_steps });
               break;
             }
             if (
@@ -138,7 +175,8 @@ export class Agent {
             if (!result.success) break;
           }
 
-          // Already added during multi-act loop
+          // Save results to state
+          this.state.last_result = results;
 
           // Detect DOM change to decide whether to continue planning or re-observe
           const afterSig = await this.browserSession.getDomSignature();
@@ -148,25 +186,25 @@ export class Agent {
 
           // Handle failures
           if (!result.success) {
-            consecutiveFailures++;
+            this.state.consecutive_failures++;
             this.logger.warn(
-              `Action failed (${consecutiveFailures}/${maxConsecutiveFailures})`,
+              `Action failed (${this.state.consecutive_failures}/${maxConsecutiveFailures})`,
               {
-                step: this.currentStep,
+                step: this.state.n_steps,
                 action: 'sequence',
                 error: result.error,
               }
             );
 
-            if (consecutiveFailures >= maxConsecutiveFailures) {
+            if (this.state.consecutive_failures >= maxConsecutiveFailures) {
               if (this.config.continueOnFailure) {
                 // Try recovery
                 await this.attemptRecovery(
                   page,
                   objective,
-                  consecutiveFailures
+                  this.state.consecutive_failures
                 );
-                consecutiveFailures = 0;
+                this.state.consecutive_failures = 0;
               } else {
                 throw new Error(
                   `Too many consecutive failures: ${result.error}`
@@ -174,14 +212,14 @@ export class Agent {
               }
             }
           } else {
-            consecutiveFailures = 0; // Reset on success
+            this.state.consecutive_failures = 0; // Reset on success
           }
 
           // Wait a bit between actions to be respectful
           await this.sleep(1000);
         } catch (error) {
           this.logger.error(
-            `Error in step ${this.currentStep}`,
+            `Error in step ${this.state.n_steps}`,
             error as Error
           );
 
@@ -206,14 +244,14 @@ export class Agent {
         }
       }
 
-      if (this.currentStep >= this.config.maxSteps!) {
+      if (this.state.n_steps >= this.config.maxSteps!) {
         this.logger.warn('Agent reached maximum steps', {
           maxSteps: this.config.maxSteps,
         });
       }
 
       this.logger.info('Agent finished', {
-        steps: this.currentStep,
+        steps: this.state.n_steps,
         historyLength: this.history.length,
       });
 
@@ -270,8 +308,10 @@ export class Agent {
       },
     ];
 
+    this.state.last_messages = messages;
+
     this.logger.debug('Sending request to LLM', {
-      step: this.currentStep,
+      step: this.state.n_steps,
       messageCount: messages.length,
     });
 
@@ -284,7 +324,7 @@ export class Agent {
       // Parse JSON response safely
       const thoughtData = JsonParser.parse(response.content);
       this.logger.debug('[LLM response parsed] ===>>', {
-        step: this.currentStep,
+        step: this.state.n_steps,
         response: JSON.stringify(thoughtData, null, 2),
       });
       // Normalize action array if returned as keyed objects
@@ -373,7 +413,7 @@ export class Agent {
       thought = { ...thought, action: filteredActions } as AgentThought;
 
       this.logger.debug('LLM response received', {
-        step: this.currentStep,
+        step: this.state.n_steps,
         actionCount: thought.action.length,
       });
 
@@ -402,7 +442,7 @@ export class Agent {
     action: Action
   ): Promise<ActionResult> {
     this.logger.debug('Executing action', {
-      step: this.currentStep,
+      step: this.state.n_steps,
       action: action.action,
       selector: action.selector,
       reasoning: action.reasoning,
@@ -713,7 +753,7 @@ export class Agent {
     pageView?: PageView
   ): void {
     const historyEntry: AgentHistory = {
-      step: this.currentStep,
+      step: this.state.n_steps,
       action,
       result,
       pageState: pageView
@@ -750,13 +790,7 @@ export class Agent {
     return this.isRunning;
   }
 
-  /**
-   * Stop the agent execution
-   */
-  stop(): void {
-    this.isRunning = false;
-    this.logger.info('Agent stopped by user');
-  }
+
 
   /**
    * Update agent configuration
@@ -764,5 +798,65 @@ export class Agent {
   updateConfig(config: Partial<AgentConfig>): void {
     this.config = { ...this.config, ...config };
     this.logger.debug('Agent configuration updated', { config: this.config });
+  }
+
+  /**
+   * Pause the agent execution
+   */
+  pause(): void {
+    this.state.paused = true;
+    this.logger.info('Agent paused');
+  }
+
+  /**
+   * Resume the agent execution
+   */
+  resume(): void {
+    this.state.paused = false;
+    this.logger.info('Agent resumed');
+  }
+
+  /**
+   * Stop the agent execution
+   */
+  stop(): void {
+    this.state.stopped = true;
+    this.isRunning = false;
+    this.logger.info('Agent stopped');
+  }
+
+  /**
+   * Get the current agent state
+   */
+  getState(): AgentState {
+    return { ...this.state };
+  }
+
+  /**
+   * Check if the agent is paused
+   */
+  isPaused(): boolean {
+    return this.state.paused;
+  }
+
+  /**
+   * Check if the agent is stopped
+   */
+  isStopped(): boolean {
+    return this.state.stopped;
+  }
+
+  /**
+   * Get current step number
+   */
+  getCurrentStep(): number {
+    return this.state.n_steps;
+  }
+
+  /**
+   * Get consecutive failures count
+   */
+  getConsecutiveFailures(): number {
+    return this.state.consecutive_failures;
   }
 }

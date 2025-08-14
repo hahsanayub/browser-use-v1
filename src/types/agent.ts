@@ -2,7 +2,9 @@
  * Agent-related type definitions
  */
 
+import { AgentHook } from '../agent/Agent';
 import type { Action } from '../agent/views';
+import { LLMMessage } from './llm';
 
 export type ErrorAction = { action: 'error'; reasoning?: string };
 export type HistoryAction = Action | ErrorAction;
@@ -50,5 +52,27 @@ export interface AgentConfig {
   useThinking?: boolean;
   /** Max actions per step for prompt placeholder replacement */
   maxActionsPerStep?: number;
+  /** Hooks for step start and end */
+  onStepStart?: AgentHook;
+  /** Hook for step end */
+  onStepEnd?: AgentHook;
 }
 
+export interface AgentState {
+  /** Current step number */
+  n_steps: number;
+  /** Number of consecutive failures */
+  consecutive_failures: number;
+  /** Whether the agent is paused */
+  paused: boolean;
+  /** Whether the agent is stopped */
+  stopped: boolean;
+  /** Last messages from the model */
+  last_messages: LLMMessage[] | null;
+  /** Last model output */
+  last_model_output: any | null;
+  /** Last action result */
+  last_result: ActionResult[] | null;
+  /** Step start time for timing */
+  step_start_time?: number;
+}
