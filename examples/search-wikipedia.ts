@@ -17,7 +17,7 @@ async function main() {
         temperature: 0.7,
       },
       browser: {
-        headless: true,
+        headless: false,
         browserType: 'chromium',
         viewport: { width: 1440, height: 900 },
         timeout: 45000,

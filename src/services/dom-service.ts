@@ -10,6 +10,11 @@ import type {
   InteractiveElement,
   DOMProcessingOptions,
   DOMState,
+  DOMBaseNode,
+  DOMTextNode,
+  DOMElementNode,
+  ViewportInfo,
+  SelectorMap,
 } from '../types/dom';
 import { getLogger } from './logging';
 
@@ -68,7 +73,7 @@ export class DOMService {
         ]);
 
       const pageView: PageView = {
-        html: JSON.stringify(domResult),
+        html: this.serializeDOMState(domResult),
         interactiveElements,
         url,
         title,
@@ -102,7 +107,8 @@ export class DOMService {
   ): Promise<string> {
     try {
       const dom = await this.buildDomState(page, options);
-      return DOMService.computeStringHash(JSON.stringify(dom));
+      const serializedDom = this.serializeDOMState(dom);
+      return DOMService.computeStringHash(serializedDom);
     } catch (error) {
       this.logger.debug('Failed to compute DOM signature', {
         error: (error as Error).message,
@@ -184,20 +190,52 @@ export class DOMService {
       }
     }
 
-    // Normalize to DOMState shape
-    const map: Record<string, any> = result?.map || {};
-    const selectorMap: Record<string, string> = {};
-    for (const id of Object.keys(map)) {
-      const node = map[id];
-      if (node?.xpath) selectorMap[id] = `xpath=/${node.xpath}`;
-      else if (node?.tagName) selectorMap[id] = node.tagName;
+    // Construct DOM tree using the new logic
+    try {
+      const { elementTree, selectorMap: domSelectorMap } =
+        this.constructDomTree(result);
+
+      // Convert DOM selector map to string selector map for backward compatibility
+      const selectorMap: Record<string, string> = {};
+      for (const [highlightIndex, elementNode] of Object.entries(
+        domSelectorMap
+      )) {
+        if (elementNode.xpath) {
+          selectorMap[highlightIndex] = `xpath=/${elementNode.xpath}`;
+        } else if (elementNode.tagName) {
+          selectorMap[highlightIndex] = elementNode.tagName;
+        }
+      }
+
+      const domState: DOMState = {
+        elementTree,
+        map: result?.map || {},
+        selectorMap,
+      };
+      return domState;
+    } catch (error) {
+      this.logger.warn(
+        'Failed to construct DOM tree, falling back to original format',
+        {
+          error: (error as Error).message,
+        }
+      );
+
+      // Fallback to original logic if DOM tree construction fails
+      const map: Record<string, any> = result?.map || {};
+      const selectorMap: Record<string, string> = {};
+      for (const id of Object.keys(map)) {
+        const node = map[id];
+        if (node?.xpath) selectorMap[id] = `xpath=/${node.xpath}`;
+        else if (node?.tagName) selectorMap[id] = node.tagName;
+      }
+      const domState: DOMState = {
+        elementTree: undefined,
+        map,
+        selectorMap,
+      };
+      return domState;
     }
-    const domState: DOMState = {
-      elementTree: result?.tree ?? result?.root ?? undefined,
-      map,
-      selectorMap,
-    };
-    return domState;
   }
 
   /**
@@ -517,6 +555,147 @@ export class DOMService {
     }
 
     return selector;
+  }
+
+  /**
+   * Parse a node from JavaScript evaluation result, equivalent to Python _parse_node
+   */
+  private parseNode(nodeData: any): {
+    node: DOMBaseNode | null;
+    childrenIds: number[];
+  } {
+    if (!nodeData) {
+      return { node: null, childrenIds: [] };
+    }
+
+    // Process text nodes immediately
+    if (nodeData.type === 'TEXT_NODE') {
+      const textNode: DOMTextNode = {
+        text: nodeData.text,
+        isVisible: nodeData.isVisible,
+        parent: null,
+        type: 'TEXT_NODE',
+      };
+      return { node: textNode, childrenIds: [] };
+    }
+
+    // Process viewport info if it exists for element nodes
+    let viewportInfo: ViewportInfo | null = null;
+    if (nodeData.viewport) {
+      viewportInfo = {
+        width: nodeData.viewport.width,
+        height: nodeData.viewport.height,
+      };
+    }
+
+    const elementNode: DOMElementNode = {
+      tagName: nodeData.tagName,
+      xpath: nodeData.xpath,
+      attributes: nodeData.attributes || {},
+      children: [],
+      isVisible: nodeData.isVisible || false,
+      isInteractive: nodeData.isInteractive || false,
+      isTopElement: nodeData.isTopElement || false,
+      isInViewport: nodeData.isInViewport || false,
+      highlightIndex: nodeData.highlightIndex ?? null,
+      shadowRoot: nodeData.shadowRoot || false,
+      parent: null,
+      viewportInfo,
+    };
+
+    const childrenIds = nodeData.children || [];
+
+    return { node: elementNode, childrenIds };
+  }
+
+  /**
+   * Serialize DOM state to JSON string, handling circular references
+   */
+  private serializeDOMState(domState: DOMState): string {
+    try {
+      return JSON.stringify(domState, (key, value) => {
+        // Skip parent property to avoid circular references
+        if (key === 'parent') {
+          return undefined;
+        }
+        return value;
+      });
+    } catch (error) {
+      this.logger.warn('Failed to serialize DOM state', {
+        error: (error as Error).message,
+      });
+      // Fallback to a simplified representation
+      return JSON.stringify({
+        elementTree: domState.elementTree ? '[DOM Tree Available]' : undefined,
+        map: '[DOM Map Available]',
+        selectorMap: domState.selectorMap,
+      });
+    }
+  }
+
+  /**
+   * Construct DOM tree from JavaScript evaluation result, equivalent to Python _construct_dom_tree
+   */
+  private constructDomTree(evalPage: any): {
+    elementTree: DOMElementNode;
+    selectorMap: SelectorMap;
+  } {
+    const jsNodeMap = evalPage.map;
+    const jsRootId = evalPage.rootId;
+
+    const selectorMap: SelectorMap = {};
+    const nodeMap: Record<string, DOMBaseNode> = {};
+    const nodeChildrenMap: Record<string, number[]> = {};
+
+    // Parse all nodes first
+    for (const [id, nodeData] of Object.entries(jsNodeMap)) {
+      const { node, childrenIds } = this.parseNode(nodeData);
+      if (node === null) {
+        continue;
+      }
+
+      nodeMap[id] = node;
+      nodeChildrenMap[id] = childrenIds;
+
+      // Build selector map for elements with highlight index
+      if (
+        node.type !== 'TEXT_NODE' &&
+        (node as DOMElementNode).highlightIndex !== null
+      ) {
+        const elementNode = node as DOMElementNode;
+        selectorMap[elementNode.highlightIndex!] = elementNode;
+      }
+    }
+
+    // Build parent-child relationships after all nodes are parsed
+    for (const [id, childrenIds] of Object.entries(nodeChildrenMap)) {
+      const node = nodeMap[id];
+      if (!node || node.type === 'TEXT_NODE') {
+        continue;
+      }
+
+      const elementNode = node as DOMElementNode;
+      for (const childId of childrenIds) {
+        if (!(childId.toString() in nodeMap)) {
+          continue;
+        }
+
+        const childNode = nodeMap[childId.toString()];
+        childNode.parent = elementNode;
+        elementNode.children.push(childNode);
+      }
+    }
+
+    const htmlToDict = nodeMap[jsRootId.toString()];
+
+    if (!htmlToDict || htmlToDict.type === 'TEXT_NODE') {
+      throw new Error('Failed to parse HTML to dictionary');
+    }
+
+    return {
+      elementTree: htmlToDict as DOMElementNode,
+      selectorMap,
+    };
   }
 
   /**

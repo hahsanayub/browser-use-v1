@@ -2,6 +2,37 @@
  * DOM-related type definitions
  */
 
+export interface ViewportInfo {
+  width: number;
+  height: number;
+}
+
+export interface DOMBaseNode {
+  isVisible: boolean;
+  parent: DOMElementNode | null;
+  type?: string; // Add type property to base node
+}
+
+export interface DOMTextNode extends DOMBaseNode {
+  text: string;
+  type: 'TEXT_NODE';
+}
+
+export interface DOMElementNode extends DOMBaseNode {
+  tagName: string;
+  xpath: string;
+  attributes: Record<string, string>;
+  children: DOMBaseNode[];
+  isInteractive: boolean;
+  isTopElement: boolean;
+  isInViewport: boolean;
+  shadowRoot: boolean;
+  highlightIndex: number | null;
+  viewportInfo: ViewportInfo | null;
+}
+
+export type SelectorMap = Record<number, DOMElementNode>;
+
 export interface InteractiveElement {
   /** Unique identifier for the element */
   id: string;
@@ -67,7 +98,7 @@ export interface DOMProcessingOptions {
  */
 export interface DOMState {
   /** Tree structure representing the page (if available) */
-  elementTree?: unknown;
+  elementTree?: DOMElementNode;
   /** Node map keyed by internal id */
   map: Record<string, any>;
   /** CSS/XPath selector map keyed by internal id */

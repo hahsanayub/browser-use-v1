@@ -2,6 +2,7 @@
  * System prompts and prompt templates for the AI agent
  */
 import { readFile } from 'node:fs/promises';
+import { PageView } from '../types/dom';
 
 /**
  * Dynamically load system prompts from markdown files based on configuration.
@@ -76,18 +77,7 @@ export class SystemPrompt {
  */
 export function generatePageContextPrompt(
   objective: string,
-  pageView: {
-    url: string;
-    title: string;
-    html: string;
-    interactiveElements: Array<{
-      id: string;
-      tagName: string;
-      type: string;
-      text?: string;
-      selector: string;
-    }>;
-  },
+  pageView: PageView,
   history: Array<{
     step: number;
     action: { action: string; selector?: string; url?: string; text?: string };

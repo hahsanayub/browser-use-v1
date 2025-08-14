@@ -323,10 +323,7 @@ export class Agent {
 
       // Parse JSON response safely
       const thoughtData = JsonParser.parse(response.content);
-      this.logger.debug('[LLM response parsed] ===>>', {
-        step: this.state.n_steps,
-        response: JSON.stringify(thoughtData, null, 2),
-      });
+
       // Normalize action array if returned as keyed objects
       if (Array.isArray((thoughtData as any).action)) {
         (thoughtData as any).action = (thoughtData as any).action.map(
