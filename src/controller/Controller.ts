@@ -7,6 +7,7 @@ import { BrowserContext } from '../browser/BrowserContext';
 import { BrowserSession } from '../browser/BrowserSession';
 import { Agent } from '../agent/Agent';
 import { createLLMClient } from '../llm/factory';
+import { BaseLLMClient } from '../llm/base-client';
 import { getConfig } from '../config/index';
 import { initializeLogger } from '../services/logging';
 import {
@@ -39,6 +40,7 @@ export class Controller {
   private browserContext: BrowserContext | null = null;
   private browserSession: BrowserSession | null = null;
   private agent: Agent | null = null;
+  private llmClient: BaseLLMClient | null = null;
   private logger;
   private isInitialized = false;
 
@@ -87,6 +89,10 @@ export class Controller {
           await this.cleanup();
         });
       }
+
+      // Initialize LLM client
+      this.llmClient = createLLMClient(this.config.llm);
+      this.logger.debug('LLM client initialized');
 
       // Mark initialized before initializing the browser so that dependent
       // methods that assert initialization can proceed.
@@ -176,8 +182,10 @@ export class Controller {
     if (!this.agent || agentConfig) {
       this.logger.debug('Creating new agent instance');
 
-      // Create LLM client
-      const llmClient = createLLMClient(this.config.llm);
+      // Reuse the existing LLM client
+      if (!this.llmClient) {
+        throw new Error('LLM client not initialized');
+      }
 
       // Merge agent config with global config
       const finalAgentConfig: AgentConfig = {
@@ -187,7 +195,7 @@ export class Controller {
 
       this.agent = new Agent(
         this.browserSession,
-        llmClient,
+        this.llmClient,
         finalAgentConfig,
         async (name, params) => this.act(name, params)
       );
@@ -289,6 +297,7 @@ export class Controller {
       context: {
         browserContext: this.browserContext,
         browserSession: this.browserSession,
+        llmClient: this.llmClient,
       },
     });
 

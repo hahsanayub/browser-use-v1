@@ -40,7 +40,7 @@ async function main() {
       actionTimeout: 15000,
       continueOnFailure: true,
       customInstructions:
-        'Use the search input to search for "google. Click the first real search result (not an ad). Wait for the new page to fully load, then get the title of the page.',
+        'Use the search input to search for "google. Click the first real search result (not an ad). Wait for the new page to fully load, then get the content of the page.',
       onStepEnd: async () => {
         // do nothing
       },
@@ -57,7 +57,7 @@ async function main() {
     };
 
     const history = await controller.run(
-      'On Wikipedia, search for "google" and open the first non-ad result. After navigation, wait for content to load, get the title of the page, and finish.',
+      'On Wikipedia, search for "google" and open the first non-ad result. After navigation, wait for content to load, summarize the content, and finish.',
       agentConfig
     );
 
@@ -71,7 +71,7 @@ async function main() {
 
     console.log(`Steps executed: ${history.length}`);
   } catch (error) {
-    console.error('Ollama Google example failed:', error);
+    console.error('Wikipedia example failed:', error);
   } finally {
     await controller.cleanup();
   }

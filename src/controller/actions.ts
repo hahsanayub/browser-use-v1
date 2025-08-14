@@ -8,6 +8,8 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import type { BrowserContext as AgentBrowserContext } from '../browser/BrowserContext';
 import type { BrowserSession } from '../browser/BrowserSession';
+import TurndownService from 'turndown';
+import type { BaseLLMClient } from '../llm/base-client';
 
 // Use BrowserSession's enhanced index-based interaction
 async function executeWithBrowserSession<T>(
@@ -949,6 +951,211 @@ class FileActions {
   }
 }
 
+class ExtractDataActions {
+  @action(
+    'extract_structured_data',
+    'Extract structured, semantic data (e.g. product description, price, all information about XYZ) from the current webpage based on a textual query. This tool takes the entire markdown of the page and extracts the query from it. Set extract_links=true ONLY if your query requires extracting links/URLs from the page. Only use this for specific queries for information retrieval from the page. Don\'t use this to get interactive elements - the tool does not see HTML elements, only the markdown.',
+    z.object({
+      query: z.string().min(1).describe('The query to extract information about'),
+      extract_links: z.boolean().default(false).describe('Whether to include links and images in the extraction'),
+    }),
+    { isAvailableForPage: (page) => page && !page.isClosed() }
+  )
+  static async extractStructuredData({
+    params,
+    page,
+    context,
+  }: {
+    params: { query: string; extract_links: boolean };
+    page: Page;
+    context: {
+      browserContext?: AgentBrowserContext;
+      browserSession?: BrowserSession;
+      llmClient?: BaseLLMClient;
+    };
+  }): Promise<ActionResult> {
+    const { query, extract_links } = params;
+
+    if (!context.llmClient) {
+      return {
+        success: false,
+        message: 'LLM client not available',
+        error: 'LLM_CLIENT_UNAVAILABLE',
+      };
+    }
+
+    return withHealthCheck(page, async (p) => {
+      try {
+        // Get page HTML content with timeout
+        let pageHtml: string;
+        try {
+          pageHtml = await Promise.race([
+            p.content(),
+            new Promise<string>((_, reject) =>
+              setTimeout(() => reject(new Error('Timeout')), 10000)
+            ),
+          ]);
+        } catch (error) {
+          if (error instanceof Error && error.message === 'Timeout') {
+            throw new Error('Page content extraction timed out after 10 seconds');
+          }
+          throw new Error(`Couldn't extract page content: ${error}`);
+        }
+
+        // Initialize Turndown service for HTML to Markdown conversion
+        const turndownService = new TurndownService({
+          headingStyle: 'atx',
+          codeBlockStyle: 'fenced',
+        });
+
+        // Configure what to strip based on extract_links parameter
+        if (!extract_links) {
+          // Remove links and images if not needed
+          turndownService.remove(['a', 'img']);
+        }
+
+        // Convert HTML to markdown
+        let content: string;
+        try {
+          content = await new Promise<string>((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error('Timeout')), 5000);
+            try {
+              const result = turndownService.turndown(pageHtml);
+              clearTimeout(timeout);
+              resolve(result);
+            } catch (error) {
+              clearTimeout(timeout);
+              reject(error);
+            }
+          });
+        } catch (error) {
+          throw new Error(`Could not convert HTML to markdown: ${error}`);
+        }
+
+        // Process iframe content (simplified version - Playwright has limitations with cross-origin iframes)
+        for (const frame of p.frames()) {
+          if (frame.url() !== p.url() && !frame.url().startsWith('data:') && !frame.url().startsWith('about:')) {
+            try {
+              // Wait for iframe to load with aggressive timeout
+              await Promise.race([
+                frame.waitForLoadState('domcontentloaded'),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 1000))
+              ]);
+
+              const iframeHtml = await Promise.race([
+                frame.content(),
+                new Promise<string>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2000))
+              ]);
+
+              const iframeMarkdown = await new Promise<string>((resolve, reject) => {
+                const timeout = setTimeout(() => reject(new Error('Timeout')), 2000);
+                try {
+                  const result = turndownService.turndown(iframeHtml);
+                  clearTimeout(timeout);
+                  resolve(result);
+                } catch (error) {
+                  clearTimeout(timeout);
+                  reject(error);
+                }
+              });
+
+              content += `\n\nIFRAME ${frame.url()}:\n${iframeMarkdown}`;
+            } catch {
+              // Skip failed iframes silently
+            }
+          }
+        }
+
+        // Remove multiple sequential newlines
+        content = content.replace(/\n+/g, '\n');
+
+        // Limit content length to 30,000 characters
+        const maxChars = 30000;
+        if (content.length > maxChars) {
+          const halfMax = Math.floor(maxChars / 2);
+          content = content.substring(0, halfMax) +
+            '\n... left out the middle because it was too long ...\n' +
+            content.substring(content.length - halfMax);
+        }
+
+        // Prepare prompt for LLM
+        const prompt = `You convert websites into structured information. Extract information from this webpage based on the query. Focus only on content relevant to the query. If
+1. The query is vague
+2. Does not make sense for the page
+3. Some/all of the information is not available
+
+Explain the content of the page and that the requested information is not available in the page. Respond in JSON format.
+
+Query: ${query}
+
+Website:
+${content}`;
+
+        // Call LLM with timeout
+        const response = await Promise.race([
+          context.llmClient!.generateResponse([
+            { role: 'user', content: prompt }
+          ]),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('LLM call timed out')), 120000)
+          ),
+        ]);
+
+        const extractedContent = `Page Link: ${p.url()}\nQuery: ${query}\nExtracted Content:\n${response.content}`;
+
+        // Determine if we need to save to file or include in memory
+        const maxMemorySize = 600;
+        let message: string;
+        let attachments: string[] | undefined;
+
+        if (extractedContent.length < maxMemorySize) {
+          message = extractedContent;
+        } else {
+          // Save to file if content is too long
+          const lines = extractedContent.split('\n');
+          let display = '';
+          let displayLines = 0;
+
+          for (const line of lines) {
+            if (display.length + line.length < maxMemorySize) {
+              display += line + '\n';
+              displayLines++;
+            } else {
+              break;
+            }
+          }
+
+          const remainingLines = lines.length - displayLines;
+          const fileName = `extracted_content_${Date.now()}.md`;
+          const filePath = path.resolve(process.cwd(), fileName);
+
+          try {
+            await fs.writeFile(filePath, extractedContent, 'utf-8');
+            message = `Extracted content from ${p.url()}\n<query>${query}</query>\n<extracted_content>\n${display}${remainingLines > 0 ? `${remainingLines} more lines...\n` : ''}</extracted_content>\n<file_saved>Content saved to ${fileName}</file_saved>`;
+            attachments = [fileName];
+          } catch {
+            // Fallback to truncated content if file saving fails
+            message = display + (remainingLines > 0 ? `${remainingLines} more lines...` : '');
+          }
+        }
+
+        return {
+          success: true,
+          message,
+          attachments,
+        };
+
+      } catch (error) {
+        return {
+          success: false,
+          message: `Failed to extract structured data: ${(error as Error).message}`,
+          error: (error as Error).message,
+        };
+      }
+    });
+  }
+}
+
 // Ensure classes are referenced to avoid tree-shaking and "unused" warnings
 export default [
   ClickActions,
@@ -968,4 +1175,5 @@ export default [
   SheetsActions,
   ScrollToTextAction,
   FileActions,
+  ExtractDataActions,
 ];
