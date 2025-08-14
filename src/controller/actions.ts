@@ -11,6 +11,23 @@ import type { BrowserSession } from '../browser/BrowserSession';
 import TurndownService from 'turndown';
 import type { BaseLLMClient } from '../llm/base-client';
 
+// Helper function for Promise.race with proper timeout cleanup
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  errorMessage: string = 'Operation timed out'
+): Promise<T> {
+  let timeoutId: NodeJS.Timeout;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(errorMessage)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+}
+
 // Use BrowserSession's enhanced index-based interaction
 async function executeWithBrowserSession<T>(
   context: { browserSession?: BrowserSession } | undefined,
@@ -989,16 +1006,12 @@ class ExtractDataActions {
         // Get page HTML content with timeout
         let pageHtml: string;
         try {
-          pageHtml = await Promise.race([
+          pageHtml = await withTimeout(
             p.content(),
-            new Promise<string>((_, reject) =>
-              setTimeout(() => reject(new Error('Timeout')), 10000)
-            ),
-          ]);
+            10000,
+            'Page content extraction timed out after 10 seconds'
+          );
         } catch (error) {
-          if (error instanceof Error && error.message === 'Timeout') {
-            throw new Error('Page content extraction timed out after 10 seconds');
-          }
           throw new Error(`Couldn't extract page content: ${error}`);
         }
 
@@ -1017,17 +1030,11 @@ class ExtractDataActions {
         // Convert HTML to markdown
         let content: string;
         try {
-          content = await new Promise<string>((resolve, reject) => {
-            const timeout = setTimeout(() => reject(new Error('Timeout')), 5000);
-            try {
-              const result = turndownService.turndown(pageHtml);
-              clearTimeout(timeout);
-              resolve(result);
-            } catch (error) {
-              clearTimeout(timeout);
-              reject(error);
-            }
-          });
+          content = await withTimeout(
+            Promise.resolve(turndownService.turndown(pageHtml)),
+            5000,
+            'HTML to markdown conversion timed out'
+          );
         } catch (error) {
           throw new Error(`Could not convert HTML to markdown: ${error}`);
         }
@@ -1037,27 +1044,23 @@ class ExtractDataActions {
           if (frame.url() !== p.url() && !frame.url().startsWith('data:') && !frame.url().startsWith('about:')) {
             try {
               // Wait for iframe to load with aggressive timeout
-              await Promise.race([
+              await withTimeout(
                 frame.waitForLoadState('domcontentloaded'),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 1000))
-              ]);
+                1000,
+                'Iframe load timeout'
+              );
 
-              const iframeHtml = await Promise.race([
+              const iframeHtml = await withTimeout(
                 frame.content(),
-                new Promise<string>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2000))
-              ]);
+                2000,
+                'Iframe content extraction timeout'
+              );
 
-              const iframeMarkdown = await new Promise<string>((resolve, reject) => {
-                const timeout = setTimeout(() => reject(new Error('Timeout')), 2000);
-                try {
-                  const result = turndownService.turndown(iframeHtml);
-                  clearTimeout(timeout);
-                  resolve(result);
-                } catch (error) {
-                  clearTimeout(timeout);
-                  reject(error);
-                }
-              });
+              const iframeMarkdown = await withTimeout(
+                Promise.resolve(turndownService.turndown(iframeHtml)),
+                2000,
+                'Iframe markdown conversion timeout'
+              );
 
               content += `\n\nIFRAME ${frame.url()}:\n${iframeMarkdown}`;
             } catch {
@@ -1092,14 +1095,13 @@ Website:
 ${content}`;
 
         // Call LLM with timeout
-        const response = await Promise.race([
+        const response = await withTimeout(
           context.llmClient!.generateResponse([
             { role: 'user', content: prompt }
           ]),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('LLM call timed out')), 120000)
-          ),
-        ]);
+          120000,
+          'LLM call timed out after 2 minutes'
+        );
 
         const extractedContent = `Page Link: ${p.url()}\nQuery: ${query}\nExtracted Content:\n${response.content}`;
 

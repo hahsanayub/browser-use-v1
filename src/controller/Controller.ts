@@ -445,6 +445,8 @@ export class Controller {
         this.browser = null;
       }
 
+
+
       this.agent = null;
       this.isInitialized = false;
 
