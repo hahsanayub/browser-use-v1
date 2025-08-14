@@ -3,6 +3,7 @@
  */
 import { readFile } from 'node:fs/promises';
 import { PageView } from '../types/dom';
+import { DOMService } from '../services/dom-service';
 
 /**
  * Dynamically load system prompts from markdown files based on configuration.
@@ -84,13 +85,24 @@ export function generatePageContextPrompt(
     result: { success: boolean; message: string; error?: string };
   }> = []
 ): string {
-  const interactiveElementsList = pageView.interactiveElements
-    .slice(0, 40)
-    .map(
-      (el, index) =>
-        `[${index}] <${el.tagName}> ${el.text ?? ''} </${el.tagName}>`
-    )
-    .join('\n');
+  let interactiveElementsList: string;
+
+  // Use new clickableElementsToString method if elementTree is available
+  if (pageView.domState?.elementTree) {
+    const domService = new DOMService();
+    interactiveElementsList = domService.clickableElementsToString(
+      pageView.domState.elementTree
+    );
+  } else {
+    // Fallback to original logic if elementTree is not available
+    interactiveElementsList = Object.entries(pageView.domState?.map || {})
+      .slice(0, 40)
+      .map(
+        ([index, el]) =>
+          `[${index}] <${el.tagName}> ${el.text ?? ''} </${el.tagName}>`
+      )
+      .join('\n');
+  }
 
   const historySection =
     history.length > 0

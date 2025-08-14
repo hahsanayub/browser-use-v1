@@ -58,8 +58,6 @@ export interface InteractiveElement {
 export interface PageView {
   /** Simplified HTML content */
   html: string;
-  /** List of interactive elements */
-  interactiveElements: InteractiveElement[];
   /** Page URL */
   url: string;
   /** Page title */
@@ -100,7 +98,7 @@ export interface DOMState {
   /** Tree structure representing the page (if available) */
   elementTree?: DOMElementNode;
   /** Node map keyed by internal id */
-  map: Record<string, any>;
+  map: Record<string, InteractiveElement>;
   /** CSS/XPath selector map keyed by internal id */
   selectorMap: Record<string, string>;
 }
