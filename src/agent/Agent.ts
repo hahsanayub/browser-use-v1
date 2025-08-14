@@ -24,6 +24,8 @@ import { getLogger } from '../services/logging';
 import { JsonParser } from '../services/json-parser';
 import { registry } from '../controller/singleton';
 
+export type AgentHook = (agent: Agent) => void;
+
 /**
  * Agent class for intelligent web automation
  */
@@ -60,7 +62,13 @@ export class Agent {
   /**
    * Execute the agent to accomplish the given objective
    */
-  async run(objective: string): Promise<AgentHistory[]> {
+  async run(
+    objective: string,
+    {
+      onStepStart,
+      onStepEnd,
+    }: { onStepStart?: AgentHook; onStepEnd?: AgentHook }
+  ): Promise<AgentHistory[]> {
     if (this.isRunning) {
       throw new Error('Agent is already running');
     }
@@ -72,7 +80,7 @@ export class Agent {
     this.logger.info('Agent started', { objective, config: this.config });
 
     try {
-      const page = this.browserSession.getContext().pages().slice(-1)[0];
+      const page = this.browserSession.getContext()?.pages().slice(-1)[0];
       if (!page) {
         throw new Error(
           'No active page found. Create a page in the browser context first.'
@@ -93,12 +101,14 @@ export class Agent {
           const pageView = await this.browserSession.getStateSummary(true);
           const beforeSig = await this.browserSession.getDomSignature();
 
+          // Before step hook
+          onStepStart?.(this);
+
           // Generate response from LLM
           const thought = await this.think(objective, pageView);
-          this.logger.debug('[LLM response received] ===>>', {
-            step: this.currentStep,
-            response: JSON.stringify(thought, null, 2),
-          });
+
+          // After step hook
+          onStepEnd?.(this);
 
           // Execute the action sequence proposed by the model
           const actionsToRun = [...(thought as any).action];
@@ -221,7 +231,7 @@ export class Agent {
     pageView: PageView
   ): Promise<AgentThought> {
     // Derive dynamic available actions for this page (name + description)
-    const activePage = this.browserSession.getContext().pages().slice(-1)[0];
+    const activePage = this.browserSession.getContext()?.pages().slice(-1)[0];
     const availableList = registry.list().filter((a) => {
       try {
         return activePage

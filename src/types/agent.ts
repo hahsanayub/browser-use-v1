@@ -51,3 +51,4 @@ export interface AgentConfig {
   /** Max actions per step for prompt placeholder replacement */
   maxActionsPerStep?: number;
 }
+
