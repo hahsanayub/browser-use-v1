@@ -32,7 +32,7 @@ export class JsonParser {
     const finalAttempt = this.tryParse<T>(this.minorRepairs(raw));
     if (finalAttempt.success) return finalAttempt.value as T;
 
-    throw new Error('Unable to parse LLM JSON output');
+    throw new Error(`Unable to parse LLM JSON output: ${raw}`);
   }
 
   private static tryParse<T>(
@@ -47,9 +47,8 @@ export class JsonParser {
   }
 
   private static extractFencedJson(text: string, lang?: string): string | null {
-    const fence = '```';
     const pattern = lang
-      ? new RegExp('```\s*' + lang + '\s*\n([\s\S]*?)\n```', 'i')
+      ? new RegExp('```\\s*' + lang + '\\s*\n([\\s\\S]*?)\n```', 'i')
       : /```\s*\n([\s\S]*?)\n```/i;
     const match = text.match(pattern);
     if (!match) return null;
@@ -108,11 +107,27 @@ export class JsonParser {
 
   private static minorRepairs(text: string): string {
     let repaired = text.trim();
+
+    // Fix double braces at start/end (common LLM output issue)
+    if (repaired.startsWith('{{') && repaired.endsWith('}}')) {
+      repaired = repaired.slice(1, -1);
+    }
+    if (repaired.startsWith('[[') && repaired.endsWith(']]')) {
+      repaired = repaired.slice(1, -1);
+    }
+
+    // Replace backticks with escaped backticks in JSON strings to prevent parsing issues
+    // This is a common issue when LLM outputs contain code references
+    repaired = repaired.replace(
+      /(:\s*"[^"]*?)`([^"`]*?)`([^"]*?")/g,
+      '$1\\`$2\\`$3'
+    );
+
     // Replace single quotes with double quotes where safe (avoid in numbers/booleans)
     // This is heuristic; apply only when looks like JSON-like keys
     if (/\{[\s\S]*?\}/.test(repaired) || /\[[\s\S]*?\]/.test(repaired)) {
       repaired = repaired.replace(
-        /([,{\[]\s*)'([^'\n\r]+?)'(\s*:\s*)/g,
+        /([,{[]]\s*)'([^'\n\r]+?)'(\s*:\s*)/g,
         '$1"$2"$3'
       );
       repaired = repaired.replace(/:\s*'([^'\n\r]*?)'/g, ': "$1"');

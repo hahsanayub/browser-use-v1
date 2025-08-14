@@ -95,10 +95,10 @@ export function generatePageContextPrompt(
   }> = []
 ): string {
   const interactiveElementsList = pageView.interactiveElements
-    .slice(0, 20)
+    .slice(0, 40)
     .map(
-      (el) =>
-        `- ${el.selector}: ${el.tagName} (${el.type})${el.text ? ` — ${el.text}` : ''}`
+      (el, index) =>
+        `[${index}] <${el.tagName}> ${el.text ?? ''} </${el.tagName}>`
     )
     .join('\n');
 
@@ -113,16 +113,12 @@ export function generatePageContextPrompt(
           .join('\n')}`
       : '';
 
-  const pageHtmlPreview =
-    pageView.html.substring(0, 8000) +
-    (pageView.html.length > 8000 ? '...[truncated]' : '');
-
   return (
     `<agent_history>\n` +
     historySection +
     `\n</agent_history>\n` +
     `<agent_state>\n<user_request>\n${objective}\n</user_request>\n<file_system>\nNo file system available\n</file_system>\n<todo_contents>\n[Current todo.md is empty, fill it with your plan when applicable]\n</todo_contents>\n</agent_state>\n` +
-    `<browser_state>\nCurrent URL: ${pageView.url}\nTitle: ${pageView.title}\n\nInteractive Elements (visible):\n${interactiveElementsList}\n\nPage HTML Preview:\n${pageHtmlPreview}\n</browser_state>`
+    `<browser_state>\nCurrent URL: ${pageView.url}\nTitle: ${pageView.title}\n\nInteractive elements from top layer of the current page inside the viewport:\n${interactiveElementsList}\n</browser_state>`
   );
 }
 

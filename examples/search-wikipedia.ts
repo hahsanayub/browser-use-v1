@@ -1,23 +1,23 @@
-/**
- * Example: Use Ollama (qwen3-coder) to open Google, search "openai",
- * click the first result, and open the linked page.
- */
-
+import 'dotenv/config';
+import fs from 'fs';
 import { createController, type AgentConfig } from '../src/index.js';
+
+const timestamp = Date.now();
 
 async function main() {
   const controller = await createController({
     config: {
       llm: {
-        provider: 'ollama',
-        model: 'qwen3-coder',
-        baseUrl: 'http://localhost:11434',
+        provider: 'google',
+        model: 'gemini-2.0-flash',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        apiKey: process.env.GOOGLE_API_KEY,
         timeout: 60000,
         maxTokens: 1024 * 1024,
         temperature: 0.7,
       },
       browser: {
-        headless: false,
+        headless: true,
         browserType: 'chromium',
         viewport: { width: 1440, height: 900 },
         timeout: 45000,
@@ -33,18 +33,31 @@ async function main() {
   });
 
   try {
-    await controller.goto('https://www.google.com');
+    await controller.goto('https://www.wikipedia.org/');
 
     const agentConfig: AgentConfig = {
-      maxSteps: 40,
+      maxSteps: 4,
       actionTimeout: 15000,
       continueOnFailure: true,
       customInstructions:
-        'Use the search input to search for "openai". Click the first real search result (not an ad). Wait for the new page to fully load, then take a screenshot and finish.',
+        'Use the search input to search for "google. Click the first real search result (not an ad). Wait for the new page to fully load, then get the title of the page.',
+      onStepEnd: async () => {
+        // do nothing
+      },
+      onStepStart: async (agent) => {
+        const state = agent.getState();
+        fs.mkdirSync(`logs/${timestamp}`, { recursive: true });
+        const log = `${state.last_messages?.map((m) => `##${m.role}\n${m.content}`).join('\n\n')}\n\n\n\n##LLM Response\n${JSON.stringify(
+          state.last_model_output,
+          null,
+          2
+        )}`;
+        fs.writeFileSync(`logs/${timestamp}/${state.n_steps}.txt`, log);
+      },
     };
 
     const history = await controller.run(
-      'On Google, search for "openai" and open the first non-ad result. After navigation, wait for content to load, take a screenshot, and finish.',
+      'On Wikipedia, search for "google" and open the first non-ad result. After navigation, wait for content to load, get the title of the page, and finish.',
       agentConfig
     );
 
