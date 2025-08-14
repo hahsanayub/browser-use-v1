@@ -380,6 +380,14 @@ export class Agent {
                     normalized.type = normalized.type ?? 'element';
                     normalized.value = normalized.selector;
                   }
+                  // Handle empty wait object {} - provide default time wait
+                  if (
+                    normalized.value === undefined &&
+                    normalized.type === undefined
+                  ) {
+                    normalized.type = 'time';
+                    normalized.value = 2000; // Default to 2 seconds
+                  }
                 }
                 return normalized;
               }
