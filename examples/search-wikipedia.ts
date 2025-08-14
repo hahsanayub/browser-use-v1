@@ -2,7 +2,7 @@ import 'dotenv/config';
 import fs from 'fs';
 import { createController, type AgentConfig } from '../src/index.js';
 
-const timestamp = Date.now();
+const timestamp = new Date().toISOString();
 
 async function main() {
   const controller = await createController({

@@ -1,8 +1,6 @@
 /**
  * Google Gemini client implementation (HTTP via google genai REST is not used here;
  * this client models a minimal surface compatible with our BaseLLMClient).
- *
- * Note: For full feature parity with Python (genai SDK), consider adding official SDK.
  */
 
 import axios, { AxiosInstance } from 'axios';

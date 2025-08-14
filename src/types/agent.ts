@@ -33,6 +33,8 @@ export interface ActionResult {
   message: string;
   /** Error details if action failed */
   error?: string;
+  /** Files to display to the user */
+  attachments?: string[];
   /** Additional metadata */
   metadata?: Record<string, any>;
 }

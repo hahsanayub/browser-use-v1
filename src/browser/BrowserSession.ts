@@ -1,6 +1,6 @@
 /**
  * BrowserSession provides unified session management with step-level state caching
- * and robust health check/recovery mechanisms - equivalent to Python browser-use
+ * and robust health check/recovery mechanisms
  */
 
 import type {
@@ -42,14 +42,14 @@ export interface TabInfo {
 }
 
 /**
- * Enhanced BrowserSession class with Python parity
+ * Enhanced BrowserSession class
  */
 export class BrowserSession {
   private id: string;
   private config: BrowserSessionConfig;
   private logger = getLogger();
 
-  // Connection parameters (Python equivalent: wss_url, cdp_url, browser_pid, etc.)
+  // Connection parameters
   private wssUrl?: string;
   private cdpUrl?: string;
   private browserPid?: number;
@@ -116,7 +116,7 @@ export class BrowserSession {
   }
 
   /**
-   * Unified start method - handles all connection scenarios like Python version
+   * Unified start method - handles all connection scenarios
    */
   async start(): Promise<BrowserSession> {
     if (this.initialized) {
@@ -130,7 +130,6 @@ export class BrowserSession {
         connectionMethod: this.getConnectionMethod(),
       });
 
-      // Priority order matches Python: passed objects > PID > WSS > CDP > launch new
       if (this.playwrightBrowser || this.playwrightContext || this.passedPage) {
         await this.setupFromPassedObjects();
       } else if (this.browserPid) {
@@ -283,7 +282,6 @@ export class BrowserSession {
       throw new Error('Element not found for clicking');
     }
 
-    // Try different click strategies like Python version
     const strategies = [
       () => element.click({ timeout: 5000 }),
       () => element.click({ force: true, timeout: 5000 }),

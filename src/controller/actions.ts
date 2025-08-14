@@ -379,15 +379,25 @@ class ScreenshotActions {
   }
 }
 
-// finish
-class FinishActions {
-  @action('finish', 'Mark the task as completed')
-  static async finish(): Promise<ActionResult> {
-    return { success: true, message: 'Task marked as complete' };
+// done
+class DoneActions {
+  @action(
+    'done',
+    'Mark the task as completed - provide a summary of results for the user. Set success=true if task completed successfully, false otherwise. Text should be your response to the user summarizing results. Include files you would like to display to the user in files_to_display.',
+    z.object({
+      success: z.boolean().describe('Whether the task was completed successfully'),
+      text: z.string().describe('Summary of results for the user'),
+      files_to_display: z.array(z.string()).optional().default([]).describe('Files to display to the user')
+    })
+  )
+  static async done({ params }: { params: { success: boolean; text: string; files_to_display?: string[] } }): Promise<ActionResult> {
+    return {
+      success: params.success,
+      message: params.text,
+      attachments: params.files_to_display
+    };
   }
 }
-
-// Python-parity actions -------------------------------------------------
 
 class IndexActions {
   @action(
@@ -949,7 +959,7 @@ export default [
   KeyActions,
   HoverActions,
   ScreenshotActions,
-  FinishActions,
+  DoneActions,
   IndexActions,
   NavActions,
   KeysActions,
