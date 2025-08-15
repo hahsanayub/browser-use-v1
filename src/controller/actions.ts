@@ -1072,8 +1072,9 @@ class ExtractDataActions {
         // Remove multiple sequential newlines
         content = content.replace(/\n+/g, '\n');
 
-        // Limit content length to 30,000 characters
-        const maxChars = 30000;
+        // Limit content length to 1024 * 1024 characters
+        // TODO: set 30000  characters
+        const maxChars = 1024 * 1024;
         if (content.length > maxChars) {
           const halfMax = Math.floor(maxChars / 2);
           content = content.substring(0, halfMax) +

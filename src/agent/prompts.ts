@@ -107,7 +107,10 @@ export function generatePageContextPrompt(
 
   // Apply max length truncation similar to Python version
   if (interactiveElementsList.length > maxClickableElementsLength) {
-    interactiveElementsList = interactiveElementsList.substring(0, maxClickableElementsLength);
+    interactiveElementsList = interactiveElementsList.substring(
+      0,
+      maxClickableElementsLength
+    );
     truncatedText = ` (truncated to ${maxClickableElementsLength} characters)`;
   }
 
