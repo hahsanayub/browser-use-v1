@@ -366,6 +366,15 @@ export class Agent {
                     normalized.keys = normalized.key;
                     delete normalized.key;
                   }
+                } else if (normalized.action === 'read_file') {
+                  // Map file_path to file_name for compatibility with Python version
+                  if (
+                    normalized.file_name === undefined &&
+                    normalized.file_path !== undefined
+                  ) {
+                    normalized.file_name = normalized.file_path;
+                    delete normalized.file_path;
+                  }
                 } else if (normalized.action === 'wait') {
                   // Support { time: 5 } as seconds by default; convert to ms for value
                   if (

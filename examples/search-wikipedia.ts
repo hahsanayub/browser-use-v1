@@ -57,7 +57,7 @@ async function main() {
     };
 
     const history = await controller.run(
-      'On Wikipedia, search for "google" and open the first non-ad result. After navigation, wait for content to load, summarize the content, and finish.',
+      'On Wikipedia, search for "google" and open the first non-ad result. After navigation, wait for content to load, scroll to the bottom of the page, summarize the content, and finish.',
       agentConfig
     );
 
