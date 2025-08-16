@@ -41,9 +41,9 @@ export class SystemPrompt {
       else if (useThinking === false) filename = 'system-prompt-no-thinking.md';
 
       const candidates: URL[] = [
-        new URL(`./prompt/${filename}`, import.meta.url),
+        new URL(`./prompts/${filename}`, import.meta.url),
         // Fallback to source tree when running from dist
-        new URL(`../../src/agent/prompt/${filename}`, import.meta.url),
+        new URL(`../../src/agent/prompts/${filename}`, import.meta.url),
       ];
 
       for (const candidate of candidates) {

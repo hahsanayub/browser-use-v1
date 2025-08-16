@@ -24,7 +24,7 @@ import {
   SystemPrompt,
   generatePageContextPrompt,
   generateStuckRecoveryPrompt,
-} from './prompts';
+} from './PromptManager';
 import { getLogger } from '../services/logging';
 import { JsonParser } from '../services/json-parser';
 import { registry } from '../controller/singleton';

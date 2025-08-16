@@ -21,5 +21,5 @@ export {
   generateErrorRecoveryPrompt,
   generateCompletionVerificationPrompt,
   generateStuckRecoveryPrompt,
-} from './prompts';
+} from './PromptManager';
 export type { AgentHistory, ActionResult, AgentConfig } from '../types/agent';
