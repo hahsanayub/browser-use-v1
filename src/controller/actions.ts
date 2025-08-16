@@ -151,47 +151,6 @@ class GotoActions {
 class ScrollActions {
   @action(
     'scroll',
-    'Scroll the page',
-    z.object({
-      direction: z.enum(['up', 'down', 'left', 'right']).default('down'),
-      amount: z.number().min(1).max(10).default(3),
-    }),
-    {
-      isAvailableForPage: (page) => page && !page.isClosed(),
-    }
-  )
-  static async scroll({
-    params,
-    page,
-  }: {
-    params: { direction: 'up' | 'down' | 'left' | 'right'; amount?: number };
-    page: Page;
-  }): Promise<ActionResult> {
-    const pixels = (params.amount ?? 3) * 300;
-    const dx =
-      params.direction === 'left'
-        ? -pixels
-        : params.direction === 'right'
-          ? pixels
-          : 0;
-    const dy =
-      params.direction === 'up'
-        ? -pixels
-        : params.direction === 'down'
-          ? pixels
-          : 0;
-    return withHealthCheck(page, async (p) => {
-      await p.mouse.wheel(dx, dy);
-      await p.waitForTimeout(200);
-      return {
-        success: true,
-        message: `Scrolled ${params.direction} ${params.amount ?? 3}`,
-      };
-    });
-  }
-
-  @action(
-    'scroll_pages',
     'Scroll page by number of pages (down=true for down; supports half pages like 0.5)',
     z.object({
       down: z.boolean().default(true),

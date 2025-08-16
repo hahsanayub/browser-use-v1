@@ -7,7 +7,6 @@ import { promises as fs } from 'fs';
 import { resolve as pathResolve } from 'path';
 import type {
   PageView,
-  InteractiveElement,
   DOMProcessingOptions,
   DOMState,
   DOMBaseNode,
@@ -15,6 +14,8 @@ import type {
   DOMElementNode,
   ViewportInfo,
   SelectorMap,
+  DOMResult,
+  PageInfo,
 } from '../types/dom';
 import { getLogger } from './logging';
 
@@ -63,9 +64,9 @@ export class DOMService {
       this.logger.debug('Processing page view', { url });
 
       // Use injected buildDomTree.js to get structured DOM state and interactive elements
-      const [title, viewport, isLoading, domResult] = await Promise.all([
+      const [title, pageInfo, isLoading, domResult] = await Promise.all([
         page.title(),
-        page.viewportSize(),
+        this.getPageInfo(page),
         this.isPageLoading(page),
         this.buildDomState(page, options),
       ]);
@@ -75,9 +76,9 @@ export class DOMService {
         url,
         title,
         isLoading,
-        viewport: viewport || { width: 1280, height: 720 },
         timestamp: Date.now(),
         domState: domResult,
+        pageInfo,
       };
 
       // Cache the result
@@ -92,6 +93,57 @@ export class DOMService {
       this.logger.error('Failed to process page view', error as Error, { url });
       throw error;
     }
+  }
+
+  async getPageInfo(page: Page): Promise<PageInfo> {
+    const pageInfo = await page.evaluate(() => {
+      return {
+        // Current viewport dimensions
+        viewport_width: window.innerWidth,
+        viewport_height: window.innerHeight,
+
+        // Total page dimensions
+        page_width: Math.max(
+          document.documentElement.scrollWidth,
+          document.body.scrollWidth || 0
+        ),
+        page_height: Math.max(
+          document.documentElement.scrollHeight,
+          document.body.scrollHeight || 0
+        ),
+
+        // Current scroll position
+        scroll_x:
+          window.scrollX ||
+          window.pageXOffset ||
+          document.documentElement.scrollLeft ||
+          0,
+        scroll_y:
+          window.scrollY ||
+          window.pageYOffset ||
+          document.documentElement.scrollTop ||
+          0,
+      };
+    });
+
+    return {
+      viewportWidth: pageInfo.viewport_width,
+      viewportHeight: pageInfo.viewport_height,
+      pageWidth: pageInfo.page_width,
+      pageHeight: pageInfo.page_height,
+      scrollX: pageInfo.scroll_x,
+      scrollY: pageInfo.scroll_y,
+      pixelsAbove: pageInfo.scroll_y,
+      pixelsBelow: Math.max(
+        0,
+        pageInfo.page_height - (pageInfo.scroll_y + pageInfo.viewport_height)
+      ),
+      pixelsLeft: pageInfo.scroll_x,
+      pixelsRight: Math.max(
+        0,
+        pageInfo.page_width - (pageInfo.scroll_x + pageInfo.viewport_width)
+      ),
+    };
   }
 
   /**
@@ -136,7 +188,7 @@ export class DOMService {
         };
       }
     }
-    let result: any;
+    let result: DOMResult;
     try {
       result = await page.evaluate(
         (payload: { script: string; args: any }) =>
@@ -231,96 +283,6 @@ export class DOMService {
         selectorMap,
       };
       return domState;
-    }
-  }
-
-  /**
-   * Extract interactive elements from the page
-   */
-  private async extractInteractiveElementsFromBuild(
-    page: Page
-  ): Promise<InteractiveElement[]> {
-    if (!this.buildDomTreeScript) {
-      const scriptPath = pathResolve(process.cwd(), 'src/dom/buildDomTree.js');
-      try {
-        this.buildDomTreeScript = await fs.readFile(scriptPath, 'utf-8');
-      } catch {
-        // Fallback to a lightweight query when script missing
-        const elements = await page.$$eval(
-          'a, button, input, textarea, select, [role="button"]',
-          (els) =>
-            els.map((el, i) => ({
-              id: `interactive_${i}`,
-              tagName: el.tagName.toLowerCase(),
-              type: el.getAttribute('type') || el.tagName.toLowerCase(),
-              attributes: Array.from(el.attributes).reduce(
-                (acc, a) => {
-                  acc[a.name] = a.value;
-                  return acc;
-                },
-                {} as Record<string, string>
-              ),
-              selector: el.id ? `#${el.id}` : el.tagName.toLowerCase(),
-            }))
-        );
-        return elements as unknown as InteractiveElement[];
-      }
-    }
-    try {
-      const domState: any = await page.evaluate(
-        (payload: { script: string; args: any }) =>
-          new Function(`return ${payload.script}`)()(payload.args),
-        {
-          script: this.buildDomTreeScript!,
-          args: {
-            doHighlightElements: false,
-            viewportExpansion: -1,
-            debugMode: false,
-          },
-        }
-      );
-
-      // Walk domState.map to gather interactive nodes with highlightIndex or attributes heuristics
-      const elements: InteractiveElement[] = [];
-      const map: Record<string, any> = domState?.map || {};
-      for (const id of Object.keys(map)) {
-        const node = map[id];
-        if (!node || typeof node !== 'object') continue;
-        if (!node.isInteractive) continue;
-        const selector = node.xpath ? `xpath=/${node.xpath}` : node.tagName;
-        elements.push({
-          id,
-          tagName: node.tagName || 'node',
-          type: node.tagName || 'node',
-          text: undefined,
-          attributes: (node.attributes as Record<string, string>) || {},
-          selector,
-        });
-      }
-      return elements;
-    } catch (e) {
-      // Fallback to basic querySelectorAll extraction when script execution is blocked by CSP
-      this.logger.warn('Failed to build interactive elements from script', {
-        error: (e as Error).message,
-      });
-      const elements = await page.$$eval(
-        'a, button, input, textarea, select, [role="button"]',
-        (els) =>
-          els.map((el, i) => ({
-            id: `interactive_${i}`,
-            tagName: el.tagName.toLowerCase(),
-            type: el.getAttribute('type') || el.tagName.toLowerCase(),
-            attributes: Array.from(el.attributes).reduce(
-              (acc, a) => {
-                acc[a.name] = a.value;
-                return acc;
-              },
-              {} as Record<string, string>
-            ),
-            selector: el.id ? `#${el.id}` : el.tagName.toLowerCase(),
-          }))
-      );
-      return elements as unknown as InteractiveElement[];
     }
   }
 
@@ -579,8 +541,8 @@ export class DOMService {
     let viewportInfo: ViewportInfo | null = null;
     if (nodeData.viewport) {
       viewportInfo = {
-        width: nodeData.viewport.width,
-        height: nodeData.viewport.height,
+        width: nodeData.pageInfo.width,
+        height: nodeData.pageInfo.height,
       };
     }
 
@@ -632,7 +594,7 @@ export class DOMService {
   /**
    * Construct DOM tree from JavaScript evaluation result, equivalent to Python _construct_dom_tree
    */
-  private constructDomTree(evalPage: any): {
+  private constructDomTree(evalPage: DOMResult): {
     elementTree: DOMElementNode;
     selectorMap: SelectorMap;
   } {

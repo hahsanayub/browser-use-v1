@@ -693,9 +693,7 @@ export class BrowserSession {
       ) {
         map.set(node.highlightIndex, {
           ...node,
-          selector: node.xpath
-            ? `xpath=/${node.xpath}`
-            : node.selector || node.tagName,
+          selector: node.xpath ? `xpath=/${node.xpath}` : node.tagName,
         });
       }
     }

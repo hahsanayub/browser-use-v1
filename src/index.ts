@@ -64,11 +64,7 @@ export {
 
 // Types
 export type { BrowserContextConfig } from './types/browser';
-export type {
-  PageView,
-  InteractiveElement,
-  DOMProcessingOptions,
-} from './types/dom';
+export type { PageView, DOMNode, DOMProcessingOptions } from './types/dom';
 
 /**
  * Create a new browser-use controller instance

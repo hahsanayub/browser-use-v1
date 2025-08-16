@@ -33,26 +33,17 @@ export interface DOMElementNode extends DOMBaseNode {
 
 export type SelectorMap = Record<number, DOMElementNode>;
 
-export interface InteractiveElement {
-  /** Unique identifier for the element */
-  id: string;
-  /** Tag name of the element */
-  tagName: string;
-  /** Element type (button, input, link, etc.) */
-  type: string;
-  /** Text content of the element */
-  text?: string;
-  /** Element attributes */
-  attributes: Record<string, string>;
-  /** CSS selector to locate the element */
-  selector: string;
-  /** Bounding box coordinates */
-  boundingBox?: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
+export interface PageInfo {
+  viewportWidth: number;
+  viewportHeight: number;
+  pageWidth: number;
+  pageHeight: number;
+  scrollX: number;
+  scrollY: number;
+  pixelsAbove: number;
+  pixelsBelow: number;
+  pixelsLeft: number;
+  pixelsRight: number;
 }
 
 export interface PageView {
@@ -63,16 +54,16 @@ export interface PageView {
   /** Page title */
   title: string;
   /** Page loading state */
-  isLoading: boolean;
-  /** Viewport information */
-  viewport: {
-    width: number;
-    height: number;
-  };
+  isLoading: boolean; // todo: implement loading_status
   /** Timestamp when the view was captured */
   timestamp: number;
   /** Optional raw DOM state structure for advanced reasoning */
   domState?: DOMState;
+  pageInfo: PageInfo;
+  // tabs
+  // browser_errors
+  // is_pdf_viewer
+  // screenshot
 }
 
 export interface DOMProcessingOptions {
@@ -98,7 +89,27 @@ export interface DOMState {
   /** Tree structure representing the page (if available) */
   elementTree?: DOMElementNode;
   /** Node map keyed by internal id */
-  map: Record<string, InteractiveElement>;
+  map: Record<string, DOMNode>;
   /** CSS/XPath selector map keyed by internal id */
   selectorMap: Record<string, string>;
 }
+
+export interface DOMNode {
+  tagName: string;
+  isVisible: boolean;
+  attributes?: Record<string, string>;
+  xpath?: string;
+  children?: string[];
+  isTopElement?: boolean;
+  isInteractive?: boolean;
+  isInViewport?: boolean;
+  highlightIndex?: number;
+  shadowRoot?: boolean;
+  text?: string;
+  type?: string;
+}
+
+export type DOMResult = {
+  rootId: string;
+  map: Record<string, DOMNode>;
+};
