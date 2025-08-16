@@ -116,12 +116,9 @@ export class JsonParser {
       repaired = repaired.slice(1, -1);
     }
 
-    // Replace backticks with escaped backticks in JSON strings to prevent parsing issues
-    // This is a common issue when LLM outputs contain code references
-    repaired = repaired.replace(
-      /(:\s*"[^"]*?)`([^"`]*?)`([^"]*?")/g,
-      '$1\\`$2\\`$3'
-    );
+    // Fix improperly escaped backticks in JSON strings
+    // Convert \` back to ` since backticks don't need escaping in JSON
+    repaired = repaired.replace(/\\`/g, '`');
 
     // Replace single quotes with double quotes where safe (avoid in numbers/booleans)
     // This is heuristic; apply only when looks like JSON-like keys

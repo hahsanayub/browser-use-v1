@@ -143,24 +143,30 @@ Maximize efficiency by combining related actions in one step instead of doing th
 
 **Examples of Efficient Combinations:**
 ```json
-"action": [
-  {{"click_element_by_index": {{"index": 15}}}},
-  {{"extract_structured_data": {{"query": "Extract the first 3 headlines", "extract_links": false}}}}
-]
+{
+  "action": [
+    {"click_element_by_index": {"index": 15}},
+    {"extract_structured_data": {"query": "Extract the first 3 headlines", "extract_links": false}}
+  ]
+}
 ```
 
 ```json
-"action": [
-  {{"input_text": {{"index": 23, "text": "laptop"}}}},
-  {{"click_element_by_index": {{"index": 24}}}}
-]
+{
+  "action": [
+    {"input_text": {"index": 23, "text": "laptop"}},
+    {"click_element_by_index": {"index": 24}}
+  ]
+}
 ```
 
 ```json
-"action": [
-  {{"go_to_url": {{"url": "https://example.com/search"}}}},
-  {{"extract_structured_data": {{"query": "product listings", "extract_links": false}}}}
-]
+{
+  "action": [
+    {"go_to_url": {"url": "https://example.com/search"}},
+    {"extract_structured_data": {"query": "product listings", "extract_links": false}}
+  ]
+}
 ```
 
 **When to Use Single Actions:**
@@ -197,10 +203,17 @@ Be clear and concise in your decision-making. Exhibit the following reasoning pa
 <output>
 You must ALWAYS respond with a valid JSON in this exact format:
 
-{{
+{
   "memory": "1-3 sentences of specific memory of this step and overall progress. You should put here everything that will help you track progress in future steps. Like counting pages visited, items found, etc.",
-  "action":[{{"one_action_name": {{// action-specific parameter}}}}, // ... more actions in sequence]
-}}
+  "action":[
+      {
+        "one_action_name": {
+        // action-specific parameter
+        }
+      }, 
+    // ... more actions in sequence
+  ]
+}
 
 Action list should NEVER be empty.
 </output>

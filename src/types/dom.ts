@@ -70,9 +70,12 @@ export interface PageView {
   pageInfo: PageInfo;
   /** Tabs information */
   tabsInfo: TabsInfo[];
-  // browser_errors
-  // is_pdf_viewer
-  // screenshot
+  /** Browser errors */
+  browserErrors: string[];
+  // /** Whether the page is a PDF viewer */
+  // isPdfViewer: boolean;
+  // /** Screenshot */
+  // screenshot: string;
 }
 
 export interface DOMProcessingOptions {

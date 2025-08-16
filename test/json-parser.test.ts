@@ -4,6 +4,42 @@ import { JsonParser } from '../src/services/json-parser';
 describe('JsonParser', () => {
   describe('parse() - Basic JSON parsing', () => {
     it('should parse valid JSON object', () => {
+      const input = ` {{
+  "thinking": "I have already navigated to the Wikipedia page for Google and extracted a summary of the content. Now, I need to complete the task by calling the \`done\` action with success set to true and the summary as the text.",
+  "evaluation_previous_goal": "Successfully read the extracted content from the file.",
+  "memory": "Navigated to the Wikipedia page for Google and have a summary of its content.",
+  "next_goal": "Call the \`done\` action to complete the task and provide the summary to the user.",
+  "action": [
+    {
+      "done": {
+        "success": true,
+        "text": "I have navigated to the Wikipedia page for Google and summarized the content as requested. Google LLC is an American multinational technology company focusing on online advertising, search engine technology, cloud computing, computer software, quantum computing, e-commerce, consumer electronics, and artificial intelligence. It details Google's history from its origins as a research project by Larry Page and Sergey Brin to its IPO and reorganization under Alphabet Inc. The page outlines Google's products and services, including its search engine, advertising platforms, consumer services like Gmail and YouTube, and enterprise offerings like Google Workspace and Google Cloud Platform. It also covers corporate affairs, including business trends, tax avoidance strategies, corporate identity, workplace culture, office locations, infrastructure, environmental initiatives, and philanthropy. Finally, the page addresses criticism and controversies surrounding Google, such as privacy concerns, antitrust issues, and political controversies."
+      }
+    }
+  ]
+}}`;
+      const result = JsonParser.parse(input);
+      expect(result).toEqual({
+        thinking:
+          'I have already navigated to the Wikipedia page for Google and extracted a summary of the content. Now, I need to complete the task by calling the `done` action with success set to true and the summary as the text.',
+        evaluation_previous_goal:
+          'Successfully read the extracted content from the file.',
+        memory:
+          'Navigated to the Wikipedia page for Google and have a summary of its content.',
+        next_goal:
+          'Call the `done` action to complete the task and provide the summary to the user.',
+        action: [
+          {
+            done: {
+              success: true,
+              text: "I have navigated to the Wikipedia page for Google and summarized the content as requested. Google LLC is an American multinational technology company focusing on online advertising, search engine technology, cloud computing, computer software, quantum computing, e-commerce, consumer electronics, and artificial intelligence. It details Google's history from its origins as a research project by Larry Page and Sergey Brin to its IPO and reorganization under Alphabet Inc. The page outlines Google's products and services, including its search engine, advertising platforms, consumer services like Gmail and YouTube, and enterprise offerings like Google Workspace and Google Cloud Platform. It also covers corporate affairs, including business trends, tax avoidance strategies, corporate identity, workplace culture, office locations, infrastructure, environmental initiatives, and philanthropy. Finally, the page addresses criticism and controversies surrounding Google, such as privacy concerns, antitrust issues, and political controversies.",
+            },
+          },
+        ],
+      });
+    });
+
+    it('should parse valid JSON object', () => {
       const input = '{"name": "test", "value": 123}';
       const result = JsonParser.parse(input);
       expect(result).toEqual({ name: 'test', value: 123 });
@@ -227,14 +263,19 @@ More text
 
     it('should attempt to handle unbalanced braces but may not always succeed', () => {
       // JsonParser attempts to close unbalanced structures but this particular case fails
-      const input = 'Text {"incomplete": true, "missing": "close" and more text';
-      expect(() => JsonParser.parse(input)).toThrow('Unable to parse LLM JSON output:');
+      const input =
+        'Text {"incomplete": true, "missing": "close" and more text';
+      expect(() => JsonParser.parse(input)).toThrow(
+        'Unable to parse LLM JSON output:'
+      );
     });
 
     it('should attempt to handle unbalanced brackets but may not always succeed', () => {
       // JsonParser attempts to close unbalanced structures but this particular case fails
       const input = 'Text [1, 2, 3 and more text';
-      expect(() => JsonParser.parse(input)).toThrow('Unable to parse LLM JSON output:');
+      expect(() => JsonParser.parse(input)).toThrow(
+        'Unable to parse LLM JSON output:'
+      );
     });
 
     it('should work with TypeScript generic types', () => {
@@ -329,7 +370,8 @@ More text
   describe('parse() - Additional repair scenarios', () => {
     it('should handle backticks in JSON values that need escaping', () => {
       // This tests the backtick escaping repair functionality
-      const input = '{"command": "`npm install`", "description": "Install dependencies"}';
+      const input =
+        '{"command": "`npm install`", "description": "Install dependencies"}';
       const result = JsonParser.parse(input);
       expect(result).toEqual({
         command: '`npm install`',

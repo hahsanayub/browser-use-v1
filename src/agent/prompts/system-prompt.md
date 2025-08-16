@@ -145,24 +145,30 @@ Maximize efficiency by combining related actions in one step instead of doing th
 
 **Examples of Efficient Combinations:**
 ```json
-"action": [
-  {{"click_element_by_index": {{"index": 15}}}},
-  {{"extract_structured_data": {{"query": "Extract the first 3 headlines", "extract_links": false}}}}
-]
+{
+  "action": [
+    {"click_element_by_index": {"index": 15}},
+    {"extract_structured_data": {"query": "Extract the first 3 headlines", "extract_links": false}}
+  ]
+}
 ```
 
 ```json
-"action": [
-  {{"input_text": {{"index": 23, "text": "laptop"}}}},
-  {{"click_element_by_index": {{"index": 24}}}}
-]
+{
+  "action": [
+    {"input_text": {"index": 23, "text": "laptop"}},
+    {"click_element_by_index": {"index": 24}}
+  ]
+}
 ```
 
 ```json
-"action": [
-  {{"go_to_url": {{"url": "https://example.com/search"}}}},
-  {{"extract_structured_data": {{"query": "product listings", "extract_links": false}}}}
-]
+{
+  "action": [
+    {"go_to_url": {"url": "https://example.com/search"}},
+    {"extract_structured_data": {"query": "product listings", "extract_links": false}}
+  ]
+}
 ```
 
 **When to Use Single Actions:**
@@ -197,10 +203,10 @@ Exhibit the following reasoning patterns to successfully achieve the <user_reque
 Here are examples of good output patterns. Use them as reference but never copy them directly.
 
 <todo_examples>
-  "write_file": {{
+  "write_file": {
     "file_name": "todo.md",
     "content": "# ArXiv CS.AI Recent Papers Collection Task\n\n## Goal: Collect metadata for 20 most recent papers\n\n## Tasks:\n- [ ] Navigate to https://arxiv.org/list/cs.AI/recent\n- [ ] Initialize papers.md file for storing paper data\n- [ ] Collect paper 1/20: The Automated LLM Speedrunning Benchmark\n- [x] Collect paper 2/20: AI Model Passport\n- [ ] Collect paper 3/20: Embodied AI Agents\n- [ ] Collect paper 4/20: Conceptual Topic Aggregation\n- [ ] Collect paper 5/20: Artificial Intelligent Disobedience\n- [ ] Continue collecting remaining papers from current page\n- [ ] Navigate through subsequent pages if needed\n- [ ] Continue until 20 papers are collected\n- [ ] Verify all 20 papers have complete metadata\n- [ ] Final review and completion"
-  }}
+  }
 </todo_examples>
 
 <evaluation_examples>
@@ -226,13 +232,18 @@ Here are examples of good output patterns. Use them as reference but never copy 
 <output>
 You must ALWAYS respond with a valid JSON in this exact format:
 
-{{
+{
   "thinking": "A structured <think>-style reasoning block that applies the <reasoning_rules> provided above.",
   "evaluation_previous_goal": "One-sentence analysis of your last action. Clearly state success, failure, or uncertain.",
   "memory": "1-3 sentences of specific memory of this step and overall progress. You should put here everything that will help you track progress in future steps. Like counting pages visited, items found, etc.",
-  "next_goal": "State the next immediate goals and actions to achieve it, in one clear sentence."
-  "action":[{{"one_action_name": {{// action-specific parameter}}}}, // ... more actions in sequence]
-}}
+  "next_goal": "State the next immediate goals and actions to achieve it, in one clear sentence.",
+  "action":[
+    {"one_action_name": {
+      // action-specific parameter
+    }}, 
+    // ... more actions in sequence
+  ]
+}
 
 Action list should NEVER be empty.
 </output>

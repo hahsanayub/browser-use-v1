@@ -75,6 +75,19 @@ export class DOMService {
           this.buildDomState(page, options),
         ]);
 
+      // Determine browser errors based on DOM processing results
+      const browserErrors: string[] = [];
+
+      // Check if this is a minimal fallback state (empty selector map indicates fallback)
+      if (
+        !domResult.selectorMap ||
+        Object.keys(domResult.selectorMap).length === 0
+      ) {
+        browserErrors.push(
+          `DOM processing timed out for ${url} - using minimal state. Basic navigation still available via go_to_url, scroll, and search actions.`
+        );
+      }
+
       const pageView: PageView = {
         html: this.serializeDOMState(domResult),
         url,
@@ -84,6 +97,7 @@ export class DOMService {
         domState: domResult,
         pageInfo,
         tabsInfo,
+        browserErrors,
       };
 
       // Cache the result
@@ -96,7 +110,58 @@ export class DOMService {
       return pageView;
     } catch (error) {
       this.logger.error('Failed to process page view', error as Error, { url });
-      throw error;
+
+      // Create minimal fallback pageView with browser errors for failed state retrieval
+      try {
+        const [title, pageInfo, tabsInfo] = await Promise.all([
+          page.title().catch(() => 'Title unavailable'),
+          this.getPageInfo(page).catch(() => ({
+            viewportWidth: 0,
+            viewportHeight: 0,
+            pageWidth: 0,
+            pageHeight: 0,
+            scrollX: 0,
+            scrollY: 0,
+            pixelsAbove: 0,
+            pixelsBelow: 0,
+            pixelsLeft: 0,
+            pixelsRight: 0,
+          })),
+          this.getTabsInfo(page, browserContext).catch(() => []),
+        ]);
+
+        const fallbackPageView: PageView = {
+          html: '',
+          url,
+          title,
+          isLoading: false,
+          timestamp: Date.now(),
+          domState: {
+            map: {},
+            selectorMap: {},
+          },
+          pageInfo,
+          tabsInfo,
+          browserErrors: [
+            `Page state retrieval failed, minimal recovery applied for ${url}`,
+          ],
+        };
+
+        // Cache the fallback result
+        this.cache.set(cacheKey, {
+          view: fallbackPageView,
+          timestamp: Date.now(),
+        });
+
+        return fallbackPageView;
+      } catch (fallbackError) {
+        this.logger.error(
+          'Failed to create fallback page view',
+          fallbackError as Error,
+          { url }
+        );
+        throw error; // Re-throw original error
+      }
     }
   }
 
