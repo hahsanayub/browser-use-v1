@@ -14,7 +14,6 @@ import type {
   AgentConfig,
   AgentState,
 } from '../types/agent';
-/* eslint-disable prettier/prettier */
 import {
   type Action,
   type AgentThought,
@@ -36,7 +35,7 @@ export type AgentHook = (agent: Agent) => Promise<void>;
  */
 export class Agent {
   private browserSession: BrowserSession;
-  private llmClient: BaseLLMClient;
+  llmClient: BaseLLMClient;
   private domService: DOMService;
   private config: AgentConfig;
   private history: AgentHistory[] = [];

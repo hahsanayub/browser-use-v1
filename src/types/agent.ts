@@ -3,7 +3,7 @@
  */
 
 import { AgentHook } from '../agent/Agent';
-import type { Action } from '../agent/views';
+import type { Action, AgentThought } from '../agent/views';
 import { LLMMessage } from './llm';
 
 export type ErrorAction = { action: 'error'; reasoning?: string };
@@ -74,7 +74,7 @@ export interface AgentState {
   /** Last messages from the model */
   last_messages: LLMMessage[] | null;
   /** Last model output */
-  last_model_output: any | null;
+  last_model_output: AgentThought | null;
   /** Last action result */
   last_result: ActionResult[] | null;
   /** Step start time for timing */
