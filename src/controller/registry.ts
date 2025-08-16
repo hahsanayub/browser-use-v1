@@ -56,7 +56,9 @@ export class ActionRegistry {
         if (typeof available === 'boolean' && !available) continue;
       }
       // Expect normalized shape: { action: '<name>', ...params }
-      const variant = (z.object({ action: z.literal(a.name) }).and(a.paramSchema)) as z.ZodTypeAny;
+      const variant = z
+        .object({ action: z.literal(a.name) })
+        .and(a.paramSchema) as z.ZodTypeAny;
       variants.push(variant);
     }
     if (variants.length === 0) {

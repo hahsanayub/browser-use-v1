@@ -363,16 +363,26 @@ class DoneActions {
     'done',
     'Mark the task as completed - provide a summary of results for the user. Set success=true if task completed successfully, false otherwise. Text should be your response to the user summarizing results. Include files you would like to display to the user in files_to_display.',
     z.object({
-      success: z.boolean().describe('Whether the task was completed successfully'),
+      success: z
+        .boolean()
+        .describe('Whether the task was completed successfully'),
       text: z.string().describe('Summary of results for the user'),
-      files_to_display: z.array(z.string()).optional().default([]).describe('Files to display to the user')
+      files_to_display: z
+        .array(z.string())
+        .optional()
+        .default([])
+        .describe('Files to display to the user'),
     })
   )
-  static async done({ params }: { params: { success: boolean; text: string; files_to_display?: string[] } }): Promise<ActionResult> {
+  static async done({
+    params,
+  }: {
+    params: { success: boolean; text: string; files_to_display?: string[] };
+  }): Promise<ActionResult> {
     return {
       success: params.success,
       message: params.text,
-      attachments: params.files_to_display
+      attachments: params.files_to_display,
     };
   }
 }
@@ -930,10 +940,16 @@ class FileActions {
 class ExtractDataActions {
   @action(
     'extract_structured_data',
-    'Extract structured, semantic data (e.g. product description, price, all information about XYZ) from the current webpage based on a textual query. This tool takes the entire markdown of the page and extracts the query from it. Set extract_links=true ONLY if your query requires extracting links/URLs from the page. Only use this for specific queries for information retrieval from the page. Don\'t use this to get interactive elements - the tool does not see HTML elements, only the markdown.',
+    "Extract structured, semantic data (e.g. product description, price, all information about XYZ) from the current webpage based on a textual query. This tool takes the entire markdown of the page and extracts the query from it. Set extract_links=true ONLY if your query requires extracting links/URLs from the page. Only use this for specific queries for information retrieval from the page. Don't use this to get interactive elements - the tool does not see HTML elements, only the markdown.",
     z.object({
-      query: z.string().min(1).describe('The query to extract information about'),
-      extract_links: z.boolean().default(false).describe('Whether to include links and images in the extraction'),
+      query: z
+        .string()
+        .min(1)
+        .describe('The query to extract information about'),
+      extract_links: z
+        .boolean()
+        .default(false)
+        .describe('Whether to include links and images in the extraction'),
     }),
     { isAvailableForPage: (page) => page && !page.isClosed() }
   )
@@ -1000,7 +1016,11 @@ class ExtractDataActions {
 
         // Process iframe content (simplified version - Playwright has limitations with cross-origin iframes)
         for (const frame of p.frames()) {
-          if (frame.url() !== p.url() && !frame.url().startsWith('data:') && !frame.url().startsWith('about:')) {
+          if (
+            frame.url() !== p.url() &&
+            !frame.url().startsWith('data:') &&
+            !frame.url().startsWith('about:')
+          ) {
             try {
               // Wait for iframe to load with aggressive timeout
               await withTimeout(
@@ -1036,7 +1056,8 @@ class ExtractDataActions {
         const maxChars = 1024 * 1024;
         if (content.length > maxChars) {
           const halfMax = Math.floor(maxChars / 2);
-          content = content.substring(0, halfMax) +
+          content =
+            content.substring(0, halfMax) +
             '\n... left out the middle because it was too long ...\n' +
             content.substring(content.length - halfMax);
         }
@@ -1057,7 +1078,7 @@ ${content}`;
         // Call LLM with timeout
         const response = await withTimeout(
           context.llmClient!.generateResponse([
-            { role: 'user', content: prompt }
+            { role: 'user', content: prompt },
           ]),
           120000,
           'LLM call timed out after 2 minutes'
@@ -1097,7 +1118,9 @@ ${content}`;
             attachments = [fileName];
           } catch {
             // Fallback to truncated content if file saving fails
-            message = display + (remainingLines > 0 ? `${remainingLines} more lines...` : '');
+            message =
+              display +
+              (remainingLines > 0 ? `${remainingLines} more lines...` : '');
           }
         }
 
@@ -1106,7 +1129,6 @@ ${content}`;
           message,
           attachments,
         };
-
       } catch (error) {
         return {
           success: false,

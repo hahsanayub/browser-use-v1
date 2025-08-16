@@ -158,7 +158,7 @@ function getBrowserStateDescription(
   }
 
   const currentTabText =
-    currentTabId !== null ? `Current tab: ${currentTabId}` : '';
+    currentTabId !== null ? `\nCurrent tab: ${currentTabId}` : '';
 
   // Check if current page is a PDF viewer and add appropriate message
   const pdfMessage = isPdfViewer
