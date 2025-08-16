@@ -72,8 +72,8 @@ export interface PageView {
   tabsInfo: TabsInfo[];
   /** Browser errors */
   browserErrors: string[];
-  // /** Whether the page is a PDF viewer */
-  // isPdfViewer: boolean;
+  /** Whether the page is a PDF viewer */
+  isPdfViewer: boolean;
   // /** Screenshot */
   // screenshot: string;
 }

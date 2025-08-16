@@ -66,13 +66,14 @@ export class DOMService {
       this.logger.debug('Processing page view', { url });
 
       // Use injected buildDomTree.js to get structured DOM state and interactive elements
-      const [title, pageInfo, tabsInfo, isLoading, domResult] =
+      const [title, pageInfo, tabsInfo, isLoading, domResult, isPdfViewer] =
         await Promise.all([
           page.title(),
           this.getPageInfo(page),
           this.getTabsInfo(page, browserContext),
           this.isPageLoading(page),
           this.buildDomState(page, options),
+          this.isPdfViewer(page),
         ]);
 
       // Determine browser errors based on DOM processing results
@@ -98,6 +99,7 @@ export class DOMService {
         pageInfo,
         tabsInfo,
         browserErrors,
+        isPdfViewer,
       };
 
       // Cache the result
@@ -145,6 +147,7 @@ export class DOMService {
           browserErrors: [
             `Page state retrieval failed, minimal recovery applied for ${url}`,
           ],
+          isPdfViewer: false,
         };
 
         // Cache the fallback result
@@ -162,6 +165,33 @@ export class DOMService {
         );
         throw error; // Re-throw original error
       }
+    }
+  }
+
+  private async isPdfViewer(page: Page): Promise<boolean> {
+    try {
+      const isPdfViewer = await page.evaluate(() => {
+        // Check for Chrome's built-in PDF viewer (updated selector)
+        const pdfEmbed =
+          document.querySelector(
+            'embed[type="application/x-google-chrome-pdf"]'
+          ) || document.querySelector('embed[type="application/pdf"]');
+        const isPdfViewer = !!pdfEmbed;
+
+        // Also check if the URL ends with .pdf or has PDF content-type
+        const url = window.location.href;
+        const isPdfUrl =
+          url.toLowerCase().includes('.pdf') ||
+          document.contentType === 'application/pdf';
+
+        return isPdfViewer || isPdfUrl;
+      });
+      return isPdfViewer;
+    } catch (error) {
+      this.logger.debug('Failed to check if page is a PDF viewer', {
+        error: (error as Error).message,
+      });
+      return false;
     }
   }
 
