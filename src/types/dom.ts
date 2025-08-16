@@ -76,6 +76,7 @@ export interface PageView {
   isPdfViewer: boolean;
   // /** Screenshot */
   // screenshot: string;
+  // todo: add screenshot
 }
 
 export interface DOMProcessingOptions {

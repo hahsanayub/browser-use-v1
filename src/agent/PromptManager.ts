@@ -73,6 +73,109 @@ export class SystemPrompt {
     return content;
   }
 }
+
+function getBrowserStateDescription(
+  pageView: PageView,
+  truncatedText: string,
+  interactiveElementsList: string
+): string {
+  const { pageInfo, tabsInfo, isPdfViewer } = pageView;
+
+  // Check if there's content above or below the viewport
+  const hasContentAbove = (pageInfo.pixelsAbove || 0) > 0;
+  const hasContentBelow = (pageInfo.pixelsBelow || 0) > 0;
+
+  // Enhanced page information for the model
+  let pageInfoText = '';
+  if (pageInfo) {
+    // Compute page statistics dynamically
+    const pagesAbove =
+      pageInfo.viewportHeight > 0
+        ? pageInfo.pixelsAbove / pageInfo.viewportHeight
+        : 0;
+    const pagesBelow =
+      pageInfo.viewportHeight > 0
+        ? pageInfo.pixelsBelow / pageInfo.viewportHeight
+        : 0;
+    const totalPages =
+      pageInfo.viewportHeight > 0
+        ? pageInfo.pageHeight / pageInfo.viewportHeight
+        : 0;
+    const currentPagePosition =
+      pageInfo.scrollY /
+      Math.max(pageInfo.pageHeight - pageInfo.viewportHeight, 1);
+
+    pageInfoText = `Page info: ${pageInfo.viewportWidth}x${pageInfo.viewportHeight}px viewport, ${pageInfo.pageWidth}x${pageInfo.pageHeight}px total page size, ${pagesAbove.toFixed(1)} pages above, ${pagesBelow.toFixed(1)} pages below, ${totalPages.toFixed(1)} total pages, at ${Math.round(currentPagePosition * 100)}% of page`;
+  }
+
+  // Process interactive elements text with scroll indicators
+  let elementsText = '';
+  if (interactiveElementsList !== '') {
+    if (hasContentAbove) {
+      const pagesAbove =
+        pageInfo.viewportHeight > 0
+          ? pageInfo.pixelsAbove / pageInfo.viewportHeight
+          : 0;
+      elementsText = `... ${pageInfo.pixelsAbove} pixels above (${pagesAbove.toFixed(1)} pages) - scroll to see more or extract structured data if you are looking for specific information ...\n${interactiveElementsList}`;
+    } else {
+      elementsText = `[Start of page]\n${interactiveElementsList}`;
+    }
+
+    if (hasContentBelow) {
+      const pagesBelow =
+        pageInfo.viewportHeight > 0
+          ? pageInfo.pixelsBelow / pageInfo.viewportHeight
+          : 0;
+      elementsText = `${elementsText}\n... ${pageInfo.pixelsBelow} pixels below (${pagesBelow.toFixed(1)} pages) - scroll to see more or extract structured data if you are looking for specific information ...`;
+    } else {
+      elementsText = `${elementsText}\n[End of page]`;
+    }
+  } else {
+    elementsText = 'empty page';
+  }
+
+  // Process tabs information
+  let tabsText = '';
+  const currentTabCandidates: number[] = [];
+
+  // Find tabs that match both URL and title to identify current tab more reliably
+  for (const tab of tabsInfo) {
+    if (tab.url === pageView.url && tab.title === pageView.title) {
+      currentTabCandidates.push(tab.pageId);
+    }
+  }
+
+  // If we have exactly one match, mark it as current
+  // Otherwise, don't mark any tab as current to avoid confusion
+  const currentTabId =
+    currentTabCandidates.length === 1 ? currentTabCandidates[0] : null;
+
+  for (const tab of tabsInfo) {
+    tabsText += `Tab ${tab.pageId}: ${tab.url} - ${tab.title.substring(
+      0,
+      30
+    )}\n`;
+  }
+
+  const currentTabText =
+    currentTabId !== null ? `Current tab: ${currentTabId}` : '';
+
+  // Check if current page is a PDF viewer and add appropriate message
+  const pdfMessage = isPdfViewer
+    ? 'PDF viewer cannot be rendered. In this page, DO NOT use the extract_structured_data action as PDF content cannot be rendered. Use the read_file action on the downloaded PDF in available_file_paths to read the full content.\n\n'
+    : '';
+
+  const browserState = `${currentTabText}
+Available tabs:
+${tabsText}
+${pageInfoText}
+${pdfMessage}Interactive elements from top layer of the current page inside the viewport${truncatedText}:
+${elementsText}
+`;
+
+  return browserState;
+}
+
 /**
  * Generate a prompt for the current page context
  */
@@ -130,7 +233,7 @@ export function generatePageContextPrompt(
     historySection +
     `\n</agent_history>\n` +
     `<agent_state>\n<user_request>\n${objective}\n</user_request>\n<file_system>\nNo file system available\n</file_system>\n<todo_contents>\n[Current todo.md is empty, fill it with your plan when applicable]\n</todo_contents>\n</agent_state>\n` +
-    `<browser_state>\nCurrent URL: ${pageView.url}\nTitle: ${pageView.title}\n\nInteractive elements from top layer of the current page inside the viewport${truncatedText}:\n${interactiveElementsList}\n</browser_state>`
+    `<browser_state>${getBrowserStateDescription(pageView, truncatedText, interactiveElementsList)}</browser_state>`
   );
 }
 

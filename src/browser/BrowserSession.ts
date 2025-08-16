@@ -495,7 +495,8 @@ export class BrowserSession {
         // Create a timeout promise for page.title()
         const titlePromise = page.title();
         const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('Title timeout')), 2000);
+          // todo: make this configurable
+          setTimeout(() => reject(new Error('Title timeout')), 10 * 1000);
         });
 
         const title = await Promise.race([titlePromise, timeoutPromise]);
