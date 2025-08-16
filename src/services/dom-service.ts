@@ -2,7 +2,7 @@
  * DOM Service for analyzing and processing web pages for AI agents
  */
 
-import { Page } from 'playwright';
+import { BrowserContext, Page } from 'playwright';
 import { promises as fs } from 'fs';
 import { resolve as pathResolve } from 'path';
 import type {
@@ -16,6 +16,7 @@ import type {
   SelectorMap,
   DOMResult,
   PageInfo,
+  TabsInfo,
 } from '../types/dom';
 import { getLogger } from './logging';
 
@@ -45,6 +46,7 @@ export class DOMService {
    */
   async getPageView(
     page: Page,
+    browserContext: BrowserContext,
     options: DOMProcessingOptions = {},
     forceRefresh: boolean = false
   ): Promise<PageView> {
@@ -64,12 +66,14 @@ export class DOMService {
       this.logger.debug('Processing page view', { url });
 
       // Use injected buildDomTree.js to get structured DOM state and interactive elements
-      const [title, pageInfo, isLoading, domResult] = await Promise.all([
-        page.title(),
-        this.getPageInfo(page),
-        this.isPageLoading(page),
-        this.buildDomState(page, options),
-      ]);
+      const [title, pageInfo, tabsInfo, isLoading, domResult] =
+        await Promise.all([
+          page.title(),
+          this.getPageInfo(page),
+          this.getTabsInfo(page, browserContext),
+          this.isPageLoading(page),
+          this.buildDomState(page, options),
+        ]);
 
       const pageView: PageView = {
         html: this.serializeDOMState(domResult),
@@ -79,6 +83,7 @@ export class DOMService {
         timestamp: Date.now(),
         domState: domResult,
         pageInfo,
+        tabsInfo,
       };
 
       // Cache the result
@@ -93,6 +98,98 @@ export class DOMService {
       this.logger.error('Failed to process page view', error as Error, { url });
       throw error;
     }
+  }
+
+  /**
+   * Check if a URL is a new tab page (about:blank or chrome://new-tab-page).
+   */
+  private isNewTabPage(url: string): boolean {
+    return (
+      url === 'about:blank' ||
+      url === 'chrome://new-tab-page/' ||
+      url === 'chrome://new-tab-page'
+    );
+  }
+
+  async getTabsInfo(
+    page: Page,
+    browserContext: BrowserContext
+  ): Promise<TabsInfo[]> {
+    const tabsInfo: TabsInfo[] = [];
+    const pages = browserContext.pages();
+
+    for (const [pageIndex, currentPage] of pages.entries()) {
+      const url = currentPage.url();
+
+      // Skip JS execution for chrome:// pages and new tab pages
+      if (this.isNewTabPage(url) || url.startsWith('chrome://')) {
+        // Use URL as title for chrome pages, or mark new tabs as unusable
+        let title: string;
+        if (this.isNewTabPage(url)) {
+          title = 'ignore this tab and do not use it';
+        } else {
+          // For chrome:// pages, use the URL itself as the title
+          title = url;
+        }
+
+        tabsInfo.push({
+          pageId: pageIndex,
+          url,
+          title,
+          parentPageId: null, // No parent page concept in this implementation
+        });
+        continue;
+      }
+
+      // Normal pages - try to get title with timeout
+      try {
+        // Create a timeout promise for page.title()
+        const titlePromise = currentPage.title();
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Title timeout')), 2000);
+        });
+
+        const title = await Promise.race([titlePromise, timeoutPromise]);
+        tabsInfo.push({
+          pageId: pageIndex,
+          url,
+          title,
+          parentPageId: null, // No parent page concept in this implementation
+        });
+      } catch (error) {
+        // page.title() can hang forever on tabs that are crashed/disappeared/about:blank
+        // but we should preserve the real URL and not mislead the LLM about tab availability
+        this.logger.debug(
+          `⚠️ Failed to get tab info for tab #${pageIndex}: ${url} (using fallback title)`,
+          { error: (error as Error).message }
+        );
+
+        // Only mark as unusable if it's actually a new tab page, otherwise preserve the real URL
+        if (this.isNewTabPage(url)) {
+          tabsInfo.push({
+            pageId: pageIndex,
+            url,
+            title: 'ignore this tab and do not use it',
+            parentPageId: null,
+          });
+        } else {
+          // harsh but good, just close the page here because if we can't get the title
+          // then we certainly can't do anything else useful with it, no point keeping it open
+          try {
+            await currentPage.close();
+            this.logger.debug(
+              `🪓 Force-closed page because its JS engine is unresponsive: ${url}`
+            );
+          } catch {
+            // Ignore close errors
+          }
+          // Continue to next page without adding this one to tabsInfo
+          continue;
+        }
+      }
+    }
+
+    return tabsInfo;
   }
 
   async getPageInfo(page: Page): Promise<PageInfo> {

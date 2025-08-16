@@ -46,6 +46,13 @@ export interface PageInfo {
   pixelsRight: number;
 }
 
+export interface TabsInfo {
+  pageId: number;
+  url: string;
+  title: string;
+  parentPageId: number | null;
+}
+
 export interface PageView {
   /** Simplified HTML content */
   html: string;
@@ -59,8 +66,10 @@ export interface PageView {
   timestamp: number;
   /** Optional raw DOM state structure for advanced reasoning */
   domState?: DOMState;
+  /** Page information */
   pageInfo: PageInfo;
-  // tabs
+  /** Tabs information */
+  tabsInfo: TabsInfo[];
   // browser_errors
   // is_pdf_viewer
   // screenshot

@@ -42,6 +42,17 @@ export interface TabInfo {
 }
 
 /**
+ * Check if a URL is a new tab page (about:blank or chrome://new-tab-page).
+ */
+function isNewTabPage(url: string): boolean {
+  return (
+    url === 'about:blank' ||
+    url === 'chrome://new-tab-page/' ||
+    url === 'chrome://new-tab-page'
+  );
+}
+
+/**
  * Enhanced BrowserSession class
  */
 export class BrowserSession {
@@ -171,7 +182,12 @@ export class BrowserSession {
       this.currentPage = healthyPage;
     }
 
-    const pageView = await this.domService.getPageView(healthyPage, {}, true);
+    const pageView = await this.domService.getPageView(
+      healthyPage,
+      this.context!,
+      {},
+      true
+    );
     const selectorMap = this.buildSelectorMap(pageView.domState);
 
     this._cachedBrowserStateSummary = {
@@ -451,20 +467,74 @@ export class BrowserSession {
     const pages = this.context.pages();
     const tabsInfo: TabInfo[] = [];
 
-    for (const [index, page] of pages.entries()) {
-      try {
-        const title = await page.title();
-        const url = page.url();
+    for (const [pageIndex, page] of pages.entries()) {
+      const url = page.url();
+
+      // Skip JS execution for chrome:// pages and new tab pages
+      if (isNewTabPage(url) || url.startsWith('chrome://')) {
+        // Use URL as title for chrome pages, or mark new tabs as unusable
+        let title: string;
+        if (isNewTabPage(url)) {
+          title = 'ignore this tab and do not use it';
+        } else {
+          // For chrome:// pages, use the URL itself as the title
+          title = url;
+        }
+
         tabsInfo.push({
-          id: `page_${index}`,
+          id: `page_${pageIndex}`,
+          title,
+          url,
+          isActive: page === this.currentPage,
+        });
+        continue;
+      }
+
+      // Normal pages - try to get title with timeout
+      try {
+        // Create a timeout promise for page.title()
+        const titlePromise = page.title();
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Title timeout')), 2000);
+        });
+
+        const title = await Promise.race([titlePromise, timeoutPromise]);
+        tabsInfo.push({
+          id: `page_${pageIndex}`,
           title,
           url,
           isActive: page === this.currentPage,
         });
       } catch (error) {
-        this.logger.debug('Failed to get tab info', {
-          error: (error as Error).message,
-        });
+        // page.title() can hang forever on tabs that are crashed/disappeared/about:blank
+        // but we should preserve the real URL and not mislead the LLM about tab availability
+        this.logger.debug(
+          `⚠️ Failed to get tab info for tab #${pageIndex}: ${url} (using fallback title)`,
+          { error: (error as Error).message }
+        );
+
+        // Only mark as unusable if it's actually a new tab page, otherwise preserve the real URL
+        if (isNewTabPage(url)) {
+          tabsInfo.push({
+            id: `page_${pageIndex}`,
+            title: 'ignore this tab and do not use it',
+            url,
+            isActive: page === this.currentPage,
+          });
+        } else {
+          // harsh but good, just close the page here because if we can't get the title
+          // then we certainly can't do anything else useful with it, no point keeping it open
+          try {
+            await page.close();
+            this.logger.debug(
+              `🪓 Force-closed page because its JS engine is unresponsive: ${url}`
+            );
+          } catch {
+            // Ignore close errors
+          }
+          // Continue to next page without adding this one to tabsInfo
+          continue;
+        }
       }
     }
 
