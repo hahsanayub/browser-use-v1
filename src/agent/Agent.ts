@@ -60,8 +60,13 @@ export class Agent {
       actionTimeout: 30000,
       continueOnFailure: true,
       maxClickableElementsLength: 40000,
+      flashMode: false,
+      useThinking: true,
+      maxActionsPerStep: 10,
       ...config,
     };
+
+    this.logger.info('Agent config', { config: this.config });
 
     // Initialize agent state
     this.state = {
