@@ -17,7 +17,7 @@ async function main() {
         temperature: 0.7,
       },
       browser: {
-        headless: false,
+        headless: true,
         browserType: 'chromium',
         viewport: { width: 1440, height: 900 },
         timeout: 45000,
@@ -36,7 +36,7 @@ async function main() {
     await controller.goto('https://www.wikipedia.org/');
 
     const agentConfig: AgentConfig = {
-      maxSteps: 4,
+      maxSteps: 7,
       actionTimeout: 15000,
       continueOnFailure: true,
       customInstructions:

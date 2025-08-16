@@ -99,6 +99,8 @@ export class Agent {
     this.state.last_result = null;
     this.history = [];
 
+    let taskCompleted = false; // Track when done action is executed
+
     this.logger.info('Agent started', { objective, config: this.config });
 
     try {
@@ -111,7 +113,7 @@ export class Agent {
 
       const maxConsecutiveFailures = 3;
 
-      while (this.state.n_steps < this.config.maxSteps!) {
+      while (this.state.n_steps < this.config.maxSteps! && !taskCompleted) {
         // Check if agent should be stopped or paused
         if (this.state.stopped) {
           this.logger.info('Agent stopped');
@@ -159,8 +161,9 @@ export class Agent {
             results.push(result);
             this.addToHistory(act, result, pageView);
             const afterSigForAct = await this.browserSession.getDomSignature();
-            if (act.action === 'finish') {
+            if (act.action === 'done') {
               this.logger.info('Task completed', { step: this.state.n_steps });
+              taskCompleted = true;
               break;
             }
             if (
@@ -321,11 +324,15 @@ export class Agent {
       messageCount: messages.length,
     });
 
+    let responseContent: string = 'none';
+
     try {
       const response = await this.llmClient.generateResponse(messages, {
         temperature: 0.1, // Low temperature for more consistent responses
         maxTokens: 2000,
       });
+
+      responseContent = response.content;
 
       // Parse JSON response safely
       const thoughtData = JsonParser.parse(response.content);
@@ -430,6 +437,7 @@ export class Agent {
 
       return thought;
     } catch (error) {
+      this.logger.debug(`Error Response Content:`, { responseContent });
       this.logger.error('Failed to get LLM response', error as Error);
 
       // Fallback minimal output: take a screenshot
@@ -625,7 +633,7 @@ export class Agent {
           message: 'Missing index',
           error: 'MISSING_INDEX',
         };
-      case 'finish':
+      case 'done':
         return { success: true, message: 'Task marked as complete' };
       default:
         return {
@@ -805,8 +813,6 @@ export class Agent {
   getIsRunning(): boolean {
     return this.isRunning;
   }
-
-
 
   /**
    * Update agent configuration

@@ -148,7 +148,7 @@ export function validateAgentThought(data: unknown): AgentThought {
  */
 export function createFinishAction(reasoning: string): Action {
   return {
-    action: 'finish',
+    action: 'done',
     reasoning,
     expectedOutcome: 'Task completed successfully',
   };
