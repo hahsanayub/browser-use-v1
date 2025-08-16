@@ -72,4 +72,14 @@ export interface BrowserSessionConfig {
   allowedDomains?: string[];
   /** Global timeout for operations */
   timeout?: number;
+
+  // Page load timing configuration
+  /** Minimum time to wait before capturing page state (seconds) */
+  minimumWaitPageLoadTime?: number;
+  /** Time to wait for network idle (seconds) */
+  waitForNetworkIdlePageLoadTime?: number;
+  /** Maximum time to wait for page load (seconds) */
+  maximumWaitPageLoadTime?: number;
+  /** Time to wait between actions (seconds) */
+  waitBetweenActions?: number;
 }

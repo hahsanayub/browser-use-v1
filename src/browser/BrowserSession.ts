@@ -19,6 +19,18 @@ import { promises as fs } from 'fs';
 import { ChildProcess } from 'child_process';
 import path from 'path';
 
+/**
+ * Custom error for when a URL is not allowed
+ */
+export class URLNotAllowedError extends Error {
+  constructor(url: string, allowedDomains: string[]) {
+    super(
+      `URL not allowed: ${url}. Allowed domains: ${allowedDomains.join(', ')}`
+    );
+    this.name = 'URLNotAllowedError';
+  }
+}
+
 export interface BrowserStateSummary extends PageView {
   /** Map from highlight index to the full element node returned by in-page DOM build */
   selectorMap: Map<number, any>;
@@ -48,8 +60,45 @@ function isNewTabPage(url: string): boolean {
   return (
     url === 'about:blank' ||
     url === 'chrome://new-tab-page/' ||
-    url === 'chrome://new-tab-page'
+    url === 'chrome://new-tab-page' ||
+    url === 'edge://newtab' ||
+    url === 'chrome://newtab' ||
+    url.startsWith('chrome-extension://')
   );
+}
+
+/**
+ * Match URL with domain pattern supporting wildcards
+ */
+function matchUrlWithDomainPattern(url: string, pattern: string): boolean {
+  if (isNewTabPage(url)) {
+    return true;
+  }
+
+  try {
+    const urlObj = new URL(url);
+
+    // If pattern includes protocol, match the whole URL
+    if (pattern.includes('://')) {
+      const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+      return regex.test(url);
+    }
+
+    // Otherwise, match just the hostname
+    const hostname = urlObj.hostname.toLowerCase();
+    const patternLower = pattern.toLowerCase();
+
+    // Simple wildcard matching
+    if (patternLower.includes('*')) {
+      const regex = new RegExp('^' + patternLower.replace(/\*/g, '.*') + '$');
+      return regex.test(hostname);
+    }
+
+    // Exact match or subdomain match
+    return hostname === patternLower || hostname.endsWith('.' + patternLower);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -86,6 +135,7 @@ export class BrowserSession {
   private _downloadedFiles: string[] = [];
   private _subprocess?: ChildProcess;
   private _recordingDir?: string;
+  private _currentPageLoadingStatus: string | null = null;
 
   constructor(
     options: {
@@ -106,6 +156,11 @@ export class BrowserSession {
       headless: true,
       timeout: 30000,
       viewport: { width: 1280, height: 720 },
+      // Page load timing defaults (match Python version)
+      minimumWaitPageLoadTime: 0.25,
+      waitForNetworkIdlePageLoadTime: 0.5,
+      maximumWaitPageLoadTime: 5.0,
+      waitBetweenActions: 0.5,
       ...options.config,
     };
 
@@ -182,6 +237,8 @@ export class BrowserSession {
       this.currentPage = healthyPage;
     }
 
+    await this.waitForPageAndFramesLoad(page);
+
     const pageView = await this.domService.getPageView(
       healthyPage,
       this.context!,
@@ -201,6 +258,91 @@ export class BrowserSession {
     });
 
     return this._cachedBrowserStateSummary;
+  }
+
+  private async waitForPageAndFramesLoad(
+    page: Page,
+    timeoutOverwrite?: number
+  ): Promise<void> {
+    /**
+     * Ensures page is fully loaded and stable before continuing.
+     * Waits for network idle, DOM stability, and minimum WAIT_TIME.
+     * Also checks if the loaded URL is allowed.
+     *
+     * Parameters:
+     * -----------
+     * page: Page - The page to wait for
+     * timeoutOverwrite: number | undefined - Override the minimum wait time
+     */
+
+    // Start timing
+    const startTime = Date.now() / 1000;
+
+    // Skip network waiting for new tab pages (about:blank, chrome://new-tab-page, etc.)
+    // These pages load instantly and don't need network idle time
+    if (isNewTabPage(page.url())) {
+      this.logger.debug(
+        `⚡ Skipping page load wait for new tab page: ${page.url()}`
+      );
+      return;
+    }
+
+    try {
+      await this.waitForStableNetwork();
+
+      // Check if the loaded URL is allowed
+      await this.checkAndHandleNavigation(page);
+    } catch (error) {
+      if (error instanceof URLNotAllowedError) {
+        throw error;
+      }
+      this.logger.warn(
+        `⚠️ Page load for ${page.url()} failed due to ${error?.constructor?.name || 'Unknown error'}, continuing anyway...`
+      );
+    }
+
+    // Calculate remaining time to meet minimum WAIT_TIME
+    const elapsed = Date.now() / 1000 - startTime;
+    const minimumWait =
+      timeoutOverwrite ?? this.config.minimumWaitPageLoadTime ?? 0.25;
+    const remaining = Math.max(minimumWait - elapsed, 0);
+
+    // Get tab index for logging (try to find it in context pages)
+    let tabIdx: string | number = '??';
+    try {
+      if (this.context?.pages) {
+        const pages = this.context.pages();
+        tabIdx = pages.indexOf(page);
+        if (tabIdx === -1) tabIdx = '??';
+      }
+    } catch {
+      // Ignore errors getting tab index
+    }
+
+    let extraDelay = '';
+    if (remaining > 0) {
+      extraDelay = `, waiting +${remaining.toFixed(2)}s for all frames to finish`;
+    }
+
+    // Log the page navigation completion
+    this.logger.info(
+      `➡️ Page navigation [${tabIdx}] ${this.truncateUrl(page.url(), 40)} took ${elapsed.toFixed(2)}s${extraDelay}`
+    );
+
+    // Sleep remaining time if needed
+    if (remaining > 0) {
+      await new Promise((resolve) => setTimeout(resolve, remaining * 1000));
+    }
+  }
+
+  /**
+   * Truncate URL for logging purposes
+   */
+  private truncateUrl(url: string, maxLength: number): string {
+    if (url.length <= maxLength) {
+      return url;
+    }
+    return url.substring(0, maxLength - 3) + '...';
   }
 
   /**
@@ -241,6 +383,9 @@ export class BrowserSession {
         waitUntil: 'domcontentloaded',
         timeout: timeoutMs || this.config.timeout,
       });
+
+      // Wait for page and frames to fully load (equivalent to Python version)
+      await this.waitForPageAndFramesLoad(targetPage);
 
       this.invalidateCache();
 
@@ -926,6 +1071,262 @@ export class BrowserSession {
       }
     }
     this.cleanupHandlers = [];
+  }
+
+  /**
+   * Check if a URL is allowed based on the allowedDomains configuration
+   */
+  private isUrlAllowed(url: string): boolean {
+    if (
+      !this.config.allowedDomains ||
+      this.config.allowedDomains.length === 0
+    ) {
+      return true; // No restrictions configured, allow everything
+    }
+
+    // Special case: Always allow new tab pages
+    if (isNewTabPage(url)) {
+      return true;
+    }
+
+    for (const allowedDomain of this.config.allowedDomains) {
+      try {
+        if (matchUrlWithDomainPattern(url, allowedDomain)) {
+          // If it's a pattern with wildcards, log warning (similar to Python version)
+          if (allowedDomain.includes('*')) {
+            try {
+              const urlObj = new URL(url);
+              const domain = urlObj.hostname.toLowerCase();
+              this.logger.warn(
+                `Using wildcard pattern '${allowedDomain}' for domain '${domain}'. Consider using specific domains for better security.`
+              );
+            } catch {
+              // Ignore URL parsing errors for warning
+            }
+          }
+          return true;
+        }
+      } catch {
+        // Continue to next pattern if this one fails
+        continue;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if current page URL is allowed and handle if not
+   */
+  private async checkAndHandleNavigation(page: Page): Promise<void> {
+    if (!this.isUrlAllowed(page.url())) {
+      throw new URLNotAllowedError(
+        page.url(),
+        this.config.allowedDomains || []
+      );
+    }
+  }
+
+  /**
+   * Wait for stable network activity (equivalent to Python's _wait_for_stable_network)
+   */
+  private async waitForStableNetwork(): Promise<void> {
+    const pendingRequests = new Set<any>();
+    let lastActivity = Date.now() / 1000;
+
+    const page = await this.getCurrentPage();
+
+    // Define relevant resource types and content types
+    const RELEVANT_RESOURCE_TYPES = new Set([
+      'document',
+      'stylesheet',
+      'image',
+      'font',
+      'script',
+      'iframe',
+    ]);
+
+    const RELEVANT_CONTENT_TYPES = [
+      'text/html',
+      'text/css',
+      'application/javascript',
+      'image/',
+      'font/',
+      'application/json',
+    ];
+
+    // Additional patterns to filter out
+    const IGNORED_URL_PATTERNS = [
+      // Analytics and tracking
+      'analytics',
+      'tracking',
+      'telemetry',
+      'beacon',
+      'metrics',
+      // Ad-related
+      'doubleclick',
+      'adsystem',
+      'adserver',
+      'advertising',
+      // Social media widgets
+      'facebook.com/plugins',
+      'platform.twitter',
+      'linkedin.com/embed',
+      // Live chat and support
+      'livechat',
+      'zendesk',
+      'intercom',
+      'crisp.chat',
+      'hotjar',
+      // Push notifications
+      'push-notifications',
+      'onesignal',
+      'pushwoosh',
+      // Background sync/heartbeat
+      'heartbeat',
+      'ping',
+      'alive',
+      // WebRTC and streaming
+      'webrtc',
+      'rtmp://',
+      'wss://',
+      // Common CDNs for dynamic content
+      'cloudfront.net',
+      'fastly.net',
+    ];
+
+    const onRequest = (request: any) => {
+      // Filter by resource type
+      if (!RELEVANT_RESOURCE_TYPES.has(request.resourceType())) {
+        return;
+      }
+
+      // Filter out streaming, websocket, and other real-time requests
+      if (
+        ['websocket', 'media', 'eventsource', 'manifest', 'other'].includes(
+          request.resourceType()
+        )
+      ) {
+        return;
+      }
+
+      // Filter out by URL patterns
+      const url = request.url().toLowerCase();
+      if (IGNORED_URL_PATTERNS.some((pattern) => url.includes(pattern))) {
+        return;
+      }
+
+      // Filter out data URLs and blob URLs
+      if (url.startsWith('data:') || url.startsWith('blob:')) {
+        return;
+      }
+
+      // Filter out requests with certain headers
+      const headers = request.headers();
+      if (
+        headers.purpose === 'prefetch' ||
+        ['video', 'audio'].includes(headers['sec-fetch-dest'])
+      ) {
+        return;
+      }
+
+      pendingRequests.add(request);
+      lastActivity = Date.now() / 1000;
+      // this.logger.debug(`Request started: ${request.url()} (${request.resourceType()})`);
+    };
+
+    const onResponse = (response: any) => {
+      const request = response.request();
+      if (!pendingRequests.has(request)) {
+        return;
+      }
+
+      // Filter by content type if available
+      const contentType = (
+        response.headers()['content-type'] || ''
+      ).toLowerCase();
+
+      // Skip if content type indicates streaming or real-time data
+      const streamingTypes = [
+        'streaming',
+        'video',
+        'audio',
+        'webm',
+        'mp4',
+        'event-stream',
+        'websocket',
+        'protobuf',
+      ];
+      if (streamingTypes.some((t) => contentType.includes(t))) {
+        pendingRequests.delete(request);
+        return;
+      }
+
+      // Only process relevant content types
+      if (!RELEVANT_CONTENT_TYPES.some((ct) => contentType.includes(ct))) {
+        pendingRequests.delete(request);
+        return;
+      }
+
+      // Skip if response is too large (likely not essential for page load)
+      const contentLength = response.headers()['content-length'];
+      if (contentLength && parseInt(contentLength) > 5 * 1024 * 1024) {
+        // 5MB
+        pendingRequests.delete(request);
+        return;
+      }
+
+      pendingRequests.delete(request);
+      lastActivity = Date.now() / 1000;
+      // this.logger.debug(`Request resolved: ${request.url()} (${contentType})`);
+    };
+
+    // Attach event listeners
+    page.on('request', onRequest);
+    page.on('response', onResponse);
+
+    const startTime = Date.now() / 1000;
+    try {
+      // Wait for idle time
+      while (true) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const now = Date.now() / 1000;
+
+        if (
+          pendingRequests.size === 0 &&
+          now - lastActivity >=
+            (this.config.waitForNetworkIdlePageLoadTime || 0.5)
+        ) {
+          // Clear loading status when page loads successfully
+          this._currentPageLoadingStatus = null;
+          break;
+        }
+
+        if (now - startTime > (this.config.maximumWaitPageLoadTime || 5.0)) {
+          const pendingUrls = Array.from(pendingRequests).map((r: any) =>
+            r.url()
+          );
+          this.logger.debug(
+            `Network timeout after ${this.config.maximumWaitPageLoadTime}s with ${pendingRequests.size} ` +
+              `pending requests: ${pendingUrls}`
+          );
+          // Set loading status for LLM to see
+          this._currentPageLoadingStatus = `Page loading was aborted after ${this.config.maximumWaitPageLoadTime}s with ${pendingRequests.size} pending network requests. You may want to use the wait action to allow more time for the page to fully load.`;
+          break;
+        }
+      }
+    } finally {
+      // Clean up event listeners
+      page.off('request', onRequest);
+      page.off('response', onResponse);
+    }
+
+    const elapsed = Date.now() / 1000 - startTime;
+    if (elapsed > 1) {
+      this.logger.debug(
+        `💤 Page network traffic calmed down after ${elapsed.toFixed(2)} seconds`
+      );
+    }
   }
 
   // Destructor equivalent
