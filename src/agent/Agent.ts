@@ -29,6 +29,7 @@ import {
 import { getLogger } from '../services/logging';
 import { JsonParser } from '../services/json-parser';
 import { registry } from '../controller/singleton';
+import { FileSystem } from '../services/file-system';
 
 export type AgentHook = (agent: Agent) => Promise<void>;
 
@@ -39,6 +40,7 @@ export class Agent {
   private browserSession: BrowserSession;
   llmClient: BaseLLMClient;
   private domService: DOMService;
+  private fileSystem: FileSystem | null = null;
   private config: AgentConfig;
   private history: AgentHistory[] = [];
   private logger = getLogger();
@@ -70,6 +72,9 @@ export class Agent {
 
     this.logger.info('Agent config', { config: this.config });
 
+    // Initialize file system
+    this.initializeFileSystem();
+
     // Initialize agent state
     this.state = {
       n_steps: 0,
@@ -80,6 +85,28 @@ export class Agent {
       last_result: null,
       last_messages: null,
     };
+  }
+
+  /**
+   * Initialize the file system for the agent
+   */
+  private initializeFileSystem(): void {
+    try {
+      const fileSystemPath = this.config.fileSystemPath || process.cwd();
+      this.fileSystem = new FileSystem(fileSystemPath);
+      this.logger.info(`FileSystem initialized at: ${fileSystemPath}`);
+    } catch (error) {
+      this.logger.error('Failed to initialize FileSystem', error as Error);
+      // FileSystem is optional, so we don't throw here
+      this.fileSystem = null;
+    }
+  }
+
+  /**
+   * Get file system instance
+   */
+  getFileSystem(): FileSystem | null {
+    return this.fileSystem;
   }
 
   /**
@@ -353,7 +380,8 @@ export class Agent {
           objective,
           pageView,
           this.history,
-          this.config.maxClickableElementsLength
+          this.config.maxClickableElementsLength,
+          this.fileSystem
         ),
       },
     ];
@@ -793,7 +821,8 @@ export class Agent {
           objective,
           pageView,
           this.history,
-          this.config.maxClickableElementsLength
+          this.config.maxClickableElementsLength,
+          this.fileSystem
         ),
       },
     ];

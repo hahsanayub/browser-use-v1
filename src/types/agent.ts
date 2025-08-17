@@ -80,6 +80,8 @@ export interface AgentConfig {
   saveConversationPath?: string;
   /** File encoding for saved conversation logs (default: 'utf-8') */
   saveConversationPathEncoding?: BufferEncoding | string;
+  /** Directory path for agent file system (default: current working directory) */
+  fileSystemPath?: string;
 }
 
 export interface AgentState {

@@ -4,6 +4,7 @@
 import { readFile } from 'node:fs/promises';
 import { PageView } from '../types/dom';
 import { DOMService } from '../services/dom-service';
+import { FileSystem } from '../services/file-system';
 
 /**
  * Dynamically load system prompts from markdown files based on configuration.
@@ -187,7 +188,8 @@ export function generatePageContextPrompt(
     action: { action: string; selector?: string; url?: string; text?: string };
     result: { success: boolean; message: string; error?: string };
   }> = [],
-  maxClickableElementsLength: number = 40000
+  maxClickableElementsLength: number = 40000,
+  fileSystem?: FileSystem | null
 ): string {
   let interactiveElementsList: string;
   let truncatedText = '';
@@ -228,11 +230,30 @@ export function generatePageContextPrompt(
           .join('\n')}`
       : '';
 
+  // Generate file system information
+  let fileSystemContent = 'No file system available';
+  let todoContents = '[Current todo.md is empty, fill it with your plan when applicable]';
+
+  if (fileSystem) {
+    try {
+      const description = fileSystem.describe();
+      fileSystemContent = description || 'File system available but no files found';
+
+      // Get todo.md contents if available
+      const todoContent = fileSystem.getTodoContents();
+      if (todoContent && todoContent.trim()) {
+        todoContents = todoContent;
+      }
+    } catch (error) {
+      fileSystemContent = 'File system available but error reading contents';
+    }
+  }
+
   return (
     `<agent_history>\n` +
     historySection +
     `\n</agent_history>\n` +
-    `<agent_state>\n<user_request>\n${objective}\n</user_request>\n<file_system>\nNo file system available\n</file_system>\n<todo_contents>\n[Current todo.md is empty, fill it with your plan when applicable]\n</todo_contents>\n</agent_state>\n` +
+    `<agent_state>\n<user_request>\n${objective}\n</user_request>\n<file_system>\n${fileSystemContent}\n</file_system>\n<todo_contents>\n${todoContents}\n</todo_contents>\n</agent_state>\n` +
     `<browser_state>${getBrowserStateDescription(pageView, truncatedText, interactiveElementsList)}</browser_state>`
   );
 }

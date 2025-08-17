@@ -10,6 +10,7 @@ import type { BrowserContext as AgentBrowserContext } from '../browser/BrowserCo
 import type { BrowserSession } from '../browser/BrowserSession';
 import TurndownService from 'turndown';
 import type { BaseLLMClient } from '../llm/base-client';
+import { FileSystem } from '../services/file-system';
 
 // Helper function for Promise.race with proper timeout cleanup
 function withTimeout<T>(
@@ -1129,7 +1130,7 @@ class ScrollToTextAction {
 
 class FileActions {
   @action(
-    'write_file',
+    'write_local_file',
     'Write or append content to a file; extensions allowed: .md, .txt, .json, .csv, .pdf (PDF written as markdown)',
     z.object({
       file_name: z.string().min(1),
@@ -1171,7 +1172,7 @@ class FileActions {
   }
 
   @action(
-    'replace_file_str',
+    'replace_local_file_str',
     'Replace occurrences of old_str with new_str in a text file',
     z.object({
       file_name: z.string().min(1),
@@ -1200,7 +1201,7 @@ class FileActions {
   }
 
   @action(
-    'read_file',
+    'read_local_file',
     'Read a file from local filesystem',
     z.object({ file_name: z.string().min(1) })
   )
@@ -1426,6 +1427,246 @@ ${content}`;
   }
 }
 
+// file system
+class FileSystemActions {
+  @action(
+    'read_file',
+    'Read content from a file in the agent filesystem',
+    z.object({
+      filename: z.string().min(1).describe('Full filename with extension (e.g., todo.md, results.txt)'),
+      external: z.boolean().optional().default(false).describe('Whether this is an external file path (not in agent filesystem)')
+    })
+  )
+  static async readFile({
+    params,
+    context,
+  }: {
+    params: { filename: string; external?: boolean };
+    page: Page;
+    context: { fileSystem?: FileSystem };
+  }): Promise<ActionResult> {
+    const fileSystem = context?.fileSystem;
+    if (!fileSystem) {
+      return {
+        success: false,
+        message: 'FileSystem not available',
+        error: 'FileSystem service not initialized',
+      };
+    }
+
+    try {
+      const result = await fileSystem.readFile(params.filename, params.external || false);
+      return {
+        success: true,
+        message: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to read file: ${(error as Error).message}`,
+        error: (error as Error).message,
+      };
+    }
+  }
+
+  @action(
+    'write_file',
+    'Write content to a file in the agent filesystem',
+    z.object({
+      filename: z.string().min(1).describe('Full filename with extension (e.g., todo.md, results.txt)'),
+      content: z.string().describe('Content to write to the file')
+    })
+  )
+  static async writeFile({
+    params,
+    context,
+  }: {
+    params: { filename: string; content: string };
+    page: Page;
+    context: { fileSystem?: FileSystem };
+  }): Promise<ActionResult> {
+    const fileSystem = context?.fileSystem;
+    if (!fileSystem) {
+      return {
+        success: false,
+        message: 'FileSystem not available',
+        error: 'FileSystem service not initialized',
+      };
+    }
+
+    try {
+      const result = await fileSystem.writeFile(params.filename, params.content);
+      return {
+        success: true,
+        message: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to write file: ${(error as Error).message}`,
+        error: (error as Error).message,
+      };
+    }
+  }
+
+  @action(
+    'append_file',
+    'Append content to an existing file in the agent filesystem',
+    z.object({
+      filename: z.string().min(1).describe('Full filename with extension (e.g., todo.md, results.txt)'),
+      content: z.string().describe('Content to append to the file')
+    })
+  )
+  static async appendFile({
+    params,
+    context,
+  }: {
+    params: { filename: string; content: string };
+    page: Page;
+    context: { fileSystem?: FileSystem };
+  }): Promise<ActionResult> {
+    const fileSystem = context?.fileSystem;
+    if (!fileSystem) {
+      return {
+        success: false,
+        message: 'FileSystem not available',
+        error: 'FileSystem service not initialized',
+      };
+    }
+
+    try {
+      const result = await fileSystem.appendFile(params.filename, params.content);
+      return {
+        success: true,
+        message: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to append to file: ${(error as Error).message}`,
+        error: (error as Error).message,
+      };
+    }
+  }
+
+  @action(
+    'list_files',
+    'List all files in the agent filesystem',
+    z.object({})
+  )
+  static async listFiles({
+    context,
+  }: {
+    params: Record<string, unknown>;
+    page: Page;
+    context: { fileSystem?: FileSystem };
+  }): Promise<ActionResult> {
+    const fileSystem = context?.fileSystem;
+    if (!fileSystem) {
+      return {
+        success: false,
+        message: 'FileSystem not available',
+        error: 'FileSystem service not initialized',
+      };
+    }
+
+    try {
+      const files = fileSystem.listFiles();
+      const fileList = files.length > 0 ? files.join(', ') : 'No files found';
+      return {
+        success: true,
+        message: `Files in agent filesystem: ${fileList}`,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to list files: ${(error as Error).message}`,
+        error: (error as Error).message,
+      };
+    }
+  }
+
+  @action(
+    'replace_file_str',
+    'Replace all occurrences of a string in a file with another string',
+    z.object({
+      filename: z.string().min(1).describe('Full filename with extension (e.g., todo.md, results.txt)'),
+      old_str: z.string().min(1).describe('String to replace'),
+      new_str: z.string().describe('Replacement string')
+    })
+  )
+  static async replaceFileStr({
+    params,
+    context,
+  }: {
+    params: { filename: string; old_str: string; new_str: string };
+    page: Page;
+    context: { fileSystem?: FileSystem };
+  }): Promise<ActionResult> {
+    const fileSystem = context?.fileSystem;
+    if (!fileSystem) {
+      return {
+        success: false,
+        message: 'FileSystem not available',
+        error: 'FileSystem service not initialized',
+      };
+    }
+
+    try {
+      const result = await fileSystem.replaceFileStr(params.filename, params.old_str, params.new_str);
+      return {
+        success: true,
+        message: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to replace string in file: ${(error as Error).message}`,
+        error: (error as Error).message,
+      };
+    }
+  }
+
+  @action(
+    'save_extracted_content',
+    'Save extracted content to a numbered markdown file',
+    z.object({
+      content: z.string().min(1).describe('Content to save')
+    })
+  )
+  static async saveExtractedContent({
+    params,
+    context,
+  }: {
+    params: { content: string };
+    page: Page;
+    context: { fileSystem?: FileSystem };
+  }): Promise<ActionResult> {
+    const fileSystem = context?.fileSystem;
+    if (!fileSystem) {
+      return {
+        success: false,
+        message: 'FileSystem not available',
+        error: 'FileSystem service not initialized',
+      };
+    }
+
+    try {
+      const result = await fileSystem.saveExtractedContent(params.content);
+      return {
+        success: true,
+        message: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to save extracted content: ${(error as Error).message}`,
+        error: (error as Error).message,
+      };
+    }
+  }
+}
+
 // Ensure classes are referenced to avoid tree-shaking and "unused" warnings
 export default [
   ClickActions,
@@ -1446,4 +1687,5 @@ export default [
   ScrollToTextAction,
   FileActions,
   ExtractDataActions,
+  FileSystemActions,
 ];
