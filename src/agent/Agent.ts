@@ -3,6 +3,8 @@
  */
 
 import { Page } from 'playwright';
+import fs from 'fs';
+import path from 'path';
 import { BrowserSession } from '../browser/BrowserSession';
 import { DOMService } from '../services/dom-service';
 import { BaseLLMClient } from '../llm/base-client';
@@ -78,6 +80,33 @@ export class Agent {
       last_result: null,
       last_messages: null,
     };
+  }
+
+  /**
+   * Save the conversation (input messages and model output) for the current step
+   */
+  private async saveConversation(
+    messages: LLMMessage[],
+    thought: AgentThought,
+    step: number
+  ): Promise<void> {
+    try {
+      const dir = this.config.saveConversationPath;
+      if (!dir) return;
+      const encoding = (this.config.saveConversationPathEncoding ||
+        'utf-8') as BufferEncoding;
+      await fs.promises.mkdir(dir, { recursive: true });
+      const filePath = path.join(dir, `conversation_${step}.txt`);
+      const parts: string[] = [];
+      for (const m of messages) {
+        parts.push(`##${m.role}\n${m.content}`);
+      }
+      parts.push('\n\n\n\n##LLM Response');
+      parts.push(JSON.stringify(thought, null, 2));
+      await fs.promises.writeFile(filePath, parts.join('\n\n'), { encoding });
+    } catch (error) {
+      this.logger.warn('Failed to save conversation log', error as Error);
+    }
   }
 
   /**
@@ -262,6 +291,14 @@ export class Agent {
         steps: this.state.n_steps,
         historyLength: this.history.length,
       });
+      // onDone callback after the run completes
+      if (this.config.onDone) {
+        try {
+          await this.config.onDone(this.history);
+        } catch (err) {
+          this.logger.warn('onDone hook failed', err as Error);
+        }
+      }
 
       return this.history;
     } finally {
@@ -322,6 +359,15 @@ export class Agent {
     ];
 
     this.state.last_messages = messages;
+
+    // Hook: before sending to LLM
+    if (this.config.onModelRequest) {
+      try {
+        await this.config.onModelRequest(messages, this.state.n_steps);
+      } catch (err) {
+        this.logger.warn('onModelRequest hook failed', err as Error);
+      }
+    }
 
     this.logger.debug('Sending request to LLM', {
       step: this.state.n_steps,
@@ -442,6 +488,24 @@ export class Agent {
         } as any);
       }
       thought = { ...thought, action: filteredActions } as AgentThought;
+
+      // Hook: after receiving model response (with normalized thought)
+      if (this.config.onModelResponse) {
+        try {
+          await this.config.onModelResponse(
+            pageView,
+            thought,
+            this.state.n_steps
+          );
+        } catch (err) {
+          this.logger.warn('onModelResponse hook failed', err as Error);
+        }
+      }
+
+      // Optional: save conversation for this step
+      if (this.config.saveConversationPath) {
+        await this.saveConversation(messages, thought, this.state.n_steps);
+      }
 
       this.logger.debug('LLM response received', {
         step: this.state.n_steps,

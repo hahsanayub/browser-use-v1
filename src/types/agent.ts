@@ -5,6 +5,7 @@
 import { AgentHook } from '../agent/Agent';
 import type { Action, AgentThought } from '../agent/views';
 import { LLMMessage } from './llm';
+import type { PageView } from './dom';
 
 export type ErrorAction = { action: 'error'; reasoning?: string };
 export type HistoryAction = Action | ErrorAction;
@@ -60,6 +61,25 @@ export interface AgentConfig {
   onStepStart?: AgentHook;
   /** Hook for step end */
   onStepEnd?: AgentHook;
+
+  /** Hook invoked right before sending messages to the LLM */
+  onModelRequest?: (
+    messages: LLMMessage[],
+    step: number
+  ) => Promise<void> | void;
+  /** Hook invoked right after receiving and parsing the LLM response */
+  onModelResponse?: (
+    pageView: PageView,
+    thought: AgentThought,
+    step: number
+  ) => Promise<void> | void;
+  /** Hook invoked after the agent finishes (on done or loop end) */
+  onDone?: (history: AgentHistory[]) => Promise<void> | void;
+
+  /** Directory path to automatically save per-step conversation logs */
+  saveConversationPath?: string;
+  /** File encoding for saved conversation logs (default: 'utf-8') */
+  saveConversationPathEncoding?: BufferEncoding | string;
 }
 
 export interface AgentState {
