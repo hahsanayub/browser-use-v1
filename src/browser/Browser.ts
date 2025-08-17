@@ -10,6 +10,7 @@ import {
   BrowserType,
 } from 'playwright';
 import type { BrowserConfig } from '../types/browser';
+import { BrowserProfile, type ProfileBuildResult } from './profiles';
 import { getLogger } from '../services/logging';
 
 /**
@@ -20,6 +21,7 @@ export class Browser {
   private browser: PlaywrightBrowser | null = null;
   private browserType: BrowserType;
   private logger = getLogger();
+  private profile: ProfileBuildResult | null = null;
 
   constructor(config: BrowserConfig) {
     this.config = config;
@@ -49,17 +51,27 @@ export class Browser {
     }
 
     try {
+      // Build browser profile with optimized settings
+      this.profile = await BrowserProfile.fromConfig(this.config);
+
       this.logger.info('Launching browser', {
         browserType: this.config.browserType,
-        headless: this.config.headless,
+        headless: this.profile.headless,
+        args: this.profile.args.length,
+        userDataDir: this.profile.userDataDir,
       });
 
-      const launchOptions = {
-        headless: this.config.headless,
-        args: this.config.args,
+      const launchOptions: any = {
+        headless: this.profile.headless,
+        args: this.profile.args,
         executablePath: this.config.executablePath,
         timeout: this.config.timeout,
       };
+
+      // Add userDataDir if specified
+      if (this.profile.userDataDir) {
+        launchOptions.userDataDir = this.profile.userDataDir;
+      }
 
       this.browser = await this.browserType.launch(launchOptions);
 
@@ -96,6 +108,13 @@ export class Browser {
    */
   getBrowser(): PlaywrightBrowser | null {
     return this.browser;
+  }
+
+  /**
+   * Get the current browser profile information
+   */
+  getProfile(): ProfileBuildResult | null {
+    return this.profile;
   }
 
   /**

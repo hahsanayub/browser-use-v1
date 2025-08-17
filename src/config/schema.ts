@@ -4,6 +4,20 @@
 
 import { z } from 'zod';
 
+// Viewport size schema
+const ViewportSizeSchema = z.object({
+  width: z.number().min(1).default(1280),
+  height: z.number().min(1).default(720),
+});
+
+// Extension configuration schema
+const ExtensionConfigSchema = z.object({
+  id: z.string().optional(),
+  path: z.string().optional(),
+  name: z.string().optional(),
+  enabled: z.boolean().default(true),
+});
+
 // Browser configuration schema
 export const BrowserConfigSchema = z.object({
   browserType: z.enum(['chromium', 'firefox', 'webkit']).default('chromium'),
@@ -12,12 +26,20 @@ export const BrowserConfigSchema = z.object({
   args: z.array(z.string()).default([]),
   executablePath: z.string().optional(),
   timeout: z.number().min(1000).default(30000),
-  viewport: z
-    .object({
-      width: z.number().min(1).default(1280),
-      height: z.number().min(1).default(720),
-    })
-    .default({ width: 1280, height: 720 }),
+  viewport: ViewportSizeSchema.default({ width: 1280, height: 720 }),
+
+  // Enhanced configuration options
+  useOptimizedArgs: z.boolean().default(false),
+  enableStealth: z.boolean().default(false),
+  disableSecurity: z.boolean().default(false),
+  enableDeterministicRendering: z.boolean().default(false),
+  enableDefaultExtensions: z.boolean().default(false),
+  customExtensions: z.array(ExtensionConfigSchema).default([]),
+  allowedDomains: z.array(z.string()).optional(),
+  windowSize: ViewportSizeSchema.optional(),
+  windowPosition: ViewportSizeSchema.optional(),
+  keepAlive: z.boolean().default(false),
+  profileDirectory: z.string().default('Default'),
 });
 
 // LLM configuration schema
@@ -73,6 +95,14 @@ export const DEFAULT_CONFIG: AppConfig = {
     args: [],
     timeout: 30000,
     viewport: { width: 1280, height: 720 },
+    useOptimizedArgs: false,
+    enableStealth: false,
+    disableSecurity: false,
+    enableDeterministicRendering: false,
+    enableDefaultExtensions: false,
+    customExtensions: [],
+    keepAlive: false,
+    profileDirectory: 'Default',
   },
   llm: {
     provider: 'openai',

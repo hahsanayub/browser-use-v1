@@ -2,6 +2,22 @@
  * Browser-related type definitions
  */
 
+export interface ViewportSize {
+  width: number;
+  height: number;
+}
+
+export interface ExtensionConfig {
+  /** Extension ID (for Chrome Web Store extensions) */
+  id?: string;
+  /** Local path to unpacked extension directory */
+  path?: string;
+  /** Extension name for identification */
+  name?: string;
+  /** Whether to enable this extension */
+  enabled?: boolean;
+}
+
 export interface BrowserConfig {
   /** Browser type to use (chromium, firefox, webkit) */
   browserType?: 'chromium' | 'firefox' | 'webkit';
@@ -16,10 +32,31 @@ export interface BrowserConfig {
   /** Timeout for browser operations in milliseconds */
   timeout?: number;
   /** Viewport size */
-  viewport?: {
-    width: number;
-    height: number;
-  };
+  viewport?: ViewportSize;
+
+  // Enhanced configuration options
+  /** Use optimized Chrome arguments for automation */
+  useOptimizedArgs?: boolean;
+  /** Enable stealth mode to avoid detection */
+  enableStealth?: boolean;
+  /** Disable security features for testing */
+  disableSecurity?: boolean;
+  /** Enable deterministic rendering for consistent screenshots */
+  enableDeterministicRendering?: boolean;
+  /** Enable default automation-optimized extensions */
+  enableDefaultExtensions?: boolean;
+  /** Custom extensions to load */
+  customExtensions?: ExtensionConfig[];
+  /** List of allowed domains for navigation */
+  allowedDomains?: string[];
+  /** Window size for non-headless mode */
+  windowSize?: ViewportSize;
+  /** Window position for non-headless mode */
+  windowPosition?: ViewportSize;
+  /** Whether to keep browser alive after session ends */
+  keepAlive?: boolean;
+  /** Profile directory name (e.g., 'Default', 'Profile 1') */
+  profileDirectory?: string;
 }
 
 export interface BrowserContextConfig {
@@ -36,10 +73,7 @@ export interface BrowserContextConfig {
   /** Timeout settings */
   timeout?: number;
   /** Viewport configuration */
-  viewport?: {
-    width: number;
-    height: number;
-  };
+  viewport?: ViewportSize;
 }
 
 export interface BrowserSessionConfig {
@@ -58,10 +92,7 @@ export interface BrowserSessionConfig {
   /** Custom user data directory */
   userDataDir?: string;
   /** Custom viewport size */
-  viewport?: {
-    width: number;
-    height: number;
-  };
+  viewport?: ViewportSize;
   /** Browser launch arguments */
   args?: string[];
   /** Whether to run in headless mode */
