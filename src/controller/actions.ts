@@ -194,7 +194,7 @@ class ScrollActions {
       // Get window height with retries
       const windowHeight = await getWindowHeight();
 
-      // Calculate scroll amount based on num_pages (use floor like Python's int())
+      // Calculate scroll amount based on num_pages
       const scrollAmount = Math.floor(windowHeight * params.num_pages);
       const dy = params.down ? scrollAmount : -scrollAmount;
 
@@ -210,7 +210,7 @@ class ScrollActions {
             throw new Error('Browser session not available');
           }
 
-          // Get element using the same pattern as Python version
+          // Get element using the same pattern
           const summary = await session.getStateSummary(false);
           const elementNode = summary.selectorMap.get(params.index);
 
@@ -386,7 +386,6 @@ class ScrollActions {
       }
 
       // Page-level scrolling (default or fallback)
-      // Match Python version's condition checks
       const needsPageScroll =
         scrollTarget === 'the page' ||
         scrollTarget.includes('fallback') ||
@@ -469,7 +468,7 @@ class ScrollActions {
         speed: 3000, // Pixels per second
       });
 
-      // Detach CDP session with timeout (matching Python's asyncio.wait_for)
+      // Detach CDP session with timeout
       try {
         await Promise.race([
           cdpSession.detach(),
@@ -478,8 +477,7 @@ class ScrollActions {
           ),
         ]);
       } catch {
-        // Ignore timeout and other detach errors like Python version
-        // Python: except (TimeoutError, Exception): pass
+        // Ignore timeout and other detach errors
       }
 
       console.log(

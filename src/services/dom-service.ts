@@ -709,7 +709,7 @@ export class DOMService {
   }
 
   /**
-   * Parse a node from JavaScript evaluation result, equivalent to Python _parse_node
+   * Parse a node from JavaScript evaluation result
    */
   private parseNode(nodeData: any): {
     node: DOMBaseNode | null;
@@ -785,7 +785,7 @@ export class DOMService {
   }
 
   /**
-   * Construct DOM tree from JavaScript evaluation result, equivalent to Python _construct_dom_tree
+   * Construct DOM tree from JavaScript evaluation result
    */
   private constructDomTree(evalPage: DOMResult): {
     elementTree: DOMElementNode;
@@ -850,7 +850,7 @@ export class DOMService {
   }
 
   /**
-   * Convert clickable elements to string representation similar to Python version
+   * Convert clickable elements to string representation
    */
   clickableElementsToString(
     elementTree: DOMElementNode,

@@ -70,7 +70,7 @@ export class Agent {
       flashMode: false,
       useThinking: true,
       maxActionsPerStep: 10,
-      useVision: true, // Enable vision by default
+      useVision: false, // Disable vision by default
       visionDetailLevel: 'auto',
       ...config,
     };
@@ -182,7 +182,7 @@ export class Agent {
   }
 
   /**
-   * Store screenshot to disk during finalization (similar to Python version)
+   * Store screenshot to disk during finalization
    */
   private async storeStepScreenshot(screenshot: string | null): Promise<void> {
     if (!this.config.useVision || !this.screenshotService || !screenshot) {
@@ -207,7 +207,6 @@ export class Agent {
 
   /**
    * Build user message with multimodal content (text + screenshots)
-   * Similar to Python's AgentMessagePrompt.get_user_message()
    */
   private buildUserMessage(objective: string, pageView: PageView): LLMMessage {
     const textContent = generatePageContextPrompt(
@@ -591,7 +590,6 @@ export class Agent {
                     delete normalized.key;
                   }
                 } else if (normalized.action === 'read_file') {
-                  // Map file_path to file_name for compatibility with Python version
                   if (
                     normalized.file_name === undefined &&
                     normalized.file_path !== undefined
@@ -1067,7 +1065,7 @@ export class Agent {
     result: ActionResult,
     pageView?: PageView
   ): Promise<void> {
-    // Store screenshot to disk during finalization (similar to Python version)
+    // Store screenshot to disk during finalization
     if (this.screenshots.length > 0) {
       const latestScreenshot = this.screenshots[this.screenshots.length - 1];
       await this.storeStepScreenshot(latestScreenshot);

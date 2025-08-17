@@ -159,7 +159,7 @@ export class BrowserSession {
       headless: true,
       timeout: 30000,
       viewport: { width: 1280, height: 720 },
-      // Page load timing defaults (match Python version)
+      // Page load timing defaults
       minimumWaitPageLoadTime: 0.25,
       waitForNetworkIdlePageLoadTime: 0.5,
       maximumWaitPageLoadTime: 5.0,
@@ -387,7 +387,7 @@ export class BrowserSession {
         timeout: timeoutMs || this.config.timeout,
       });
 
-      // Wait for page and frames to fully load (equivalent to Python version)
+      // Wait for page and frames to fully load
       await this.waitForPageAndFramesLoad(targetPage);
 
       this.invalidateCache();
@@ -798,13 +798,12 @@ export class BrowserSession {
 
   /**
    * Take screenshot for vision/multimodal use and return as base64 string
-   * Similar to Python's take_screenshot method
    */
   async takeScreenshotForVision(
     fullPage: boolean = false
   ): Promise<string | null> {
     return this.executeWithHealthCheck(async (healthyPage) => {
-      // Check if page URL is a new tab page (similar to Python version)
+      // Check if page URL is a new tab page
       const currentUrl = healthyPage.url();
       const isNewTabPage =
         currentUrl === 'about:blank' ||
@@ -824,7 +823,7 @@ export class BrowserSession {
         const screenshot = await healthyPage.screenshot({
           fullPage,
           type: 'png',
-          timeout: 30000, // 30 second timeout like Python version
+          timeout: 30000, // 30 second timeout
         });
 
         const base64Screenshot = screenshot.toString('base64');
@@ -1181,7 +1180,7 @@ export class BrowserSession {
     for (const allowedDomain of this.config.allowedDomains) {
       try {
         if (matchUrlWithDomainPattern(url, allowedDomain)) {
-          // If it's a pattern with wildcards, log warning (similar to Python version)
+          // If it's a pattern with wildcards, log warning
           if (allowedDomain.includes('*')) {
             try {
               const urlObj = new URL(url);
@@ -1217,7 +1216,7 @@ export class BrowserSession {
   }
 
   /**
-   * Wait for stable network activity (equivalent to Python's _wait_for_stable_network)
+   * Wait for stable network activity
    */
   private async waitForStableNetwork(): Promise<void> {
     const pendingRequests = new Set<any>();

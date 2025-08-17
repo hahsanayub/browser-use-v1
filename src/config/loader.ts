@@ -7,7 +7,6 @@
 
 import { promises as fs } from 'fs';
 import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
 import { homedir } from 'os';
 import { config as loadEnv } from 'dotenv';
 import { AppConfigSchema, DEFAULT_CONFIG, type AppConfig } from './schema';

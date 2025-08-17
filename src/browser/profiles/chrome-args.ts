@@ -1,6 +1,5 @@
 /**
  * Optimized Chrome arguments for browser automation
- * Based on browser-use Python implementation and Playwright best practices
  */
 
 /**
@@ -183,7 +182,7 @@ export const CHROME_EXTENSION_ARGS = [
 
 /**
  * Playwright default Chromium arguments to ignore/disable
- * Mirrors Python implementation to remove easily detectable automation flags
+ * remove easily detectable automation flags
  * and allow extensions, scrollbars, etc.
  */
 export const PLAYWRIGHT_IGNORED_DEFAULT_ARGS: string[] = [
