@@ -473,7 +473,7 @@ export class Agent {
     page: Page,
     action: Action
   ): Promise<ActionResult> {
-    this.logger.debug('Executing action', {
+    this.logger.debug('🌟 Executing action', {
       step: this.state.n_steps,
       action: action.action,
       selector: action.selector,
@@ -551,10 +551,45 @@ export class Agent {
     page: Page,
     action: Action
   ): Promise<ActionResult> {
-    const direction = action.scroll?.direction ?? 'down';
-    const amount = action.scroll?.amount ?? 3;
+    // Normalize parameters to Controller's scroll schema: { down, num_pages, index? }
+    // Support both top-level fields (down/num_pages/index) and nested scroll.{direction,amount,index}
+    const a: any = action;
+    const topDown: boolean | undefined = a.down;
+    const topNumPages: number | undefined = a.num_pages;
+    const topIndex: number | undefined = a.index;
+
+    // Fallback to nested scroll object if top-level not provided
+    const direction: 'up' | 'down' = a.scroll?.direction ?? 'down';
+    const amount: number | string = a.scroll?.amount ?? 1; // align with Action schema default
+    const nestedIndex: number | undefined = a.scroll?.index;
+
+    const down: boolean =
+      typeof topDown === 'boolean' ? topDown : direction !== 'up';
+    let num_pages: number;
+    if (typeof topNumPages === 'number' && Number.isFinite(topNumPages)) {
+      num_pages = topNumPages;
+    } else if (typeof amount === 'number' && Number.isFinite(amount)) {
+      // Treat "amount" as number of pages
+      num_pages = amount;
+    } else if (typeof amount === 'string') {
+      const parsed = Number(amount);
+      num_pages = Number.isFinite(parsed) ? parsed : 1;
+    } else {
+      num_pages = 1;
+    }
+
+    const index: number | undefined =
+      typeof topIndex === 'number'
+        ? topIndex
+        : typeof nestedIndex === 'number'
+          ? nestedIndex
+          : undefined;
+
+    const payload: Record<string, unknown> = { down, num_pages };
+    if (typeof index === 'number') payload.index = index;
+
     return this.actDelegate
-      ? this.actDelegate('scroll', { direction, amount })
+      ? this.actDelegate('scroll', payload)
       : { success: false, message: 'No dispatcher', error: 'NO_DISPATCH' };
   }
 

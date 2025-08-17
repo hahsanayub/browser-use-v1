@@ -272,6 +272,36 @@ export class Controller {
       };
     }
 
+    // Normalize params for known actions before validation (robustness against LLM variants)
+    if (actionName === 'scroll') {
+      const p: any = params || {};
+      // If caller already used down/num_pages we keep them; otherwise convert from direction/amount (or nested scroll)
+      const hasCanonical =
+        typeof p.down === 'boolean' || typeof p.num_pages === 'number';
+      const hasAltKeys =
+        p.direction !== undefined ||
+        p.amount !== undefined ||
+        p.scroll !== undefined;
+      if (!hasCanonical && hasAltKeys) {
+        const direction: any = p.direction ?? p.scroll?.direction ?? 'down';
+        const amount: any = p.amount ?? p.scroll?.amount ?? 1;
+        const index: any = p.index ?? p.scroll?.index;
+        const down = direction !== 'up';
+        let num_pages: number = 1;
+        if (typeof amount === 'number' && Number.isFinite(amount)) {
+          num_pages = amount;
+        } else if (typeof amount === 'string') {
+          const n = Number(amount);
+          num_pages = Number.isFinite(n) ? n : 1;
+        }
+        params = {
+          down,
+          num_pages,
+          ...(typeof index === 'number' ? { index } : {}),
+        };
+      }
+    }
+
     // validate params
     let validatedParams: Record<string, unknown> = {};
     try {
