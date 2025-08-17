@@ -62,20 +62,33 @@ export class Browser {
         userDataDir: this.profile.userDataDir,
       });
 
-      const launchOptions: any = {
-        headless: this.profile.headless,
-        args: this.profile.args,
-        ignoreDefaultArgs: PLAYWRIGHT_IGNORED_DEFAULT_ARGS,
-        executablePath: this.config.executablePath,
-        timeout: this.config.timeout,
-      };
-
-      // Add userDataDir if specified
+      // Use launchPersistentContext when userDataDir is specified
       if (this.profile.userDataDir) {
-        launchOptions.userDataDir = this.profile.userDataDir;
-      }
+        const persistentOptions: any = {
+          headless: this.profile.headless,
+          args: this.profile.args,
+          ignoreDefaultArgs: PLAYWRIGHT_IGNORED_DEFAULT_ARGS,
+          executablePath: this.config.executablePath,
+          timeout: this.config.timeout,
+        };
 
-      this.browser = await this.browserType.launch(launchOptions);
+        const context = await this.browserType.launchPersistentContext(
+          this.profile.userDataDir,
+          persistentOptions
+        );
+
+        this.browser = context.browser()!;
+      } else {
+        const launchOptions: any = {
+          headless: this.profile.headless,
+          args: this.profile.args,
+          ignoreDefaultArgs: PLAYWRIGHT_IGNORED_DEFAULT_ARGS,
+          executablePath: this.config.executablePath,
+          timeout: this.config.timeout,
+        };
+
+        this.browser = await this.browserType.launch(launchOptions);
+      }
 
       this.logger.info('Browser launched successfully');
       return this.browser;

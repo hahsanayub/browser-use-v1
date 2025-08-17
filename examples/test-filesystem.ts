@@ -40,7 +40,8 @@ async function testFileSystem() {
     // Test write_file
     const writeResult = await controller.act('write_file', {
       filename: 'test.md',
-      content: '# Test File\n\nThis is a test file created by the Agent FileSystem.',
+      content:
+        '# Test File\n\nThis is a test file created by the Agent FileSystem.',
     });
     console.log('Write result:', writeResult);
 
@@ -80,7 +81,6 @@ async function testFileSystem() {
     }
 
     console.log('✅ All FileSystem tests completed successfully!');
-
   } catch (error) {
     console.error('❌ Error during testing:', error);
     process.exit(1);

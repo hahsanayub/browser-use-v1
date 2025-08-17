@@ -2,11 +2,37 @@
  * LLM-related type definitions
  */
 
+/** Image content for multimodal messages */
+export interface LLMImageContent {
+  /** Type indicator */
+  type: 'image';
+  /** Image URL with data URI or regular URL */
+  imageUrl: {
+    /** Image URL - can be data URI (data:image/png;base64,...) or regular URL */
+    url: string;
+    /** Media type for the image */
+    mediaType?: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
+    /** Detail level for vision models */
+    detail?: 'auto' | 'low' | 'high';
+  };
+}
+
+/** Text content for messages */
+export interface LLMTextContent {
+  /** Type indicator */
+  type: 'text';
+  /** Text content */
+  text: string;
+}
+
+/** Union type for message content parts */
+export type LLMContentPart = LLMTextContent | LLMImageContent;
+
 export interface LLMMessage {
   /** Role of the message sender */
   role: 'system' | 'user' | 'assistant';
-  /** Content of the message */
-  content: string;
+  /** Content of the message - can be string or array of content parts for multimodal */
+  content: string | LLMContentPart[];
   /** Optional metadata */
   metadata?: Record<string, any>;
 }

@@ -8,6 +8,8 @@ import path from 'path';
 import { BrowserSession } from '../browser/BrowserSession';
 import { DOMService } from '../services/dom-service';
 import { BaseLLMClient } from '../llm/base-client';
+import { ScreenshotService } from '../services/screenshot-service';
+import { FileSystem } from '../services/file-system';
 import type { LLMMessage } from '../types/llm';
 import type { PageView } from '../types/dom';
 import type {
@@ -29,7 +31,6 @@ import {
 import { getLogger } from '../services/logging';
 import { JsonParser } from '../services/json-parser';
 import { registry } from '../controller/singleton';
-import { FileSystem } from '../services/file-system';
 
 export type AgentHook = (agent: Agent) => Promise<void>;
 
@@ -41,11 +42,13 @@ export class Agent {
   llmClient: BaseLLMClient;
   private domService: DOMService;
   private fileSystem: FileSystem | null = null;
+  private screenshotService: ScreenshotService | null = null;
   private config: AgentConfig;
   private history: AgentHistory[] = [];
   private logger = getLogger();
   private state: AgentState;
   private isRunning = false;
+  private screenshots: string[] = []; // Store recent screenshots for multimodal
 
   constructor(
     browserSession: BrowserSession,
@@ -67,6 +70,8 @@ export class Agent {
       flashMode: false,
       useThinking: true,
       maxActionsPerStep: 10,
+      useVision: true, // Enable vision by default
+      visionDetailLevel: 'auto',
       ...config,
     };
 
@@ -74,6 +79,9 @@ export class Agent {
 
     // Initialize file system
     this.initializeFileSystem();
+
+    // Initialize screenshot service
+    this.initializeScreenshotService();
 
     // Initialize agent state
     this.state = {
@@ -103,10 +111,129 @@ export class Agent {
   }
 
   /**
+   * Initialize the screenshot service for vision capabilities
+   */
+  private initializeScreenshotService(): void {
+    try {
+      if (this.config.useVision) {
+        const agentDirectory = this.config.fileSystemPath || process.cwd();
+        this.screenshotService = new ScreenshotService(agentDirectory);
+        // Initialize async in background
+        this.screenshotService.initialize().catch((error) => {
+          this.logger.error('Failed to initialize ScreenshotService directories', error);
+        });
+        this.logger.info(`ScreenshotService initialized for vision support`);
+      } else {
+        this.logger.debug('Vision disabled, ScreenshotService not initialized');
+      }
+    } catch (error) {
+      this.logger.error('Failed to initialize ScreenshotService', error as Error);
+      // ScreenshotService is optional, so we don't throw here
+      this.screenshotService = null;
+    }
+  }
+
+  /**
    * Get file system instance
    */
   getFileSystem(): FileSystem | null {
     return this.fileSystem;
+  }
+
+  /**
+   * Capture screenshot for the current step if vision is enabled
+   */
+  private async captureStepScreenshot(): Promise<void> {
+    if (!this.config.useVision || !this.screenshotService) {
+      return;
+    }
+
+    try {
+      const screenshot = await this.browserSession.takeScreenshotForVision(true);
+
+      if (screenshot) {
+        // Store screenshot to disk
+        await this.screenshotService.storeScreenshot(screenshot, this.state.n_steps);
+
+        // Add to screenshots array for multimodal messages
+        this.screenshots.push(screenshot);
+
+        // Keep only the last 2 screenshots to manage memory
+        if (this.screenshots.length > 2) {
+          this.screenshots = this.screenshots.slice(-2);
+        }
+
+        this.logger.debug('Screenshot captured for vision', {
+          step: this.state.n_steps,
+          screenshotCount: this.screenshots.length,
+        });
+      }
+    } catch (error) {
+      this.logger.warn('Failed to capture step screenshot', {
+        step: this.state.n_steps,
+        error: (error as Error).message,
+      });
+      // Don't throw - screenshot failure shouldn't stop the agent
+    }
+  }
+
+  /**
+   * Build user message with multimodal content (text + screenshots)
+   * Similar to Python's AgentMessagePrompt.get_user_message()
+   */
+  private buildUserMessage(objective: string, pageView: PageView): LLMMessage {
+    const textContent = generatePageContextPrompt(
+      objective,
+      pageView,
+      this.history,
+      this.config.maxClickableElementsLength,
+      this.fileSystem
+    );
+
+    // If vision is disabled or no screenshots available, return text-only message
+    if (!this.config.useVision || this.screenshots.length === 0) {
+      return {
+        role: 'user',
+        content: textContent,
+      };
+    }
+
+    // Build multimodal message with text and screenshots
+    const contentParts: any[] = [
+      {
+        type: 'text',
+        text: textContent,
+      },
+    ];
+
+    // Add screenshots with labels
+    for (let i = 0; i < this.screenshots.length; i++) {
+      const screenshot = this.screenshots[i];
+      const label = i === this.screenshots.length - 1
+        ? 'Current screenshot:'
+        : 'Previous screenshot:';
+
+      // Add label as text content
+      contentParts.push({
+        type: 'text',
+        text: label,
+      });
+
+      // Add the screenshot
+      contentParts.push({
+        type: 'image',
+        imageUrl: {
+          url: `data:image/png;base64,${screenshot}`,
+          mediaType: 'image/png' as const,
+          detail: this.config.visionDetailLevel || 'auto',
+        },
+      });
+    }
+
+    return {
+      role: 'user',
+      content: contentParts,
+    };
   }
 
   /**
@@ -197,6 +324,9 @@ export class Agent {
           // Step-level snapshot: refresh at start of step
           const pageView = await this.browserSession.getStateSummary(true);
           const beforeSig = await this.browserSession.getDomSignature();
+
+          // Take screenshot for vision if enabled
+          await this.captureStepScreenshot();
 
           // Before step hook
           await onStepStart?.(this);
@@ -374,16 +504,7 @@ export class Agent {
             ? `\n\n## Additional Instructions:\n${this.config.customInstructions}`
             : ''),
       },
-      {
-        role: 'user',
-        content: generatePageContextPrompt(
-          objective,
-          pageView,
-          this.history,
-          this.config.maxClickableElementsLength,
-          this.fileSystem
-        ),
-      },
+      this.buildUserMessage(objective, pageView),
     ];
 
     this.state.last_messages = messages;

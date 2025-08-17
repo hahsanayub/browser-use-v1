@@ -782,7 +782,7 @@ export class BrowserSession {
   }
 
   /**
-   * Take screenshot
+   * Take screenshot and return as Buffer
    */
   async takeScreenshot(fullPage: boolean = false): Promise<Buffer | null> {
     return this.executeWithHealthCheck(async (healthyPage) => {
@@ -793,6 +793,51 @@ export class BrowserSession {
 
       this.logger.debug('Screenshot taken', { fullPage });
       return screenshot;
+    });
+  }
+
+  /**
+   * Take screenshot for vision/multimodal use and return as base64 string
+   * Similar to Python's take_screenshot method
+   */
+  async takeScreenshotForVision(fullPage: boolean = false): Promise<string | null> {
+    return this.executeWithHealthCheck(async (healthyPage) => {
+      // Check if page URL is a new tab page (similar to Python version)
+      const currentUrl = healthyPage.url();
+      const isNewTabPage =
+        currentUrl === 'about:blank' ||
+        currentUrl === 'chrome://newtab/' ||
+        currentUrl.startsWith('chrome://') ||
+        currentUrl.startsWith('about:');
+
+      if (isNewTabPage) {
+        this.logger.debug('Skipping screenshot for new tab page', { url: currentUrl });
+        return null;
+      }
+
+      try {
+        const screenshot = await healthyPage.screenshot({
+          fullPage,
+          type: 'png',
+          timeout: 30000, // 30 second timeout like Python version
+        });
+
+        const base64Screenshot = screenshot.toString('base64');
+
+        this.logger.debug('Vision screenshot taken', {
+          fullPage,
+          url: currentUrl,
+          size: screenshot.length
+        });
+
+        return base64Screenshot;
+      } catch (error) {
+        this.logger.warn('Failed to take vision screenshot', {
+          url: currentUrl,
+          error: (error as Error).message,
+        });
+        return null;
+      }
     });
   }
 

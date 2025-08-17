@@ -9,11 +9,27 @@ import type {
   LLMResponse,
   LLMRequestOptions,
   LLMClientConfig,
+  LLMContentPart,
 } from '../../types/llm';
+
+interface OpenAITextContent {
+  type: 'text';
+  text: string;
+}
+
+interface OpenAIImageContent {
+  type: 'image_url';
+  image_url: {
+    url: string;
+    detail?: 'auto' | 'low' | 'high';
+  };
+}
+
+type OpenAIContent = string | (OpenAITextContent | OpenAIImageContent)[];
 
 interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: OpenAIContent;
 }
 
 interface OpenAIResponse {
@@ -81,10 +97,9 @@ export class OpenAIClient extends BaseLLMClient {
         options: requestOptions,
       });
 
-      const openAIMessages: OpenAIMessage[] = messages.map((msg) => ({
-        role: msg.role,
-        content: msg.content,
-      }));
+      const openAIMessages: OpenAIMessage[] = messages.map((msg) =>
+        this.convertToOpenAIMessage(msg)
+      );
 
       const requestData: Record<string, any> = {
         model: this.config.model,
@@ -218,6 +233,44 @@ export class OpenAIClient extends BaseLLMClient {
         throw this.handleError(error, 'API request failed');
       }
     }
+  }
+
+  /**
+   * Convert our LLMMessage format to OpenAI's format
+   */
+  private convertToOpenAIMessage(msg: LLMMessage): OpenAIMessage {
+    // If content is already a string, return as-is
+    if (typeof msg.content === 'string') {
+      return {
+        role: msg.role,
+        content: msg.content,
+      };
+    }
+
+    // Convert multimodal content
+    const openAIContent: (OpenAITextContent | OpenAIImageContent)[] = [];
+
+    for (const part of msg.content) {
+      if (part.type === 'text') {
+        openAIContent.push({
+          type: 'text',
+          text: part.text,
+        });
+      } else if (part.type === 'image') {
+        openAIContent.push({
+          type: 'image_url',
+          image_url: {
+            url: part.imageUrl.url,
+            detail: part.imageUrl.detail,
+          },
+        });
+      }
+    }
+
+    return {
+      role: msg.role,
+      content: openAIContent,
+    };
   }
 
   /**

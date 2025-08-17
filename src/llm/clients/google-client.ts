@@ -10,6 +10,7 @@ import type {
   LLMResponse,
   LLMRequestOptions,
   LLMClientConfig,
+  LLMContentPart,
 } from '../../types/llm';
 
 interface GooglePart {
@@ -61,6 +62,43 @@ export class GoogleClient extends BaseLLMClient {
     });
   }
 
+  /**
+   * Convert our content format to Google Parts format
+   */
+  private convertContentToParts(content: string | LLMContentPart[]): GooglePart[] {
+    if (typeof content === 'string') {
+      return [{ text: content }];
+    }
+
+    const parts: GooglePart[] = [];
+    for (const part of content) {
+      if (part.type === 'text') {
+        parts.push({ text: part.text });
+      } else if (part.type === 'image') {
+        // Convert data URI to inline data format for Google
+        const url = part.imageUrl.url;
+        if (url.startsWith('data:image/')) {
+          const [mimeTypePart, base64Data] = url.split(',');
+          const mimeType = mimeTypePart.split(':')[1].split(';')[0];
+          parts.push({
+            inlineData: {
+              mimeType,
+              data: base64Data,
+            },
+          });
+        } else {
+          // For HTTP URLs, Google requires inline data, so we log a warning
+          // In a production system, you'd want to fetch and convert the image
+          this.logger.warn('Google Gemini requires inline data for images, HTTP URLs not directly supported', {
+            url,
+          });
+        }
+      }
+    }
+
+    return parts;
+  }
+
   private serializeMessages(messages: LLMMessage[]): {
     contents: GoogleContent[];
     system?: GoogleContent;
@@ -69,11 +107,11 @@ export class GoogleClient extends BaseLLMClient {
     let system: GoogleContent | undefined;
     for (const m of messages) {
       if (m.role === 'system') {
-        const systemParts: GooglePart[] = [{ text: m.content }];
+        const systemParts: GooglePart[] = this.convertContentToParts(m.content);
         system = { role: 'user', parts: systemParts } as any; // Google expects system separately; placeholder
         continue;
       }
-      const parts: GooglePart[] = [{ text: m.content }];
+      const parts: GooglePart[] = this.convertContentToParts(m.content);
       const role: 'user' | 'model' = m.role === 'assistant' ? 'model' : 'user';
       contents.push({ role, parts });
     }

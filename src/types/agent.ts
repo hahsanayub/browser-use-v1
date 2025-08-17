@@ -57,6 +57,10 @@ export interface AgentConfig {
   maxActionsPerStep?: number;
   /** Maximum length of clickable elements string before truncation */
   maxClickableElementsLength?: number;
+  /** Whether to enable vision/multimodal capabilities */
+  useVision?: boolean;
+  /** Vision detail level for image analysis */
+  visionDetailLevel?: 'auto' | 'low' | 'high';
   /** Hooks for step start and end */
   onStepStart?: AgentHook;
   /** Hook for step end */

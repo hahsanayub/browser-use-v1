@@ -9,11 +9,28 @@ import type {
   LLMResponse,
   LLMRequestOptions,
   LLMClientConfig,
+  LLMContentPart,
 } from '../../types/llm';
+
+interface AnthropicTextContent {
+  type: 'text';
+  text: string;
+}
+
+interface AnthropicImageContent {
+  type: 'image';
+  source: {
+    type: 'base64';
+    media_type: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
+    data: string;
+  };
+}
+
+type AnthropicContent = string | (AnthropicTextContent | AnthropicImageContent)[];
 
 interface AnthropicMessage {
   role: 'user' | 'assistant';
-  content: string;
+  content: AnthropicContent;
 }
 
 interface AnthropicResponse {
@@ -80,10 +97,7 @@ export class AnthropicClient extends BaseLLMClient {
       );
 
       const anthropicMessages: AnthropicMessage[] = conversationMessages.map(
-        (msg) => ({
-          role: msg.role as 'user' | 'assistant',
-          content: msg.content,
-        })
+        (msg) => this.convertToAnthropicMessage(msg)
       );
 
       const requestData: Record<string, any> = {
@@ -204,6 +218,57 @@ export class AnthropicClient extends BaseLLMClient {
         throw this.handleError(error, 'API request failed');
       }
     }
+  }
+
+  /**
+   * Convert our LLMMessage format to Anthropic's format
+   */
+  private convertToAnthropicMessage(msg: LLMMessage): AnthropicMessage {
+    // If content is already a string, return as-is
+    if (typeof msg.content === 'string') {
+      return {
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+      };
+    }
+
+    // Convert multimodal content
+    const anthropicContent: (AnthropicTextContent | AnthropicImageContent)[] = [];
+
+    for (const part of msg.content) {
+      if (part.type === 'text') {
+        anthropicContent.push({
+          type: 'text',
+          text: part.text,
+        });
+      } else if (part.type === 'image') {
+        // Convert data URI to Anthropic's format
+        const url = part.imageUrl.url;
+        if (url.startsWith('data:image/')) {
+          const [mimeTypePart, base64Data] = url.split(',');
+          const mediaType = mimeTypePart.split(':')[1].split(';')[0] as 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
+
+          anthropicContent.push({
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: mediaType,
+              data: base64Data,
+            },
+          });
+        } else {
+          // For HTTP URLs, we'd need to fetch and convert the image
+          this.logger.warn('Anthropic requires base64 encoded images, HTTP URLs not directly supported', {
+            url,
+          });
+        }
+      }
+    }
+
+    return {
+      role: msg.role as 'user' | 'assistant',
+      content: anthropicContent,
+    };
   }
 
   /**

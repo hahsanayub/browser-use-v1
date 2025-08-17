@@ -7,6 +7,7 @@ import type {
   LLMResponse,
   LLMRequestOptions,
   LLMClientConfig,
+  LLMContentPart,
 } from '../types/llm';
 import { getLogger } from '../services/logging';
 
@@ -60,7 +61,7 @@ export abstract class BaseLLMClient {
   }
 
   /**
-   * Validate messages format
+   * Validate messages format (supports both string and multimodal content)
    */
   protected validateMessages(messages: LLMMessage[]): void {
     if (!Array.isArray(messages) || messages.length === 0) {
@@ -75,12 +76,55 @@ export abstract class BaseLLMClient {
         throw new Error(`Invalid message role: ${message.role}`);
       }
 
-      if (
-        typeof message.content !== 'string' ||
-        message.content.trim().length === 0
-      ) {
-        throw new Error('Message content must be a non-empty string');
+      // Validate content - can be string or array of content parts
+      if (typeof message.content === 'string') {
+        if (message.content.trim().length === 0) {
+          throw new Error('String message content must be non-empty');
+        }
+      } else if (Array.isArray(message.content)) {
+        if (message.content.length === 0) {
+          throw new Error('Content parts array must be non-empty');
+        }
+
+        for (const part of message.content) {
+          this.validateContentPart(part);
+        }
+      } else {
+        throw new Error('Message content must be string or array of content parts');
       }
+    }
+  }
+
+    /**
+   * Validate individual content part for multimodal messages
+   */
+  protected validateContentPart(part: LLMContentPart): void {
+    if (!part.type) {
+      throw new Error('Content part must have a type');
+    }
+
+    switch (part.type) {
+      case 'text':
+        if (typeof part.text !== 'string' || part.text.trim().length === 0) {
+          throw new Error('Text content part must have non-empty text');
+        }
+        break;
+
+      case 'image':
+        if (!part.imageUrl?.url) {
+          throw new Error('Image content part must have imageUrl.url');
+        }
+
+        // Basic validation for data URI or URL
+        const url = part.imageUrl.url;
+        if (!url.startsWith('data:image/') && !url.startsWith('http')) {
+          throw new Error('Image URL must be a data URI or HTTP URL');
+        }
+        break;
+
+      default:
+        // Use a type assertion to access the type property
+        throw new Error(`Unknown content part type: ${(part as any).type}`);
     }
   }
 
