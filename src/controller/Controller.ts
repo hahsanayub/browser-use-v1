@@ -14,7 +14,8 @@ import {
   initializeSignalHandler,
   addCleanupFunction,
 } from '../services/signal-handler';
-import type { AppConfig } from '../config/schema';
+import type { AppConfig, AppConfigInput } from '../config/schema';
+import { AppConfigSchema } from '../config/schema';
 import type { AgentHistory, AgentConfig, ActionResult } from '../types/agent';
 import type { BrowserContextConfig } from '../types/browser';
 import { registry } from './singleton';
@@ -22,9 +23,32 @@ import { z } from 'zod';
 // ensure builtin actions are registered
 import './actions';
 
+/**
+ * Deep merge utility function for configuration objects
+ */
+function deepMerge(target: any, source: any): any {
+  const result = { ...target };
+
+  for (const key in source) {
+    if (source.hasOwnProperty(key)) {
+      const sourceValue = source[key];
+      const targetValue = result[key];
+
+      if (sourceValue != null && typeof sourceValue === 'object' && !Array.isArray(sourceValue) &&
+          targetValue != null && typeof targetValue === 'object' && !Array.isArray(targetValue)) {
+        result[key] = deepMerge(targetValue, sourceValue);
+      } else if (sourceValue !== undefined) {
+        result[key] = sourceValue;
+      }
+    }
+  }
+
+  return result;
+}
+
 export interface ControllerConfig {
   /** Configuration override (optional) */
-  config?: Partial<AppConfig>;
+  config?: Partial<AppConfigInput>;
   /** Whether to auto-initialize browser */
   autoInitializeBrowser?: boolean;
   /** Whether to setup signal handlers for graceful shutdown */
@@ -45,7 +69,7 @@ export class Controller {
   private isInitialized = false;
 
   private controllerConfig: Required<Omit<ControllerConfig, 'config'>> & {
-    config?: Partial<AppConfig>;
+    config?: Partial<AppConfigInput>;
   };
 
   constructor(controllerConfig: ControllerConfig = {}) {
@@ -73,9 +97,13 @@ export class Controller {
       // Load configuration
       this.config = await getConfig();
 
-      // Apply any config overrides
+      // Apply any config overrides using deep merge
       if (this.controllerConfig.config) {
-        this.config = { ...this.config, ...this.controllerConfig.config };
+        // First, parse the override config to apply any defaults
+        const parsedOverrides = AppConfigSchema.partial().parse(this.controllerConfig.config);
+        const mergedConfig = deepMerge(this.config, parsedOverrides);
+        // Use Zod schema to parse and apply defaults to the merged config
+        this.config = AppConfigSchema.parse(mergedConfig);
       }
 
       // Initialize logging

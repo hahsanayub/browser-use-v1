@@ -87,6 +87,12 @@ export type BrowserConfig = z.infer<typeof BrowserConfigSchema>;
 export type LLMConfig = z.infer<typeof LLMConfigSchema>;
 export type LoggingConfig = z.infer<typeof LoggingConfigSchema>;
 
+// Input configuration types (with defaults applied, fields optional for user input)
+export type BrowserConfigInput = z.input<typeof BrowserConfigSchema>;
+export type LLMConfigInput = z.input<typeof LLMConfigSchema>;
+export type LoggingConfigInput = z.input<typeof LoggingConfigSchema>;
+export type AppConfigInput = z.input<typeof AppConfigSchema>;
+
 // Default configuration
 export const DEFAULT_CONFIG: AppConfig = {
   browser: {
