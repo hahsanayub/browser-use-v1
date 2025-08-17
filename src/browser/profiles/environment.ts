@@ -19,10 +19,7 @@ export interface SystemInfo {
 export function isDockerEnvironment(): boolean {
   try {
     // Check for Docker-specific files and environment variables
-    const dockerIndicators = [
-      '/.dockerenv',
-      '/proc/self/cgroup',
-    ];
+    const dockerIndicators = ['/.dockerenv', '/proc/self/cgroup'];
 
     // Check for Docker files
     for (const indicator of dockerIndicators) {
@@ -77,7 +74,9 @@ export function getSystemInfo(): SystemInfo {
   const platform = os.platform() as SystemInfo['platform'];
 
   return {
-    platform: ['darwin', 'win32', 'linux'].includes(platform) ? platform : 'unknown',
+    platform: ['darwin', 'win32', 'linux'].includes(platform)
+      ? platform
+      : 'unknown',
     isDocker: isDockerEnvironment(),
     hasDisplay: hasDisplayAvailable(),
     architecture: os.arch(),

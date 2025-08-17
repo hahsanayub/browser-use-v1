@@ -161,7 +161,8 @@ export class BrowserProfile {
 
     // Get extension arguments
     if (extensionsToLoad.length > 0) {
-      const extensionArgs = await this.extensionManager.getExtensionArgs(extensionsToLoad);
+      const extensionArgs =
+        await this.extensionManager.getExtensionArgs(extensionsToLoad);
       args.push(...extensionArgs);
     }
 
@@ -204,7 +205,9 @@ export class BrowserProfile {
    * Build complete profile configuration for browser launch
    */
   async build(): Promise<ProfileBuildResult> {
-    getLogger().info(`Building browser profile for ${this.systemInfo.platform} (Docker: ${this.systemInfo.isDocker})`);
+    getLogger().info(
+      `Building browser profile for ${this.systemInfo.platform} (Docker: ${this.systemInfo.isDocker})`
+    );
 
     const args = await this.buildArgs();
 

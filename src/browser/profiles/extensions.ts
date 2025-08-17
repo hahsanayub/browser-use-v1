@@ -42,7 +42,8 @@ export class ExtensionManager {
   private cacheDir: string;
 
   constructor(cacheDir?: string) {
-    this.cacheDir = cacheDir || path.join(os.homedir(), '.browser-use', 'extensions');
+    this.cacheDir =
+      cacheDir || path.join(os.homedir(), '.browser-use', 'extensions');
   }
 
   /**
@@ -70,33 +71,40 @@ export class ExtensionManager {
     getLogger().info(`Downloading extension ${extensionId}...`);
 
     return new Promise((resolve, reject) => {
-      https.get(crxUrl, (response) => {
-        if (response.statusCode !== 200) {
-          reject(new Error(`Failed to download extension: ${response.statusCode}`));
-          return;
-        }
+      https
+        .get(crxUrl, (response) => {
+          if (response.statusCode !== 200) {
+            reject(
+              new Error(`Failed to download extension: ${response.statusCode}`)
+            );
+            return;
+          }
 
-        const writeStream = createWriteStream(crxPath);
-        response.pipe(writeStream);
+          const writeStream = createWriteStream(crxPath);
+          response.pipe(writeStream);
 
-        writeStream.on('finish', () => {
-          writeStream.close();
-          resolve(crxPath);
-        });
+          writeStream.on('finish', () => {
+            writeStream.close();
+            resolve(crxPath);
+          });
 
-        writeStream.on('error', (error) => {
+          writeStream.on('error', (error) => {
+            reject(error);
+          });
+        })
+        .on('error', (error) => {
           reject(error);
         });
-      }).on('error', (error) => {
-        reject(error);
-      });
     });
   }
 
   /**
    * Extract CRX file to directory
    */
-  private async extractExtension(crxPath: string, extensionId: string): Promise<string> {
+  private async extractExtension(
+    crxPath: string,
+    extensionId: string
+  ): Promise<string> {
     const extractDir = path.join(this.cacheDir, extensionId);
 
     // Remove existing directory
@@ -119,7 +127,9 @@ export class ExtensionManager {
       return extractDir;
     } catch (error) {
       // If unzip fails, try to handle CRX header manually
-      getLogger().warn(`System unzip failed for ${extensionId}, trying manual CRX extraction: ${error}`);
+      getLogger().warn(
+        `System unzip failed for ${extensionId}, trying manual CRX extraction: ${error}`
+      );
 
       try {
         const data = await fs.readFile(crxPath);
@@ -161,7 +171,9 @@ export class ExtensionManager {
 
         return extractDir;
       } catch (extractError) {
-        getLogger().error(`Failed to extract extension ${extensionId}: ${extractError}`);
+        getLogger().error(
+          `Failed to extract extension ${extensionId}: ${extractError}`
+        );
         throw extractError;
       }
     }
@@ -170,7 +182,9 @@ export class ExtensionManager {
   /**
    * Setup a single extension
    */
-  private async setupExtension(extension: ExtensionConfig): Promise<string | null> {
+  private async setupExtension(
+    extension: ExtensionConfig
+  ): Promise<string | null> {
     if (!extension.enabled) {
       return null;
     }
@@ -182,10 +196,14 @@ export class ExtensionManager {
       if (extension.path) {
         const manifestPath = path.join(extension.path, 'manifest.json');
         if (existsSync(manifestPath)) {
-          getLogger().info(`Using local extension: ${extension.name || extension.path}`);
+          getLogger().info(
+            `Using local extension: ${extension.name || extension.path}`
+          );
           return extension.path;
         } else {
-          getLogger().warn(`Local extension path does not contain manifest.json: ${extension.path}`);
+          getLogger().warn(
+            `Local extension path does not contain manifest.json: ${extension.path}`
+          );
           return null;
         }
       }
@@ -197,22 +215,31 @@ export class ExtensionManager {
 
         // Check if already extracted
         if (existsSync(manifestPath)) {
-          getLogger().info(`Extension already cached: ${extension.name || extension.id}`);
+          getLogger().info(
+            `Extension already cached: ${extension.name || extension.id}`
+          );
           return extractDir;
         }
 
         // Download and extract
         const crxPath = await this.downloadExtension(extension.id);
-        const extractedPath = await this.extractExtension(crxPath, extension.id);
+        const extractedPath = await this.extractExtension(
+          crxPath,
+          extension.id
+        );
 
         getLogger().info(`Extension ready: ${extension.name || extension.id}`);
         return extractedPath;
       }
 
-      getLogger().warn(`Extension configuration invalid: ${JSON.stringify(extension)}`);
+      getLogger().warn(
+        `Extension configuration invalid: ${JSON.stringify(extension)}`
+      );
       return null;
     } catch (error) {
-      getLogger().error(`Failed to setup extension ${extension.name || extension.id}: ${error}`);
+      getLogger().error(
+        `Failed to setup extension ${extension.name || extension.id}: ${error}`
+      );
       return null;
     }
   }
@@ -221,7 +248,7 @@ export class ExtensionManager {
    * Setup multiple extensions and return paths for Chrome args
    */
   async setupExtensions(extensions: ExtensionConfig[]): Promise<string[]> {
-    const promises = extensions.map(ext => this.setupExtension(ext));
+    const promises = extensions.map((ext) => this.setupExtension(ext));
     const results = await Promise.allSettled(promises);
 
     const extensionPaths: string[] = [];
@@ -230,12 +257,16 @@ export class ExtensionManager {
       if (result.status === 'fulfilled' && result.value) {
         extensionPaths.push(result.value);
       } else if (result.status === 'rejected') {
-        getLogger().error(`Failed to setup extension ${extensions[index]?.name}: ${result.reason}`);
+        getLogger().error(
+          `Failed to setup extension ${extensions[index]?.name}: ${result.reason}`
+        );
       }
     });
 
     if (extensionPaths.length > 0) {
-      getLogger().info(`Successfully loaded ${extensionPaths.length} extensions`);
+      getLogger().info(
+        `Successfully loaded ${extensionPaths.length} extensions`
+      );
     }
 
     return extensionPaths;

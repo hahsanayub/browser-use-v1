@@ -169,7 +169,7 @@ class ScrollActions {
     context?: { browserSession?: BrowserSession };
   }): Promise<ActionResult> {
     return withHealthCheck(page, async (p) => {
-            // Helper function to get window height with retry
+      // Helper function to get window height with retry
       const getWindowHeight = async (): Promise<number> => {
         for (let attempt = 0; attempt < 4; attempt++) {
           try {
@@ -184,7 +184,7 @@ class ScrollActions {
               throw new Error(`Scroll failed due to an error: ${error}`);
             }
             // Wait 1 second before retry
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise((resolve) => setTimeout(resolve, 1000));
           }
         }
         return 800; // fallback
@@ -201,7 +201,7 @@ class ScrollActions {
       const direction = params.down ? 'down' : 'up';
       let scrollTarget = 'the page';
 
-            // Element-specific scrolling if index is provided
+      // Element-specific scrolling if index is provided
       if (typeof params.index === 'number') {
         try {
           const session = context?.browserSession;
@@ -214,148 +214,195 @@ class ScrollActions {
           const elementNode = summary.selectorMap.get(params.index);
 
           if (!elementNode) {
-            throw new Error(`Element index ${params.index} does not exist - retry or use alternative actions`);
+            throw new Error(
+              `Element index ${params.index} does not exist - retry or use alternative actions`
+            );
           }
 
-            // Try direct container scrolling (no events that might close dropdowns)
-            const containerScrollResult = await p.evaluate(
-              (scrollParams) => {
-                const { dy, elementXPath } = scrollParams;
+          // Try direct container scrolling (no events that might close dropdowns)
+          const containerScrollResult = await p.evaluate(
+            (scrollParams) => {
+              const { dy, elementXPath } = scrollParams;
 
-                // Get the target element by XPath
-                const targetElement = document.evaluate(
-                  elementXPath,
-                  document,
-                  null,
-                  XPathResult.FIRST_ORDERED_NODE_TYPE,
-                  null
-                ).singleNodeValue as HTMLElement | null;
+              // Get the target element by XPath
+              const targetElement = document.evaluate(
+                elementXPath,
+                document,
+                null,
+                XPathResult.FIRST_ORDERED_NODE_TYPE,
+                null
+              ).singleNodeValue as HTMLElement | null;
 
-                if (!targetElement) {
-                  return { success: false, reason: 'Element not found by XPath' };
-                }
+              if (!targetElement) {
+                return { success: false, reason: 'Element not found by XPath' };
+              }
 
-                console.log('[SCROLL DEBUG] Starting direct container scroll for element:', targetElement.tagName);
+              console.log(
+                '[SCROLL DEBUG] Starting direct container scroll for element:',
+                targetElement.tagName
+              );
 
-                // Try to find scrollable containers in the hierarchy (starting from element itself)
-                let currentElement: HTMLElement | null = targetElement;
-                let scrollSuccess = false;
-                let scrolledElement: HTMLElement | null = null;
-                let scrollDelta = 0;
-                let attempts = 0;
+              // Try to find scrollable containers in the hierarchy (starting from element itself)
+              let currentElement: HTMLElement | null = targetElement;
+              let scrollSuccess = false;
+              let scrolledElement: HTMLElement | null = null;
+              let scrollDelta = 0;
+              let attempts = 0;
 
-                // Check up to 10 elements in hierarchy (including the target element itself)
-                while (currentElement && attempts < 10) {
-                  const computedStyle = window.getComputedStyle(currentElement);
-                  const hasScrollableY = /(auto|scroll|overlay)/.test(computedStyle.overflowY);
-                  const canScrollVertically = currentElement.scrollHeight > currentElement.clientHeight;
+              // Check up to 10 elements in hierarchy (including the target element itself)
+              while (currentElement && attempts < 10) {
+                const computedStyle = window.getComputedStyle(currentElement);
+                const hasScrollableY = /(auto|scroll|overlay)/.test(
+                  computedStyle.overflowY
+                );
+                const canScrollVertically =
+                  currentElement.scrollHeight > currentElement.clientHeight;
 
-                  console.log('[SCROLL DEBUG] Checking element:', currentElement.tagName,
-                    'hasScrollableY:', hasScrollableY,
-                    'canScrollVertically:', canScrollVertically,
-                    'scrollHeight:', currentElement.scrollHeight,
-                    'clientHeight:', currentElement.clientHeight);
+                console.log(
+                  '[SCROLL DEBUG] Checking element:',
+                  currentElement.tagName,
+                  'hasScrollableY:',
+                  hasScrollableY,
+                  'canScrollVertically:',
+                  canScrollVertically,
+                  'scrollHeight:',
+                  currentElement.scrollHeight,
+                  'clientHeight:',
+                  currentElement.clientHeight
+                );
 
-                  if (hasScrollableY && canScrollVertically) {
-                    const beforeScroll = currentElement.scrollTop;
-                    const maxScroll = currentElement.scrollHeight - currentElement.clientHeight;
+                if (hasScrollableY && canScrollVertically) {
+                  const beforeScroll = currentElement.scrollTop;
+                  const maxScroll =
+                    currentElement.scrollHeight - currentElement.clientHeight;
 
-                    // Calculate scroll amount (1/3 of provided dy for gentler scrolling)
-                    let scrollAmount = dy / 3;
+                  // Calculate scroll amount (1/3 of provided dy for gentler scrolling)
+                  let scrollAmount = dy / 3;
 
-                    // Ensure we don't scroll beyond bounds
-                    if (scrollAmount > 0) {
-                      scrollAmount = Math.min(scrollAmount, maxScroll - beforeScroll);
-                    } else {
-                      scrollAmount = Math.max(scrollAmount, -beforeScroll);
-                    }
-
-                    // Try direct scrollTop manipulation (most reliable)
-                    currentElement.scrollTop = beforeScroll + scrollAmount;
-
-                    const afterScroll = currentElement.scrollTop;
-                    const actualScrollDelta = afterScroll - beforeScroll;
-
-                    console.log('[SCROLL DEBUG] Scroll attempt:', currentElement.tagName,
-                      'before:', beforeScroll, 'after:', afterScroll, 'delta:', actualScrollDelta);
-
-                    if (Math.abs(actualScrollDelta) > 0.5) {
-                      scrollSuccess = true;
-                      scrolledElement = currentElement;
-                      scrollDelta = actualScrollDelta;
-                      console.log('[SCROLL DEBUG] Successfully scrolled container:', currentElement.tagName, 'delta:', actualScrollDelta);
-                      break;
-                    }
+                  // Ensure we don't scroll beyond bounds
+                  if (scrollAmount > 0) {
+                    scrollAmount = Math.min(
+                      scrollAmount,
+                      maxScroll - beforeScroll
+                    );
+                  } else {
+                    scrollAmount = Math.max(scrollAmount, -beforeScroll);
                   }
 
-                  // Move to parent (but don't go beyond body for dropdown case)
-                  if (currentElement === document.body || currentElement === document.documentElement) {
+                  // Try direct scrollTop manipulation (most reliable)
+                  currentElement.scrollTop = beforeScroll + scrollAmount;
+
+                  const afterScroll = currentElement.scrollTop;
+                  const actualScrollDelta = afterScroll - beforeScroll;
+
+                  console.log(
+                    '[SCROLL DEBUG] Scroll attempt:',
+                    currentElement.tagName,
+                    'before:',
+                    beforeScroll,
+                    'after:',
+                    afterScroll,
+                    'delta:',
+                    actualScrollDelta
+                  );
+
+                  if (Math.abs(actualScrollDelta) > 0.5) {
+                    scrollSuccess = true;
+                    scrolledElement = currentElement;
+                    scrollDelta = actualScrollDelta;
+                    console.log(
+                      '[SCROLL DEBUG] Successfully scrolled container:',
+                      currentElement.tagName,
+                      'delta:',
+                      actualScrollDelta
+                    );
                     break;
                   }
-                  currentElement = currentElement.parentElement;
-                  attempts++;
                 }
 
-                if (scrollSuccess && scrolledElement) {
-                  // Successfully scrolled a container
-                  return {
-                    success: true,
-                    method: 'direct_container_scroll',
-                    containerType: 'element',
-                    containerTag: scrolledElement.tagName.toLowerCase(),
-                    containerClass: scrolledElement.className || '',
-                    containerId: scrolledElement.id || '',
-                    scrollDelta: scrollDelta
-                  };
-                } else {
-                  // No container found or could scroll
-                  console.log('[SCROLL DEBUG] No scrollable container found for element');
-                  return {
-                    success: false,
-                    reason: 'No scrollable container found',
-                    needsPageScroll: true
-                  };
+                // Move to parent (but don't go beyond body for dropdown case)
+                if (
+                  currentElement === document.body ||
+                  currentElement === document.documentElement
+                ) {
+                  break;
                 }
-              },
-              { dy, elementXPath: elementNode.xpath || '' }
-            );
-
-            if (containerScrollResult.success) {
-              if (containerScrollResult.containerType === 'element') {
-                let containerInfo = containerScrollResult.containerTag;
-                if (containerScrollResult.containerId) {
-                  containerInfo += `#${containerScrollResult.containerId}`;
-                } else if (containerScrollResult.containerClass) {
-                  containerInfo += `.${containerScrollResult.containerClass.split(' ')[0]}`;
-                }
-                scrollTarget = `element ${params.index}'s scroll container (${containerInfo})`;
-              } else {
-                scrollTarget = `the page (fallback from element ${params.index})`;
+                currentElement = currentElement.parentElement;
+                attempts++;
               }
+
+              if (scrollSuccess && scrolledElement) {
+                // Successfully scrolled a container
+                return {
+                  success: true,
+                  method: 'direct_container_scroll',
+                  containerType: 'element',
+                  containerTag: scrolledElement.tagName.toLowerCase(),
+                  containerClass: scrolledElement.className || '',
+                  containerId: scrolledElement.id || '',
+                  scrollDelta: scrollDelta,
+                };
+              } else {
+                // No container found or could scroll
+                console.log(
+                  '[SCROLL DEBUG] No scrollable container found for element'
+                );
+                return {
+                  success: false,
+                  reason: 'No scrollable container found',
+                  needsPageScroll: true,
+                };
+              }
+            },
+            { dy, elementXPath: elementNode.xpath || '' }
+          );
+
+          if (containerScrollResult.success) {
+            if (containerScrollResult.containerType === 'element') {
+              let containerInfo = containerScrollResult.containerTag;
+              if (containerScrollResult.containerId) {
+                containerInfo += `#${containerScrollResult.containerId}`;
+              } else if (containerScrollResult.containerClass) {
+                containerInfo += `.${containerScrollResult.containerClass.split(' ')[0]}`;
+              }
+              scrollTarget = `element ${params.index}'s scroll container (${containerInfo})`;
             } else {
-              // Container scroll failed, need page-level scrolling
-              console.log(`Container scroll failed for element ${params.index}: ${containerScrollResult.reason || 'Unknown'}`);
-              scrollTarget = `the page (no container found for element ${params.index})`;
+              scrollTarget = `the page (fallback from element ${params.index})`;
             }
+          } else {
+            // Container scroll failed, need page-level scrolling
+            console.log(
+              `Container scroll failed for element ${params.index}: ${containerScrollResult.reason || 'Unknown'}`
+            );
+            scrollTarget = `the page (no container found for element ${params.index})`;
+          }
         } catch (error) {
-          console.log(`Element-specific scrolling failed for index ${params.index}: ${error}`);
+          console.log(
+            `Element-specific scrolling failed for index ${params.index}: ${error}`
+          );
           scrollTarget = `the page (fallback from element ${params.index})`;
         }
       }
 
       // Page-level scrolling (default or fallback)
       // Match Python version's condition checks
-      const needsPageScroll = scrollTarget === 'the page' ||
+      const needsPageScroll =
+        scrollTarget === 'the page' ||
         scrollTarget.includes('fallback') ||
         scrollTarget.includes('no container found') ||
         scrollTarget.includes('mouse wheel failed');
 
       if (needsPageScroll) {
-        console.log(`🔄 Performing page-level scrolling. Reason: ${scrollTarget}`);
+        console.log(
+          `🔄 Performing page-level scrolling. Reason: ${scrollTarget}`
+        );
 
         try {
           // Try CDP scroll gesture first (works universally including PDFs)
-          const cdpScrollSuccess = await ScrollActions.scrollWithCDPGesture(p, dy);
+          const cdpScrollSuccess = await ScrollActions.scrollWithCDPGesture(
+            p,
+            dy
+          );
 
           if (!cdpScrollSuccess) {
             // Fallback to smart JavaScript scrolling
@@ -365,7 +412,10 @@ class ScrollActions {
         } catch (error) {
           // Hard fallback: always works on root scroller
           await p.evaluate((y) => window.scrollBy(0, y), dy);
-          console.log('Smart scroll failed; used window.scrollBy fallback', error);
+          console.log(
+            'Smart scroll failed; used window.scrollBy fallback',
+            error
+          );
         }
       }
 
@@ -392,7 +442,10 @@ class ScrollActions {
    * Scroll using CDP Input.synthesizeScrollGesture for universal compatibility.
    * Works in all contexts including PDFs.
    */
-  private static async scrollWithCDPGesture(page: Page, pixels: number): Promise<boolean> {
+  private static async scrollWithCDPGesture(
+    page: Page,
+    pixels: number
+  ): Promise<boolean> {
     try {
       // Create CDP session
       const cdpSession = await (page.context() as any).newCDPSession(page);
@@ -400,7 +453,7 @@ class ScrollActions {
       // Get viewport center for scroll origin
       const viewport = await page.evaluate(() => ({
         width: window.innerWidth,
-        height: window.innerHeight
+        height: window.innerHeight,
       }));
 
       const centerX = Math.floor(viewport.width / 2);
@@ -419,17 +472,23 @@ class ScrollActions {
       try {
         await Promise.race([
           cdpSession.detach(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('CDP detach timeout')), 1000))
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('CDP detach timeout')), 1000)
+          ),
         ]);
       } catch {
         // Ignore timeout and other detach errors like Python version
         // Python: except (TimeoutError, Exception): pass
       }
 
-      console.log(`📄 Scrolled via CDP Input.synthesizeScrollGesture: ${pixels}px`);
+      console.log(
+        `📄 Scrolled via CDP Input.synthesizeScrollGesture: ${pixels}px`
+      );
       return true;
     } catch (error) {
-      console.log(`❌ Scrolling via CDP Input.synthesizeScrollGesture failed: ${error}`);
+      console.log(
+        `❌ Scrolling via CDP Input.synthesizeScrollGesture failed: ${error}`
+      );
       return false;
     }
   }
@@ -438,7 +497,10 @@ class ScrollActions {
    * Smart container scrolling with JavaScript fallback.
    * Finds the best scrollable container and scrolls it.
    */
-  private static async smartScrollContainer(page: Page, pixels: number): Promise<void> {
+  private static async smartScrollContainer(
+    page: Page,
+    pixels: number
+  ): Promise<void> {
     const SMART_SCROLL_JS = `(dy) => {
       const bigEnough = el => el.clientHeight >= window.innerHeight * 0.5;
       const canScroll = el =>

@@ -11,7 +11,7 @@ export {
   getSystemInfo,
   isDockerEnvironment,
   hasDisplayAvailable,
-  getWindowAdjustments
+  getWindowAdjustments,
 } from './environment';
 export type { SystemInfo } from './environment';
 

@@ -8,7 +8,7 @@ import {
   createCustomConfig,
   OPTIMIZED_PRESET,
   STEALTH_PRESET,
-  getSystemInfo
+  getSystemInfo,
 } from '../src/browser/profiles';
 import type { BrowserConfig } from '../src/types/browser';
 
@@ -67,7 +67,7 @@ async function extensionExample() {
         path: '/path/to/local/extension',
         name: 'Local Extension',
         enabled: true,
-      }
+      },
     ],
   };
 
@@ -139,7 +139,9 @@ async function testingConfigExample() {
   const browser = new Browser(testConfig);
   await browser.launch();
 
-  console.log('Testing browser launched with deterministic rendering and disabled security');
+  console.log(
+    'Testing browser launched with deterministic rendering and disabled security'
+  );
 
   await browser.close();
 }
