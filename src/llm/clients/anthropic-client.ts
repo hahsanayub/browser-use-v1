@@ -26,7 +26,9 @@ interface AnthropicImageContent {
   };
 }
 
-type AnthropicContent = string | (AnthropicTextContent | AnthropicImageContent)[];
+type AnthropicContent =
+  | string
+  | (AnthropicTextContent | AnthropicImageContent)[];
 
 interface AnthropicMessage {
   role: 'user' | 'assistant';
@@ -233,7 +235,8 @@ export class AnthropicClient extends BaseLLMClient {
     }
 
     // Convert multimodal content
-    const anthropicContent: (AnthropicTextContent | AnthropicImageContent)[] = [];
+    const anthropicContent: (AnthropicTextContent | AnthropicImageContent)[] =
+      [];
 
     for (const part of msg.content) {
       if (part.type === 'text') {
@@ -246,7 +249,11 @@ export class AnthropicClient extends BaseLLMClient {
         const url = part.imageUrl.url;
         if (url.startsWith('data:image/')) {
           const [mimeTypePart, base64Data] = url.split(',');
-          const mediaType = mimeTypePart.split(':')[1].split(';')[0] as 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
+          const mediaType = mimeTypePart.split(':')[1].split(';')[0] as
+            | 'image/png'
+            | 'image/jpeg'
+            | 'image/webp'
+            | 'image/gif';
 
           anthropicContent.push({
             type: 'image',
@@ -258,9 +265,12 @@ export class AnthropicClient extends BaseLLMClient {
           });
         } else {
           // For HTTP URLs, we'd need to fetch and convert the image
-          this.logger.warn('Anthropic requires base64 encoded images, HTTP URLs not directly supported', {
-            url,
-          });
+          this.logger.warn(
+            'Anthropic requires base64 encoded images, HTTP URLs not directly supported',
+            {
+              url,
+            }
+          );
         }
       }
     }

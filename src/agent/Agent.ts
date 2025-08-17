@@ -120,14 +120,20 @@ export class Agent {
         this.screenshotService = new ScreenshotService(agentDirectory);
         // Initialize async in background
         this.screenshotService.initialize().catch((error) => {
-          this.logger.error('Failed to initialize ScreenshotService directories', error);
+          this.logger.error(
+            'Failed to initialize ScreenshotService directories',
+            error
+          );
         });
         this.logger.info(`ScreenshotService initialized for vision support`);
       } else {
         this.logger.debug('Vision disabled, ScreenshotService not initialized');
       }
     } catch (error) {
-      this.logger.error('Failed to initialize ScreenshotService', error as Error);
+      this.logger.error(
+        'Failed to initialize ScreenshotService',
+        error as Error
+      );
       // ScreenshotService is optional, so we don't throw here
       this.screenshotService = null;
     }
@@ -149,7 +155,8 @@ export class Agent {
     }
 
     try {
-      const screenshot = await this.browserSession.takeScreenshotForVision(true);
+      const screenshot =
+        await this.browserSession.takeScreenshotForVision(true);
 
       if (screenshot) {
         // Add to screenshots array for multimodal messages
@@ -183,7 +190,10 @@ export class Agent {
     }
 
     try {
-      await this.screenshotService.storeScreenshot(screenshot, this.state.n_steps);
+      await this.screenshotService.storeScreenshot(
+        screenshot,
+        this.state.n_steps
+      );
       this.logger.debug('Screenshot stored to disk', {
         step: this.state.n_steps,
       });
@@ -227,9 +237,10 @@ export class Agent {
     // Add screenshots with labels
     for (let i = 0; i < this.screenshots.length; i++) {
       const screenshot = this.screenshots[i];
-      const label = i === this.screenshots.length - 1
-        ? 'Current screenshot:'
-        : 'Previous screenshot:';
+      const label =
+        i === this.screenshots.length - 1
+          ? 'Current screenshot:'
+          : 'Previous screenshot:';
 
       // Add label as text content
       contentParts.push({

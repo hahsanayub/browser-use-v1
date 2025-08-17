@@ -1433,8 +1433,17 @@ class FileSystemActions {
     'read_file',
     'Read content from a file in the agent filesystem',
     z.object({
-      filename: z.string().min(1).describe('Full filename with extension (e.g., todo.md, results.txt)'),
-      external: z.boolean().optional().default(false).describe('Whether this is an external file path (not in agent filesystem)')
+      filename: z
+        .string()
+        .min(1)
+        .describe('Full filename with extension (e.g., todo.md, results.txt)'),
+      external: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe(
+          'Whether this is an external file path (not in agent filesystem)'
+        ),
     })
   )
   static async readFile({
@@ -1455,7 +1464,10 @@ class FileSystemActions {
     }
 
     try {
-      const result = await fileSystem.readFile(params.filename, params.external || false);
+      const result = await fileSystem.readFile(
+        params.filename,
+        params.external || false
+      );
       return {
         success: true,
         message: result,
@@ -1473,8 +1485,11 @@ class FileSystemActions {
     'write_file',
     'Write content to a file in the agent filesystem',
     z.object({
-      filename: z.string().min(1).describe('Full filename with extension (e.g., todo.md, results.txt)'),
-      content: z.string().describe('Content to write to the file')
+      filename: z
+        .string()
+        .min(1)
+        .describe('Full filename with extension (e.g., todo.md, results.txt)'),
+      content: z.string().describe('Content to write to the file'),
     })
   )
   static async writeFile({
@@ -1495,7 +1510,10 @@ class FileSystemActions {
     }
 
     try {
-      const result = await fileSystem.writeFile(params.filename, params.content);
+      const result = await fileSystem.writeFile(
+        params.filename,
+        params.content
+      );
       return {
         success: true,
         message: result,
@@ -1513,8 +1531,11 @@ class FileSystemActions {
     'append_file',
     'Append content to an existing file in the agent filesystem',
     z.object({
-      filename: z.string().min(1).describe('Full filename with extension (e.g., todo.md, results.txt)'),
-      content: z.string().describe('Content to append to the file')
+      filename: z
+        .string()
+        .min(1)
+        .describe('Full filename with extension (e.g., todo.md, results.txt)'),
+      content: z.string().describe('Content to append to the file'),
     })
   )
   static async appendFile({
@@ -1535,7 +1556,10 @@ class FileSystemActions {
     }
 
     try {
-      const result = await fileSystem.appendFile(params.filename, params.content);
+      const result = await fileSystem.appendFile(
+        params.filename,
+        params.content
+      );
       return {
         success: true,
         message: result,
@@ -1549,11 +1573,7 @@ class FileSystemActions {
     }
   }
 
-  @action(
-    'list_files',
-    'List all files in the agent filesystem',
-    z.object({})
-  )
+  @action('list_files', 'List all files in the agent filesystem', z.object({}))
   static async listFiles({
     context,
   }: {
@@ -1590,9 +1610,12 @@ class FileSystemActions {
     'replace_file_str',
     'Replace all occurrences of a string in a file with another string',
     z.object({
-      filename: z.string().min(1).describe('Full filename with extension (e.g., todo.md, results.txt)'),
+      filename: z
+        .string()
+        .min(1)
+        .describe('Full filename with extension (e.g., todo.md, results.txt)'),
       old_str: z.string().min(1).describe('String to replace'),
-      new_str: z.string().describe('Replacement string')
+      new_str: z.string().describe('Replacement string'),
     })
   )
   static async replaceFileStr({
@@ -1613,7 +1636,11 @@ class FileSystemActions {
     }
 
     try {
-      const result = await fileSystem.replaceFileStr(params.filename, params.old_str, params.new_str);
+      const result = await fileSystem.replaceFileStr(
+        params.filename,
+        params.old_str,
+        params.new_str
+      );
       return {
         success: true,
         message: result,
@@ -1631,7 +1658,7 @@ class FileSystemActions {
     'save_extracted_content',
     'Save extracted content to a numbered markdown file',
     z.object({
-      content: z.string().min(1).describe('Content to save')
+      content: z.string().min(1).describe('Content to save'),
     })
   )
   static async saveExtractedContent({

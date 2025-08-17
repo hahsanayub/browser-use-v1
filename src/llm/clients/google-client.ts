@@ -65,7 +65,9 @@ export class GoogleClient extends BaseLLMClient {
   /**
    * Convert our content format to Google Parts format
    */
-  private convertContentToParts(content: string | LLMContentPart[]): GooglePart[] {
+  private convertContentToParts(
+    content: string | LLMContentPart[]
+  ): GooglePart[] {
     if (typeof content === 'string') {
       return [{ text: content }];
     }
@@ -89,9 +91,12 @@ export class GoogleClient extends BaseLLMClient {
         } else {
           // For HTTP URLs, Google requires inline data, so we log a warning
           // In a production system, you'd want to fetch and convert the image
-          this.logger.warn('Google Gemini requires inline data for images, HTTP URLs not directly supported', {
-            url,
-          });
+          this.logger.warn(
+            'Google Gemini requires inline data for images, HTTP URLs not directly supported',
+            {
+              url,
+            }
+          );
         }
       }
     }

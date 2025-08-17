@@ -90,12 +90,14 @@ export abstract class BaseLLMClient {
           this.validateContentPart(part);
         }
       } else {
-        throw new Error('Message content must be string or array of content parts');
+        throw new Error(
+          'Message content must be string or array of content parts'
+        );
       }
     }
   }
 
-    /**
+  /**
    * Validate individual content part for multimodal messages
    */
   protected validateContentPart(part: LLMContentPart): void {

@@ -232,12 +232,14 @@ export function generatePageContextPrompt(
 
   // Generate file system information
   let fileSystemContent = 'No file system available';
-  let todoContents = '[Current todo.md is empty, fill it with your plan when applicable]';
+  let todoContents =
+    '[Current todo.md is empty, fill it with your plan when applicable]';
 
   if (fileSystem) {
     try {
       const description = fileSystem.describe();
-      fileSystemContent = description || 'File system available but no files found';
+      fileSystemContent =
+        description || 'File system available but no files found';
 
       // Get todo.md contents if available
       const todoContent = fileSystem.getTodoContents();

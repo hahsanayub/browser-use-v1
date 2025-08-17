@@ -5,7 +5,8 @@
 import { promises as fs, writeFileSync } from 'fs';
 import path from 'path';
 
-export const INVALID_FILENAME_ERROR_MESSAGE = 'Error: Invalid filename format. Must be alphanumeric with supported extension.';
+export const INVALID_FILENAME_ERROR_MESSAGE =
+  'Error: Invalid filename format. Must be alphanumeric with supported extension.';
 export const DEFAULT_FILE_SYSTEM_PATH = 'browseruse_agent_data';
 
 /**
@@ -129,7 +130,10 @@ export abstract class BaseFile {
   /**
    * Create from plain object
    */
-  static fromJSON(data: { name: string; content: string }, FileClass: typeof BaseFile): BaseFile {
+  static fromJSON(
+    data: { name: string; content: string },
+    FileClass: typeof BaseFile
+  ): BaseFile {
     return new (FileClass as any)(data.name, data.content);
   }
 }
@@ -191,7 +195,9 @@ export class PdfFile extends BaseFile {
       const filePath = path.join(dirPath, `${this.name}.txt`); // Temporary: save as .txt
       await fs.writeFile(filePath, this.content, 'utf-8');
     } catch (error) {
-      throw new FileSystemError(`Error: Could not write to file '${this.fullName}'. ${(error as Error).message}`);
+      throw new FileSystemError(
+        `Error: Could not write to file '${this.fullName}'. ${(error as Error).message}`
+      );
     }
   }
 
@@ -202,7 +208,9 @@ export class PdfFile extends BaseFile {
       const filePath = path.join(dirPath, `${this.name}.txt`); // Temporary: save as .txt
       writeFileSync(filePath, this.content, 'utf-8');
     } catch (error) {
-      throw new FileSystemError(`Error: Could not write to file '${this.fullName}'. ${(error as Error).message}`);
+      throw new FileSystemError(
+        `Error: Could not write to file '${this.fullName}'. ${(error as Error).message}`
+      );
     }
   }
 }

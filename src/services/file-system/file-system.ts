@@ -21,7 +21,10 @@ import { getLogger } from '../logging';
  * Serializable state of the file system
  */
 export interface FileSystemState {
-  files: Record<string, { type: string; data: { name: string; content: string } }>;
+  files: Record<
+    string,
+    { type: string; data: { name: string; content: string } }
+  >;
   baseDir: string;
   extractedContentCount: number;
 }
@@ -36,7 +39,10 @@ export class FileSystem {
   private extractedContentCount: number = 0;
   private logger = getLogger();
 
-  private fileTypes: Record<string, new (name: string, content?: string) => BaseFile> = {
+  private fileTypes: Record<
+    string,
+    new (name: string, content?: string) => BaseFile
+  > = {
     md: MarkdownFile,
     txt: TxtFile,
     json: JsonFile,
@@ -73,7 +79,9 @@ export class FileSystem {
   /**
    * Get the appropriate file class for an extension
    */
-  private getFileTypeClass(extension: string): (new (name: string, content?: string) => BaseFile) | null {
+  private getFileTypeClass(
+    extension: string
+  ): (new (name: string, content?: string) => BaseFile) | null {
     return this.fileTypes[extension.toLowerCase()] || null;
   }
 
@@ -87,11 +95,13 @@ export class FileSystem {
       }
     } catch (error) {
       this.logger.error('Failed to create base directory', error as Error);
-      throw new FileSystemError(`Failed to create base directory: ${(error as Error).message}`);
+      throw new FileSystemError(
+        `Failed to create base directory: ${(error as Error).message}`
+      );
     }
   }
 
-    /**
+  /**
    * Clean and recreate data directory
    */
   private cleanDataDirectory(): void {
@@ -105,7 +115,9 @@ export class FileSystem {
       mkdirSync(this.dataDir, { recursive: true });
     } catch (error) {
       this.logger.error('Failed to clean data directory', error as Error);
-      throw new FileSystemError(`Failed to clean data directory: ${(error as Error).message}`);
+      throw new FileSystemError(
+        `Failed to clean data directory: ${(error as Error).message}`
+      );
     }
   }
 
@@ -118,7 +130,9 @@ export class FileSystem {
       const FileClass = this.getFileTypeClass(extension);
 
       if (!FileClass) {
-        throw new Error(`Invalid file extension '${extension}' for file '${fullFilename}'.`);
+        throw new Error(
+          `Invalid file extension '${extension}' for file '${fullFilename}'.`
+        );
       }
 
       const fileObj = new FileClass(name);
@@ -172,7 +186,7 @@ export class FileSystem {
    * List all files in the system
    */
   listFiles(): string[] {
-    return Array.from(this.files.values()).map(file => file.fullName);
+    return Array.from(this.files.values()).map((file) => file.fullName);
   }
 
   /**
@@ -194,7 +208,10 @@ export class FileSystem {
   /**
    * Read file content and return appropriate message to LLM
    */
-  async readFile(fullFilename: string, externalFile: boolean = false): Promise<string> {
+  async readFile(
+    fullFilename: string,
+    externalFile: boolean = false
+  ): Promise<string> {
     if (externalFile) {
       try {
         const { extension } = this.parseFilename(fullFilename);
@@ -252,7 +269,9 @@ export class FileSystem {
       const FileClass = this.getFileTypeClass(extension);
 
       if (!FileClass) {
-        throw new Error(`Invalid file extension '${extension}' for file '${fullFilename}'.`);
+        throw new Error(
+          `Invalid file extension '${extension}' for file '${fullFilename}'.`
+        );
       }
 
       // Create or get existing file
@@ -300,7 +319,11 @@ export class FileSystem {
   /**
    * Replace old_str with new_str in file
    */
-  async replaceFileStr(fullFilename: string, oldStr: string, newStr: string): Promise<string> {
+  async replaceFileStr(
+    fullFilename: string,
+    oldStr: string,
+    newStr: string
+  ): Promise<string> {
     if (!this.isValidFilename(fullFilename)) {
       return INVALID_FILENAME_ERROR_MESSAGE;
     }
@@ -316,7 +339,10 @@ export class FileSystem {
 
     try {
       const content = fileObj.read();
-      const newContent = content.replace(new RegExp(oldStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), newStr);
+      const newContent = content.replace(
+        new RegExp(oldStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+        newStr
+      );
       await fileObj.write(newContent, this.dataDir);
       return `Successfully replaced all occurrences of "${oldStr}" with "${newStr}" in file ${fullFilename}`;
     } catch (error) {
@@ -442,7 +468,10 @@ export class FileSystem {
    * Get serializable state of the file system
    */
   getState(): FileSystemState {
-    const filesData: Record<string, { type: string; data: { name: string; content: string } }> = {};
+    const filesData: Record<
+      string,
+      { type: string; data: { name: string; content: string } }
+    > = {};
 
     for (const [fullFilename, fileObj] of this.files) {
       filesData[fullFilename] = {
@@ -466,7 +495,9 @@ export class FileSystem {
       rmSync(this.dataDir, { recursive: true, force: true });
     } catch (error) {
       this.logger.error('Failed to nuke file system directory', error as Error);
-      throw new FileSystemError(`Failed to delete file system directory: ${(error as Error).message}`);
+      throw new FileSystemError(
+        `Failed to delete file system directory: ${(error as Error).message}`
+      );
     }
   }
 

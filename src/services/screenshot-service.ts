@@ -40,7 +40,10 @@ export class ScreenshotService {
         directory: this.screenshotsDir,
       });
     } catch (error) {
-      this.logger.error('Failed to initialize screenshot service', error as Error);
+      this.logger.error(
+        'Failed to initialize screenshot service',
+        error as Error
+      );
       throw error;
     }
   }
