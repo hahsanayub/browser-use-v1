@@ -1,3 +1,4 @@
+/* eslint-disable no-prototype-builtins */
 /**
  * Main Controller class that orchestrates all components of the browser-use system
  */
@@ -34,8 +35,14 @@ function deepMerge(target: any, source: any): any {
       const sourceValue = source[key];
       const targetValue = result[key];
 
-      if (sourceValue != null && typeof sourceValue === 'object' && !Array.isArray(sourceValue) &&
-          targetValue != null && typeof targetValue === 'object' && !Array.isArray(targetValue)) {
+      if (
+        sourceValue != null &&
+        typeof sourceValue === 'object' &&
+        !Array.isArray(sourceValue) &&
+        targetValue != null &&
+        typeof targetValue === 'object' &&
+        !Array.isArray(targetValue)
+      ) {
         result[key] = deepMerge(targetValue, sourceValue);
       } else if (sourceValue !== undefined) {
         result[key] = sourceValue;
@@ -100,7 +107,9 @@ export class Controller {
       // Apply any config overrides using deep merge
       if (this.controllerConfig.config) {
         // First, parse the override config to apply any defaults
-        const parsedOverrides = AppConfigSchema.partial().parse(this.controllerConfig.config);
+        const parsedOverrides = AppConfigSchema.partial().parse(
+          this.controllerConfig.config
+        );
         const mergedConfig = deepMerge(this.config, parsedOverrides);
         // Use Zod schema to parse and apply defaults to the merged config
         this.config = AppConfigSchema.parse(mergedConfig);

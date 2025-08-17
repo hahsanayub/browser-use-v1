@@ -41,17 +41,21 @@ async function main() {
       continueOnFailure: true,
       customInstructions:
         'Use the search input to search for "google. Click the first real search result (not an ad). Wait for the new page to fully load, then get the content of the page.',
-      onStepEnd: async () => {
-        // do nothing
+      onStepStart: async () => {
+        // do nothing (pre-step state may not have messages/output yet)
       },
-      onStepStart: async (agent) => {
+      onStepEnd: async (agent) => {
         const state = agent.getState();
         fs.mkdirSync(`logs/${timestamp}`, { recursive: true });
-        const log = `${state.last_messages?.map((m) => `##${m.role}\n${m.content}`).join('\n\n')}\n\n\n\n##LLM Response\n${JSON.stringify(
-          state.last_model_output,
-          null,
-          2
-        )}`;
+        const messages = state.last_messages
+          ? state.last_messages
+              .map((m) => `##${m.role}\n${m.content}`)
+              .join('\n\n')
+          : '';
+        const response = state.last_model_output
+          ? JSON.stringify(state.last_model_output, null, 2)
+          : '';
+        const log = `${messages}\n\n\n\n##LLM Response\n${response}`;
         fs.writeFileSync(`logs/${timestamp}/${state.n_steps}.txt`, log);
       },
     };
