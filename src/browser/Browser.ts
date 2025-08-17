@@ -11,6 +11,7 @@ import {
 } from 'playwright';
 import type { BrowserConfig } from '../types/browser';
 import { BrowserProfile, type ProfileBuildResult } from './profiles';
+import { PLAYWRIGHT_IGNORED_DEFAULT_ARGS } from './profiles/chrome-args';
 import { getLogger } from '../services/logging';
 
 /**
@@ -64,6 +65,7 @@ export class Browser {
       const launchOptions: any = {
         headless: this.profile.headless,
         args: this.profile.args,
+        ignoreDefaultArgs: PLAYWRIGHT_IGNORED_DEFAULT_ARGS,
         executablePath: this.config.executablePath,
         timeout: this.config.timeout,
       };

@@ -18,6 +18,8 @@ import { getLogger } from '../services/logging';
 import { promises as fs } from 'fs';
 import { ChildProcess } from 'child_process';
 import path from 'path';
+import { BrowserProfile, type ProfileBuildResult } from './profiles';
+import { PLAYWRIGHT_IGNORED_DEFAULT_ARGS } from './profiles/chrome-args';
 
 /**
  * Custom error for when a URL is not allowed
@@ -136,6 +138,7 @@ export class BrowserSession {
   private _subprocess?: ChildProcess;
   private _recordingDir?: string;
   private _currentPageLoadingStatus: string | null = null;
+  private profile?: ProfileBuildResult;
 
   constructor(
     options: {
@@ -977,24 +980,58 @@ export class BrowserSession {
   }
 
   private async launchNewBrowser(): Promise<void> {
-    const launchOptions = {
+    // Build a BrowserProfile from the current session config for consistent args and viewport logic
+    const browserConfig = {
+      browserType: 'chromium' as const,
       headless: this.config.headless,
-      args: this.config.args || [],
+      userDataDir: this.config.userDataDir,
+      args: this.config.args,
       timeout: this.config.timeout,
+      viewport: this.config.viewport,
+      windowSize: this.config.viewport,
+      // Keep defaults for optimized args/stealth/extensions as provided by caller presets
+      useOptimizedArgs: false,
+      enableStealth: false,
+      enableDefaultExtensions: false,
+      disableSecurity: false,
+      enableDeterministicRendering: false,
+      profileDirectory: 'Default',
     };
 
-    if (this.config.userDataDir) {
-      (launchOptions as any).userDataDir = this.config.userDataDir;
-    }
+    this.profile = await BrowserProfile.fromConfig(browserConfig);
 
-    this.browser = await chromium.launch(launchOptions);
-    this._ownsResources = true;
+    // Launch persistent context when userDataDir is provided
+    if (this.profile.userDataDir) {
+      const context = await chromium.launchPersistentContext(
+        this.profile.userDataDir,
+        {
+          headless: this.profile.headless,
+          args: this.profile.args,
+          ignoreDefaultArgs: PLAYWRIGHT_IGNORED_DEFAULT_ARGS,
+          timeout: this.config.timeout,
+        } as any
+      );
+
+      this.context = context;
+      this.browser = context.browser()!;
+      this._ownsResources = true;
+    } else {
+      // Fall back to incognito browser and create a fresh context later
+      this.browser = await chromium.launch({
+        headless: this.profile.headless,
+        args: this.profile.args,
+        ignoreDefaultArgs: PLAYWRIGHT_IGNORED_DEFAULT_ARGS,
+        timeout: this.config.timeout,
+      } as any);
+      this._ownsResources = true;
+    }
   }
 
   private async setupContext(): Promise<void> {
+    // If context already exists (persistent mode), just apply settings; otherwise create one
     if (!this.context && this.browser) {
       const contextOptions: any = {
-        viewport: this.config.viewport,
+        viewport: this.profile?.viewport ?? this.config.viewport,
         userAgent: this.config.userAgent,
         ignoreHTTPSErrors: true,
       };
@@ -1002,12 +1039,14 @@ export class BrowserSession {
       if (this.config.recordVideo && this._recordingDir) {
         contextOptions.recordVideo = {
           dir: this._recordingDir,
-          size: this.config.viewport,
+          size: this.profile?.viewport ?? this.config.viewport,
         };
       }
 
       this.context = await this.browser.newContext(contextOptions);
+    }
 
+    if (this.context) {
       if (this.config.timeout) {
         this.context.setDefaultTimeout(this.config.timeout);
       }

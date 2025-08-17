@@ -2,7 +2,11 @@
  * Browser profile manager that combines arguments, extensions, and environment detection
  */
 
-import type { BrowserConfig, ViewportSize, ExtensionConfig } from '../../types/browser';
+import type {
+  BrowserConfig,
+  ViewportSize,
+  ExtensionConfig,
+} from '../../types/browser';
 import { getSystemInfo, getWindowAdjustments } from './environment';
 import { ExtensionManager, DEFAULT_EXTENSIONS } from './extensions';
 import {
@@ -45,18 +49,30 @@ export class BrowserProfile {
     // Auto-detect headless mode if not specified
     if (this.config.headless === undefined) {
       this.config.headless = isDocker || !hasDisplay;
-      getLogger().info(`Auto-detected headless mode: ${this.config.headless} (Docker: ${isDocker}, Display: ${hasDisplay})`);
+      getLogger().info(
+        `Auto-detected headless mode: ${this.config.headless} (Docker: ${isDocker}, Display: ${hasDisplay})`
+      );
     }
 
-    // Set default viewport/window size
-    if (!this.config.viewport && !this.config.windowSize) {
-      this.config.viewport = { width: 1280, height: 720 };
+    // Set default viewport only for headless mode; in headful mode prefer real window sizing
+    if (this.config.headless) {
+      if (!this.config.viewport && !this.config.windowSize) {
+        this.config.viewport = { width: 1280, height: 720 };
+      }
+    } else {
+      // Headful: if window size not set, we'll start maximized via args; leave viewport undefined
+      if (!this.config.windowSize) {
+        this.config.viewport = undefined;
+      }
     }
 
     // Adjust window position for non-headless mode
     if (!this.config.headless && !this.config.windowPosition) {
       const adjustments = getWindowAdjustments();
-      this.config.windowPosition = { width: adjustments.x, height: adjustments.y };
+      this.config.windowPosition = {
+        width: adjustments.x,
+        height: adjustments.y,
+      };
     }
   }
 
@@ -96,7 +112,9 @@ export class BrowserProfile {
     // Add deterministic rendering args
     if (this.config.enableDeterministicRendering) {
       args.push(...CHROME_DETERMINISTIC_RENDERING_ARGS);
-      getLogger().warn('Deterministic rendering enabled - may break some websites');
+      getLogger().warn(
+        'Deterministic rendering enabled - may break some websites'
+      );
     }
 
     // Add stealth mode args
@@ -113,14 +131,18 @@ export class BrowserProfile {
     // Add window size for non-headless mode
     if (!this.config.headless) {
       if (this.config.windowSize) {
-        args.push(`--window-size=${this.config.windowSize.width},${this.config.windowSize.height}`);
+        args.push(
+          `--window-size=${this.config.windowSize.width},${this.config.windowSize.height}`
+        );
       } else {
         args.push('--start-maximized');
       }
 
       // Add window position
       if (this.config.windowPosition) {
-        args.push(`--window-position=${this.config.windowPosition.width},${this.config.windowPosition.height}`);
+        args.push(
+          `--window-position=${this.config.windowPosition.width},${this.config.windowPosition.height}`
+        );
       }
     }
 
@@ -192,7 +214,7 @@ export class BrowserProfile {
       userDataDir: this.config.userDataDir,
     };
 
-    // Set viewport for headless mode or if explicitly configured
+    // Set viewport for headless mode or if explicitly configured; in headful mode default is no viewport
     if (this.config.headless || this.config.viewport) {
       result.viewport = this.config.viewport || this.config.windowSize;
     }

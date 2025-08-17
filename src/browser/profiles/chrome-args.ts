@@ -50,9 +50,7 @@ export const CHROME_DISABLED_COMPONENTS = [
 /**
  * Headless mode arguments
  */
-export const CHROME_HEADLESS_ARGS = [
-  '--headless=new',
-];
+export const CHROME_HEADLESS_ARGS = ['--headless=new'];
 
 /**
  * Docker-specific arguments for better compatibility
@@ -181,4 +179,16 @@ export const CHROME_EXTENSION_ARGS = [
   '--disable-extensions-file-access-check',
   '--disable-extensions-http-throttling',
   '--enable-extension-activity-logging',
+];
+
+/**
+ * Playwright default Chromium arguments to ignore/disable
+ * Mirrors Python implementation to remove easily detectable automation flags
+ * and allow extensions, scrollbars, etc.
+ */
+export const PLAYWRIGHT_IGNORED_DEFAULT_ARGS: string[] = [
+  '--enable-automation',
+  '--disable-extensions',
+  '--hide-scrollbars',
+  '--disable-features=AcceptCHFrame,AutoExpandDetailsElement,AvoidUnnecessaryBeforeUnloadCheckSync,CertificateTransparencyComponentUpdater,DeferRendererTasksAfterInput,DestroyProfileOnBrowserClose,DialMediaRouteProvider,ExtensionManifestV2Disabled,GlobalMediaControls,HttpsUpgrades,ImprovedCookieControls,LazyFrameLoading,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate',
 ];
