@@ -800,7 +800,9 @@ export class BrowserSession {
    * Take screenshot for vision/multimodal use and return as base64 string
    * Similar to Python's take_screenshot method
    */
-  async takeScreenshotForVision(fullPage: boolean = false): Promise<string | null> {
+  async takeScreenshotForVision(
+    fullPage: boolean = false
+  ): Promise<string | null> {
     return this.executeWithHealthCheck(async (healthyPage) => {
       // Check if page URL is a new tab page (similar to Python version)
       const currentUrl = healthyPage.url();
@@ -811,8 +813,11 @@ export class BrowserSession {
         currentUrl.startsWith('about:');
 
       if (isNewTabPage) {
-        this.logger.debug('Skipping screenshot for new tab page', { url: currentUrl });
-        return null;
+        this.logger.debug(
+          'Sending LLM 4px placeholder instead of real screenshot',
+          { url: currentUrl }
+        );
+        return PLACEHOLDER_4PX_SCREENSHOT;
       }
 
       try {
@@ -827,7 +832,7 @@ export class BrowserSession {
         this.logger.debug('Vision screenshot taken', {
           fullPage,
           url: currentUrl,
-          size: screenshot.length
+          size: screenshot.length,
         });
 
         return base64Screenshot;
@@ -1428,3 +1433,7 @@ export class BrowserSession {
     await this.stop();
   }
 }
+
+// Known placeholder image data for about:blank pages - a 4x4 white PNG
+const PLACEHOLDER_4PX_SCREENSHOT =
+  'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAFElEQVR4nGP8//8/AwwwMSAB3BwAlm4DBfIlvvkAAAAASUVORK5CYII=';

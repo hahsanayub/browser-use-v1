@@ -152,9 +152,6 @@ export class Agent {
       const screenshot = await this.browserSession.takeScreenshotForVision(true);
 
       if (screenshot) {
-        // Store screenshot to disk
-        await this.screenshotService.storeScreenshot(screenshot, this.state.n_steps);
-
         // Add to screenshots array for multimodal messages
         this.screenshots.push(screenshot);
 
@@ -174,6 +171,27 @@ export class Agent {
         error: (error as Error).message,
       });
       // Don't throw - screenshot failure shouldn't stop the agent
+    }
+  }
+
+  /**
+   * Store screenshot to disk during finalization (similar to Python version)
+   */
+  private async storeStepScreenshot(screenshot: string | null): Promise<void> {
+    if (!this.config.useVision || !this.screenshotService || !screenshot) {
+      return;
+    }
+
+    try {
+      await this.screenshotService.storeScreenshot(screenshot, this.state.n_steps);
+      this.logger.debug('Screenshot stored to disk', {
+        step: this.state.n_steps,
+      });
+    } catch (error) {
+      this.logger.warn('Failed to store screenshot to disk', {
+        step: this.state.n_steps,
+        error: (error as Error).message,
+      });
     }
   }
 
@@ -349,7 +367,7 @@ export class Agent {
             const beforeSigForAct = await this.browserSession.getDomSignature();
             result = await this.executeAction(page, act);
             results.push(result);
-            this.addToHistory(act, result, pageView);
+            await this.addToHistory(act, result, pageView);
             const afterSigForAct = await this.browserSession.getDomSignature();
             if (act.action === 'done') {
               this.logger.info('Task completed', { step: this.state.n_steps });
@@ -428,7 +446,7 @@ export class Agent {
             error: (error as Error).message,
           };
 
-          this.addToHistory(
+          await this.addToHistory(
             {
               action: 'error' as any,
               reasoning: 'Error occurred during execution',
@@ -1033,11 +1051,17 @@ export class Agent {
   /**
    * Add an action and result to the history
    */
-  private addToHistory(
+  private async addToHistory(
     action: Action,
     result: ActionResult,
     pageView?: PageView
-  ): void {
+  ): Promise<void> {
+    // Store screenshot to disk during finalization (similar to Python version)
+    if (this.screenshots.length > 0) {
+      const latestScreenshot = this.screenshots[this.screenshots.length - 1];
+      await this.storeStepScreenshot(latestScreenshot);
+    }
+
     const historyEntry: AgentHistory = {
       step: this.state.n_steps,
       action,

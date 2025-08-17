@@ -16,11 +16,6 @@ async function testVisionCapabilities() {
           headless: false, // Show browser for visual verification
           userDataDir: './test-data',
         },
-        agent: {
-          useVision: true, // Enable vision capabilities
-          visionDetailLevel: 'high',
-          maxSteps: 5,
-        },
         llm: {
           provider: 'google',
           model: 'gemini-2.0-flash',
@@ -37,7 +32,12 @@ async function testVisionCapabilities() {
 
     console.log('🤖 Running agent with vision enabled...');
     const history = await controller.run(
-      'Take a screenshot and describe what you can see on this Wikipedia homepage. Focus on the main visual elements, layout, and any prominent images or graphics.'
+      'Take a screenshot and describe what you can see on this Wikipedia homepage. Focus on the main visual elements, layout, and any prominent images or graphics.',
+      {
+        useVision: true, // Enable vision capabilities
+        visionDetailLevel: 'high',
+        maxSteps: 5,
+      }
     );
 
     console.log('📊 Agent execution completed!');
@@ -52,6 +52,42 @@ async function testVisionCapabilities() {
       for (const screenshot of screenshots) {
         console.log(
           `  - Step ${screenshot.stepNumber}: ${screenshot.filePath} (${Math.round(screenshot.fileSize / 1024)}KB)`
+        );
+      }
+    }
+
+    // Test placeholder screenshot functionality
+    console.log('\n🧪 Testing placeholder screenshot for about:blank...');
+    await controller.goto('about:blank');
+
+    const placeholderTestHistory = await controller.run(
+      'This is a test of placeholder screenshot functionality for about:blank pages.',
+      {
+        useVision: true,
+        visionDetailLevel: 'high',
+        maxSteps: 3,
+      }
+    );
+
+    console.log(
+      `📊 Placeholder test completed! Total steps: ${placeholderTestHistory.length}`
+    );
+
+    // Check if placeholder screenshots were handled correctly
+    if (agent && agent.screenshotService) {
+      const allScreenshots = await agent.screenshotService.listScreenshots();
+      console.log(
+        `📸 Total screenshots after placeholder test: ${allScreenshots.length}`
+      );
+
+      // Verify that placeholder screenshots are not stored to disk
+      // (they should only be used in memory for LLM messages)
+      const expectedScreenshotCount = 1; // Only the Wikipedia screenshot should be stored
+      if (allScreenshots.length === expectedScreenshotCount) {
+        console.log('✅ Placeholder screenshot correctly not stored to disk');
+      } else {
+        console.log(
+          `⚠️ Unexpected screenshot count: ${allScreenshots.length} (expected ${expectedScreenshotCount})`
         );
       }
     }
