@@ -16,7 +16,7 @@ async function main() {
         temperature: 0.7,
       },
       browser: {
-        headless: true,
+        headless: false,
         browserType: 'chromium',
         viewport: { width: 1440, height: 900 },
         timeout: 45000,
@@ -36,7 +36,7 @@ async function main() {
 
     const agentConfig: AgentConfig = {
       useVision: true,
-      maxSteps: 7,
+      maxSteps: 10,
       actionTimeout: 15000,
       continueOnFailure: true,
       customInstructions:
@@ -46,7 +46,7 @@ async function main() {
     };
 
     const history = await controller.run(
-      "On Wikipedia, search for 'TDD' and open the first non-ad result. After navigation, wait for content to load, scroll to the bottom of the page, summarize the content, and finish.",
+      "On Wikipedia, search for 'TDD' and open the first non-ad result. After navigation, wait for content to load, summarize the content, and finish.",
       agentConfig
     );
 

@@ -333,7 +333,10 @@ export class Agent {
 
       while (this.state.n_steps < this.config.maxSteps! && !taskCompleted) {
         // Check if agent should be stopped or paused
-        if (this.state.stopped) {
+        if (
+          this.state.stopped ||
+          !this.browserSession.getBrowser()?.isConnected()
+        ) {
           this.logger.info('Agent stopped');
           break;
         }
@@ -443,6 +446,18 @@ export class Agent {
           // Wait a bit between actions to be respectful
           await this.sleep(1000);
         } catch (error) {
+          const errorMessage = (error as Error).message;
+          if (
+            errorMessage.includes(
+              'Target page, context or browser has been closed'
+            )
+          ) {
+            this.logger.warn(
+              'Browser has been closed, terminating agent loop.',
+              error as Error
+            );
+            break;
+          }
           this.logger.error(
             `Error in step ${this.state.n_steps}`,
             error as Error
