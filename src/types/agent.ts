@@ -59,6 +59,8 @@ export interface AgentConfig {
   maxClickableElementsLength?: number;
   /** Whether to enable vision/multimodal capabilities */
   useVision?: boolean;
+  /** Whether to use full vision (all elements) */
+  useFullVision?: boolean;
   /** Vision detail level for image analysis */
   visionDetailLevel?: 'auto' | 'low' | 'high';
   /** Hooks for step start and end */

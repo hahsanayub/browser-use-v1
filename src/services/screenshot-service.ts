@@ -29,7 +29,7 @@ export class ScreenshotService {
 
   constructor(agentDirectory: string) {
     this.agentDirectory = agentDirectory;
-    this.screenshotsDir = join(agentDirectory, 'screenshots');
+    this.screenshotsDir = join(this.agentDirectory, 'screenshots');
   }
 
   /**

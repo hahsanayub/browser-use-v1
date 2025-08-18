@@ -155,8 +155,9 @@ export class Agent {
     }
 
     try {
-      const screenshot =
-        await this.browserSession.takeScreenshotForVision(true);
+      const screenshot = await this.browserSession.takeScreenshotForVision(
+        this.config.useFullVision
+      );
 
       if (screenshot) {
         // Add to screenshots array for multimodal messages
@@ -281,7 +282,9 @@ export class Agent {
       const filePath = path.join(dir, `conversation_${step}.txt`);
       const parts: string[] = [];
       for (const m of messages) {
-        parts.push(`##${m.role}\n${m.content}`);
+        parts.push(
+          `##${m.role}\n${typeof m.content === 'string' ? m.content : m.content?.[0]?.type === 'text' ? m.content[0].text : JSON.stringify(m.content, null, 2)}`
+        );
       }
       parts.push('\n\n\n\n##LLM Response');
       parts.push(JSON.stringify(thought, null, 2));
