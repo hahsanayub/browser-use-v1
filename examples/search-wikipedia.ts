@@ -1,5 +1,4 @@
 import 'dotenv/config';
-import fs from 'fs';
 import { createController, type AgentConfig } from '../src/index.js';
 
 const timestamp = new Date().toISOString();
@@ -36,11 +35,12 @@ async function main() {
     await controller.goto('https://www.wikipedia.org/');
 
     const agentConfig: AgentConfig = {
+      useVision: true,
       maxSteps: 7,
       actionTimeout: 15000,
       continueOnFailure: true,
       customInstructions:
-        'Use the search input to search for "google. Click the first real search result (not an ad). Wait for the new page to fully load, then get the content of the page.',
+        'Use the search input to search with keywords. Click the first real search result (not an ad). Wait for the new page to fully load, then get the content of the page.',
       // onStepStart: async () => {
       //   // do nothing (pre-step state may not have messages/output yet)
       // },
@@ -62,7 +62,7 @@ async function main() {
     };
 
     const history = await controller.run(
-      'On Wikipedia, search for "google" and open the first non-ad result. After navigation, wait for content to load, scroll to the bottom of the page, summarize the content, and finish.',
+      "On Wikipedia, search for 'TDD' and open the first non-ad result. After navigation, wait for content to load, scroll to the bottom of the page, summarize the content, and finish.",
       agentConfig
     );
 

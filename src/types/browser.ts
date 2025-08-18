@@ -113,4 +113,12 @@ export interface BrowserSessionConfig {
   maximumWaitPageLoadTime?: number;
   /** Time to wait between actions (seconds) */
   waitBetweenActions?: number;
+
+  // Screenshot configuration
+  /** Default screenshot format */
+  defaultScreenshotFormat?: 'png' | 'jpeg';
+  /** Default JPEG quality when using JPEG format */
+  defaultJpegQuality?: number;
+  /** Whether to use viewport-only screenshots by default for better performance */
+  defaultViewportScreenshots?: boolean;
 }

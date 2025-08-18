@@ -4,6 +4,10 @@
 import { readFile } from 'node:fs/promises';
 import { PageView } from '../types/dom';
 import { DOMService } from '../services/dom-service';
+import {
+  ViewportAwareDOMService,
+  ViewportAwareOptions,
+} from '../services/viewport-aware-dom-service';
 import { FileSystem } from '../services/file-system';
 
 /**
@@ -178,7 +182,7 @@ ${elementsText}
 }
 
 /**
- * Generate a prompt for the current page context
+ * Generate a prompt for the current page context with viewport-aware DOM processing
  */
 export function generatePageContextPrompt(
   objective: string,
@@ -189,17 +193,49 @@ export function generatePageContextPrompt(
     result: { success: boolean; message: string; error?: string };
   }> = [],
   maxClickableElementsLength: number = 40000,
-  fileSystem?: FileSystem | null
+  fileSystem?: FileSystem | null,
+  useViewportAware: boolean = true,
+  viewportAwareOptions?: Partial<ViewportAwareOptions>
 ): string {
   let interactiveElementsList: string;
   let truncatedText = '';
 
-  // Use new clickableElementsToString method if elementTree is available
-  if (pageView.domState?.elementTree) {
+  // Use viewport-aware DOM processing if available and enabled
+  if (pageView.domState?.elementTree && useViewportAware) {
+    const viewportAwareDOMService = new ViewportAwareDOMService();
+
+    const options: ViewportAwareOptions = {
+      maxTotalLength: maxClickableElementsLength,
+      viewportPriorityRatio: 0.8, // 80% budget for viewport elements
+      includeOutsideViewport: true,
+      ...viewportAwareOptions,
+    };
+
+    interactiveElementsList =
+      viewportAwareDOMService.clickableElementsToStringViewportAware(
+        pageView.domState.elementTree,
+        options
+      );
+
+    // Check if content was truncated based on length
+    if (interactiveElementsList.length >= maxClickableElementsLength) {
+      truncatedText = ` (viewport-aware truncation applied)`;
+    }
+  } else if (pageView.domState?.elementTree) {
+    // Fallback to standard DOM service
     const domService = new DOMService();
     interactiveElementsList = domService.clickableElementsToString(
       pageView.domState.elementTree
     );
+
+    // Apply simple length truncation for fallback
+    if (interactiveElementsList.length > maxClickableElementsLength) {
+      interactiveElementsList = interactiveElementsList.substring(
+        0,
+        maxClickableElementsLength
+      );
+      truncatedText = ` (truncated to ${maxClickableElementsLength} characters)`;
+    }
   } else {
     // Fallback to original logic if elementTree is not available
     interactiveElementsList = Object.entries(pageView.domState?.map || {})
@@ -208,15 +244,15 @@ export function generatePageContextPrompt(
           `[${index}] <${el.tagName}> ${el.text ?? ''} </${el.tagName}>`
       )
       .join('\n');
-  }
 
-  // Apply max length truncation
-  if (interactiveElementsList.length > maxClickableElementsLength) {
-    interactiveElementsList = interactiveElementsList.substring(
-      0,
-      maxClickableElementsLength
-    );
-    truncatedText = ` (truncated to ${maxClickableElementsLength} characters)`;
+    // Apply simple length truncation for fallback
+    if (interactiveElementsList.length > maxClickableElementsLength) {
+      interactiveElementsList = interactiveElementsList.substring(
+        0,
+        maxClickableElementsLength
+      );
+      truncatedText = ` (truncated to ${maxClickableElementsLength} characters)`;
+    }
   }
 
   const historySection =
@@ -246,7 +282,7 @@ export function generatePageContextPrompt(
       if (todoContent && todoContent.trim()) {
         todoContents = todoContent;
       }
-    } catch (error) {
+    } catch {
       fileSystemContent = 'File system available but error reading contents';
     }
   }

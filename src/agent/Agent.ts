@@ -597,6 +597,24 @@ export class Agent {
                     normalized.file_name = normalized.file_path;
                     delete normalized.file_path;
                   }
+                } else if (normalized.action === 'write_file') {
+                  // Normalize file parameter names for write_file action
+                  if (
+                    normalized.filename === undefined &&
+                    normalized.file_name !== undefined
+                  ) {
+                    normalized.filename = normalized.file_name;
+                    delete normalized.file_name;
+                  }
+                } else if (normalized.action === 'write_local_file') {
+                  // Normalize file parameter names for write_local_file action
+                  if (
+                    normalized.file_name === undefined &&
+                    normalized.filename !== undefined
+                  ) {
+                    normalized.file_name = normalized.filename;
+                    delete normalized.filename;
+                  }
                 } else if (normalized.action === 'wait') {
                   // Support { time: 5 } as seconds by default; convert to ms for value
                   if (

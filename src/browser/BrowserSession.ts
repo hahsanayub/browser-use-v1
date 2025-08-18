@@ -18,6 +18,7 @@ import { getLogger } from '../services/logging';
 import { promises as fs } from 'fs';
 import { ChildProcess } from 'child_process';
 import path from 'path';
+import { CDPScreenshotService } from '../services/cdp-screenshot-service';
 import { BrowserProfile, type ProfileBuildResult } from './profiles';
 import { PLAYWRIGHT_IGNORED_DEFAULT_ARGS } from './profiles/chrome-args';
 
@@ -139,6 +140,9 @@ export class BrowserSession {
   private _recordingDir?: string;
   private _currentPageLoadingStatus: string | null = null;
   private profile?: ProfileBuildResult;
+
+  // CDP Screenshot service
+  private cdpScreenshotService?: CDPScreenshotService;
 
   constructor(
     options: {
@@ -782,25 +786,73 @@ export class BrowserSession {
   }
 
   /**
-   * Take screenshot and return as Buffer
+   * Get or create CDP screenshot service for current page
    */
-  async takeScreenshot(fullPage: boolean = false): Promise<Buffer | null> {
-    return this.executeWithHealthCheck(async (healthyPage) => {
-      const screenshot = await healthyPage.screenshot({
-        fullPage,
-        type: 'png',
-      });
+  private async getCDPScreenshotService(): Promise<CDPScreenshotService> {
+    const currentPage = await this.getCurrentPage();
+    if (!this.cdpScreenshotService) {
+      this.cdpScreenshotService = new CDPScreenshotService(currentPage);
+    }
+    return this.cdpScreenshotService;
+  }
 
-      this.logger.debug('Screenshot taken', { fullPage });
-      return screenshot;
+  /**
+   * Take screenshot and return as Buffer
+   * Now uses CDP for better performance, defaults to viewport-only screenshot
+   */
+  async takeScreenshot(
+    fullPage: boolean = false,
+    format: 'png' | 'jpeg' = 'png',
+    quality?: number
+  ): Promise<Buffer | null> {
+    return this.executeWithHealthCheck(async (healthyPage) => {
+      try {
+        const cdpService = await this.getCDPScreenshotService();
+        const result = await cdpService.takeScreenshot({
+          captureBeyondViewport: fullPage,
+          format,
+          quality,
+        });
+
+        // Convert base64 to Buffer
+        const buffer = Buffer.from(result.data, 'base64');
+
+        this.logger.debug('Screenshot taken via CDP', {
+          fullPage,
+          format,
+          quality,
+          size: buffer.length,
+        });
+
+        return buffer;
+      } catch (error) {
+        this.logger.warn('CDP screenshot failed, falling back to Playwright', {
+          error,
+        });
+        // Fallback to original Playwright method
+        const screenshot = await healthyPage.screenshot({
+          fullPage,
+          type: format,
+          quality: format === 'jpeg' ? quality : undefined,
+        });
+
+        this.logger.debug('Screenshot taken via Playwright fallback', {
+          fullPage,
+          format,
+        });
+        return screenshot;
+      }
     });
   }
 
   /**
    * Take screenshot for vision/multimodal use and return as base64 string
+   * Now uses CDP for better performance, defaults to viewport-only screenshot
    */
   async takeScreenshotForVision(
-    fullPage: boolean = false
+    fullPage: boolean = false,
+    format: 'png' | 'jpeg' = 'png',
+    quality?: number
   ): Promise<string | null> {
     return this.executeWithHealthCheck(async (healthyPage) => {
       // Check if page URL is a new tab page
@@ -820,27 +872,58 @@ export class BrowserSession {
       }
 
       try {
-        const screenshot = await healthyPage.screenshot({
+        // Try CDP screenshot first
+        const cdpService = await this.getCDPScreenshotService();
+        const result = await cdpService.takeScreenshot({
+          captureBeyondViewport: fullPage,
+          format,
+          quality,
+        });
+
+        this.logger.debug('Vision screenshot taken via CDP', {
           fullPage,
-          type: 'png',
-          timeout: 30000, // 30 second timeout
-        });
-
-        const base64Screenshot = screenshot.toString('base64');
-
-        this.logger.debug('Vision screenshot taken', {
-          fullPage,
+          format,
+          quality,
           url: currentUrl,
-          size: screenshot.length,
+          size: result.estimatedSize,
         });
 
-        return base64Screenshot;
-      } catch (error) {
-        this.logger.warn('Failed to take vision screenshot', {
-          url: currentUrl,
-          error: (error as Error).message,
-        });
-        return null;
+        return result.data;
+      } catch (cdpError) {
+        this.logger.warn(
+          'CDP vision screenshot failed, falling back to Playwright',
+          {
+            url: currentUrl,
+            error: (cdpError as Error).message,
+          }
+        );
+
+        try {
+          // Fallback to original Playwright method
+          const screenshot = await healthyPage.screenshot({
+            fullPage,
+            type: format,
+            quality: format === 'jpeg' ? quality : undefined,
+            timeout: 30000, // 30 second timeout
+          });
+
+          const base64Screenshot = screenshot.toString('base64');
+
+          this.logger.debug('Vision screenshot taken via Playwright fallback', {
+            fullPage,
+            format,
+            url: currentUrl,
+            size: screenshot.length,
+          });
+
+          return base64Screenshot;
+        } catch (playwrightError) {
+          this.logger.warn('Failed to take vision screenshot', {
+            url: currentUrl,
+            error: (playwrightError as Error).message,
+          });
+          return null;
+        }
       }
     });
   }
@@ -866,6 +949,12 @@ export class BrowserSession {
 
       // Stop recording
       await this.stopRecording();
+
+      // Cleanup CDP screenshot service
+      if (this.cdpScreenshotService) {
+        await this.cdpScreenshotService.cleanup();
+        this.cdpScreenshotService = undefined;
+      }
 
       // Close context if we own it
       if (this._ownsResources && this.context && !this._keepAlive) {

@@ -15,6 +15,8 @@ export interface ScreenshotMetadata {
   filePath: string;
   /** Size of the screenshot file in bytes */
   fileSize: number;
+  /** Image format */
+  format: 'png' | 'jpeg';
 }
 
 /**
@@ -53,9 +55,10 @@ export class ScreenshotService {
    */
   async storeScreenshot(
     screenshotB64: string,
-    stepNumber: number
+    stepNumber: number,
+    format: 'png' | 'jpeg' = 'png'
   ): Promise<ScreenshotMetadata> {
-    const screenshotFilename = `step_${stepNumber}.png`;
+    const screenshotFilename = `step_${stepNumber}.${format}`;
     const screenshotPath = join(this.screenshotsDir, screenshotFilename);
 
     try {
@@ -68,12 +71,14 @@ export class ScreenshotService {
         timestamp: Date.now(),
         filePath: screenshotPath,
         fileSize: screenshotData.length,
+        format,
       };
 
       this.logger.debug('Screenshot stored', {
         stepNumber,
         filePath: screenshotPath,
         fileSize: metadata.fileSize,
+        format,
       });
 
       return metadata;
@@ -81,6 +86,7 @@ export class ScreenshotService {
       this.logger.error('Failed to store screenshot', error as Error, {
         stepNumber,
         message: (error as Error).message,
+        format,
       });
       throw error;
     }
@@ -126,6 +132,7 @@ export class ScreenshotService {
               timestamp: stats.mtime.getTime(),
               filePath,
               fileSize: stats.size,
+              format: 'png', // Default format for existing screenshots
             });
           }
         }

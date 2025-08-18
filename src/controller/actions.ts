@@ -619,25 +619,74 @@ class HoverActions {
 class ScreenshotActions {
   @action(
     'screenshot',
-    'Take a full-page screenshot',
-    z.object({}).optional(),
+    'Take a viewport screenshot (optimized for performance)',
+    z
+      .object({
+        fullPage: z
+          .boolean()
+          .default(false)
+          .describe(
+            'Whether to capture the full page. Default: false (viewport only)'
+          ),
+        format: z
+          .enum(['png', 'jpeg'])
+          .default('png')
+          .describe('Image format. Default: png'),
+        quality: z
+          .number()
+          .min(0)
+          .max(100)
+          .optional()
+          .describe('JPEG quality (0-100). Only applies when format is jpeg'),
+      })
+      .optional(),
     {
       isAvailableForPage: (page) => page && !page.isClosed(),
     }
   )
   static async screenshot({
+    params,
     page,
   }: {
-    params: Record<string, unknown>;
+    params: {
+      fullPage?: boolean;
+      format?: 'png' | 'jpeg';
+      quality?: number;
+    };
     page: Page;
   }): Promise<ActionResult> {
     return withHealthCheck(page, async (p) => {
-      const image = await p.screenshot({ fullPage: true, type: 'png' });
-      return {
-        success: true,
-        message: 'Screenshot taken',
-        metadata: { size: image.length, timestamp: Date.now() },
-      };
+      const {
+        fullPage = false, // Default to viewport-only for better performance
+        format = 'png',
+        quality,
+      } = params || {};
+
+      try {
+        // Use the enhanced screenshot with CDP support
+        const image = await p.screenshot({
+          fullPage,
+          type: format,
+          quality: format === 'jpeg' ? quality : undefined,
+        });
+
+        return {
+          success: true,
+          message: `${fullPage ? 'Full-page' : 'Viewport'} screenshot taken`,
+          metadata: {
+            size: image.length,
+            timestamp: Date.now(),
+            format,
+            fullPage,
+            quality: format === 'jpeg' ? quality : undefined,
+          },
+        };
+      } catch (error) {
+        return {
+          success: false,
+          message: `Failed to take screenshot: ${(error as Error).message}`,
+        };
+      }
     });
   }
 }
