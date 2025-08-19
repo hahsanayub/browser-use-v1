@@ -209,7 +209,10 @@ export class Agent {
   /**
    * Build user message with multimodal content (text + screenshots)
    */
-  private async buildUserMessage(objective: string, pageView: PageView): Promise<LLMMessage> {
+  private async buildUserMessage(
+    objective: string,
+    pageView: PageView
+  ): Promise<LLMMessage> {
     const textContent = await generatePageContextPrompt(
       objective,
       pageView,

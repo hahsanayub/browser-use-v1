@@ -48,23 +48,39 @@ export class ClickableElementDetector {
       ]);
 
       // Check class names for search indicators
-      const classList = (node.attributes.class || '').toLowerCase().split(/\s+/);
-      if (classList.some(cls => searchIndicators.has(cls) ||
-          Array.from(searchIndicators).some(indicator => cls.includes(indicator)))) {
+      const classList = (node.attributes.class || '')
+        .toLowerCase()
+        .split(/\s+/);
+      if (
+        classList.some(
+          (cls) =>
+            searchIndicators.has(cls) ||
+            Array.from(searchIndicators).some((indicator) =>
+              cls.includes(indicator)
+            )
+        )
+      ) {
         return true;
       }
 
       // Check id for search indicators
       const elementId = (node.attributes.id || '').toLowerCase();
-      if (Array.from(searchIndicators).some(indicator => elementId.includes(indicator))) {
+      if (
+        Array.from(searchIndicators).some((indicator) =>
+          elementId.includes(indicator)
+        )
+      ) {
         return true;
       }
 
       // Check data attributes for search functionality
       for (const [attrName, attrValue] of Object.entries(node.attributes)) {
-        if (attrName.startsWith('data-') &&
-            Array.from(searchIndicators).some(indicator =>
-              (attrValue || '').toLowerCase().includes(indicator))) {
+        if (
+          attrName.startsWith('data-') &&
+          Array.from(searchIndicators).some((indicator) =>
+            (attrValue || '').toLowerCase().includes(indicator)
+          )
+        ) {
           return true;
         }
       }
@@ -85,12 +101,17 @@ export class ClickableElementDetector {
           }
 
           // Direct interactiveness indicators
-          if (['focusable', 'editable', 'settable'].includes(prop.name) && prop.value) {
+          if (
+            ['focusable', 'editable', 'settable'].includes(prop.name) &&
+            prop.value
+          ) {
             return true;
           }
 
           // Interactive state properties (presence indicates interactive widget)
-          if (['checked', 'expanded', 'pressed', 'selected'].includes(prop.name)) {
+          if (
+            ['checked', 'expanded', 'pressed', 'selected'].includes(prop.name)
+          ) {
             // These properties only exist on interactive elements
             return true;
           }
@@ -133,10 +154,19 @@ export class ClickableElementDetector {
     if (node.attributes) {
       // Check for event handlers or interactive attributes
       const interactiveAttributes = new Set([
-        'onclick', 'onmousedown', 'onmouseup', 'onkeydown', 'onkeyup', 'tabindex'
+        'onclick',
+        'onmousedown',
+        'onmouseup',
+        'onkeydown',
+        'onkeyup',
+        'tabindex',
       ]);
 
-      if (Object.keys(node.attributes).some(attr => interactiveAttributes.has(attr))) {
+      if (
+        Object.keys(node.attributes).some((attr) =>
+          interactiveAttributes.has(attr)
+        )
+      ) {
         return true;
       }
 
@@ -196,8 +226,18 @@ export class ClickableElementDetector {
         // Check if this small element has interactive properties
         if (node.attributes) {
           // Small elements with these attributes are likely interactive icons
-          const iconAttributes = new Set(['class', 'role', 'onclick', 'data-action', 'aria-label']);
-          if (Object.keys(node.attributes).some(attr => iconAttributes.has(attr))) {
+          const iconAttributes = new Set([
+            'class',
+            'role',
+            'onclick',
+            'data-action',
+            'aria-label',
+          ]);
+          if (
+            Object.keys(node.attributes).some((attr) =>
+              iconAttributes.has(attr)
+            )
+          ) {
             return true;
           }
         }

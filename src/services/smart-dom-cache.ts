@@ -53,7 +53,10 @@ export class SmartDOMCache {
   /**
    * Get DOM signature with smart caching
    */
-  async getDomSignature(page: Page, options: DOMProcessingOptions = {}): Promise<string> {
+  async getDomSignature(
+    page: Page,
+    options: DOMProcessingOptions = {}
+  ): Promise<string> {
     const startTime = performance.now();
     this.stats.totalRequests++;
 
@@ -73,11 +76,14 @@ export class SmartDOMCache {
       return signature;
     } catch (error) {
       this.logger.warn('CDP signature failed, using fallback', {
-        error: (error as Error).message
+        error: (error as Error).message,
       });
 
       // Fallback to original method
-      const signature = await this.fallbackService.getDomSignature(page, options);
+      const signature = await this.fallbackService.getDomSignature(
+        page,
+        options
+      );
 
       if (signature !== this.lastKnownSignature) {
         this.recordSignatureChange(signature, 'mutation');
@@ -94,7 +100,10 @@ export class SmartDOMCache {
   /**
    * Get DOM state with intelligent caching and optimizations
    */
-  async getDomState(page: Page, options: DOMProcessingOptions = {}): Promise<DOMState> {
+  async getDomState(
+    page: Page,
+    options: DOMProcessingOptions = {}
+  ): Promise<DOMState> {
     const startTime = performance.now();
     const cacheKey = this.generateCacheKey(page.url(), options);
 
@@ -140,9 +149,17 @@ export class SmartDOMCache {
       this.stats.cdpFallbacks++;
 
       // Fallback to the original service
-      const pageView = await this.fallbackService.getPageView(page, page.context(), options, true);
+      const pageView = await this.fallbackService.getPageView(
+        page,
+        page.context(),
+        options,
+        true
+      );
       const domState = pageView.domState;
-      const signature = await this.fallbackService.getDomSignature(page, options);
+      const signature = await this.fallbackService.getDomSignature(
+        page,
+        options
+      );
 
       // Only cache if we have a valid domState
       if (domState) {
@@ -160,12 +177,18 @@ export class SmartDOMCache {
   /**
    * Check if DOM has changed since last check
    */
-  async hasChanged(page: Page, lastSignature: string, options: DOMProcessingOptions = {}): Promise<boolean> {
+  async hasChanged(
+    page: Page,
+    lastSignature: string,
+    options: DOMProcessingOptions = {}
+  ): Promise<boolean> {
     try {
       const currentSignature = await this.getDomSignature(page, options);
       return currentSignature !== lastSignature;
     } catch (error) {
-      this.logger.warn('DOM change detection failed', { error: (error as Error).message });
+      this.logger.warn('DOM change detection failed', {
+        error: (error as Error).message,
+      });
       // Assume changed if we can't detect
       return true;
     }
@@ -174,7 +197,9 @@ export class SmartDOMCache {
   /**
    * Intelligently determine if DOM check is necessary
    */
-  shouldCheckDom(reason: 'step_start' | 'before_action' | 'after_action' | 'multi_action'): boolean {
+  shouldCheckDom(
+    reason: 'step_start' | 'before_action' | 'after_action' | 'multi_action'
+  ): boolean {
     const recentHistory = this.signatureHistory.slice(-5);
 
     switch (reason) {
@@ -197,9 +222,13 @@ export class SmartDOMCache {
 
       case 'multi_action':
         // For multi-action sequences, check less frequently
-        const recentChanges = recentHistory.filter(h => Date.now() - h.timestamp < 2000);
+        const recentChanges = recentHistory.filter(
+          (h) => Date.now() - h.timestamp < 2000
+        );
         if (recentChanges.length > 3) {
-          this.logger.debug('Throttling DOM checks during rapid multi-action sequence');
+          this.logger.debug(
+            'Throttling DOM checks during rapid multi-action sequence'
+          );
           return false;
         }
         return true;
@@ -212,7 +241,10 @@ export class SmartDOMCache {
   /**
    * Record a signature change event
    */
-  private recordSignatureChange(signature: string, reason: DOMChangeEvent['reason']): void {
+  private recordSignatureChange(
+    signature: string,
+    reason: DOMChangeEvent['reason']
+  ): void {
     const event: DOMChangeEvent = {
       timestamp: Date.now(),
       reason,
@@ -224,7 +256,10 @@ export class SmartDOMCache {
     // Keep only recent history
     this.signatureHistory = this.signatureHistory.slice(-20);
 
-    this.logger.debug('DOM signature changed', { reason, signature: signature.slice(0, 8) });
+    this.logger.debug('DOM signature changed', {
+      reason,
+      signature: signature.slice(0, 8),
+    });
   }
 
   /**
@@ -245,11 +280,16 @@ export class SmartDOMCache {
   /**
    * Set cache entry with cleanup
    */
-  private setCacheEntry(key: string, signature: string, domState: DOMState): void {
+  private setCacheEntry(
+    key: string,
+    signature: string,
+    domState: DOMState
+  ): void {
     // Clean up old entries if cache is full
     if (this.cache.size >= this.maxCacheSize) {
-      const oldestKey = Array.from(this.cache.entries())
-        .sort(([, a], [, b]) => a.timestamp - b.timestamp)[0][0];
+      const oldestKey = Array.from(this.cache.entries()).sort(
+        ([, a], [, b]) => a.timestamp - b.timestamp
+      )[0][0];
       this.cache.delete(oldestKey);
     }
 
@@ -266,7 +306,8 @@ export class SmartDOMCache {
    */
   private updatePerformanceStats(duration: number): void {
     this.stats.avgProcessingTime =
-      (this.stats.avgProcessingTime * (this.stats.totalRequests - 1) + duration) /
+      (this.stats.avgProcessingTime * (this.stats.totalRequests - 1) +
+        duration) /
       this.stats.totalRequests;
   }
 
@@ -274,9 +315,10 @@ export class SmartDOMCache {
    * Get performance statistics
    */
   getStats() {
-    const cacheHitRate = this.stats.totalRequests > 0
-      ? (this.stats.cacheHits / this.stats.totalRequests * 100).toFixed(1)
-      : '0';
+    const cacheHitRate =
+      this.stats.totalRequests > 0
+        ? ((this.stats.cacheHits / this.stats.totalRequests) * 100).toFixed(1)
+        : '0';
 
     return {
       ...this.stats,
@@ -292,9 +334,14 @@ export class SmartDOMCache {
    */
   invalidateCache(url?: string): void {
     if (url) {
-      const keysToDelete = Array.from(this.cache.keys()).filter(key => key.startsWith(url));
-      keysToDelete.forEach(key => this.cache.delete(key));
-      this.logger.debug('Cache invalidated for URL', { url, keysDeleted: keysToDelete.length });
+      const keysToDelete = Array.from(this.cache.keys()).filter((key) =>
+        key.startsWith(url)
+      );
+      keysToDelete.forEach((key) => this.cache.delete(key));
+      this.logger.debug('Cache invalidated for URL', {
+        url,
+        keysDeleted: keysToDelete.length,
+      });
     } else {
       this.cache.clear();
       this.cdpService.clearCache();
@@ -308,10 +355,7 @@ export class SmartDOMCache {
   /**
    * Configure cache settings
    */
-  configure(options: {
-    cacheTimeout?: number;
-    maxCacheSize?: number;
-  }): void {
+  configure(options: { cacheTimeout?: number; maxCacheSize?: number }): void {
     if (options.cacheTimeout !== undefined) {
       this.cacheTimeout = options.cacheTimeout;
       this.cdpService.setCacheTimeout(options.cacheTimeout);

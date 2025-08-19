@@ -95,7 +95,8 @@ interface EnhancedDOMNode {
  */
 export class CDPDOMService {
   private logger = getLogger();
-  private cache: Map<string, { domState: DOMState; timestamp: number }> = new Map();
+  private cache: Map<string, { domState: DOMState; timestamp: number }> =
+    new Map();
   private cacheTimeout: number = 3000; // 3 seconds cache timeout
   private lastSignature: string = '';
   private lastDomState: DOMState | null = null;
@@ -105,7 +106,10 @@ export class CDPDOMService {
   /**
    * Compute a compact signature for current DOM state using CDP
    */
-  async getDomSignature(page: Page, options: DOMProcessingOptions = {}): Promise<string> {
+  async getDomSignature(
+    page: Page,
+    options: DOMProcessingOptions = {}
+  ): Promise<string> {
     try {
       const startTime = performance.now();
 
@@ -134,7 +138,11 @@ export class CDPDOMService {
 
         // Generate simple signature from node structure and essential styles
         const signatureData = {
-          nodeCount: snapshot.documents?.reduce((sum, doc) => sum + (doc.nodes?.nodeName?.length || 0), 0) || 0,
+          nodeCount:
+            snapshot.documents?.reduce(
+              (sum, doc) => sum + (doc.nodes?.nodeName?.length || 0),
+              0
+            ) || 0,
           styles: snapshot.strings?.slice(0, 50), // First 50 strings for signature
           url: currentUrl,
         };
@@ -144,14 +152,18 @@ export class CDPDOMService {
 
         // Cache the signature
         this.cache.set(cacheKey, {
-          domState: this.lastDomState || { elementTree: undefined, map: {}, selectorMap: {} },
-          timestamp: Date.now()
+          domState: this.lastDomState || {
+            elementTree: undefined,
+            map: {},
+            selectorMap: {},
+          },
+          timestamp: Date.now(),
         });
 
         const endTime = performance.now();
         this.logger.debug('CDP DOM signature computed', {
           duration: `${(endTime - startTime).toFixed(2)}ms`,
-          nodeCount: signatureData.nodeCount
+          nodeCount: signatureData.nodeCount,
         });
 
         return signature;
@@ -170,7 +182,10 @@ export class CDPDOMService {
   /**
    * Build DOM state using CDP DOMSnapshot for high performance
    */
-  async buildDomState(page: Page, options: DOMProcessingOptions = {}): Promise<DOMState> {
+  async buildDomState(
+    page: Page,
+    options: DOMProcessingOptions = {}
+  ): Promise<DOMState> {
     const startTime = performance.now();
 
     try {
@@ -223,7 +238,10 @@ export class CDPDOMService {
         await cdp.detach();
       }
     } catch (error) {
-      this.logger.error('CDP DOM state building failed, falling back to JavaScript approach', error as Error);
+      this.logger.error(
+        'CDP DOM state building failed, falling back to JavaScript approach',
+        error as Error
+      );
 
       // Fallback to the original buildDomTree.js approach if CDP fails
       return this.fallbackToBuildDomTree(page, options);
@@ -261,11 +279,14 @@ export class CDPDOMService {
       if (!nodes.nodeName || !layout.nodeIndex) continue;
 
       // Build layout lookup
-      const layoutLookup = new Map<number, {
-        bounds?: number[];
-        styles?: number[];
-        paintOrder?: number;
-      }>();
+      const layoutLookup = new Map<
+        number,
+        {
+          bounds?: number[];
+          styles?: number[];
+          paintOrder?: number;
+        }
+      >();
 
       for (let i = 0; i < layout.nodeIndex.length; i++) {
         const nodeIndex = layout.nodeIndex[i];
@@ -304,18 +325,35 @@ export class CDPDOMService {
 
         let computedStyles: Record<string, string> = {};
         if (layoutData?.styles) {
-          for (let i = 0; i < Math.min(layoutData.styles.length, REQUIRED_COMPUTED_STYLES.length); i++) {
+          for (
+            let i = 0;
+            i <
+            Math.min(layoutData.styles.length, REQUIRED_COMPUTED_STYLES.length);
+            i++
+          ) {
             const styleIndex = layoutData.styles[i];
             if (styleIndex >= 0 && styleIndex < snapshot.strings.length) {
-              computedStyles[REQUIRED_COMPUTED_STYLES[i]] = snapshot.strings[styleIndex];
+              computedStyles[REQUIRED_COMPUTED_STYLES[i]] =
+                snapshot.strings[styleIndex];
             }
           }
         }
 
         // Calculate visibility and interactivity
-        const isVisible = this.isElementVisible(bounds, computedStyles, viewportWidth, viewportHeight);
-        const isClickable = nodes.isClickable?.index.includes(nodeIndex) || false;
-        const isInteractive = this.isElementInteractive(tagName, attributes, computedStyles, isClickable);
+        const isVisible = this.isElementVisible(
+          bounds,
+          computedStyles,
+          viewportWidth,
+          viewportHeight
+        );
+        const isClickable =
+          nodes.isClickable?.index.includes(nodeIndex) || false;
+        const isInteractive = this.isElementInteractive(
+          tagName,
+          attributes,
+          computedStyles,
+          isClickable
+        );
 
         // Generate XPath
         const xpath = this.generateXPath(nodeIndex, nodes, nodeIndex);
@@ -328,20 +366,31 @@ export class CDPDOMService {
           isVisible,
           isInteractive,
           isTopElement: isVisible, // Simplified for now
-          isInViewport: this.isInViewport(bounds, viewportWidth, viewportHeight, options.viewportExpansion),
-          bounds: bounds ? {
-            x: bounds[0],
-            y: bounds[1],
-            width: bounds[2],
-            height: bounds[3],
-          } : undefined,
+          isInViewport: this.isInViewport(
+            bounds,
+            viewportWidth,
+            viewportHeight,
+            options.viewportExpansion
+          ),
+          bounds: bounds
+            ? {
+                x: bounds[0],
+                y: bounds[1],
+                width: bounds[2],
+                height: bounds[3],
+              }
+            : undefined,
           computedStyles,
           isClickable,
           cursorStyle: computedStyles.cursor,
         };
 
         // Assign highlight index for interactive and visible elements
-        if (isInteractive && isVisible && (enhancedNode.isInViewport || options.viewportExpansion === -1)) {
+        if (
+          isInteractive &&
+          isVisible &&
+          (enhancedNode.isInViewport || options.viewportExpansion === -1)
+        ) {
           enhancedNode.highlightIndex = highlightIndex;
           selectorMap[highlightIndex.toString()] = `xpath=/${xpath}`;
           highlightIndex++;
@@ -422,7 +471,14 @@ export class CDPDOMService {
 
     // Check interactive tag names
     const interactiveTags = new Set([
-      'a', 'button', 'input', 'select', 'textarea', 'details', 'summary', 'label'
+      'a',
+      'button',
+      'input',
+      'select',
+      'textarea',
+      'details',
+      'summary',
+      'label',
     ]);
 
     if (interactiveTags.has(tagName)) {
@@ -433,7 +489,13 @@ export class CDPDOMService {
     // Check for interactive roles or attributes
     const role = attributes.role;
     const interactiveRoles = new Set([
-      'button', 'link', 'menuitem', 'tab', 'switch', 'checkbox', 'radio'
+      'button',
+      'link',
+      'menuitem',
+      'tab',
+      'switch',
+      'checkbox',
+      'radio',
     ]);
 
     if (role && interactiveRoles.has(role)) return true;
@@ -502,7 +564,10 @@ export class CDPDOMService {
   /**
    * Fallback to the original JavaScript-based approach
    */
-  private async fallbackToBuildDomTree(page: Page, options: DOMProcessingOptions): Promise<DOMState> {
+  private async fallbackToBuildDomTree(
+    page: Page,
+    options: DOMProcessingOptions
+  ): Promise<DOMState> {
     this.logger.warn('Using fallback JavaScript DOM processing');
 
     // Import the original DOM service as fallback

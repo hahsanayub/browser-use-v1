@@ -2,7 +2,12 @@
  * System prompts and prompt templates for the AI agent
  */
 import { readFile } from 'node:fs/promises';
-import { PageView, DOMElementNode, DOMBaseNode, DOMTextNode } from '../types/dom';
+import {
+  PageView,
+  DOMElementNode,
+  DOMBaseNode,
+  DOMTextNode,
+} from '../types/dom';
 import { DOMService } from '../services/dom-service';
 import {
   ViewportAwareDOMService,
@@ -204,9 +209,10 @@ function fallbackElementTreeToString(elementTree: DOMElementNode): string {
         .map(([key, value]) => `${key}="${value}"`)
         .join(' ');
 
-      const highlightInfo = elementNode.highlightIndex !== null
-        ? ` [${elementNode.highlightIndex}]`
-        : '';
+      const highlightInfo =
+        elementNode.highlightIndex !== null
+          ? ` [${elementNode.highlightIndex}]`
+          : '';
 
       result += `${indent}<${elementNode.tagName}${attrs ? ' ' + attrs : ''}>${highlightInfo}\n`;
     }
@@ -270,11 +276,14 @@ export async function generatePageContextPrompt(
     } as any;
 
     try {
-      const { html } = await domService.getEnhancedClickableElementsString(placeholderPage);
+      const { html } =
+        await domService.getEnhancedClickableElementsString(placeholderPage);
       interactiveElementsList = html;
     } catch (error) {
       // Final fallback using elementTree directly
-      interactiveElementsList = fallbackElementTreeToString(pageView.domState.elementTree);
+      interactiveElementsList = fallbackElementTreeToString(
+        pageView.domState.elementTree
+      );
     }
 
     // Apply simple length truncation for fallback

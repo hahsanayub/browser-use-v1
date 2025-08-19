@@ -17,7 +17,9 @@ export class DOMTreeAdapter {
   /**
    * Convert buildDomTree.js result to EnhancedDOMTreeNode format
    */
-  static convertToEnhancedDOMTree(domResult: DOMResult): EnhancedDOMTreeNode | null {
+  static convertToEnhancedDOMTree(
+    domResult: DOMResult
+  ): EnhancedDOMTreeNode | null {
     if (!domResult.rootId || !domResult.map) {
       return null;
     }
@@ -55,7 +57,10 @@ export class DOMTreeAdapter {
   /**
    * Convert a single DOMNode to EnhancedDOMTreeNode
    */
-  private static convertDOMNodeToEnhanced(domNode: DOMNode, id: string): EnhancedDOMTreeNode | null {
+  private static convertDOMNodeToEnhanced(
+    domNode: DOMNode,
+    id: string
+  ): EnhancedDOMTreeNode | null {
     // Handle text nodes
     if (domNode.type === 'TEXT_NODE') {
       return {
@@ -110,7 +115,9 @@ export class DOMTreeAdapter {
   /**
    * Create SnapshotNode from DOMNode data
    */
-  private static createSnapshotNode(domNode: DOMNode): SnapshotNode | undefined {
+  private static createSnapshotNode(
+    domNode: DOMNode
+  ): SnapshotNode | undefined {
     // The buildDomTree.js doesn't provide bounding box information directly
     // This would need to be enhanced to include actual bounding box data
     // For now, return undefined as we don't have this information
@@ -120,7 +127,9 @@ export class DOMTreeAdapter {
   /**
    * Create AccessibilityNode from DOMNode data
    */
-  private static createAccessibilityNode(domNode: DOMNode): AccessibilityNode | undefined {
+  private static createAccessibilityNode(
+    domNode: DOMNode
+  ): AccessibilityNode | undefined {
     // Extract role from attributes if available
     const role = domNode.attributes?.role;
 
