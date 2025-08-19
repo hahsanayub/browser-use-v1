@@ -74,9 +74,6 @@ export interface PageView {
   browserErrors: string[];
   /** Whether the page is a PDF viewer */
   isPdfViewer: boolean;
-  // /** Screenshot */
-  // screenshot: string;
-  // todo: add screenshot
 }
 
 export interface DOMProcessingOptions {
@@ -126,3 +123,89 @@ export type DOMResult = {
   rootId: string;
   map: Record<string, DOMNode>;
 };
+
+// Bounding box and serialization types
+export interface DOMRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface PropagatingBounds {
+  tag: string;
+  bounds: DOMRect;
+  nodeId: number;
+  depth: number;
+}
+
+export interface PropagatingElement {
+  tag: string;
+  role: string | null;
+}
+
+export interface SimplifiedNode {
+  originalNode: EnhancedDOMTreeNode;
+  children: SimplifiedNode[];
+  interactiveIndex?: number;
+  isNew?: boolean;
+  excludedByParent?: boolean;
+  shouldDisplay?: boolean;
+}
+
+export interface EnhancedDOMTreeNode {
+  nodeId: number;
+  backendNodeId: number;
+  nodeType: NodeType;
+  nodeName: string;
+  tagName: string;
+  nodeValue?: string;
+  attributes?: Record<string, string>;
+  children: EnhancedDOMTreeNode[];
+  childrenAndShadowRoots: EnhancedDOMTreeNode[];
+  contentDocument?: EnhancedDOMTreeNode;
+  snapShotNode?: SnapshotNode;
+  isVisible: boolean;
+  isActuallyScrollable: boolean;
+  isScrollable: boolean;
+  shouldShowScrollInfo: boolean;
+  elementIndex?: number;
+  axNode?: AccessibilityNode;
+}
+
+export interface SnapshotNode {
+  bounds?: DOMRect;
+}
+
+export interface AccessibilityNode {
+  role?: string;
+  properties?: AccessibilityProperty[];
+}
+
+export interface AccessibilityProperty {
+  name: string;
+  value: any;
+}
+
+export enum NodeType {
+  ELEMENT_NODE = 1,
+  TEXT_NODE = 3,
+  DOCUMENT_NODE = 9,
+  DOCUMENT_FRAGMENT_NODE = 11,
+}
+
+export interface SerializedDOMState {
+  root?: SimplifiedNode;
+  selectorMap: DOMSelectorMap;
+}
+
+export type DOMSelectorMap = Record<number, EnhancedDOMTreeNode>;
+
+export interface TimingInfo {
+  createSimplifiedTree?: number;
+  optimizeTree?: number;
+  bboxFiltering?: number;
+  assignInteractiveIndices?: number;
+  clickableDetectionTime?: number;
+  serializeAccessibleElementsTotal?: number;
+}

@@ -19,6 +19,8 @@ import type {
   TabsInfo,
 } from '../types/dom';
 import { getLogger } from './logging';
+import { DOMTreeSerializer } from './dom-tree-serializer';
+import { DOMTreeAdapter } from './dom-tree-adapter';
 
 /**
  * DOM Service class for processing and analyzing web page content
@@ -349,7 +351,8 @@ export class DOMService {
     try {
       const dom = await this.buildDomState(page, options);
       const serializedDom = this.serializeDOMState(dom);
-      return DOMService.computeStringHash(serializedDom);
+      const signature = DOMService.computeStringHash(serializedDom);
+      return signature;
     } catch (error) {
       this.logger.debug('Failed to compute DOM signature', {
         error: (error as Error).message,
@@ -850,10 +853,12 @@ export class DOMService {
   }
 
   /**
-   * Convert clickable elements to string representation
+   * Get enhanced clickable elements string using the new DOMTreeSerializer
+   * with bounding box filtering and improved element detection
    */
-  clickableElementsToString(
-    elementTree: DOMElementNode,
+  async getEnhancedClickableElementsString(
+    page: Page,
+    options: DOMProcessingOptions = {},
     includeAttributes: string[] = [
       'title',
       'type',
@@ -868,196 +873,72 @@ export class DOMService {
       'aria-expanded',
       'data-state',
       'aria-checked',
+      // Accessibility properties from ax_node (ordered by importance for automation)
+      'checked',
+      'selected',
+      'expanded',
+      'pressed',
+      'disabled',
+      // 'invalid',
+      'valuenow',
+      'keyshortcuts',
+      'haspopup',
+      'multiselectable',
+      // Less commonly needed (uncomment if required):
+      // 'readonly',
+      'required',
+      'valuetext',
+      'level',
+      'busy',
+      'live',
+      // Accessibility name (contains text content for StaticText elements)
+      'ax_name',
     ]
-  ): string {
-    const formattedText: string[] = [];
+  ): Promise<{ html: string; timing: any }> {
+    try {
+      // Get DOM result from buildDomTree.js
+      const domResult = await this.buildDomState(page, options);
 
-    /**
-     * Get all text content until next clickable element
-     */
-    const getAllTextTillNextClickableElement = (
-      node: DOMElementNode
-    ): string => {
-      const textParts: string[] = [];
+      // Convert to enhanced format
+      const enhancedRoot = DOMTreeAdapter.convertToEnhancedDOMTree({
+        rootId: 'root',
+        map: domResult.map,
+      });
 
-      const collectText = (currentNode: DOMBaseNode): void => {
-        // Skip this branch if we hit a highlighted element (except for the current node)
-        if (
-          currentNode.type !== 'TEXT_NODE' &&
-          currentNode !== node &&
-          (currentNode as DOMElementNode).highlightIndex !== null
-        ) {
-          return;
-        }
-
-        if (currentNode.type === 'TEXT_NODE') {
-          const textNode = currentNode as DOMTextNode;
-          textParts.push(textNode.text);
-        } else {
-          const elementNode = currentNode as DOMElementNode;
-          for (const child of elementNode.children) {
-            collectText(child);
-          }
-        }
-      };
-
-      collectText(node);
-      return textParts.join('\n').trim();
-    };
-
-    /**
-     * Cap text length with ellipsis
-     */
-    const capTextLength = (text: string, maxLength: number): string => {
-      if (text.length > maxLength) {
-        return text.substring(0, maxLength) + '...';
+      if (!enhancedRoot) {
+        this.logger.warn('Failed to convert DOM result to enhanced format');
+        return { html: '', timing: {} };
       }
-      return text;
-    };
 
-    /**
-     * Process DOM node recursively
-     */
-    const processNode = (node: DOMBaseNode, depth: number): void => {
-      let nextDepth = depth;
-      const depthStr = '\t'.repeat(depth);
+      // Use the new serializer
+      const serializer = new DOMTreeSerializer(
+        enhancedRoot,
+        undefined, // no previous state
+        true, // enable bbox filtering
+        0.99 // containment threshold
+      );
 
-      if (node.type !== 'TEXT_NODE') {
-        const elementNode = node as DOMElementNode;
+      const { state, timing } = serializer.serializeAccessibleElements();
 
-        // Add element with highlightIndex
-        if (elementNode.highlightIndex !== null) {
-          nextDepth += 1;
+      // Serialize to string
+      const html = state.root
+        ? DOMTreeSerializer.serializeTree(state.root, includeAttributes)
+        : '';
 
-          const text = getAllTextTillNextClickableElement(elementNode);
-          let attributesHtmlStr: string | null = null;
+      this.logger.debug('Enhanced DOM serialization completed', {
+        timing,
+        htmlLength: html.length,
+        selectorMapSize: Object.keys(state.selectorMap).length,
+      });
 
-          if (includeAttributes.length > 0) {
-            const attributesToInclude: Record<string, string> = {};
-
-            // Filter attributes that exist and have non-empty values
-            for (const key of includeAttributes) {
-              const value = elementNode.attributes[key];
-              if (value && value.trim() !== '') {
-                attributesToInclude[key] = value.trim();
-              }
-            }
-
-            // Remove duplicate attribute values (keep first occurrence)
-            if (Object.keys(attributesToInclude).length > 1) {
-              const keysToRemove = new Set<string>();
-              const seenValues: Record<string, string> = {};
-
-              for (const key of includeAttributes) {
-                if (key in attributesToInclude) {
-                  const value = attributesToInclude[key];
-                  if (value.length > 5) {
-                    // Don't remove short values like "true", "false"
-                    if (value in seenValues) {
-                      // This value was already seen, remove this key
-                      keysToRemove.add(key);
-                    } else {
-                      // First time seeing this value
-                      seenValues[value] = key;
-                    }
-                  }
-                }
-              }
-
-              // Remove duplicate keys
-              for (const key of keysToRemove) {
-                delete attributesToInclude[key];
-              }
-            }
-
-            // Remove role attribute if it's the same as tag name
-            if (attributesToInclude.role === elementNode.tagName) {
-              delete attributesToInclude.role;
-            }
-
-            // Remove attributes that duplicate the text content
-            const attrsToRemoveIfTextMatches = [
-              'aria-label',
-              'placeholder',
-              'title',
-            ];
-            for (const attr of attrsToRemoveIfTextMatches) {
-              if (
-                attributesToInclude[attr] &&
-                attributesToInclude[attr].toLowerCase() === text.toLowerCase()
-              ) {
-                delete attributesToInclude[attr];
-              }
-            }
-
-            if (Object.keys(attributesToInclude).length > 0) {
-              // Format as key1='value1' key2='value2'
-              attributesHtmlStr = Object.entries(attributesToInclude)
-                .map(([key, value]) => `${key}=${capTextLength(value, 15)}`)
-                .join(' ');
-            }
-          }
-
-          // Build the line
-          const highlightIndicator = `[${elementNode.highlightIndex}]`;
-          let line = `${depthStr}${highlightIndicator}<${elementNode.tagName}`;
-
-          if (attributesHtmlStr) {
-            line += ` ${attributesHtmlStr}`;
-          }
-
-          if (text) {
-            // Add space before >text only if there were NO attributes added before
-            const trimmedText = text.trim();
-            if (!attributesHtmlStr) {
-              line += ' ';
-            }
-            line += `>${trimmedText}`;
-          }
-
-          // Add space before /> only if neither attributes NOR text were added
-          if (!attributesHtmlStr && !text) {
-            line += ' ';
-          }
-
-          line += ' />';
-          formattedText.push(line);
-        }
-
-        // Process children regardless
-        for (const child of elementNode.children) {
-          processNode(child, nextDepth);
-        }
-      } else {
-        // Handle text nodes
-        const textNode = node as DOMTextNode;
-
-        // Check if text node has a parent with highlight index
-        let current = textNode.parent;
-        let hasParentWithHighlightIndex = false;
-        while (current !== null) {
-          if (current.highlightIndex !== null) {
-            hasParentWithHighlightIndex = true;
-            break;
-          }
-          current = current.parent;
-        }
-
-        // Add text only if it doesn't have a highlighted parent
-        if (!hasParentWithHighlightIndex) {
-          if (
-            textNode.parent &&
-            textNode.parent.isVisible &&
-            textNode.parent.isTopElement
-          ) {
-            formattedText.push(`${depthStr}${textNode.text}`);
-          }
-        }
-      }
-    };
-
-    processNode(elementTree, 0);
-    return formattedText.join('\n');
+      return { html, timing };
+    } catch (error) {
+      this.logger.error(
+        'Failed to generate enhanced clickable elements string',
+        error as Error
+      );
+      return { html: '', timing: {} };
+    }
   }
 
   /**

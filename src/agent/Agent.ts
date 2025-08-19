@@ -379,37 +379,66 @@ export class Agent {
           }
           let result = { success: true, message: 'no-op' } as ActionResult;
           const results: ActionResult[] = [];
-          for (const act of actionsToRun) {
-            const beforeSigForAct = await this.browserSession.getDomSignature();
+          let lastKnownSig = beforeSig;
+
+          for (let i = 0; i < actionsToRun.length; i++) {
+            const act = actionsToRun[i];
+            const isLastAction = i === actionsToRun.length - 1;
+
+            // Skip redundant DOM checks for rapid action sequences
+            // Only check DOM before first action and after potentially DOM-changing actions
+            const shouldCheckBefore = i === 0 || this.isDOMChangingAction(act);
+            const currentSigBefore = shouldCheckBefore
+              ? await this.browserSession.getDomSignature()
+              : lastKnownSig;
+
             result = await this.executeAction(page, act);
             results.push(result);
             await this.addToHistory(act, result, pageView);
-            const afterSigForAct = await this.browserSession.getDomSignature();
+
             if (act.action === 'done') {
               this.logger.info('Task completed', { step: this.state.n_steps });
               taskCompleted = true;
               break;
             }
-            if (
-              afterSigForAct &&
-              beforeSigForAct &&
-              afterSigForAct !== beforeSigForAct
-            ) {
-              this.logger.debug(
-                'DOM changed during multi-act; breaking to re-observe'
-              );
-              break;
+
+            // Smart DOM change detection - only check after potentially changing actions
+            if (this.isDOMChangingAction(act) || isLastAction) {
+              const afterSigForAct =
+                await this.browserSession.getDomSignature();
+
+              if (
+                afterSigForAct &&
+                currentSigBefore &&
+                afterSigForAct !== currentSigBefore
+              ) {
+                this.logger.debug(
+                  'DOM changed during action; breaking to re-observe',
+                  {
+                    action: act.action,
+                    step: i + 1,
+                    total: actionsToRun.length,
+                  }
+                );
+                lastKnownSig = afterSigForAct;
+                break;
+              }
+              lastKnownSig = afterSigForAct;
             }
+
             if (!result.success) break;
           }
 
           // Save results to state
           this.state.last_result = results;
 
-          // Detect DOM change to decide whether to continue planning or re-observe
-          const afterSig = await this.browserSession.getDomSignature();
-          if (afterSig && beforeSig && afterSig !== beforeSig) {
-            this.logger.debug('DOM changed after action, re-observing');
+          // Final DOM change detection - only if we haven't checked recently
+          const finalSig =
+            lastKnownSig || (await this.browserSession.getDomSignature());
+          if (finalSig && beforeSig && finalSig !== beforeSig) {
+            this.logger.debug(
+              'DOM changed after action sequence, re-observing'
+            );
           }
 
           // Handle failures
@@ -607,12 +636,23 @@ export class Agent {
                     normalized.keys = normalized.key;
                     delete normalized.key;
                   }
-                } else if (normalized.action === 'read_file') {
+                } else if (
+                  normalized.action === 'read_file' ||
+                  normalized.action === 'read_local_file'
+                ) {
+                  // Normalize file parameter names to 'filename'
                   if (
-                    normalized.file_name === undefined &&
+                    normalized.filename === undefined &&
+                    normalized.file_name !== undefined
+                  ) {
+                    normalized.filename = normalized.file_name;
+                    delete normalized.file_name;
+                  }
+                  if (
+                    normalized.filename === undefined &&
                     normalized.file_path !== undefined
                   ) {
-                    normalized.file_name = normalized.file_path;
+                    normalized.filename = normalized.file_path;
                     delete normalized.file_path;
                   }
                 } else if (normalized.action === 'write_file') {
@@ -624,14 +664,17 @@ export class Agent {
                     normalized.filename = normalized.file_name;
                     delete normalized.file_name;
                   }
-                } else if (normalized.action === 'write_local_file') {
-                  // Normalize file parameter names for write_local_file action
+                } else if (
+                  normalized.action === 'write_local_file' ||
+                  normalized.action === 'replace_local_file_str'
+                ) {
+                  // Normalize file parameter names to 'filename'
                   if (
-                    normalized.file_name === undefined &&
-                    normalized.filename !== undefined
+                    normalized.filename === undefined &&
+                    normalized.file_name !== undefined
                   ) {
-                    normalized.file_name = normalized.filename;
-                    delete normalized.filename;
+                    normalized.filename = normalized.file_name;
+                    delete normalized.file_name;
                   }
                 } else if (normalized.action === 'wait') {
                   // Support { time: 5 } as seconds by default; convert to ms for value
@@ -751,9 +794,7 @@ export class Agent {
   ): Promise<ActionResult> {
     this.logger.debug('🌟 Executing action', {
       step: this.state.n_steps,
-      action: action.action,
-      selector: action.selector,
-      reasoning: action.reasoning,
+      ...action,
     });
 
     // Prefer Controller registry if provided
@@ -1122,6 +1163,43 @@ export class Agent {
     };
 
     this.history.push(historyEntry);
+  }
+
+  /**
+   * Determine if an action is likely to change the DOM
+   */
+  private isDOMChangingAction(action: Action): boolean {
+    const domChangingActions = new Set([
+      'click',
+      'click_element_by_index',
+      'type',
+      'key',
+      'submit',
+      'goto',
+      'goBack',
+      'goForward',
+      'reload',
+      'select',
+    ]);
+
+    // Actions that typically don't change DOM
+    const safActions = new Set([
+      'screenshot',
+      'wait',
+      'hover',
+      'scroll',
+      'done',
+      'read_file',
+      'write_file',
+    ]);
+
+    if (safActions.has(action.action)) {
+      return false;
+    }
+
+    return (
+      domChangingActions.has(action.action) || !safActions.has(action.action)
+    );
   }
 
   /**

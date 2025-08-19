@@ -1,4 +1,4 @@
-/* eslint-disable prettier/prettier */
+
 import { z } from 'zod';
 import type { Page } from 'playwright';
 import { action } from './decorators';
@@ -1180,7 +1180,7 @@ class FileActions {
     'write_local_file',
     'Write or append content to a file; extensions allowed: .md, .txt, .json, .csv, .pdf (PDF written as markdown)',
     z.object({
-      file_name: z.string().min(1),
+      filename: z.string().min(1),
       content: z.string().default(''),
       append: z.boolean().default(false),
     })
@@ -1188,10 +1188,10 @@ class FileActions {
   static async writeFile({
     params,
   }: {
-    params: { file_name: string; content: string; append: boolean };
+    params: { filename: string; content: string; append: boolean };
   }): Promise<ActionResult> {
     const allowed = ['.md', '.txt', '.json', '.csv', '.pdf'];
-    const ext = path.extname(params.file_name).toLowerCase();
+    const ext = path.extname(params.filename).toLowerCase();
     if (!allowed.includes(ext)) {
       return {
         success: false,
@@ -1199,7 +1199,7 @@ class FileActions {
         error: 'EXT_NOT_ALLOWED',
       };
     }
-    const filePath = path.resolve(process.cwd(), params.file_name);
+    const filePath = path.resolve(process.cwd(), params.filename);
     try {
       if (params.append) {
         await fs.mkdir(path.dirname(filePath), { recursive: true });
@@ -1222,7 +1222,7 @@ class FileActions {
     'replace_local_file_str',
     'Replace occurrences of old_str with new_str in a text file',
     z.object({
-      file_name: z.string().min(1),
+      filename: z.string().min(1),
       old_str: z.string(),
       new_str: z.string(),
     })
@@ -1230,10 +1230,10 @@ class FileActions {
   static async replaceFileStr({
     params,
   }: {
-    params: { file_name: string; old_str: string; new_str: string };
+    params: { filename: string; old_str: string; new_str: string };
   }): Promise<ActionResult> {
     try {
-      const filePath = path.resolve(process.cwd(), params.file_name);
+      const filePath = path.resolve(process.cwd(), params.filename);
       const content = await fs.readFile(filePath, 'utf-8');
       const replaced = content.split(params.old_str).join(params.new_str);
       await fs.writeFile(filePath, replaced, 'utf-8');
@@ -1250,15 +1250,15 @@ class FileActions {
   @action(
     'read_local_file',
     'Read a file from local filesystem',
-    z.object({ file_name: z.string().min(1) })
+    z.object({ filename: z.string().min(1) })
   )
   static async readFile({
     params,
   }: {
-    params: { file_name: string };
+    params: { filename: string };
   }): Promise<ActionResult> {
     try {
-      const filePath = path.resolve(process.cwd(), params.file_name);
+      const filePath = path.resolve(process.cwd(), params.filename);
       const content = await fs.readFile(filePath, 'utf-8');
       return { success: true, message: content };
     } catch (e) {

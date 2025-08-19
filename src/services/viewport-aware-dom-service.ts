@@ -45,6 +45,26 @@ export class ViewportAwareDOMService extends DOMService {
       'aria-expanded',
       'data-state',
       'aria-checked',
+      // Accessibility properties from ax_node (ordered by importance for automation)
+      'checked',
+      'selected',
+      'expanded',
+      'pressed',
+      'disabled',
+      // 'invalid',
+      'valuenow',
+      'keyshortcuts',
+      'haspopup',
+      'multiselectable',
+      // Less commonly needed (uncomment if required):
+      // 'readonly',
+      'required',
+      'valuetext',
+      'level',
+      'busy',
+      'live',
+      // Accessibility name (contains text content for StaticText elements)
+      'ax_name',
     ]
   ): string {
     // Collect elements separated by viewport status

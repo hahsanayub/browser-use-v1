@@ -11,6 +11,7 @@ import type {
 } from 'playwright';
 import { chromium } from 'playwright';
 import { DOMService } from '../services/dom-service';
+import { SmartDOMCache } from '../services/smart-dom-cache';
 import { ensureHealthyPage, withHealthCheck } from '../services/health-check';
 import type { PageView, DOMState } from '../types/dom';
 import type { BrowserSessionConfig } from '../types/browser';
@@ -124,6 +125,7 @@ export class BrowserSession {
   private browser?: PlaywrightBrowser;
   private context?: PlaywrightContext;
   private domService: DOMService;
+  private smartDOMCache: SmartDOMCache;
   private initialized = false;
   private currentPage?: Page;
   private humanCurrentPage?: Page;
@@ -180,6 +182,7 @@ export class BrowserSession {
     this.passedPage = options.page;
 
     this.domService = new DOMService();
+    this.smartDOMCache = new SmartDOMCache();
 
     // Set ownership based on what was passed in
     this._ownsResources = !options.browser && !options.context;
@@ -262,6 +265,7 @@ export class BrowserSession {
     this.logger.debug('State summary cached', {
       url: pageView.url,
       elements: selectorMap.size,
+      forceRefresh,
     });
 
     return this._cachedBrowserStateSummary;
@@ -359,15 +363,16 @@ export class BrowserSession {
     this._cachedBrowserStateSummary = null;
     this._cachedElementHashes = null;
     this.domService.clearCache();
+    this.smartDOMCache.invalidateCache();
     this.logger.debug('State cache invalidated');
   }
 
   /**
-   * Get DOM signature for change detection
+   * Get DOM signature for change detection with smart caching
    */
   async getDomSignature(): Promise<string> {
     const page = await this.getCurrentPage();
-    return await this.domService.getDomSignature(page);
+    return await this.smartDOMCache.getDomSignature(page);
   }
 
   /**

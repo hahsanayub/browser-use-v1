@@ -355,8 +355,11 @@ export class Controller {
     let page = this.browserContext.getActivePage();
     if (!page) page = await this.browserContext.newPage();
 
-    // Pre-signature
-    const beforeSig = await this.browserSession.getDomSignature();
+    // Smart DOM change detection - only check for potentially DOM-changing actions
+    const isDOMChangingAction = this.isDOMChangingAction(actionName);
+    const beforeSig = isDOMChangingAction
+      ? await this.browserSession.getDomSignature()
+      : null;
 
     const result = await action.execute({
       params: validatedParams,
@@ -369,17 +372,63 @@ export class Controller {
       },
     });
 
-    // Post-signature and cache invalidation if changed
-    try {
-      const afterSig = await this.browserSession.getDomSignature();
-      if (beforeSig !== afterSig) {
-        this.browserSession.invalidateCache();
+    // Post-signature and cache invalidation if changed (only for DOM-changing actions)
+    if (isDOMChangingAction && beforeSig) {
+      try {
+        const afterSig = await this.browserSession.getDomSignature();
+        if (beforeSig !== afterSig) {
+          this.browserSession.invalidateCache();
+          this.logger.debug('DOM changed after action, cache invalidated', {
+            actionName,
+          });
+        }
+      } catch {
+        // ignore signature check failures
       }
-    } catch {
-      // ignore signature check failures
     }
 
     return result;
+  }
+
+  /**
+   * Determine if an action is likely to change the DOM
+   */
+  private isDOMChangingAction(actionName: string): boolean {
+    const domChangingActions = new Set([
+      'click',
+      'click_element_by_index',
+      'type',
+      'input_text',
+      'key',
+      'submit',
+      'goto',
+      'goBack',
+      'goForward',
+      'reload',
+      'select',
+      'upload_file',
+    ]);
+
+    // Actions that typically don't change DOM
+    const safeActions = new Set([
+      'screenshot',
+      'wait',
+      'hover',
+      'scroll',
+      'done',
+      'read_file',
+      'write_file',
+      'read_local_file',
+      'write_local_file',
+      'replace_local_file_str',
+      'get_url',
+    ]);
+
+    if (safeActions.has(actionName)) {
+      return false;
+    }
+
+    return domChangingActions.has(actionName) || !safeActions.has(actionName);
   }
 
   /**
