@@ -209,8 +209,8 @@ export class Agent {
   /**
    * Build user message with multimodal content (text + screenshots)
    */
-  private buildUserMessage(objective: string, pageView: PageView): LLMMessage {
-    const textContent = generatePageContextPrompt(
+  private async buildUserMessage(objective: string, pageView: PageView): Promise<LLMMessage> {
+    const textContent = await generatePageContextPrompt(
       objective,
       pageView,
       this.history,
@@ -579,7 +579,7 @@ export class Agent {
             ? `\n\n## Additional Instructions:\n${this.config.customInstructions}`
             : ''),
       },
-      this.buildUserMessage(objective, pageView),
+      await this.buildUserMessage(objective, pageView),
     ];
 
     this.state.last_messages = messages;
@@ -1042,7 +1042,7 @@ export class Agent {
       },
       {
         role: 'user',
-        content: generatePageContextPrompt(
+        content: await generatePageContextPrompt(
           objective,
           pageView,
           this.history,

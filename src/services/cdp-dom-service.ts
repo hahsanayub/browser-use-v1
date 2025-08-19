@@ -202,7 +202,7 @@ export class CDPDOMService {
 
         // Process the snapshot data
         const domState = await this.processSnapshotToDOMState(
-          snapshot as CDPDOMSnapshot,
+          snapshot as any, // Type assertion to handle CDP interface variations
           document,
           viewportMetrics,
           options
@@ -234,7 +234,7 @@ export class CDPDOMService {
    * Process CDP snapshot data into DOMState format
    */
   private async processSnapshotToDOMState(
-    snapshot: CDPDOMSnapshot,
+    snapshot: any, // Use any to handle CDP interface variations
     document: any,
     viewportMetrics: any,
     options: DOMProcessingOptions

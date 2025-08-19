@@ -2,7 +2,7 @@
  * System prompts and prompt templates for the AI agent
  */
 import { readFile } from 'node:fs/promises';
-import { PageView } from '../types/dom';
+import { PageView, DOMElementNode, DOMBaseNode, DOMTextNode } from '../types/dom';
 import { DOMService } from '../services/dom-service';
 import {
   ViewportAwareDOMService,
@@ -182,9 +182,49 @@ ${elementsText}
 }
 
 /**
+ * Fallback method to convert elementTree to string when DOM service fails
+ */
+function fallbackElementTreeToString(elementTree: DOMElementNode): string {
+  let result = '';
+
+  function traverse(node: DOMBaseNode, depth: number = 0): void {
+    const indent = '  '.repeat(depth);
+
+    if (node.type === 'TEXT_NODE') {
+      const textNode = node as DOMTextNode;
+      if (textNode.text.trim()) {
+        result += `${indent}${textNode.text.trim()}\n`;
+      }
+      return;
+    }
+
+    const elementNode = node as DOMElementNode;
+    if (elementNode.isInteractive && elementNode.isVisible) {
+      const attrs = Object.entries(elementNode.attributes)
+        .map(([key, value]) => `${key}="${value}"`)
+        .join(' ');
+
+      const highlightInfo = elementNode.highlightIndex !== null
+        ? ` [${elementNode.highlightIndex}]`
+        : '';
+
+      result += `${indent}<${elementNode.tagName}${attrs ? ' ' + attrs : ''}>${highlightInfo}\n`;
+    }
+
+    // Traverse children
+    for (const child of elementNode.children) {
+      traverse(child, depth + 1);
+    }
+  }
+
+  traverse(elementTree);
+  return result;
+}
+
+/**
  * Generate a prompt for the current page context with viewport-aware DOM processing
  */
-export function generatePageContextPrompt(
+export async function generatePageContextPrompt(
   objective: string,
   pageView: PageView,
   history: Array<{
@@ -196,7 +236,7 @@ export function generatePageContextPrompt(
   fileSystem?: FileSystem | null,
   useViewportAware: boolean = true,
   viewportAwareOptions?: Partial<ViewportAwareOptions>
-): string {
+): Promise<string> {
   let interactiveElementsList: string;
   let truncatedText = '';
 
@@ -222,11 +262,20 @@ export function generatePageContextPrompt(
       truncatedText = ` (viewport-aware truncation applied)`;
     }
   } else if (pageView.domState?.elementTree) {
-    // Fallback to standard DOM service
+    // Fallback to standard DOM service - using placeholder page object
     const domService = new DOMService();
-    interactiveElementsList = domService.clickableElementsToString(
-      pageView.domState.elementTree
-    );
+    const placeholderPage = {
+      evaluate: () => Promise.resolve({}),
+      url: () => pageView.url || '',
+    } as any;
+
+    try {
+      const { html } = await domService.getEnhancedClickableElementsString(placeholderPage);
+      interactiveElementsList = html;
+    } catch (error) {
+      // Final fallback using elementTree directly
+      interactiveElementsList = fallbackElementTreeToString(pageView.domState.elementTree);
+    }
 
     // Apply simple length truncation for fallback
     if (interactiveElementsList.length > maxClickableElementsLength) {

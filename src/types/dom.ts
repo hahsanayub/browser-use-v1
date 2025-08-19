@@ -89,6 +89,8 @@ export interface DOMProcessingOptions {
   maxTextLength?: number;
   /** Whether to include hidden elements */
   includeHidden?: boolean;
+  /** Viewport expansion in pixels (-1 for all elements) */
+  viewportExpansion?: number;
 }
 
 /**

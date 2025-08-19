@@ -144,13 +144,16 @@ export class SmartDOMCache {
       const domState = pageView.domState;
       const signature = await this.fallbackService.getDomSignature(page, options);
 
-      // Cache the fallback result too
-      this.setCacheEntry(cacheKey, signature, domState);
+      // Only cache if we have a valid domState
+      if (domState) {
+        this.setCacheEntry(cacheKey, signature, domState);
+      }
 
       const endTime = performance.now();
       this.updatePerformanceStats(endTime - startTime);
 
-      return domState;
+      // Return domState or empty state if undefined
+      return domState || { elementTree: undefined, map: {}, selectorMap: {} };
     }
   }
 
