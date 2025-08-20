@@ -1,6 +1,5 @@
 /**
  * Clickable Element Detector - Enhanced detection of interactive elements
- * Based on Python version with comprehensive interactive element detection
  */
 
 import type { EnhancedDOMTreeNode, NodeType } from '../types/dom';

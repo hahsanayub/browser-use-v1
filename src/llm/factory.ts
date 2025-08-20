@@ -4,6 +4,7 @@
 
 import { BaseLLMClient } from './base-client';
 import { OpenAIClient } from './clients/openai-client';
+import { AzureOpenAIClient } from './clients/azure-client';
 import { AnthropicClient } from './clients/anthropic-client';
 import { OllamaClient } from './clients/ollama-client';
 import { GoogleClient } from './clients/google-client';
@@ -20,7 +21,12 @@ export function createLLMClient(config: LLMConfig): BaseLLMClient {
   // Only some providers require API keys. Ollama runs locally and does not.
   const providerRequiresApiKey = config.provider !== 'ollama';
   if (providerRequiresApiKey && !config.apiKey) {
-    throw new Error(`API key is required for ${config.provider} provider`);
+    // Azure can also use Azure AD token authentication
+    if (config.provider === 'azure' && (config.azureAdToken || config.azureEndpoint)) {
+      // Azure AD authentication is allowed
+    } else {
+      throw new Error(`API key is required for ${config.provider} provider`);
+    }
   }
 
   const clientConfig: LLMClientConfig = {
@@ -32,6 +38,11 @@ export function createLLMClient(config: LLMConfig): BaseLLMClient {
     organization: config.organization,
     project: config.project,
     serviceTier: config.serviceTier,
+    // Azure-specific configuration
+    azureEndpoint: config.azureEndpoint,
+    azureDeployment: config.azureDeployment,
+    apiVersion: config.apiVersion,
+    azureAdToken: config.azureAdToken,
     defaultOptions: {
       maxTokens: config.maxTokens,
       temperature: config.temperature,
@@ -50,6 +61,9 @@ export function createLLMClient(config: LLMConfig): BaseLLMClient {
   switch (config.provider) {
     case 'openai':
       return new OpenAIClient(clientConfig);
+
+    case 'azure':
+      return new AzureOpenAIClient(clientConfig);
 
     case 'anthropic':
       return new AnthropicClient(clientConfig);
@@ -87,8 +101,7 @@ export async function validateLLMConfig(config: LLMConfig): Promise<boolean> {
  * Get supported providers
  */
 export function getSupportedProviders(): string[] {
-  // Keep 'google' to match schema; although not implemented, it is a recognized option
-  return ['openai', 'anthropic', 'google', 'ollama', 'custom'];
+  return ['openai', 'azure', 'anthropic', 'google', 'ollama', 'custom'];
 }
 
 /**
@@ -97,6 +110,7 @@ export function getSupportedProviders(): string[] {
 export function getDefaultModels(): Record<string, string> {
   return {
     openai: 'gpt-3.5-turbo',
+    azure: 'gpt-3.5-turbo',
     anthropic: 'claude-3-sonnet-20240229',
     google: 'gemini-2.0-flash',
     ollama: 'llama3.1:8b',

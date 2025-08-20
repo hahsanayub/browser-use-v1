@@ -1,8 +1,6 @@
 /**
  * DOM Tree Serializer - Serializes enhanced DOM trees to string format for LLM consumption
- * Based on Python version with bounding box filtering and enhanced element detection
  */
-
 import { getLogger } from './logging';
 import { ClickableElementDetector } from './clickable-element-detector';
 import type {
@@ -15,6 +13,9 @@ import type {
   TimingInfo,
   DOMRect,
   NodeType,
+  DOMElementNode,
+  DOMBaseNode,
+  DOMTextNode,
 } from '../types/dom';
 
 const DISABLED_ELEMENTS = new Set([
@@ -25,6 +26,11 @@ const DISABLED_ELEMENTS = new Set([
   'link',
   'title',
 ]);
+
+export interface SimplifiedDOMOptions {
+  /** Maximum total length of the elements string */
+  maxTotalLength: number;
+}
 
 /**
  * Serializes enhanced DOM trees to string format.
@@ -758,4 +764,324 @@ export class DOMTreeSerializer {
     }
     return text;
   }
+
+  // ========== SIMPLIFIED SERIALIZATION METHODS (ViewportAwareDOMService compatibility) ==========
+
+  /**
+   * Create a type adapter to convert DOMElementNode to EnhancedDOMTreeNode
+   */
+  private static createTypeAdapter(node: DOMElementNode): EnhancedDOMTreeNode {
+    return {
+      nodeId: node.highlightIndex || 0,
+      backendNodeId: node.highlightIndex || 0,
+      nodeType: 1, // ELEMENT_NODE
+      nodeName: node.tagName.toUpperCase(),
+      tagName: node.tagName.toUpperCase(),
+      attributes: node.attributes,
+      children: [],
+      childrenAndShadowRoots: [],
+      isVisible: node.isVisible,
+      isActuallyScrollable: (node as any).isScrollable || false,
+      isScrollable: (node as any).isScrollable || false,
+      shouldShowScrollInfo: (node as any).shouldShowScrollInfo || false,
+      axNode: {
+        role: node.attributes?.role,
+        properties: Object.entries(node.attributes || {}).map(
+          ([name, value]) => ({
+            name,
+            value,
+          })
+        ),
+      },
+      snapShotNode: {
+        bounds: {
+          x: 0,
+          y: 0,
+          width: 0,
+          height: 0,
+        },
+      },
+    };
+  }
+
+  /**
+   * Generate simplified clickable elements string consistent with Python version
+   * This method provides compatibility with ViewportAwareDOMService
+   */
+  static clickableElementsToStringViewportAware(
+    elementTree: DOMElementNode,
+    options: SimplifiedDOMOptions = {
+      maxTotalLength: 40000,
+    },
+    includeAttributes: string[] = [
+      'title',
+      'type',
+      'checked',
+      'name',
+      'role',
+      'value',
+      'placeholder',
+      'data-date-format',
+      'alt',
+      'aria-label',
+      'aria-expanded',
+      'data-state',
+      'aria-checked',
+      'checked',
+      'selected',
+      'expanded',
+      'pressed',
+      'disabled',
+      'valuenow',
+      'keyshortcuts',
+      'haspopup',
+      'multiselectable',
+      'required',
+      'valuetext',
+      'level',
+      'busy',
+      'live',
+      'ax_name',
+    ]
+  ): string {
+    const logger = getLogger();
+    logger.debug('Simplified DOM processing', {
+      maxTotalLength: options.maxTotalLength,
+    });
+
+    // Generate tree-structured string similar to Python version
+    const result = this.serializeTreeSimplified(
+      elementTree,
+      includeAttributes,
+      0
+    );
+
+    // Apply length limiting if needed
+    let finalResult = result;
+    if (result.length > options.maxTotalLength) {
+      finalResult = result.substring(0, options.maxTotalLength);
+      const lastNewlineIndex = finalResult.lastIndexOf('\n');
+      if (lastNewlineIndex > 0) {
+        finalResult = finalResult.substring(0, lastNewlineIndex);
+      }
+      finalResult += '\n... (truncated to fit length limit)';
+    }
+
+    logger.debug('Generated simplified DOM string', {
+      totalLength: finalResult.length,
+      truncated: finalResult.length < result.length,
+    });
+
+    return finalResult;
+  }
+
+  /**
+   * Serialize DOM tree to string format for simplified mode, similar to Python version
+   */
+  private static serializeTreeSimplified(
+    node: DOMBaseNode | null,
+    includeAttributes: string[],
+    depth: number = 0
+  ): string {
+    if (!node) {
+      return '';
+    }
+
+    const formattedText: string[] = [];
+    const depthStr = '\t'.repeat(depth);
+    let nextDepth = depth;
+
+    if (node.type !== 'TEXT_NODE') {
+      const elementNode = node as DOMElementNode;
+
+      // Check if this is a scrollable element
+      const isScrollable = (elementNode as any).isScrollable || false;
+      const shouldShowScrollInfo =
+        (elementNode as any).shouldShowScrollInfo || false;
+      const isInteractive = elementNode.highlightIndex !== null;
+
+      // Show element if interactive, scrollable, or iframe
+      if (
+        isInteractive ||
+        isScrollable ||
+        elementNode.tagName.toUpperCase() === 'IFRAME'
+      ) {
+        nextDepth += 1;
+
+        // Build attributes string
+        const attributesStr = this.buildAttributesStringSimplified(
+          elementNode,
+          includeAttributes
+        );
+
+        // Build the line based on element type
+        let line = '';
+        if (shouldShowScrollInfo && !isInteractive) {
+          // Scrollable container but not clickable
+          line = `${depthStr}|SCROLL|<${elementNode.tagName}`;
+        } else if (isInteractive) {
+          // Interactive (and possibly scrollable)
+          const newPrefix = (elementNode as any).isNew ? '*' : '';
+          const scrollPrefix = shouldShowScrollInfo ? '|SCROLL+' : '[';
+          line = `${depthStr}${newPrefix}${scrollPrefix}${elementNode.highlightIndex}]<${elementNode.tagName}`;
+        } else if (elementNode.tagName.toUpperCase() === 'IFRAME') {
+          // Iframe element (not interactive)
+          line = `${depthStr}|IFRAME|<${elementNode.tagName}`;
+        } else {
+          line = `${depthStr}<${elementNode.tagName}`;
+        }
+
+        if (attributesStr) {
+          line += ` ${attributesStr}`;
+        }
+
+        line += ' />';
+
+        // Add scroll information if needed
+        if (shouldShowScrollInfo) {
+          const scrollInfoText = this.getScrollInfoTextSimplified(elementNode);
+          if (scrollInfoText) {
+            line += ` (${scrollInfoText})`;
+          }
+        }
+
+        formattedText.push(line);
+      }
+
+      // Process children
+      for (const child of elementNode.children) {
+        const childText = this.serializeTreeSimplified(
+          child,
+          includeAttributes,
+          nextDepth
+        );
+        if (childText) {
+          formattedText.push(childText);
+        }
+      }
+    } else {
+      // Handle text nodes
+      const textNode = node as DOMTextNode;
+      if (
+        textNode.isVisible &&
+        textNode.text &&
+        textNode.text.trim() &&
+        textNode.text.trim().length > 1
+      ) {
+        const cleanText = textNode.text.trim();
+        formattedText.push(`${depthStr}${cleanText}`);
+      }
+    }
+
+    return formattedText.join('\n');
+  }
+
+  /**
+   * Build attributes string for an element (simplified version)
+   */
+  private static buildAttributesStringSimplified(
+    element: DOMElementNode,
+    includeAttributes: string[]
+  ): string {
+    const attrs: string[] = [];
+
+    for (const attr of includeAttributes) {
+      const value = element.attributes[attr];
+      if (value && value.trim() !== '') {
+        const truncatedValue = this.truncateTextSimplified(value.trim(), 50);
+        attrs.push(`${attr}="${truncatedValue}"`);
+      }
+    }
+
+    return attrs.join(' ');
+  }
+
+  /**
+   * Get scroll info text for an element (simplified version)
+   */
+  private static getScrollInfoTextSimplified(element: DOMElementNode): string {
+    const scrollInfo = (element as any).scrollInfo;
+    if (!scrollInfo) {
+      return element.tagName.toLowerCase() === 'iframe' ? 'scroll' : '';
+    }
+
+    // Return simple scroll info for now
+    return 'scroll';
+  }
+
+  /**
+   * Truncate text with ellipsis (simplified version)
+   */
+  private static truncateTextSimplified(
+    text: string,
+    maxLength: number
+  ): string {
+    if (text.length > maxLength) {
+      return text.substring(0, maxLength) + '...';
+    }
+    return text;
+  }
+}
+
+// ========== COMPATIBILITY LAYER FOR ViewportAwareDOMService ==========
+
+/**
+ * Compatibility class to provide the same interface as ViewportAwareDOMService
+ * This delegates to the static methods in DOMTreeSerializer
+ */
+export class ViewportAwareDOMService {
+  private domLogger = getLogger();
+
+  /**
+   * Generate simplified clickable elements string consistent with Python version
+   */
+  clickableElementsToStringViewportAware(
+    elementTree: DOMElementNode,
+    options: SimplifiedDOMOptions = {
+      maxTotalLength: 40000,
+    },
+    includeAttributes: string[] = [
+      'title',
+      'type',
+      'checked',
+      'name',
+      'role',
+      'value',
+      'placeholder',
+      'data-date-format',
+      'alt',
+      'aria-label',
+      'aria-expanded',
+      'data-state',
+      'aria-checked',
+      'checked',
+      'selected',
+      'expanded',
+      'pressed',
+      'disabled',
+      'valuenow',
+      'keyshortcuts',
+      'haspopup',
+      'multiselectable',
+      'required',
+      'valuetext',
+      'level',
+      'busy',
+      'live',
+      'ax_name',
+    ]
+  ): string {
+    return DOMTreeSerializer.clickableElementsToStringViewportAware(
+      elementTree,
+      options,
+      includeAttributes
+    );
+  }
+}
+
+/**
+ * Create simplified DOM service instance (compatibility function)
+ */
+export function createViewportAwareDOMService(): ViewportAwareDOMService {
+  return new ViewportAwareDOMService();
 }

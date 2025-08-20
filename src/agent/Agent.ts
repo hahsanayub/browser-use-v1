@@ -679,6 +679,49 @@ export class Agent {
                     normalized.filename = normalized.file_name;
                     delete normalized.file_name;
                   }
+                } else if (normalized.action === 'replace_file_str') {
+                  // Normalize filename
+                  if (normalized.filename === undefined && normalized.file_name !== undefined) {
+                    normalized.filename = normalized.file_name;
+                    delete normalized.file_name;
+                  }
+                  // Normalize old_str from common LLM variants
+                  if (normalized.old_str === undefined && normalized.str_to_replace !== undefined) {
+                    normalized.old_str = normalized.str_to_replace;
+                    delete normalized.str_to_replace;
+                  }
+                  // Normalize new_str from common LLM variants
+                  if (normalized.new_str === undefined && normalized.replacement_str !== undefined) {
+                    normalized.new_str = normalized.replacement_str;
+                    delete normalized.replacement_str;
+                  }
+                } else if (normalized.action === 'replace_local_file_str') {
+                  // Normalize filename
+                  if (normalized.filename === undefined && normalized.file_name !== undefined) {
+                    normalized.filename = normalized.file_name;
+                    delete normalized.file_name;
+                  }
+                  // Normalize old_str from common LLM variants
+                  if (normalized.old_str === undefined && normalized.str_to_replace !== undefined) {
+                    normalized.old_str = normalized.str_to_replace;
+                    delete normalized.str_to_replace;
+                  }
+                  // Normalize new_str from common LLM variants
+                  if (normalized.new_str === undefined && normalized.replacement_str !== undefined) {
+                    normalized.new_str = normalized.replacement_str;
+                    delete normalized.replacement_str;
+                  }
+                } else if (normalized.action === 'extract_structured_data') {
+                  // Remove non-existent parameters that LLMs sometimes hallucinate
+                  if (normalized.save_to_file !== undefined) {
+                    delete normalized.save_to_file;
+                  }
+                  if (normalized.file_name !== undefined) {
+                    delete normalized.file_name;
+                  }
+                  if (normalized.filename !== undefined) {
+                    delete normalized.filename;
+                  }
                 } else if (normalized.action === 'wait') {
                   // Support { time: 5 } as seconds by default; convert to ms for value
                   if (
@@ -1081,6 +1124,49 @@ export class Agent {
                   ) {
                     normalized.keys = (normalized as any).key;
                     delete (normalized as any).key;
+                  }
+                } else if (normalized.action === 'replace_file_str') {
+                  // Normalize filename
+                  if (normalized.filename === undefined && normalized.file_name !== undefined) {
+                    normalized.filename = normalized.file_name;
+                    delete normalized.file_name;
+                  }
+                  // Normalize old_str from common LLM variants
+                  if (normalized.old_str === undefined && normalized.str_to_replace !== undefined) {
+                    normalized.old_str = normalized.str_to_replace;
+                    delete normalized.str_to_replace;
+                  }
+                  // Normalize new_str from common LLM variants
+                  if (normalized.new_str === undefined && normalized.replacement_str !== undefined) {
+                    normalized.new_str = normalized.replacement_str;
+                    delete normalized.replacement_str;
+                  }
+                } else if (normalized.action === 'replace_local_file_str') {
+                  // Normalize filename
+                  if (normalized.filename === undefined && normalized.file_name !== undefined) {
+                    normalized.filename = normalized.file_name;
+                    delete normalized.file_name;
+                  }
+                  // Normalize old_str from common LLM variants
+                  if (normalized.old_str === undefined && normalized.str_to_replace !== undefined) {
+                    normalized.old_str = normalized.str_to_replace;
+                    delete normalized.str_to_replace;
+                  }
+                  // Normalize new_str from common LLM variants
+                  if (normalized.new_str === undefined && normalized.replacement_str !== undefined) {
+                    normalized.new_str = normalized.replacement_str;
+                    delete normalized.replacement_str;
+                  }
+                } else if (normalized.action === 'extract_structured_data') {
+                  // Remove non-existent parameters that LLMs sometimes hallucinate
+                  if (normalized.save_to_file !== undefined) {
+                    delete normalized.save_to_file;
+                  }
+                  if (normalized.file_name !== undefined) {
+                    delete normalized.file_name;
+                  }
+                  if (normalized.filename !== undefined) {
+                    delete normalized.filename;
                   }
                 } else if (normalized.action === 'wait') {
                   if (

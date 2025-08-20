@@ -124,4 +124,14 @@ export interface LLMClientConfig {
   project?: string;
   /** Default service tier (OpenAI) */
   serviceTier?: 'auto' | 'default' | 'flex' | 'priority' | 'scale';
+  /** Azure OpenAI endpoint URL */
+  azureEndpoint?: string;
+  /** Azure OpenAI deployment name */
+  azureDeployment?: string;
+  /** Azure API version */
+  apiVersion?: string;
+  /** Azure AD token for authentication */
+  azureAdToken?: string;
+  /** Azure AD token provider function */
+  azureAdTokenProvider?: () => Promise<string>;
 }

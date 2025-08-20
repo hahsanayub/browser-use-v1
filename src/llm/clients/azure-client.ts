@@ -1,8 +1,8 @@
 /**
- * OpenAI LLM client implementation using official OpenAI SDK
+ * Azure OpenAI LLM client implementation using official OpenAI SDK
  */
 
-import OpenAI from 'openai';
+import OpenAI, { AzureOpenAI } from 'openai';
 import { BaseLLMClient } from '../base-client';
 import type {
   LLMMessage,
@@ -11,36 +11,77 @@ import type {
   LLMClientConfig,
 } from '../../types/llm';
 
+interface AzureConfig extends LLMClientConfig {
+  /** Azure OpenAI endpoint URL */
+  azureEndpoint?: string;
+  /** Azure OpenAI deployment name */
+  azureDeployment?: string;
+  /** Azure API version */
+  apiVersion?: string;
+  /** Azure AD token for authentication */
+  azureAdToken?: string;
+  /** Azure AD token provider function */
+  azureAdTokenProvider?: () => Promise<string>;
+}
+
 type OpenAIMessage = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 
 /**
- * OpenAI LLM client implementation using official OpenAI SDK
+ * Azure OpenAI LLM client implementation using official OpenAI SDK
  */
-export class OpenAIClient extends BaseLLMClient {
-  private openai: OpenAI;
+export class AzureOpenAIClient extends BaseLLMClient {
+  private azure: AzureOpenAI;
+  private azureConfig: AzureConfig;
 
-  constructor(config: LLMClientConfig) {
+  constructor(config: AzureConfig) {
     super(config);
+    this.azureConfig = config;
 
-    this.openai = new OpenAI({
-      apiKey: config.apiKey,
-      baseURL: config.baseUrl,
+    // Get configuration from environment variables if not provided
+    const azureEndpoint =
+      config.azureEndpoint || process.env.AZURE_OPENAI_ENDPOINT;
+    const azureDeployment =
+      config.azureDeployment || process.env.AZURE_OPENAI_DEPLOYMENT;
+    const apiKey = config.apiKey || process.env.AZURE_OPENAI_API_KEY;
+    const apiVersion = config.apiVersion || '2024-12-01-preview';
+
+    if (!azureEndpoint) {
+      throw new Error(
+        'Azure endpoint is required. Set azureEndpoint in config or AZURE_OPENAI_ENDPOINT environment variable.'
+      );
+    }
+
+    if (!azureDeployment) {
+      throw new Error(
+        'Azure deployment is required. Set azureDeployment in config or AZURE_OPENAI_DEPLOYMENT environment variable.'
+      );
+    }
+
+    if (!apiKey && !config.azureAdToken && !config.azureAdTokenProvider) {
+      throw new Error(
+        'Authentication is required. Provide apiKey, azureAdToken, or azureAdTokenProvider.'
+      );
+    }
+
+    this.azure = new AzureOpenAI({
+      apiKey: apiKey,
+      endpoint: azureEndpoint,
+      apiVersion: apiVersion,
+      deployment: azureDeployment,
       timeout: config.timeout || 30000,
       maxRetries: config.maxRetries || 3,
-      defaultHeaders:
-        config.organization || config.project
-          ? {
-              ...(config.organization && {
-                'OpenAI-Organization': config.organization,
-              }),
-              ...(config.project && { 'OpenAI-Project': config.project }),
-            }
-          : undefined,
+      azureADTokenProvider: config.azureAdTokenProvider,
+      defaultHeaders: config.organization || config.project ? {
+        ...(config.organization && {
+          'OpenAI-Organization': config.organization,
+        }),
+        ...(config.project && { 'OpenAI-Project': config.project }),
+      } : undefined,
     });
   }
 
   /**
-   * Generate response using OpenAI API
+   * Generate response using Azure OpenAI API
    */
   async generateResponse(
     messages: LLMMessage[],
@@ -52,7 +93,7 @@ export class OpenAIClient extends BaseLLMClient {
     const startTime = Date.now();
 
     try {
-      this.logger.debug('Sending request to OpenAI', {
+      this.logger.debug('Sending request to Azure OpenAI', {
         model: this.config.model,
         messageCount: messages.length,
         options: requestOptions,
@@ -76,7 +117,7 @@ export class OpenAIClient extends BaseLLMClient {
           stream: requestOptions.stream,
         };
 
-      // Service tier
+      // Service tier (Azure may support this in the future)
       const serviceTier = requestOptions.serviceTier || this.config.serviceTier;
       if (serviceTier) {
         (requestParams as any).service_tier = serviceTier;
@@ -113,14 +154,16 @@ export class OpenAIClient extends BaseLLMClient {
         openAIMessages.length > 0 &&
         openAIMessages[0].role === 'system'
       ) {
-        const schemaText = `\n<json_schema>\n${JSON.stringify(requestOptions.responseFormat.schema)}\n</json_schema>`;
+        const schemaText = `\n<json_schema>\n${JSON.stringify(
+          requestOptions.responseFormat.schema
+        )}\n</json_schema>`;
         if (typeof openAIMessages[0].content === 'string') {
           openAIMessages[0].content = `${openAIMessages[0].content}${schemaText}`;
         }
       }
 
       const openAIResponse =
-        await this.openai.chat.completions.create(requestParams);
+        await this.azure.chat.completions.create(requestParams);
       const requestTime = Date.now() - startTime;
 
       // Ensure we have a non-stream response
@@ -129,11 +172,12 @@ export class OpenAIClient extends BaseLLMClient {
       }
 
       if (!openAIResponse.choices || openAIResponse.choices.length === 0) {
-        throw new Error('No response choices returned from OpenAI');
+        throw new Error('No response choices returned from Azure OpenAI');
       }
 
       const choice = openAIResponse.choices[0];
       const usage = openAIResponse.usage;
+
       const llmResponse: LLMResponse = {
         content: choice.message.content || '',
         usage: usage
@@ -162,13 +206,13 @@ export class OpenAIClient extends BaseLLMClient {
       return llmResponse;
     } catch (error: any) {
       if (error.status === 401) {
-        throw this.handleError(error, 'Invalid API key');
+        throw this.handleError(error, 'Invalid API key or authentication');
       } else if (error.status === 429) {
         throw this.handleError(error, 'Rate limit exceeded');
       } else if (error.status === 400) {
         throw this.handleError(error, 'Invalid request format');
       } else {
-        throw this.handleError(error, 'API request failed');
+        throw this.handleError(error, 'Azure OpenAI API request failed');
       }
     }
   }
@@ -213,11 +257,11 @@ export class OpenAIClient extends BaseLLMClient {
   }
 
   /**
-   * Validate OpenAI client configuration
+   * Validate Azure OpenAI client configuration
    */
   async validateConfig(): Promise<boolean> {
     try {
-      this.logger.debug('Validating OpenAI configuration');
+      this.logger.debug('Validating Azure OpenAI configuration');
 
       // Test with a simple request
       const testMessages: LLMMessage[] = [{ role: 'user', content: 'Hello' }];
@@ -227,11 +271,11 @@ export class OpenAIClient extends BaseLLMClient {
         temperature: 0,
       });
 
-      this.logger.info('OpenAI client configuration validated successfully');
+      this.logger.info('Azure OpenAI client configuration validated successfully');
       return true;
     } catch (error) {
       this.logger.error(
-        'OpenAI client configuration validation failed',
+        'Azure OpenAI client configuration validation failed',
         error as Error
       );
       return false;
@@ -239,19 +283,25 @@ export class OpenAIClient extends BaseLLMClient {
   }
 
   /**
-   * Get supported models
+   * Get supported models from Azure deployment
    */
   async getSupportedModels(): Promise<string[]> {
     try {
-      const response = await this.openai.models.list();
-      return response.data
-        .filter((model) => model.id.includes('gpt'))
-        .map((model) => model.id);
+      // Azure typically uses deployment names, so we return the configured model
+      // In a real scenario, you might want to query the Azure Management API
+      return [this.config.model];
     } catch (error) {
       this.logger.warn('Failed to fetch supported models', {
         error: (error as Error).message,
       });
-      return ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo'];
+      return [this.config.model];
     }
+  }
+
+  /**
+   * Get the provider name
+   */
+  get provider(): string {
+    return 'azure';
   }
 }

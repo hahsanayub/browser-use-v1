@@ -1,8 +1,6 @@
 /**
  * CDP-based DOM Service for high-performance DOM state capture
- * Mirrors the Python version's approach using Chrome DevTools Protocol
  */
-
 import { Page } from 'playwright';
 import type { CDPSession } from 'playwright';
 import { getLogger } from './logging';
@@ -14,7 +12,6 @@ import type {
 } from '../types/dom';
 
 // Essential computed styles for interactivity and visibility detection
-// Matches Python version's REQUIRED_COMPUTED_STYLES
 const REQUIRED_COMPUTED_STYLES = [
   // Essential for visibility
   'display',
@@ -88,6 +85,20 @@ interface EnhancedDOMNode {
   computedStyles?: Record<string, string>;
   isClickable?: boolean;
   cursorStyle?: string;
+  // Scroll-related properties
+  isScrollable?: boolean;
+  isActuallyScrollable?: boolean;
+  shouldShowScrollInfo?: boolean;
+  scrollInfo?: {
+    scrollRects?: number[];
+    clientRects?: number[];
+    scrollHeight?: number;
+    scrollWidth?: number;
+    clientHeight?: number;
+    clientWidth?: number;
+    scrollTop?: number;
+    scrollLeft?: number;
+  };
 }
 
 /**
@@ -285,6 +296,8 @@ export class CDPDOMService {
           bounds?: number[];
           styles?: number[];
           paintOrder?: number;
+          scrollRects?: number[];
+          clientRects?: number[];
         }
       >();
 
@@ -294,6 +307,8 @@ export class CDPDOMService {
           bounds: layout.bounds?.[i],
           styles: layout.styles?.[i],
           paintOrder: layout.paintOrders?.[i],
+          scrollRects: layout.scrollRects?.[i],
+          clientRects: layout.clientRects?.[i],
         });
       }
 
@@ -354,6 +369,23 @@ export class CDPDOMService {
           computedStyles,
           isClickable
         );
+        // Calculate scroll properties
+        const scrollRects = layoutData?.scrollRects;
+        const clientRects = layoutData?.clientRects;
+        const isScrollable =
+          scrollRects &&
+          clientRects &&
+          (scrollRects[3] > clientRects[3] || scrollRects[2] > clientRects[2]); // Basic scroll detection
+        const isActuallyScrollable = this.calculateIsScrollable(
+          scrollRects,
+          clientRects,
+          computedStyles
+        );
+        const shouldShowScrollInfo = this.calculateShouldShowScrollInfo(
+          tagName,
+          isScrollable || false,
+          isActuallyScrollable
+        );
 
         // Generate XPath
         const xpath = this.generateXPath(nodeIndex, nodes, nodeIndex);
@@ -383,11 +415,29 @@ export class CDPDOMService {
           computedStyles,
           isClickable,
           cursorStyle: computedStyles.cursor,
+          // Scroll properties
+          isScrollable: isScrollable || false,
+          isActuallyScrollable,
+          shouldShowScrollInfo,
+          scrollInfo:
+            scrollRects && clientRects
+              ? {
+                  scrollRects,
+                  clientRects,
+                  scrollHeight: scrollRects[3],
+                  scrollWidth: scrollRects[2],
+                  clientHeight: clientRects[3],
+                  clientWidth: clientRects[2],
+                  scrollTop: 0, // CDP doesn't provide current scroll position
+                  scrollLeft: 0, // CDP doesn't provide current scroll position
+                }
+              : undefined,
         };
 
-        // Assign highlight index for interactive and visible elements
+        // Assign highlight index for interactive and visible elements, OR scrollable elements
+        // where scrollable elements need indices for scroll actions
         if (
-          isInteractive &&
+          (isInteractive || shouldShowScrollInfo) &&
           isVisible &&
           (enhancedNode.isInViewport || options.viewportExpansion === -1)
         ) {
@@ -413,6 +463,11 @@ export class CDPDOMService {
         isInViewport: node.isInViewport,
         highlightIndex: node.highlightIndex,
         bounds: node.bounds,
+        // Include scroll properties for compatibility with existing adapters
+        isScrollable: node.isScrollable,
+        isActuallyScrollable: node.isActuallyScrollable,
+        shouldShowScrollInfo: node.shouldShowScrollInfo,
+        scrollInfo: node.scrollInfo,
       };
     }
 
@@ -606,5 +661,111 @@ export class CDPDOMService {
   setCacheTimeout(timeout: number): void {
     this.cacheTimeout = timeout;
     this.logger.debug('CDP DOM cache timeout updated', { timeout });
+  }
+
+  /**
+   * Calculate if element is scrollable based on scroll/client rects and CSS
+   */
+  private calculateIsScrollable(
+    scrollRects: number[] | undefined,
+    clientRects: number[] | undefined,
+    computedStyles: Record<string, string>
+  ): boolean {
+    if (
+      !scrollRects ||
+      !clientRects ||
+      scrollRects.length < 4 ||
+      clientRects.length < 4
+    ) {
+      return false;
+    }
+
+    // Check if content is larger than visible area
+    // scrollRects format: [x, y, width, height]
+    // clientRects format: [x, y, width, height]
+    const hasVerticalScroll = scrollRects[3] > clientRects[3] + 1; // height (+1 for rounding)
+    const hasHorizontalScroll = scrollRects[2] > clientRects[2] + 1; // width (+1 for rounding)
+
+    if (!hasVerticalScroll && !hasHorizontalScroll) {
+      return false;
+    }
+
+    // Check CSS overflow properties
+    const overflow = computedStyles.overflow?.toLowerCase() || 'visible';
+    const overflowX = computedStyles['overflow-x']?.toLowerCase() || overflow;
+    const overflowY = computedStyles['overflow-y']?.toLowerCase() || overflow;
+
+    // Only allow scrolling if overflow is explicitly set to auto, scroll, or overlay
+    const allowsScroll =
+      ['auto', 'scroll', 'overlay'].includes(overflow) ||
+      ['auto', 'scroll', 'overlay'].includes(overflowX) ||
+      ['auto', 'scroll', 'overlay'].includes(overflowY);
+
+    return allowsScroll;
+  }
+
+  /**
+   * Calculate if element should show scroll info
+   */
+  private calculateShouldShowScrollInfo(
+    tagName: string,
+    isScrollable: boolean,
+    isActuallyScrollable: boolean
+  ): boolean {
+    // Special case for iframes (always show scroll info)
+    if (tagName.toLowerCase() === 'iframe') {
+      return true;
+    }
+
+    // Must be scrollable first for non-iframe elements
+    if (!isScrollable && !isActuallyScrollable) {
+      return false;
+    }
+
+    // Always show for body/html elements
+    if (['body', 'html'].includes(tagName.toLowerCase())) {
+      return true;
+    }
+
+    // TODO: Check parent scrollability to avoid nested scroll spam
+    // For now, show scroll info for all scrollable elements
+    return true;
+  }
+
+  /**
+   * Generate scroll info text similar
+   */
+  private generateScrollInfoText(
+    scrollRects: number[] | undefined,
+    clientRects: number[] | undefined,
+    tagName: string
+  ): string {
+    if (
+      !scrollRects ||
+      !clientRects ||
+      scrollRects.length < 4 ||
+      clientRects.length < 4
+    ) {
+      return tagName.toLowerCase() === 'iframe' ? 'scroll' : '';
+    }
+
+    const scrollHeight = scrollRects[3];
+    const clientHeight = clientRects[3];
+    const scrollableHeight = scrollHeight - clientHeight;
+
+    if (scrollableHeight <= 0) {
+      return '';
+    }
+
+    // Calculate pages above/below (assuming current scroll position is 0 for CDP data)
+    const scrollTop = 0; // CDP doesn't provide current scroll position
+    const pagesAbove = scrollTop / clientHeight;
+    const pagesBelow = (scrollableHeight - scrollTop) / clientHeight;
+    const scrollPercentage =
+      scrollableHeight > 0
+        ? Math.round((scrollTop / scrollableHeight) * 100)
+        : 0;
+
+    return `scroll: ${pagesAbove.toFixed(1)}↑ ${pagesBelow.toFixed(1)}↓ ${scrollPercentage}%`;
   }
 }

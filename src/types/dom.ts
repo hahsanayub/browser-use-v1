@@ -119,6 +119,10 @@ export interface DOMNode {
   shadowRoot?: boolean;
   text?: string;
   type?: string;
+  // Scroll-related properties (optional, used by enhanced serializers)
+  isActuallyScrollable?: boolean;
+  isScrollable?: boolean;
+  shouldShowScrollInfo?: boolean;
 }
 
 export type DOMResult = {

@@ -45,7 +45,7 @@ export const BrowserConfigSchema = z.object({
 // LLM configuration schema
 export const LLMConfigSchema = z.object({
   provider: z
-    .enum(['openai', 'anthropic', 'google', 'ollama', 'custom'])
+    .enum(['openai', 'azure', 'anthropic', 'google', 'ollama', 'custom'])
     .default('openai'),
   apiKey: z.string().optional(),
   model: z.string().default('gpt-3.5-turbo'),
@@ -63,6 +63,11 @@ export const LLMConfigSchema = z.object({
   organization: z.string().optional(),
   project: z.string().optional(),
   maxRetries: z.number().min(0).optional(),
+  // Azure-specific configuration
+  azureEndpoint: z.string().url().optional(),
+  azureDeployment: z.string().optional(),
+  apiVersion: z.string().optional(),
+  azureAdToken: z.string().optional(),
 });
 
 // Logging configuration schema

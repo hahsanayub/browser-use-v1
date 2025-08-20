@@ -11,8 +11,8 @@ import {
 import { DOMService } from '../services/dom-service';
 import {
   ViewportAwareDOMService,
-  ViewportAwareOptions,
-} from '../services/viewport-aware-dom-service';
+  SimplifiedDOMOptions,
+} from '../services/dom-tree-serializer';
 import { FileSystem } from '../services/file-system';
 
 /**
@@ -193,7 +193,7 @@ function fallbackElementTreeToString(elementTree: DOMElementNode): string {
   let result = '';
 
   function traverse(node: DOMBaseNode, depth: number = 0): void {
-    const indent = '  '.repeat(depth);
+    const indent = '\t'.repeat(depth);
 
     if (node.type === 'TEXT_NODE') {
       const textNode = node as DOMTextNode;
@@ -211,10 +211,10 @@ function fallbackElementTreeToString(elementTree: DOMElementNode): string {
 
       const highlightInfo =
         elementNode.highlightIndex !== null
-          ? ` [${elementNode.highlightIndex}]`
+          ? `[${elementNode.highlightIndex}]`
           : '';
 
-      result += `${indent}<${elementNode.tagName}${attrs ? ' ' + attrs : ''}>${highlightInfo}\n`;
+      result += `${indent}${highlightInfo}<${elementNode.tagName}${attrs ? ' ' + attrs : ''}>\n`;
     }
 
     // Traverse children
@@ -241,20 +241,18 @@ export async function generatePageContextPrompt(
   maxClickableElementsLength: number = 40000,
   fileSystem?: FileSystem | null,
   useViewportAware: boolean = true,
-  viewportAwareOptions?: Partial<ViewportAwareOptions>
+  simplifiedDOMOptions?: Partial<SimplifiedDOMOptions>
 ): Promise<string> {
   let interactiveElementsList: string;
   let truncatedText = '';
 
-  // Use viewport-aware DOM processing if available and enabled
+  // Use simplified DOM processing if available and enabled
   if (pageView.domState?.elementTree && useViewportAware) {
     const viewportAwareDOMService = new ViewportAwareDOMService();
 
-    const options: ViewportAwareOptions = {
+    const options: SimplifiedDOMOptions = {
       maxTotalLength: maxClickableElementsLength,
-      viewportPriorityRatio: 0.8, // 80% budget for viewport elements
-      includeOutsideViewport: true,
-      ...viewportAwareOptions,
+      ...simplifiedDOMOptions,
     };
 
     interactiveElementsList =
@@ -265,7 +263,7 @@ export async function generatePageContextPrompt(
 
     // Check if content was truncated based on length
     if (interactiveElementsList.length >= maxClickableElementsLength) {
-      truncatedText = ` (viewport-aware truncation applied)`;
+      truncatedText = ` (simplified truncation applied)`;
     }
   } else if (pageView.domState?.elementTree) {
     // Fallback to standard DOM service - using placeholder page object
@@ -279,7 +277,7 @@ export async function generatePageContextPrompt(
       const { html } =
         await domService.getEnhancedClickableElementsString(placeholderPage);
       interactiveElementsList = html;
-    } catch (error) {
+    } catch {
       // Final fallback using elementTree directly
       interactiveElementsList = fallbackElementTreeToString(
         pageView.domState.elementTree

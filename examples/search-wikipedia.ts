@@ -35,7 +35,7 @@ async function main() {
     await controller.goto('https://www.wikipedia.org/');
 
     const agentConfig: AgentConfig = {
-      useVision: true,
+      useVision: false,
       maxSteps: 10,
       actionTimeout: 15000,
       continueOnFailure: true,

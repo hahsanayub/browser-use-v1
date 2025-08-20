@@ -94,9 +94,9 @@ export class DOMTreeAdapter {
       children: [], // Will be populated in second pass
       childrenAndShadowRoots: [], // Will be populated in second pass
       isVisible: domNode.isVisible || false,
-      isActuallyScrollable: false,
-      isScrollable: false,
-      shouldShowScrollInfo: false,
+      isActuallyScrollable: domNode.isActuallyScrollable || false,
+      isScrollable: domNode.isScrollable || false,
+      shouldShowScrollInfo: domNode.shouldShowScrollInfo || false,
       elementIndex: domNode.highlightIndex,
       snapShotNode: this.createSnapshotNode(domNode),
       axNode: this.createAccessibilityNode(domNode),

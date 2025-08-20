@@ -394,8 +394,8 @@ export class DOMService {
           args: {
             doHighlightElements: true,
             // Expand viewport to include all to ensure highlightIndex stability
-            viewportExpansion: -1,
-            debugMode: false,
+            // viewportExpansion: -1,
+            // debugMode: false,
             ...options,
           },
         }
@@ -410,8 +410,8 @@ export class DOMService {
             script: this.buildDomTreeScript!,
             args: {
               doHighlightElements: true,
-              viewportExpansion: -1,
-              debugMode: false,
+              // viewportExpansion: -1,
+              // debugMode: false,
               ...options,
             },
           }

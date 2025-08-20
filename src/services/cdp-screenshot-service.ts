@@ -1,8 +1,6 @@
 /**
  * Enhanced screenshot service using Chrome DevTools Protocol (CDP)
- * Based on Python browser-use implementation for better performance
  */
-
 import { CDPSession, Page } from 'playwright';
 import { getLogger } from './logging';
 
