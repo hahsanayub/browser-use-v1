@@ -542,7 +542,60 @@ export class Agent {
   }
 
   /**
-   * Get the agent's thought process for the current situation
+   * Convert LLM response action format to Zod expected format
+   * LLM returns: [{"action_name": {"param": "value"}}]
+   * Zod expects: [{"action": "action_name", "param": "value"}]
+   */
+  private normalizeActionFormat(actionArray: any[]): any[] {
+    return actionArray.map((actionObj) => {
+      // Handle the case where action is a nested object like {"input_text": {"index": 21, "text": "TDD"}}
+      const actionKeys = Object.keys(actionObj);
+      if (actionKeys.length === 1) {
+        const actionName = actionKeys[0];
+        const actionParams = actionObj[actionName];
+
+        // If actionParams is an object, flatten it
+        if (typeof actionParams === 'object' && actionParams !== null) {
+          const normalizedParams = { ...actionParams };
+
+          // Handle parameter name mappings for specific actions
+          if (actionName === 'write_file' && normalizedParams.file_name) {
+            normalizedParams.filename = normalizedParams.file_name;
+            delete normalizedParams.file_name;
+          }
+          if (actionName === 'append_file' && normalizedParams.file_name) {
+            normalizedParams.filename = normalizedParams.file_name;
+            delete normalizedParams.file_name;
+          }
+          if (actionName === 'read_file' && normalizedParams.file_name) {
+            normalizedParams.filename = normalizedParams.file_name;
+            delete normalizedParams.file_name;
+          }
+          if (actionName === 'replace_file_str' && normalizedParams.file_name) {
+            normalizedParams.filename = normalizedParams.file_name;
+            delete normalizedParams.file_name;
+          }
+
+          return {
+            action: actionName,
+            ...normalizedParams,
+          };
+        }
+
+        // If actionParams is a primitive value, use it directly
+        return {
+          action: actionName,
+          value: actionParams,
+        };
+      }
+
+      // If it's already in the expected format, return as is
+      return actionObj;
+    });
+  }
+
+  /**
+   * Think about the current state and decide on next actions
    */
   private async think(
     objective: string,
@@ -603,7 +656,15 @@ export class Agent {
 
     let responseContent: string = 'none';
 
+    let thoughtData: AgentThought | null = null;
+
     try {
+      // Build dynamic schema for this page and validate
+      const dynamicActionSchema =
+        registry.buildDynamicActionSchemaForPage(activePage);
+      const AgentThoughtSchemaForStep =
+        createAgentThoughtSchema(dynamicActionSchema);
+
       const response = await this.llmClient.generateResponse(messages, {
         temperature: 0.1, // Low temperature for more consistent responses
         maxTokens: 2000,
@@ -611,169 +672,26 @@ export class Agent {
 
       responseContent = response.content;
 
-      // Parse JSON response safely
-      const thoughtData = JsonParser.parse(response.content);
+      // Parse and validate response using the dynamic schema (like Python version)
+      thoughtData = JsonParser.parse(response.content);
 
-      // Normalize action array if returned as keyed objects
-      if (Array.isArray((thoughtData as any).action)) {
-        (thoughtData as any).action = (thoughtData as any).action.map(
-          (item: any) => {
-            if (item && typeof item === 'object' && !('action' in item)) {
-              const entries = Object.entries(item);
-              if (entries.length === 1) {
-                const [name, params] = entries[0];
-                const normalized: any = {
-                  action: name,
-                  reasoning:
-                    'Auto-executed based on plan to progress toward goal.',
-                };
-                if (params && typeof params === 'object') {
-                  Object.assign(normalized, params);
-                }
-                // Alias normalization for known variants
-                if (normalized.action === 'send_keys') {
-                  if (
-                    normalized.keys === undefined &&
-                    typeof normalized.key === 'string'
-                  ) {
-                    normalized.keys = normalized.key;
-                    delete normalized.key;
-                  }
-                } else if (
-                  normalized.action === 'read_file' ||
-                  normalized.action === 'read_local_file'
-                ) {
-                  // Normalize file parameter names to 'filename'
-                  if (
-                    normalized.filename === undefined &&
-                    normalized.file_name !== undefined
-                  ) {
-                    normalized.filename = normalized.file_name;
-                    delete normalized.file_name;
-                  }
-                  if (
-                    normalized.filename === undefined &&
-                    normalized.file_path !== undefined
-                  ) {
-                    normalized.filename = normalized.file_path;
-                    delete normalized.file_path;
-                  }
-                } else if (normalized.action === 'write_file') {
-                  // Normalize file parameter names for write_file action
-                  if (
-                    normalized.filename === undefined &&
-                    normalized.file_name !== undefined
-                  ) {
-                    normalized.filename = normalized.file_name;
-                    delete normalized.file_name;
-                  }
-                } else if (
-                  normalized.action === 'write_local_file' ||
-                  normalized.action === 'replace_local_file_str'
-                ) {
-                  // Normalize file parameter names to 'filename'
-                  if (
-                    normalized.filename === undefined &&
-                    normalized.file_name !== undefined
-                  ) {
-                    normalized.filename = normalized.file_name;
-                    delete normalized.file_name;
-                  }
-                } else if (normalized.action === 'replace_file_str') {
-                  // Normalize filename
-                  if (normalized.filename === undefined && normalized.file_name !== undefined) {
-                    normalized.filename = normalized.file_name;
-                    delete normalized.file_name;
-                  }
-                  // Normalize old_str from common LLM variants
-                  if (normalized.old_str === undefined && normalized.str_to_replace !== undefined) {
-                    normalized.old_str = normalized.str_to_replace;
-                    delete normalized.str_to_replace;
-                  }
-                  // Normalize new_str from common LLM variants
-                  if (normalized.new_str === undefined && normalized.replacement_str !== undefined) {
-                    normalized.new_str = normalized.replacement_str;
-                    delete normalized.replacement_str;
-                  }
-                } else if (normalized.action === 'replace_local_file_str') {
-                  // Normalize filename
-                  if (normalized.filename === undefined && normalized.file_name !== undefined) {
-                    normalized.filename = normalized.file_name;
-                    delete normalized.file_name;
-                  }
-                  // Normalize old_str from common LLM variants
-                  if (normalized.old_str === undefined && normalized.str_to_replace !== undefined) {
-                    normalized.old_str = normalized.str_to_replace;
-                    delete normalized.str_to_replace;
-                  }
-                  // Normalize new_str from common LLM variants
-                  if (normalized.new_str === undefined && normalized.replacement_str !== undefined) {
-                    normalized.new_str = normalized.replacement_str;
-                    delete normalized.replacement_str;
-                  }
-                } else if (normalized.action === 'extract_structured_data') {
-                  // Remove non-existent parameters that LLMs sometimes hallucinate
-                  if (normalized.save_to_file !== undefined) {
-                    delete normalized.save_to_file;
-                  }
-                  if (normalized.file_name !== undefined) {
-                    delete normalized.file_name;
-                  }
-                  if (normalized.filename !== undefined) {
-                    delete normalized.filename;
-                  }
-                } else if (normalized.action === 'wait') {
-                  // Support { time: 5 } as seconds by default; convert to ms for value
-                  if (
-                    normalized.value === undefined &&
-                    normalized.time !== undefined
-                  ) {
-                    const t = normalized.time;
-                    if (typeof t === 'number') {
-                      normalized.value = t < 1000 ? t * 1000 : t;
-                    } else if (typeof t === 'string') {
-                      const num = Number(t);
-                      normalized.value = Number.isFinite(num)
-                        ? num < 1000
-                          ? num * 1000
-                          : num
-                        : t;
-                    }
-                    if (normalized.type === undefined) normalized.type = 'time';
-                    delete normalized.time;
-                  }
-                  // If mistakenly provided selector for wait, coerce to element wait
-                  if (
-                    normalized.value === undefined &&
-                    typeof normalized.selector === 'string'
-                  ) {
-                    normalized.type = normalized.type ?? 'element';
-                    normalized.value = normalized.selector;
-                  }
-                  // Handle empty wait object {} - provide default time wait
-                  if (
-                    normalized.value === undefined &&
-                    normalized.type === undefined
-                  ) {
-                    normalized.type = 'time';
-                    normalized.value = 2000; // Default to 2 seconds
-                  }
-                }
-                return normalized;
-              }
-            }
-            return item;
-          }
-        );
+      // Normalize action format from LLM response to Zod expected format
+      if (
+        thoughtData &&
+        thoughtData.action &&
+        Array.isArray(thoughtData.action)
+      ) {
+        thoughtData.action = this.normalizeActionFormat(thoughtData.action);
       }
-      // Build dynamic schema for this page and validate
-      const dynamicActionSchema =
-        registry.buildDynamicActionSchemaForPage(activePage);
-      const AgentThoughtSchemaForStep =
-        createAgentThoughtSchema(dynamicActionSchema);
+
       let thought = AgentThoughtSchemaForStep.parse(
         thoughtData
       ) as AgentThought;
+
+      // Cut the number of actions to max_actions_per_step if needed (like Python version)
+      if (thought.action.length > this.config.maxActionsPerStep!) {
+        thought.action = thought.action.slice(0, this.config.maxActionsPerStep);
+      }
 
       // Enforce dynamic action availability for each proposed action
       const filteredActions = thought.action.filter((a) =>
@@ -789,6 +707,9 @@ export class Agent {
         } as any);
       }
       thought = { ...thought, action: filteredActions } as AgentThought;
+
+      // Log next action summary (like Python version)
+      this.logNextActionSummary(thought);
 
       // Hook: after receiving model response (with normalized thought)
       if (this.config.onModelResponse) {
@@ -815,7 +736,7 @@ export class Agent {
 
       return thought;
     } catch (error) {
-      this.logger.debug(`Error Response Content:`, { responseContent });
+      this.logger.debug(`Error Response Content:`, { thoughtData });
       this.logger.error('Failed to get LLM response', error as Error);
 
       // Fallback minimal output: take a screenshot
@@ -1101,107 +1022,6 @@ export class Agent {
     try {
       const response = await this.llmClient.generateResponse(messages);
       const thoughtData = JsonParser.parse(response.content);
-      // Normalize potential keyed action objects
-      if (Array.isArray((thoughtData as any).action)) {
-        (thoughtData as any).action = (thoughtData as any).action.map(
-          (item: any) => {
-            if (item && typeof item === 'object' && !('action' in item)) {
-              const entries = Object.entries(item);
-              if (entries.length === 1) {
-                const [name, params] = entries[0];
-                const normalized: any = {
-                  action: name,
-                  reasoning: 'Auto-executed during recovery.',
-                };
-                if (params && typeof params === 'object') {
-                  Object.assign(normalized, params);
-                }
-                // Alias normalization for known variants in recovery too
-                if (normalized.action === 'send_keys') {
-                  if (
-                    normalized.keys === undefined &&
-                    typeof (normalized as any).key === 'string'
-                  ) {
-                    normalized.keys = (normalized as any).key;
-                    delete (normalized as any).key;
-                  }
-                } else if (normalized.action === 'replace_file_str') {
-                  // Normalize filename
-                  if (normalized.filename === undefined && normalized.file_name !== undefined) {
-                    normalized.filename = normalized.file_name;
-                    delete normalized.file_name;
-                  }
-                  // Normalize old_str from common LLM variants
-                  if (normalized.old_str === undefined && normalized.str_to_replace !== undefined) {
-                    normalized.old_str = normalized.str_to_replace;
-                    delete normalized.str_to_replace;
-                  }
-                  // Normalize new_str from common LLM variants
-                  if (normalized.new_str === undefined && normalized.replacement_str !== undefined) {
-                    normalized.new_str = normalized.replacement_str;
-                    delete normalized.replacement_str;
-                  }
-                } else if (normalized.action === 'replace_local_file_str') {
-                  // Normalize filename
-                  if (normalized.filename === undefined && normalized.file_name !== undefined) {
-                    normalized.filename = normalized.file_name;
-                    delete normalized.file_name;
-                  }
-                  // Normalize old_str from common LLM variants
-                  if (normalized.old_str === undefined && normalized.str_to_replace !== undefined) {
-                    normalized.old_str = normalized.str_to_replace;
-                    delete normalized.str_to_replace;
-                  }
-                  // Normalize new_str from common LLM variants
-                  if (normalized.new_str === undefined && normalized.replacement_str !== undefined) {
-                    normalized.new_str = normalized.replacement_str;
-                    delete normalized.replacement_str;
-                  }
-                } else if (normalized.action === 'extract_structured_data') {
-                  // Remove non-existent parameters that LLMs sometimes hallucinate
-                  if (normalized.save_to_file !== undefined) {
-                    delete normalized.save_to_file;
-                  }
-                  if (normalized.file_name !== undefined) {
-                    delete normalized.file_name;
-                  }
-                  if (normalized.filename !== undefined) {
-                    delete normalized.filename;
-                  }
-                } else if (normalized.action === 'wait') {
-                  if (
-                    normalized.value === undefined &&
-                    (normalized as any).time !== undefined
-                  ) {
-                    const t = (normalized as any).time;
-                    if (typeof t === 'number') {
-                      normalized.value = t < 1000 ? t * 1000 : t;
-                    } else if (typeof t === 'string') {
-                      const num = Number(t);
-                      normalized.value = Number.isFinite(num)
-                        ? num < 1000
-                          ? num * 1000
-                          : num
-                        : t;
-                    }
-                    if (normalized.type === undefined) normalized.type = 'time';
-                    delete (normalized as any).time;
-                  }
-                  if (
-                    normalized.value === undefined &&
-                    typeof normalized.selector === 'string'
-                  ) {
-                    normalized.type = normalized.type ?? 'element';
-                    normalized.value = normalized.selector;
-                  }
-                }
-                return normalized;
-              }
-            }
-            return item;
-          }
-        );
-      }
       const dynamicActionSchema =
         registry.buildDynamicActionSchemaForPage(page);
       const AgentThoughtSchemaForStep =
@@ -1378,5 +1198,66 @@ export class Agent {
    */
   getConsecutiveFailures(): number {
     return this.state.consecutive_failures;
+  }
+
+  /**
+   * Log a comprehensive summary of the next action(s) (like Python version)
+   */
+  private logNextActionSummary(thought: AgentThought): void {
+    if (!thought.action || thought.action.length === 0) {
+      return;
+    }
+
+    const actionCount = thought.action.length;
+
+    // Collect action details
+    const actionDetails: string[] = [];
+    for (let i = 0; i < thought.action.length; i++) {
+      const action = thought.action[i];
+      const actionName = action.action;
+
+      // Format key parameters concisely
+      const paramSummary: string[] = [];
+
+      if (action.selector) {
+        paramSummary.push(`selector="${action.selector}"`);
+      }
+      if (action.text) {
+        const textPreview =
+          action.text.length > 30
+            ? action.text.substring(0, 30) + '...'
+            : action.text;
+        paramSummary.push(`text="${textPreview}"`);
+      }
+      if (action.url) {
+        paramSummary.push(`url="${action.url}"`);
+      }
+      if (action.key) {
+        paramSummary.push(`key="${action.key}"`);
+      }
+      if (action.scroll) {
+        paramSummary.push(
+          `scroll=${action.scroll.direction}:${action.scroll.amount}`
+        );
+      }
+      if (action.wait) {
+        paramSummary.push(`wait=${action.wait.type}:${action.wait.value}`);
+      }
+
+      const paramStr =
+        paramSummary.length > 0 ? `(${paramSummary.join(', ')})` : '';
+      actionDetails.push(`${actionName}${paramStr}`);
+    }
+
+    // Create summary based on single vs multi-action
+    if (actionCount === 1) {
+      this.logger.info(`☝️ Decided next action: ${actionDetails[0]}`);
+    } else {
+      const summaryLines = [`✌️ Decided next ${actionCount} multi-actions:`];
+      for (let i = 0; i < actionDetails.length; i++) {
+        summaryLines.push(`          ${i + 1}. ${actionDetails[i]}`);
+      }
+      this.logger.info(summaryLines.join('\n'));
+    }
   }
 }

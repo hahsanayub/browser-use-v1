@@ -39,7 +39,17 @@ export class JsonParser {
     text: string
   ): { success: true; value: T } | { success: false } {
     try {
-      const v = JSON.parse(text);
+      let parsedText = text;
+      if (!parsedText.startsWith('{')) {
+        parsedText = `{${parsedText}}`;
+        try {
+          const v = JSON.parse(parsedText);
+          return { success: true, value: v };
+        } catch {
+          // ignore
+        }
+      }
+      const v = JSON.parse(parsedText);
       return { success: true, value: v };
     } catch {
       return { success: false };

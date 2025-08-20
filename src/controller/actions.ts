@@ -10,6 +10,7 @@ import type { BrowserSession } from '../browser/BrowserSession';
 import TurndownService from 'turndown';
 import type { BaseLLMClient } from '../llm/base-client';
 import { FileSystem } from '../services/file-system';
+import { Agent } from '../agent';
 
 // Helper function for Promise.race with proper timeout cleanup
 function withTimeout<T>(
@@ -1297,6 +1298,8 @@ class ExtractDataActions {
       browserContext?: AgentBrowserContext;
       browserSession?: BrowserSession;
       llmClient?: BaseLLMClient;
+      fileSystem?: FileSystem;
+      agent: Agent;
     };
   }): Promise<ActionResult> {
     const { query, extract_links } = params;
@@ -1442,8 +1445,11 @@ ${content}`;
           }
 
           const remainingLines = lines.length - displayLines;
-          const fileName = `extracted_content_${Date.now()}.md`;
-          const filePath = path.resolve(process.cwd(), fileName);
+          const fileName = `extracted_content_${context.agent.getState().n_steps}_${Date.now()}.md`;
+          const filePath = path.resolve(
+            context.fileSystem?.getDir() ?? process.cwd(),
+            fileName
+          );
 
           try {
             await fs.writeFile(filePath, extractedContent, 'utf-8');

@@ -369,6 +369,7 @@ export class Controller {
         browserSession: this.browserSession,
         llmClient: this.llmClient,
         fileSystem: this.agent?.getFileSystem() || null,
+        agent: this.agent,
       },
     });
 

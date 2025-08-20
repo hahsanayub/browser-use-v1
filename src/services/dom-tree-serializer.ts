@@ -765,7 +765,7 @@ export class DOMTreeSerializer {
     return text;
   }
 
-  // ========== SIMPLIFIED SERIALIZATION METHODS (ViewportAwareDOMService compatibility) ==========
+  // ========== SIMPLIFIED SERIALIZATION METHODS (ViewportDOMService compatibility) ==========
 
   /**
    * Create a type adapter to convert DOMElementNode to EnhancedDOMTreeNode
@@ -806,7 +806,7 @@ export class DOMTreeSerializer {
 
   /**
    * Generate simplified clickable elements string consistent with Python version
-   * This method provides compatibility with ViewportAwareDOMService
+   * This method provides compatibility with ViewportDOMService
    */
   static clickableElementsToStringViewportAware(
     elementTree: DOMElementNode,
@@ -1023,13 +1023,11 @@ export class DOMTreeSerializer {
   }
 }
 
-// ========== COMPATIBILITY LAYER FOR ViewportAwareDOMService ==========
-
 /**
- * Compatibility class to provide the same interface as ViewportAwareDOMService
+ * Compatibility class to provide the same interface as ViewportDOMService
  * This delegates to the static methods in DOMTreeSerializer
  */
-export class ViewportAwareDOMService {
+export class ViewportDOMService {
   private domLogger = getLogger();
 
   /**
@@ -1082,6 +1080,6 @@ export class ViewportAwareDOMService {
 /**
  * Create simplified DOM service instance (compatibility function)
  */
-export function createViewportAwareDOMService(): ViewportAwareDOMService {
-  return new ViewportAwareDOMService();
+export function createViewportAwareDOMService(): ViewportDOMService {
+  return new ViewportDOMService();
 }

@@ -10,7 +10,7 @@ import {
 } from '../types/dom';
 import { DOMService } from '../services/dom-service';
 import {
-  ViewportAwareDOMService,
+  ViewportDOMService,
   SimplifiedDOMOptions,
 } from '../services/dom-tree-serializer';
 import { FileSystem } from '../services/file-system';
@@ -46,9 +46,9 @@ export class SystemPrompt {
     let content: string | null = overrideSystemMessage ?? null;
 
     if (content == null) {
-      let filename = 'system-prompt.md';
-      if (flashMode) filename = 'system-prompt-flash.md';
-      else if (useThinking === false) filename = 'system-prompt-no-thinking.md';
+      let filename = 'system_prompt.md';
+      if (flashMode) filename = 'system_prompt_flash.md';
+      else if (useThinking === false) filename = 'system_prompt_no_thinking.md';
 
       const candidates: URL[] = [
         new URL(`./prompts/${filename}`, import.meta.url),
@@ -248,7 +248,7 @@ export async function generatePageContextPrompt(
 
   // Use simplified DOM processing if available and enabled
   if (pageView.domState?.elementTree && useViewportAware) {
-    const viewportAwareDOMService = new ViewportAwareDOMService();
+    const viewportAwareDOMService = new ViewportDOMService();
 
     const options: SimplifiedDOMOptions = {
       maxTotalLength: maxClickableElementsLength,
