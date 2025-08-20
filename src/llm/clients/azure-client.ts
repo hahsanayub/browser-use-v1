@@ -71,12 +71,15 @@ export class AzureOpenAIClient extends BaseLLMClient {
       timeout: config.timeout || 30000,
       maxRetries: config.maxRetries || 3,
       azureADTokenProvider: config.azureAdTokenProvider,
-      defaultHeaders: config.organization || config.project ? {
-        ...(config.organization && {
-          'OpenAI-Organization': config.organization,
-        }),
-        ...(config.project && { 'OpenAI-Project': config.project }),
-      } : undefined,
+      defaultHeaders:
+        config.organization || config.project
+          ? {
+              ...(config.organization && {
+                'OpenAI-Organization': config.organization,
+              }),
+              ...(config.project && { 'OpenAI-Project': config.project }),
+            }
+          : undefined,
     });
   }
 
@@ -271,7 +274,9 @@ export class AzureOpenAIClient extends BaseLLMClient {
         temperature: 0,
       });
 
-      this.logger.info('Azure OpenAI client configuration validated successfully');
+      this.logger.info(
+        'Azure OpenAI client configuration validated successfully'
+      );
       return true;
     } catch (error) {
       this.logger.error(

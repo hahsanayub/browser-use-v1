@@ -672,7 +672,7 @@ export class Agent {
 
       responseContent = response.content;
 
-      // Parse and validate response using the dynamic schema (like Python version)
+      // Parse and validate response using the dynamic schema
       thoughtData = JsonParser.parse(response.content);
 
       // Normalize action format from LLM response to Zod expected format
@@ -688,7 +688,7 @@ export class Agent {
         thoughtData
       ) as AgentThought;
 
-      // Cut the number of actions to max_actions_per_step if needed (like Python version)
+      // Cut the number of actions to max_actions_per_step if needed
       if (thought.action.length > this.config.maxActionsPerStep!) {
         thought.action = thought.action.slice(0, this.config.maxActionsPerStep);
       }
@@ -708,7 +708,7 @@ export class Agent {
       }
       thought = { ...thought, action: filteredActions } as AgentThought;
 
-      // Log next action summary (like Python version)
+      // Log next action summary
       this.logNextActionSummary(thought);
 
       // Hook: after receiving model response (with normalized thought)
@@ -736,7 +736,10 @@ export class Agent {
 
       return thought;
     } catch (error) {
-      this.logger.debug(`Error Response Content:`, { thoughtData });
+      this.logger.debug(`Error Response Content:`, {
+        thoughtData,
+        responseContent,
+      });
       this.logger.error('Failed to get LLM response', error as Error);
 
       // Fallback minimal output: take a screenshot
@@ -1201,7 +1204,7 @@ export class Agent {
   }
 
   /**
-   * Log a comprehensive summary of the next action(s) (like Python version)
+   * Log a comprehensive summary of the next action(s)
    */
   private logNextActionSummary(thought: AgentThought): void {
     if (!thought.action || thought.action.length === 0) {

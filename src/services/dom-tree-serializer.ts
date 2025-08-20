@@ -805,7 +805,7 @@ export class DOMTreeSerializer {
   }
 
   /**
-   * Generate simplified clickable elements string consistent with Python version
+   * Generate simplified clickable elements string
    * This method provides compatibility with ViewportDOMService
    */
   static clickableElementsToStringViewportAware(
@@ -849,7 +849,7 @@ export class DOMTreeSerializer {
       maxTotalLength: options.maxTotalLength,
     });
 
-    // Generate tree-structured string similar to Python version
+    // Generate tree-structured string similar
     const result = this.serializeTreeSimplified(
       elementTree,
       includeAttributes,
@@ -876,7 +876,7 @@ export class DOMTreeSerializer {
   }
 
   /**
-   * Serialize DOM tree to string format for simplified mode, similar to Python version
+   * Serialize DOM tree to string format for simplified mode
    */
   private static serializeTreeSimplified(
     node: DOMBaseNode | null,
@@ -1031,7 +1031,7 @@ export class ViewportDOMService {
   private domLogger = getLogger();
 
   /**
-   * Generate simplified clickable elements string consistent with Python version
+   * Generate simplified clickable elements string consistent
    */
   clickableElementsToStringViewportAware(
     elementTree: DOMElementNode,

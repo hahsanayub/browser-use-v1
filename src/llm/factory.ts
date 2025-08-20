@@ -22,7 +22,10 @@ export function createLLMClient(config: LLMConfig): BaseLLMClient {
   const providerRequiresApiKey = config.provider !== 'ollama';
   if (providerRequiresApiKey && !config.apiKey) {
     // Azure can also use Azure AD token authentication
-    if (config.provider === 'azure' && (config.azureAdToken || config.azureEndpoint)) {
+    if (
+      config.provider === 'azure' &&
+      (config.azureAdToken || config.azureEndpoint)
+    ) {
       // Azure AD authentication is allowed
     } else {
       throw new Error(`API key is required for ${config.provider} provider`);
