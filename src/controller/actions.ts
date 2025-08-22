@@ -510,22 +510,22 @@ class IndexActions {
     page: Page;
     context?: { browserSession?: BrowserSession };
   }): Promise<ActionResult> {
-    const domState = context?.browserSession?.domState;
-    let node: DOMNode | undefined;
-    let text: string | null | undefined;
-    if (domState) {
-      node = Object.values(domState.map).find(
-        (i) => i.xpath === domState.selectorMap[params.index].slice(7)
-      );
-      if (node) {
-        text = context.browserSession?.getAllChildrenText(node, 2);
-      }
-    }
+    // const domState = context?.browserSession?.domState;
+    // let node: DOMNode | undefined;
+    // let text: string | null | undefined;
+    // if (domState) {
+    //   node = Object.values(domState.map).find(
+    //     (i) => i.xpath === domState.selectorMap[params.index].slice(7)
+    //   );
+    //   if (node) {
+    //     text = context.browserSession?.getAllChildrenText(node, 2);
+    //   }
+    // }
     return executeWithBrowserSession(context, async (session) => {
       await session.clickByIndex(params.index);
       return {
         success: true,
-        message: `Clicked element with index ${params.index}${text ? `: ${text}` : ''}`,
+        message: `Clicked element with index ${params.index}`,
       };
     });
   }
