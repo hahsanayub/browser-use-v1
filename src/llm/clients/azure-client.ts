@@ -69,7 +69,7 @@ export class AzureOpenAIClient extends BaseLLMClient {
       apiVersion: apiVersion,
       deployment: azureDeployment,
       timeout: config.timeout || 30000,
-      maxRetries: config.maxRetries || 3,
+      maxRetries: config.maxRetries || 5,
       azureADTokenProvider: config.azureAdTokenProvider,
       defaultHeaders:
         config.organization || config.project

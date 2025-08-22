@@ -25,8 +25,8 @@ export class OpenAIClient extends BaseLLMClient {
     this.openai = new OpenAI({
       apiKey: config.apiKey,
       baseURL: config.baseUrl,
-      timeout: config.timeout || 30000,
-      maxRetries: config.maxRetries || 3,
+      timeout: config.timeout,
+      maxRetries: config.maxRetries || 5,
       defaultHeaders:
         config.organization || config.project
           ? {

@@ -515,7 +515,7 @@ class IndexActions {
     let text: string | null | undefined;
     if (domState) {
       node = Object.values(domState.map).find(
-        (i) => i.xpath === domState.selectorMap[2].slice(7)
+        (i) => i.xpath === domState.selectorMap[params.index].slice(7)
       );
       if (node) {
         text = context.browserSession?.getAllChildrenText(node, 2);
