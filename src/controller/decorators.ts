@@ -92,6 +92,20 @@ function getZodSchemaDescription(schema: z.ZodTypeAny): any {
     return { type: 'object', properties, description: def.description || 'object' };
   } else if (def.typeName === 'ZodOptional') {
     return { ...getZodSchemaDescription(def.innerType), optional: true };
+  } else if (def.typeName === 'ZodDefault') {
+    // Handle default values like z.string().default('hello')
+    return { ...getZodSchemaDescription(def.innerType), default: def.defaultValue() };
+  } else if (def.typeName === 'ZodUnion') {
+    // Handle union types like z.union([z.string(), z.number()])
+    const options = def.options.map((option: z.ZodTypeAny) => {
+      const optionDesc = getZodSchemaDescription(option);
+      return optionDesc.type;
+    });
+    return {
+      type: 'union',
+      options: options,
+      description: def.description || `one of: ${options.join(' | ')}`
+    };
   } else {
     return { type: 'unknown', description: def.description || 'value' };
   }
