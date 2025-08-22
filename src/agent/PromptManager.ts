@@ -14,6 +14,14 @@ import {
   SimplifiedDOMOptions,
 } from '../services/dom-tree-serializer';
 import { FileSystem } from '../services/file-system';
+import {
+  AgentHistoryManager,
+  HistoryItem,
+  EnhancedHistoryItem,
+  enhancedHistoryToHistoryItems,
+  convertLegacyHistory,
+} from './AgentHistory';
+import type { ActionRegistry } from '../controller/registry';
 
 /**
  * Dynamically load system prompts from markdown files based on configuration.
@@ -229,19 +237,34 @@ function fallbackElementTreeToString(elementTree: DOMElementNode): string {
 
 /**
  * Generate a prompt for the current page context with viewport-aware DOM processing
+ * Enhanced to support the new agent history structure aligned with Python version
  */
 export async function generatePageContextPrompt(
   objective: string,
   pageView: PageView,
-  history: Array<{
-    step: number;
-    action: { action: string; selector?: string; url?: string; text?: string };
-    result: { success: boolean; message: string; error?: string };
-  }> = [],
+  history:
+    | Array<{
+        step: number;
+        action: {
+          action: string;
+          selector?: string;
+          url?: string;
+          text?: string;
+        };
+        result: { success: boolean; message: string; error?: string };
+      }>
+    | EnhancedHistoryItem[]
+    | HistoryItem[] = [],
   maxClickableElementsLength: number = 40000,
   fileSystem?: FileSystem | null,
   useViewportAware: boolean = true,
-  simplifiedDOMOptions?: Partial<SimplifiedDOMOptions>
+  simplifiedDOMOptions?: Partial<SimplifiedDOMOptions>,
+  // New parameters for enhanced functionality
+  agentHistoryManager?: AgentHistoryManager,
+  readStateDescription?: string,
+  stepInfo?: { stepNumber: number; maxSteps: number; isLastStep: boolean },
+  pageSpecificActions?: string,
+  actionRegistry?: ActionRegistry
 ): Promise<string> {
   let interactiveElementsList: string;
   let truncatedText = '';
@@ -311,16 +334,42 @@ export async function generatePageContextPrompt(
     }
   }
 
-  const historySection =
-    history.length > 0
-      ? `${history
-          .slice(-5)
-          .map((h) => {
-            const status = h.result.success ? 'Success' : 'Failure';
-            return `<step_${h.step}>:\nAction: ${h.action.action}${h.action.selector ? ` (${h.action.selector})` : ''}${h.action.url ? ` [${h.action.url}]` : ''}\nResult: ${status}: ${h.result.message}${h.result.error ? ` — ${h.result.error}` : ''}\n</step_${h.step}>`;
-          })
-          .join('\n')}`
-      : '';
+  // Generate history section with enhanced support for different history formats
+  let historySection = '';
+  if (history.length > 0) {
+    // Check if this is the new HistoryItem format
+    if (isHistoryItemArray(history)) {
+      historySection = history
+        .map((item) => AgentHistoryManager.historyItemToString(item))
+        .join('\n');
+    }
+    // Check if this is the enhanced history format
+    else if (isEnhancedHistoryArray(history)) {
+      const historyItems = enhancedHistoryToHistoryItems(history);
+      historySection = historyItems
+        .map((item) => AgentHistoryManager.historyItemToString(item))
+        .join('\n');
+    }
+    // Fallback to legacy format for backward compatibility
+    else {
+      const enhancedHistory = convertLegacyHistory(
+        history as Array<{
+          step: number;
+          action: {
+            action: string;
+            selector?: string;
+            url?: string;
+            text?: string;
+          };
+          result: { success: boolean; message: string; error?: string };
+        }>
+      );
+      const historyItems = enhancedHistoryToHistoryItems(enhancedHistory);
+      historySection = historyItems
+        .map((item) => AgentHistoryManager.historyItemToString(item))
+        .join('\n');
+    }
+  }
 
   // Generate file system information
   let fileSystemContent = 'No file system available';
@@ -343,12 +392,58 @@ export async function generatePageContextPrompt(
     }
   }
 
+  // Determine read state content - prioritize agentHistoryManager over direct parameter
+  let readStateContent = '';
+  if (agentHistoryManager) {
+    readStateContent = agentHistoryManager.getReadStateDescription();
+  } else if (readStateDescription) {
+    readStateContent = readStateDescription;
+  }
+
+  // Clean up read state content and prepare for inclusion
+  const cleanReadState = readStateContent.trim();
+  const readStateSection = cleanReadState
+    ? `<read_state>\n${cleanReadState}\n</read_state>\n`
+    : '';
+
+  // Generate step_info section - aligned with Python version format
+  let stepInfoSection = '';
+  if (stepInfo) {
+    // Format date and time like Python version: YYYY-MM-DD HH:MM
+    const now = new Date();
+    const timeStr = now.toISOString().substring(0, 16).replace('T', ' ');
+
+    // Python version uses step_number + 1 for display and "max possible steps" format
+    stepInfoSection = `\n<step_info>\nStep ${stepInfo.stepNumber + 1} of ${stepInfo.maxSteps} max possible steps\nCurrent date and time: ${timeStr}\n</step_info>`;
+  }
+
+  // Add page-specific actions section if provided
+  const pageActionsSection = pageSpecificActions
+    ? `<page_specific_actions>\n${pageSpecificActions}\n</page_specific_actions>\n`
+    : '';
+
+  // Add default page actions section if actionRegistry is provided
+  let defaultActionsSection = '';
+  if (actionRegistry) {
+    const defaultActionsDescription = actionRegistry.getPromptDescription();
+    if (defaultActionsDescription.trim()) {
+      defaultActionsSection = `<page_actions>\n${defaultActionsDescription}\n</page_actions>\n`;
+    }
+  }
+
   return (
     `<agent_history>\n` +
     historySection +
     `\n</agent_history>\n` +
-    `<agent_state>\n<user_request>\n${objective}\n</user_request>\n<file_system>\n${fileSystemContent}\n</file_system>\n<todo_contents>\n${todoContents}\n</todo_contents>\n</agent_state>\n` +
-    `<browser_state>${getBrowserStateDescription(pageView, truncatedText, interactiveElementsList)}</browser_state>`
+    `<agent_state>\n<user_request>\n${objective}\n</user_request>\n<file_system>\n${fileSystemContent}\n</file_system>\n<todo_contents>\n${todoContents}\n</todo_contents>${stepInfoSection}\n</agent_state>\n` +
+    `<browser_state>${getBrowserStateDescription(
+      pageView,
+      truncatedText,
+      interactiveElementsList
+    )}</browser_state>\n` +
+    readStateSection +
+    defaultActionsSection +
+    pageActionsSection
   );
 }
 
@@ -419,4 +514,48 @@ Please try a completely different approach:
 5. If truly stuck, explain the situation and finish the task
 
 Break out of the current pattern and try something new.`;
+}
+
+/**
+ * Type guard to check if history is HistoryItem array
+ */
+function isHistoryItemArray(history: any[]): history is HistoryItem[] {
+  if (history.length === 0) return false;
+  const first = history[0];
+  return (
+    first &&
+    typeof first === 'object' &&
+    ('stepNumber' in first ||
+      'evaluationPreviousGoal' in first ||
+      'memory' in first ||
+      'nextGoal' in first ||
+      'actionResults' in first ||
+      'error' in first ||
+      'systemMessage' in first) &&
+    !('step' in first) &&
+    !('action' in first) &&
+    !('result' in first)
+  );
+}
+
+/**
+ * Type guard to check if history is EnhancedHistoryItem array
+ */
+function isEnhancedHistoryArray(
+  history: any[]
+): history is EnhancedHistoryItem[] {
+  if (history.length === 0) return false;
+  const first = history[0];
+  return (
+    first &&
+    typeof first === 'object' &&
+    'step' in first &&
+    'action' in first &&
+    'result' in first &&
+    ('evaluationPreviousGoal' in first ||
+      'memory' in first ||
+      'nextGoal' in first ||
+      'error' in first ||
+      'systemMessage' in first)
+  );
 }

@@ -1,5 +1,69 @@
 import 'dotenv/config';
-import { createController, type AgentConfig } from '../src/index.js';
+import {
+  ActionResult,
+  Agent,
+  BaseLLMClient,
+  createController,
+  type AgentConfig,
+} from '../src/index';
+import { withHealthCheck } from '../src/services/health-check';
+import { z } from 'zod';
+import { Page } from 'playwright';
+import { BrowserSession } from '../src/browser';
+import type { BrowserContext as AgentBrowserContext } from '../src/browser/BrowserContext';
+import { action } from '../src/controller/decorators';
+
+export class ExtractDataActions {
+  @action(
+    'extract_structured_data',
+    "Extract structured, semantic data (e.g. product description, price, all information about XYZ) from the current webpage based on a textual query. This tool takes the entire markdown of the page and extracts the query from it. Set extract_links=true ONLY if your query requires extracting links/URLs from the page. Only use this for specific queries for information retrieval from the page. Don't use this to get interactive elements - the tool does not see HTML elements, only the markdown.",
+    z.object({
+      query: z
+        .string()
+        .min(1)
+        .describe('The query to extract information about'),
+      extract_links: z
+        .boolean()
+        .default(false)
+        .describe('Whether to include links and images in the extraction'),
+    }),
+    { isAvailableForPage: (page) => page && !page.isClosed() }
+  )
+  static async extractStructuredData({
+    params,
+    page,
+    context,
+  }: {
+    params: { query: string; extract_links: boolean };
+    page: Page;
+    context: {
+      browserContext?: AgentBrowserContext;
+      browserSession?: BrowserSession;
+      llmClient?: BaseLLMClient;
+      fileSystem?: FileSystem;
+      agent: Agent;
+    };
+  }): Promise<ActionResult> {
+    console.log('extractStructuredData', params);
+    // const { query, extract_links } = params;
+
+    if (!context.llmClient) {
+      return {
+        success: false,
+        message: 'LLM client not available',
+        error: 'LLM_CLIENT_UNAVAILABLE',
+      };
+    }
+
+    return withHealthCheck(page, async (p) => {
+      return {
+        success: true,
+        message: 'Extracted structured data',
+        attachments: [],
+      };
+    });
+  }
+}
 
 const timestamp = new Date().toISOString();
 
@@ -11,8 +75,16 @@ async function main() {
         model: 'gemini-2.0-flash',
         baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
         apiKey: process.env.GOOGLE_API_KEY,
+
+        // provider: 'azure',
+        // model: 'gpt-5',
+        // azureEndpoint: 'https://oai-ai4m-rnd-eastus-001.openai.azure.com',
+        // azureDeployment: 'oai-ai4m-rnd-eastus-001-gpt-4-0125-Preview-001',
+        // apiVersion: '2025-03-01-preview',
+        // apiKey: process.env.AZURE_OPENAI_API_KEY,
+
         timeout: 60000,
-        maxTokens: 1024 * 1024,
+        maxTokens: 16384,
         temperature: 0.7,
       },
       browser: {

@@ -13,7 +13,7 @@ import { chromium } from 'playwright';
 import { DOMService } from '../services/dom-service';
 import { SmartDOMCache } from '../services/smart-dom-cache';
 import { ensureHealthyPage, withHealthCheck } from '../services/health-check';
-import type { PageView, DOMState } from '../types/dom';
+import type { PageView, DOMState, DOMNode } from '../types/dom';
 import type { BrowserSessionConfig } from '../types/browser';
 import { getLogger } from '../services/logging';
 import { promises as fs } from 'fs';
@@ -269,6 +269,43 @@ export class BrowserSession {
     });
 
     return this._cachedBrowserStateSummary;
+  }
+
+  get domState(): DOMState | null {
+    return this._cachedBrowserStateSummary?.domState ?? null;
+  }
+
+  getAllChildrenText(node: DOMNode, maxDepth: number = -1): string | null {
+    if (!node || !this.domState) {
+      return null;
+    }
+
+    const textParts: string[] = [];
+
+    const collectText = (currentNode: DOMNode, currentDepth: number): void => {
+      if (maxDepth !== -1 && currentDepth > maxDepth) {
+        return;
+      }
+
+      // Handle text nodes
+      if (currentNode.type === 'TEXT_NODE' && currentNode.text) {
+        textParts.push(currentNode.text);
+        return;
+      }
+
+      // Handle element nodes - recursively process children
+      if (currentNode.children && currentNode.children.length > 0) {
+        for (const childId of currentNode.children) {
+          const childNode = this.domState!.map[childId];
+          if (childNode) {
+            collectText(childNode, currentDepth + 1);
+          }
+        }
+      }
+    };
+
+    collectText(node, 0);
+    return textParts.join('\n').trim() || null;
   }
 
   private async waitForPageAndFramesLoad(

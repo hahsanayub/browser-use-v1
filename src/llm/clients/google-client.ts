@@ -13,6 +13,48 @@ import type {
   LLMContentPart,
 } from '../../types/llm';
 
+/**
+ * Check if an error should be retried based on error message patterns.
+ * This function mirrors the Python implementation's _is_retryable_error.
+ */
+function isRetryableError(exception: any): boolean {
+  const errorMsg = String(exception).toLowerCase();
+
+  // Rate limit patterns
+  const rateLimitPatterns = [
+    'rate limit',
+    'resource exhausted',
+    'quota exceeded',
+    'too many requests',
+    '429',
+  ];
+
+  // Server error patterns
+  const serverErrorPatterns = [
+    'service unavailable',
+    'internal server error',
+    'bad gateway',
+    '503',
+    '502',
+    '500',
+  ];
+
+  // Connection error patterns
+  const connectionPatterns = [
+    'connection',
+    'timeout',
+    'network',
+    'unreachable',
+  ];
+
+  const allPatterns = [
+    ...rateLimitPatterns,
+    ...serverErrorPatterns,
+    ...connectionPatterns,
+  ];
+  return allPatterns.some((pattern) => errorMsg.includes(pattern));
+}
+
 interface GooglePart {
   text?: string;
   inlineData?: { mimeType: string; data: string };
@@ -151,7 +193,8 @@ export class GoogleClient extends BaseLLMClient {
       req.systemInstruction = { role: 'system', parts: system.parts };
     }
 
-    try {
+    // Internal function to make the actual API call
+    const makeApiCall = async (): Promise<LLMResponse> => {
       const url = `/models/${encodeURIComponent(this.config.model)}:generateContent`;
       const res = await this.httpClient.post<GenerateContentResponse>(
         url,
@@ -172,7 +215,7 @@ export class GoogleClient extends BaseLLMClient {
           .filter(Boolean)
           .join('\n') || '';
 
-      const llm: LLMResponse = {
+      const llmResponse: LLMResponse = {
         content: primaryText,
         usage: {
           promptTokens: data.usageMetadata?.promptTokenCount || 0,
@@ -186,15 +229,90 @@ export class GoogleClient extends BaseLLMClient {
         model: this.config.model,
         metadata: { requestTime: time },
       };
-      this.logMetrics(llm, time, messages.length);
-      return llm;
-    } catch (error: any) {
-      const msg =
-        error?.response?.data?.error?.message ||
-        error.message ||
-        'Google request failed';
-      throw this.handleError(error, msg);
+      this.logMetrics(llmResponse, time, messages.length);
+      return llmResponse;
+    };
+
+    // Retry mechanism with exponential backoff
+    let lastException: any = null;
+    const maxRetries = 10; // Match the Python implementation
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        return await makeApiCall();
+      } catch (error: any) {
+        lastException = error;
+
+        // Don't retry on non-retryable errors or last attempt
+        if (!isRetryableError(error) || attempt === maxRetries - 1) {
+          break;
+        }
+
+        // Exponential backoff with cap at 60 seconds
+        const delay = Math.min(60.0, 1.0 * Math.pow(2.0, attempt));
+        this.logger.warn(
+          `Google API request failed (attempt ${attempt + 1}/${maxRetries}), retrying in ${delay}s`,
+          {
+            error: error.message,
+            attempt: attempt + 1,
+            maxRetries,
+          }
+        );
+
+        await new Promise((resolve) => setTimeout(resolve, delay * 1000));
+      }
     }
+
+    // Handle the final error with enhanced error detection
+    if (lastException) {
+      const errorMessage = String(lastException);
+      let statusCode: number | null = null;
+
+      // Check for rate limit errors
+      if (
+        [
+          'rate limit',
+          'resource exhausted',
+          'quota exceeded',
+          'too many requests',
+          '429',
+        ].some((indicator) => errorMessage.toLowerCase().includes(indicator))
+      ) {
+        statusCode = 429;
+      }
+      // Check for server errors
+      else if (
+        [
+          'service unavailable',
+          'internal server error',
+          'bad gateway',
+          '503',
+          '502',
+          '500',
+        ].some((indicator) => errorMessage.toLowerCase().includes(indicator))
+      ) {
+        statusCode = 503;
+      }
+
+      // Try to extract status code from response if available
+      if (lastException?.response?.status) {
+        statusCode = lastException.response.status;
+      }
+
+      const enhancedMessage =
+        lastException?.response?.data?.error?.message ||
+        lastException.message ||
+        'Google request failed after all retries';
+
+      this.logger.error(
+        `Google API request failed after all retries: ${enhancedMessage} (status: ${statusCode}, retries: ${maxRetries})`
+      );
+
+      throw this.handleError(lastException, enhancedMessage);
+    }
+
+    // This should never happen, but ensure we don't return undefined
+    throw new Error('All retry attempts failed without exception');
   }
 
   async validateConfig(): Promise<boolean> {

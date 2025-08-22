@@ -19,6 +19,12 @@ import type {
   AgentState,
 } from '../types/agent';
 import {
+  AgentHistoryManager,
+  AgentStepInfo,
+  AgentStepInfoImpl,
+  AgentOutput,
+} from './AgentHistory';
+import {
   type Action,
   type AgentThought,
   createAgentThoughtSchema,
@@ -45,6 +51,7 @@ export class Agent {
   private screenshotService: ScreenshotService | null = null;
   private config: AgentConfig;
   private history: AgentHistory[] = [];
+  private agentHistoryManager: AgentHistoryManager; // New enhanced history manager
   private logger = getLogger();
   private state: AgentState;
   private isRunning = false;
@@ -93,6 +100,9 @@ export class Agent {
       last_result: null,
       last_messages: null,
     };
+
+    // Initialize enhanced history manager
+    this.agentHistoryManager = new AgentHistoryManager();
   }
 
   /**
@@ -213,12 +223,44 @@ export class Agent {
     objective: string,
     pageView: PageView
   ): Promise<LLMMessage> {
+    // Create step info for current step (using 0-based indexing internally)
+    const stepInfo: AgentStepInfo = new AgentStepInfoImpl(
+      this.state.n_steps,
+      this.config.maxSteps || 100
+    );
+
+    // Generate page-specific actions for current URL
+    let pageSpecificActions: string | undefined;
+    try {
+      const activePage = this.browserSession.getContext()?.pages().slice(-1)[0];
+      if (activePage) {
+        const currentUrl = activePage.url();
+        const pageActions = registry.getPromptDescription(currentUrl);
+        if (pageActions && pageActions.trim()) {
+          pageSpecificActions = pageActions;
+        }
+      }
+    } catch (error) {
+      this.logger.warn('Failed to generate page-specific actions', error as Error);
+    }
+
     const textContent = await generatePageContextPrompt(
       objective,
       pageView,
-      this.history,
+      this.agentHistoryManager.getHistoryItems(), // Use enhanced history items
       this.config.maxClickableElementsLength,
-      this.fileSystem
+      this.fileSystem,
+      true, // useViewportAware
+      undefined, // simplifiedDOMOptions
+      this.agentHistoryManager, // Pass the enhanced history manager
+      undefined, // readStateDescription (will be retrieved from manager)
+      {
+        stepNumber: stepInfo.stepNumber,
+        maxSteps: stepInfo.maxSteps,
+        isLastStep: stepInfo.isLastStep(),
+      },
+      pageSpecificActions, // Pass page-specific actions
+      registry // Pass the action registry for default actions
     );
 
     // If vision is disabled or no screenshots available, return text-only message
@@ -435,6 +477,31 @@ export class Agent {
           // Save results to state
           this.state.last_result = results;
 
+          // Update enhanced history manager with step results
+          const stepInfo: AgentStepInfo = new AgentStepInfoImpl(
+            this.state.n_steps,
+            this.config.maxSteps || 100
+          );
+
+          // Convert AgentThought to AgentOutput format
+          const agentOutput: AgentOutput = {
+            currentState: {
+              evaluationPreviousGoal: (thought as any).evaluation_previous_goal,
+              memory: (thought as any).memory,
+              nextGoal: (thought as any).next_goal,
+            },
+            action: (thought as any).action,
+            thinking: (thought as any).thinking,
+          };
+
+          this.agentHistoryManager.updateAgentHistory(
+            this.state.n_steps,
+            agentOutput,
+            results,
+            stepInfo,
+            actionsToRun // Pass the actions array for better formatting
+          );
+
           // Final DOM change detection - only if we haven't checked recently
           const finalSig =
             lastKnownSig || (await this.browserSession.getDomSignature());
@@ -499,7 +566,14 @@ export class Agent {
             throw error;
           }
 
-          // Add error to history and continue
+          // Add detailed error to AgentHistoryManager for LLM feedback
+          let stepErrorMessage = 'Step Execution Error:\n';
+          stepErrorMessage += `${AgentHistoryManager.formatError(error as Error, true)}\n`;
+          stepErrorMessage += `This error occurred during step ${this.state.n_steps} execution.\n`;
+
+          this.agentHistoryManager.addError(this.state.n_steps, stepErrorMessage);
+
+          // Also add error to legacy history for backward compatibility
           const errorResult: ActionResult = {
             success: false,
             message: 'Step failed due to error',
@@ -667,7 +741,7 @@ export class Agent {
 
       const response = await this.llmClient.generateResponse(messages, {
         temperature: 0.1, // Low temperature for more consistent responses
-        maxTokens: 2000,
+        maxTokens: 16384,
       });
 
       responseContent = response.content;
@@ -742,9 +816,34 @@ export class Agent {
       });
       this.logger.error('Failed to get LLM response', error as Error);
 
+      // Create detailed error message for LLM feedback
+      let detailedErrorMessage = 'LLM Response Error:\n';
+
+      // Use the new formatError method from AgentHistoryManager for base error formatting
+      if (error instanceof Error) {
+        detailedErrorMessage += `${AgentHistoryManager.formatError(error, true)}\n`;
+      } else {
+        detailedErrorMessage += `Unknown error: ${String(error)}\n`;
+      }
+
+      // Add context about what was attempted
+      if (responseContent && responseContent !== 'none') {
+        const truncatedContent = responseContent.length > 500
+          ? responseContent.substring(0, 500) + '...[truncated]'
+          : responseContent;
+        detailedErrorMessage += `\nRaw LLM Response:\n${truncatedContent}\n`;
+      }
+
+      if (thoughtData) {
+        detailedErrorMessage += `\nParsed thought data (partial): ${JSON.stringify(thoughtData, null, 2)}\n`;
+      }
+
+      // Add this detailed error to agent history for LLM feedback in next step
+      this.agentHistoryManager.addError(this.state.n_steps, detailedErrorMessage);
+
       // Fallback minimal output: take a screenshot
       return {
-        memory: 'Failed to analyze page due to LLM error',
+        memory: 'Failed to analyze page due to LLM error - see agent history for details',
         action: [
           {
             action: 'screenshot',
@@ -1015,9 +1114,12 @@ export class Agent {
         content: await generatePageContextPrompt(
           objective,
           pageView,
-          this.history,
+          this.agentHistoryManager.getHistoryItems(), // Use enhanced history items
           this.config.maxClickableElementsLength,
-          this.fileSystem
+          this.fileSystem,
+          true, // useViewportAware
+          undefined, // simplifiedDOMOptions
+          this.agentHistoryManager // Pass the enhanced history manager
         ),
       },
     ];
