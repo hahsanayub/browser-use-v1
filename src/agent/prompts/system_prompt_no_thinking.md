@@ -222,7 +222,7 @@ Here are examples of good output patterns. Use them as reference but never copy 
 </examples>
 
 <output>
-You must ALWAYS respond with a valid JSON in this exact format:
+You must ALWAYS respond with a valid and standard JSON structure in this exact format:
 
 {{
   "evaluation_previous_goal": "One-sentence analysis of your last action. Clearly state success, failure, or uncertain.",
@@ -232,4 +232,5 @@ You must ALWAYS respond with a valid JSON in this exact format:
 }}
 
 Action list should NEVER be empty.
+You must NOT return any information other than the response in JSON format.
 </output>

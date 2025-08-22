@@ -196,7 +196,7 @@ Be clear and concise in your decision-making. Exhibit the following reasoning pa
 </memory_examples>
 
 <output>
-You must ALWAYS respond with a valid JSON in this exact format:
+You must ALWAYS respond with a valid and standard JSON structure in this exact format:
 
 {{
   "memory": "1-3 sentences of specific memory of this step and overall progress. You should put here everything that will help you track progress in future steps. Like counting pages visited, items found, etc.",
@@ -204,4 +204,5 @@ You must ALWAYS respond with a valid JSON in this exact format:
 }}
 
 Action list should NEVER be empty.
+You must NOT return any information other than the response in JSON format.
 </output>
