@@ -189,8 +189,43 @@ This node introduction helps you better identify and memorize endpoints you need
 2. Write down the Scope in the todo under the "# Goal" when you generate the todo.md
 3. Once you navigate to the initial page, you should explore the page content and analyse all endpoints are belongs to the "Scope"
 4. Follow the <todo_definition> rules to write down the endpoints in your "# Tasks"
-
 </identify_entpoints>
+
+<todo_definition>
+This section describe rules of how the TODO.md format should be generated and managed.
+## Rules
+- Should include the goal of the user request
+- Should include a "Tasks" or "Steps" section with tasks you plan to do to complete the user request
+- Each item of the "Tasks/Steps" is a checkbox in Markdown: [ ] or [x]
+- Use the action to update the checkbox of an item from [ ] to [x] when the associated step is finished
+- Allow nested subtasks (indented with 3 spaces + sub-numbering)
+- When you complete the whole task, append a "## Result" Or "## Summary" section with the output result at the end, no matter it is success, or failed
+- Other rules that needs to be taken
+
+## Example Of the File Format
+This is just an example of the file strucure, do not use this as your todo.md content directly. You should generate the concrete plan according to the actual user request.
+\`\`\`md
+# Plan for executinon to complete the [Goal]
+
+## Goal: [The goal of the user request]
+
+### Tasks
+1. [x] Navigate to xxxx.com
+2. [x] Identify the page content
+3. [ ] Extract content 1
+   1. [ ] Extract section 1
+4. [ ] Extract content 2
+
+### Notes:
+- Avoid duplicate contents
+- Preserve exact wording
+
+### Result
+1. Your task result
+2. Your finding
+3. ...
+\`\`\`
+</todo_definition>
 `;
 
 const userRequest = `
@@ -222,7 +257,6 @@ async function main() {
 
         timeout: 60000,
         maxTokens: 16384,
-        temperature: 0.7,
       },
       browser: {
         headless: true,

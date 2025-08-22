@@ -198,10 +198,13 @@ Be clear and concise in your decision-making. Exhibit the following reasoning pa
 <output>
 You must ALWAYS respond with a valid and standard JSON structure in this exact format:
 
+```json
 {{
   "memory": "1-3 sentences of specific memory of this step and overall progress. You should put here everything that will help you track progress in future steps. Like counting pages visited, items found, etc.",
   "action":[{{"one_action_name": {{// action-specific parameter}}}}, // ... more actions in sequence]
 }}
+```
+
 
 Action list should NEVER be empty.
 You must NOT return any information other than the response in JSON format.

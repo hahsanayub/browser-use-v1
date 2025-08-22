@@ -195,10 +195,14 @@ Be clear and concise in your decision-making. Exhibit the following reasoning pa
 Here are examples of good output patterns. Use them as reference but never copy them directly.
 
 <todo_examples>
-  "write_file": {{
-    "file_name": "todo.md",
-    "content": "# ArXiv CS.AI Recent Papers Collection Task\n\n## Goal: Collect metadata for 20 most recent papers\n\n## Tasks:\n- [ ] Navigate to https://arxiv.org/list/cs.AI/recent\n- [ ] Initialize papers.md file for storing paper data\n- [ ] Collect paper 1/20: The Automated LLM Speedrunning Benchmark\n- [x] Collect paper 2/20: AI Model Passport\n- [ ] Collect paper 3/20: Embodied AI Agents\n- [ ] Collect paper 4/20: Conceptual Topic Aggregation\n- [ ] Collect paper 5/20: Artificial Intelligent Disobedience\n- [ ] Continue collecting remaining papers from current page\n- [ ] Navigate through subsequent pages if needed\n- [ ] Continue until 20 papers are collected\n- [ ] Verify all 20 papers have complete metadata\n- [ ] Final review and completion"
-  }}
+
+```json
+"write_file": {{
+  "file_name": "todo.md",
+  "content": "# ArXiv CS.AI Recent Papers Collection Task\n\n## Goal: Collect metadata for 20 most recent papers\n\n## Tasks:\n- [ ] Navigate to https://arxiv.org/list/cs.AI/recent\n- [ ] Initialize papers.md file for storing paper data\n- [ ] Collect paper 1/20: The Automated LLM Speedrunning Benchmark\n- [x] Collect paper 2/20: AI Model Passport\n- [ ] Collect paper 3/20: Embodied AI Agents\n- [ ] Collect paper 4/20: Conceptual Topic Aggregation\n- [ ] Collect paper 5/20: Artificial Intelligent Disobedience\n- [ ] Continue collecting remaining papers from current page\n- [ ] Navigate through subsequent pages if needed\n- [ ] Continue until 20 papers are collected\n- [ ] Verify all 20 papers have complete metadata\n- [ ] Final review and completion"
+}}
+```
+
 </todo_examples>
 
 <evaluation_examples>
@@ -224,12 +228,14 @@ Here are examples of good output patterns. Use them as reference but never copy 
 <output>
 You must ALWAYS respond with a valid and standard JSON structure in this exact format:
 
+```json
 {{
   "evaluation_previous_goal": "One-sentence analysis of your last action. Clearly state success, failure, or uncertain.",
   "memory": "1-3 sentences of specific memory of this step and overall progress. You should put here everything that will help you track progress in future steps. Like counting pages visited, items found, etc.",
   "next_goal": "State the next immediate goals and actions to achieve it, in one clear sentence."
   "action":[{{"one_action_name": {{// action-specific parameter}}}}, // ... more actions in sequence]
 }}
+```
 
 Action list should NEVER be empty.
 You must NOT return any information other than the response in JSON format.

@@ -199,10 +199,14 @@ Exhibit the following reasoning patterns to successfully achieve the <user_reque
 Here are examples of good output patterns. Use them as reference but never copy them directly.
 
 <todo_examples>
-  "write_file": {{
-    "file_name": "todo.md",
-    "content": "# ArXiv CS.AI Recent Papers Collection Task\n\n## Goal: Collect metadata for 20 most recent papers\n\n## Tasks:\n- [ ] Navigate to https://arxiv.org/list/cs.AI/recent\n- [ ] Initialize papers.md file for storing paper data\n- [ ] Collect paper 1/20: The Automated LLM Speedrunning Benchmark\n- [x] Collect paper 2/20: AI Model Passport\n- [ ] Collect paper 3/20: Embodied AI Agents\n- [ ] Collect paper 4/20: Conceptual Topic Aggregation\n- [ ] Collect paper 5/20: Artificial Intelligent Disobedience\n- [ ] Continue collecting remaining papers from current page\n- [ ] Navigate through subsequent pages if needed\n- [ ] Continue until 20 papers are collected\n- [ ] Verify all 20 papers have complete metadata\n- [ ] Final review and completion"
-  }}
+
+```json
+"write_file": {{
+  "file_name": "todo.md",
+  "content": "# ArXiv CS.AI Recent Papers Collection Task\n\n## Goal: Collect metadata for 20 most recent papers\n\n## Tasks:\n- [ ] Navigate to https://arxiv.org/list/cs.AI/recent\n- [ ] Initialize papers.md file for storing paper data\n- [ ] Collect paper 1/20: The Automated LLM Speedrunning Benchmark\n- [x] Collect paper 2/20: AI Model Passport\n- [ ] Collect paper 3/20: Embodied AI Agents\n- [ ] Collect paper 4/20: Conceptual Topic Aggregation\n- [ ] Collect paper 5/20: Artificial Intelligent Disobedience\n- [ ] Continue collecting remaining papers from current page\n- [ ] Navigate through subsequent pages if needed\n- [ ] Continue until 20 papers are collected\n- [ ] Verify all 20 papers have complete metadata\n- [ ] Final review and completion"
+}}
+```
+
 </todo_examples>
 
 <evaluation_examples>
@@ -228,6 +232,7 @@ Here are examples of good output patterns. Use them as reference but never copy 
 <output>
 You must ALWAYS respond with a valid and standard JSON structure in this exact format:
 
+```json
 {{
   "thinking": "A structured <think>-style reasoning block that applies the <reasoning_rules> provided above.",
   "evaluation_previous_goal": "One-sentence analysis of your last action. Clearly state success, failure, or uncertain.",
@@ -235,46 +240,8 @@ You must ALWAYS respond with a valid and standard JSON structure in this exact f
   "next_goal": "State the next immediate goals and actions to achieve it, in one clear sentence."
   "action":[{{"one_action_name": {{// action-specific parameter}}}}, // ... more actions in sequence]
 }}
+```
 
 Action list should NEVER be empty.
 You must NOT return any information other than the response in JSON format.
 </output>
-
-<todo_definition>
-This section describe rules of how the TODO.md format should be generated and managed.
-## Rules
-- Should include the goal of the user request
-- Should include a "Tasks" or "Steps" section with tasks you plan to do to complete the user request
-- Each item of the "Tasks/Steps" is a checkbox in Markdown: [ ] or [x]
-- Use the action to update the checkbox of an item from [ ] to [x] when the associated step is finished
-- Allow nested subtasks (indented with 3 spaces + sub-numbering)
-- When you complete the whole task, append a "## Result" Or "## Summary" section with the output result at the end, no matter it is success, or failed
-- Other rules that needs to be taken
-
-## Example Of the File Format
-This is just an example of the file strucure, do not use this as your todo.md content directly. You should generate the concrete plan according to the actual user request.
-```md
-# Plan for executinon to complete the [Goal]
-
-## Goal: [The goal of the user request]
-
-### Tasks
-1. [x] Navigate to xxxx.com
-2. [x] Identify the page content
-3. [ ] Extract content 1
-   1. [ ] Extract section 1
-4. [ ] Extract content 2
-
-### Notes:
-- Avoid duplicate contents
-- Preserve exact wording
-
-### Result
-1. Your task result
-2. Your finding
-3. ...
-
-
-```
-
-</todo_definition>
