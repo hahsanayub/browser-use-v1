@@ -56,7 +56,10 @@ export class ActionRegistry {
    * @param url The URL to match against
    * @returns True if the URL's domain matches any pattern, False otherwise
    */
-  private static matchDomains(domains: string[] | undefined, url: string): boolean {
+  private static matchDomains(
+    domains: string[] | undefined,
+    url: string
+  ): boolean {
     if (!domains || !url) {
       return true;
     }
@@ -97,13 +100,13 @@ export class ActionRegistry {
     if (!pageUrl) {
       // For system prompt (no URL provided), include only actions with no domain filters
       return this.list()
-        .filter(action => !action.domains)
-        .map(action => action.promptDescription())
+        .filter((action) => !action.domains)
+        .map((action) => action.promptDescription())
         .join('\n');
     }
 
     // Only include filtered actions for the current page URL
-    const filteredActions = this.list().filter(action => {
+    const filteredActions = this.list().filter((action) => {
       if (!action.domains) {
         // Skip actions with no filters, they are already included in the system prompt
         return false;
@@ -113,7 +116,7 @@ export class ActionRegistry {
     });
 
     return filteredActions
-      .map(action => action.promptDescription())
+      .map((action) => action.promptDescription())
       .join('\n');
   }
 

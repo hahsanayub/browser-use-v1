@@ -1,6 +1,5 @@
 /**
- * Agent history management - TypeScript implementation aligned with Python browser_use
- * This file implements the agent history logic from python_browser_use/agent/message_manager/views.py
+ * Agent history management
  */
 
 export interface Action {
@@ -22,7 +21,7 @@ export interface ActionResult {
 }
 
 /**
- * Agent step information - aligned with Python AgentStepInfo
+ * Agent step information
  */
 export interface AgentStepInfo {
   stepNumber: number;
@@ -50,7 +49,6 @@ export class AgentStepInfoImpl implements AgentStepInfo {
 
 /**
  * Represents a single agent history item with its data and string representation
- * Aligned with Python HistoryItem class
  */
 export interface HistoryItem {
   stepNumber?: number;
@@ -81,7 +79,7 @@ export interface AgentOutput {
 }
 
 /**
- * Message Manager State - aligned with Python MessageManagerState
+ * Message Manager State
  */
 export interface MessageManagerState {
   toolId: number;
@@ -140,7 +138,6 @@ export class AgentHistoryManager {
 
   /**
    * Convert a history item to string representation
-   * Aligned with Python HistoryItem.to_string() method
    */
   static historyItemToString(item: HistoryItem): string {
     const stepStr =
@@ -195,7 +192,6 @@ ${content}
 
   /**
    * Update agent history with new step results
-   * Aligned with Python _update_agent_history_description method
    */
   updateAgentHistory(
     stepNumber: number,
@@ -238,9 +234,9 @@ ${content}
             `Action ${idx + 1}/${results.length}: ${result.extractedContent}`
           );
         }
-        // Handle regular action with message - format like Python version
+        // Handle regular action with message
         else if (action && result.message) {
-          // Build action description similar to Python format
+          // Build action description
           let actionDesc = '';
           if (action.action === 'goto' && action.url) {
             actionDesc = `Navigated to ${action.url}`;
@@ -356,18 +352,22 @@ ${content}
   }
 
   /**
-   * Format error message based on error type - aligned with Python AgentError.format_error
+   * Format error message based on error type
    */
-  static formatError(error: Error | string, includeTrace: boolean = false): string {
-    let message = '';
-
+  static formatError(
+    error: Error | string,
+    includeTrace: boolean = false
+  ): string {
     if (error instanceof Error) {
       // Handle specific error types
       if (error.name === 'ZodError' || error.message.includes('validation')) {
         return `Invalid model output format. Please follow the correct schema.\nDetails: ${error.message}`;
       }
 
-      if (error.message.includes('rate limit') || error.message.includes('Rate limit')) {
+      if (
+        error.message.includes('rate limit') ||
+        error.message.includes('Rate limit')
+      ) {
         return 'Rate limit reached. Waiting before retry.';
       }
 
@@ -390,13 +390,17 @@ ${content}
    * Add an error to history with proper formatting
    */
   addError(stepNumber: number, error: string | Error): void {
-    let errorMessage = typeof error === 'string' ? error : AgentHistoryManager.formatError(error);
+    let errorMessage =
+      typeof error === 'string'
+        ? error
+        : AgentHistoryManager.formatError(error);
 
-    // Truncate long error messages similar to Python version
+    // Truncate long error messages
     if (errorMessage.length > 1000) {
-      errorMessage = errorMessage.substring(0, 400) +
-                    '\n......[truncated]......\n' +
-                    errorMessage.substring(errorMessage.length - 400);
+      errorMessage =
+        errorMessage.substring(0, 400) +
+        '\n......[truncated]......\n' +
+        errorMessage.substring(errorMessage.length - 400);
     }
 
     this.state.agentHistoryItems.push({
@@ -406,7 +410,7 @@ ${content}
   }
 
   /**
-   * Add new task to history - aligned with Python add_new_task
+   * Add new task to history
    */
   addNewTask(newTask: string): void {
     const taskUpdateItem: HistoryItem = {
@@ -417,7 +421,6 @@ ${content}
 
   /**
    * Validate that error and system_message are not both provided
-   * Aligned with Python model_post_init validation
    */
   static validateHistoryItem(item: HistoryItem): void {
     if (item.error && item.systemMessage) {
@@ -436,7 +439,6 @@ export interface EnhancedHistoryItem {
   step: number;
   action: Action;
   result: ActionResult;
-  // New fields aligned with Python version
   evaluationPreviousGoal?: string;
   memory?: string;
   nextGoal?: string;

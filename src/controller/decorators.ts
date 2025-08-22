@@ -79,7 +79,11 @@ function getZodSchemaDescription(schema: z.ZodTypeAny): any {
   } else if (def.typeName === 'ZodBoolean') {
     return { type: 'boolean', description: def.description || 'true or false' };
   } else if (def.typeName === 'ZodEnum') {
-    return { type: 'enum', options: def.values, description: def.description || 'one of the allowed values' };
+    return {
+      type: 'enum',
+      options: def.values,
+      description: def.description || 'one of the allowed values',
+    };
   } else if (def.typeName === 'ZodArray') {
     return { type: 'array', description: def.description || 'array of values' };
   } else if (def.typeName === 'ZodObject') {
@@ -89,12 +93,19 @@ function getZodSchemaDescription(schema: z.ZodTypeAny): any {
         properties[key] = getZodSchemaDescription(value as z.ZodTypeAny);
       }
     }
-    return { type: 'object', properties, description: def.description || 'object' };
+    return {
+      type: 'object',
+      properties,
+      description: def.description || 'object',
+    };
   } else if (def.typeName === 'ZodOptional') {
     return { ...getZodSchemaDescription(def.innerType), optional: true };
   } else if (def.typeName === 'ZodDefault') {
     // Handle default values like z.string().default('hello')
-    return { ...getZodSchemaDescription(def.innerType), default: def.defaultValue() };
+    return {
+      ...getZodSchemaDescription(def.innerType),
+      default: def.defaultValue(),
+    };
   } else if (def.typeName === 'ZodUnion') {
     // Handle union types like z.union([z.string(), z.number()])
     const options = def.options.map((option: z.ZodTypeAny) => {
@@ -104,7 +115,7 @@ function getZodSchemaDescription(schema: z.ZodTypeAny): any {
     return {
       type: 'union',
       options: options,
-      description: def.description || `one of: ${options.join(' | ')}`
+      description: def.description || `one of: ${options.join(' | ')}`,
     };
   } else {
     return { type: 'unknown', description: def.description || 'value' };

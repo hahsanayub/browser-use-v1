@@ -241,7 +241,10 @@ export class Agent {
         }
       }
     } catch (error) {
-      this.logger.warn('Failed to generate page-specific actions', error as Error);
+      this.logger.warn(
+        'Failed to generate page-specific actions',
+        error as Error
+      );
     }
 
     const textContent = await generatePageContextPrompt(
@@ -571,7 +574,10 @@ export class Agent {
           stepErrorMessage += `${AgentHistoryManager.formatError(error as Error, true)}\n`;
           stepErrorMessage += `This error occurred during step ${this.state.n_steps} execution.\n`;
 
-          this.agentHistoryManager.addError(this.state.n_steps, stepErrorMessage);
+          this.agentHistoryManager.addError(
+            this.state.n_steps,
+            stepErrorMessage
+          );
 
           // Also add error to legacy history for backward compatibility
           const errorResult: ActionResult = {
@@ -828,9 +834,10 @@ export class Agent {
 
       // Add context about what was attempted
       if (responseContent && responseContent !== 'none') {
-        const truncatedContent = responseContent.length > 500
-          ? responseContent.substring(0, 500) + '...[truncated]'
-          : responseContent;
+        const truncatedContent =
+          responseContent.length > 500
+            ? responseContent.substring(0, 500) + '...[truncated]'
+            : responseContent;
         detailedErrorMessage += `\nRaw LLM Response:\n${truncatedContent}\n`;
       }
 
@@ -839,11 +846,15 @@ export class Agent {
       }
 
       // Add this detailed error to agent history for LLM feedback in next step
-      this.agentHistoryManager.addError(this.state.n_steps, detailedErrorMessage);
+      this.agentHistoryManager.addError(
+        this.state.n_steps,
+        detailedErrorMessage
+      );
 
       // Fallback minimal output: take a screenshot
       return {
-        memory: 'Failed to analyze page due to LLM error - see agent history for details',
+        memory:
+          'Failed to analyze page due to LLM error - see agent history for details',
         action: [
           {
             action: 'screenshot',

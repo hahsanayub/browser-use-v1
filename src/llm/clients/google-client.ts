@@ -15,7 +15,6 @@ import type {
 
 /**
  * Check if an error should be retried based on error message patterns.
- * This function mirrors the Python implementation's _is_retryable_error.
  */
 function isRetryableError(exception: any): boolean {
   const errorMsg = String(exception).toLowerCase();
@@ -235,7 +234,7 @@ export class GoogleClient extends BaseLLMClient {
 
     // Retry mechanism with exponential backoff
     let lastException: any = null;
-    const maxRetries = 10; // Match the Python implementation
+    const maxRetries = 10;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {

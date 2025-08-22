@@ -237,7 +237,6 @@ function fallbackElementTreeToString(elementTree: DOMElementNode): string {
 
 /**
  * Generate a prompt for the current page context with viewport-aware DOM processing
- * Enhanced to support the new agent history structure aligned with Python version
  */
 export async function generatePageContextPrompt(
   objective: string,
@@ -406,14 +405,13 @@ export async function generatePageContextPrompt(
     ? `<read_state>\n${cleanReadState}\n</read_state>\n`
     : '';
 
-  // Generate step_info section - aligned with Python version format
+  // Generate step_info section
   let stepInfoSection = '';
   if (stepInfo) {
-    // Format date and time like Python version: YYYY-MM-DD HH:MM
+    // Format date and time
     const now = new Date();
     const timeStr = now.toISOString().substring(0, 16).replace('T', ' ');
 
-    // Python version uses step_number + 1 for display and "max possible steps" format
     stepInfoSection = `\n<step_info>\nStep ${stepInfo.stepNumber + 1} of ${stepInfo.maxSteps} max possible steps\nCurrent date and time: ${timeStr}\n</step_info>`;
   }
 
