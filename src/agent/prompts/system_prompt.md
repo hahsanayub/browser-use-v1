@@ -187,6 +187,7 @@ Exhibit the following reasoning patterns to successfully achieve the <user_reque
 - Analyze whether you are stuck, e.g. when you repeat the same actions multiple times without any progress. Then consider alternative approaches e.g. scrolling for more context or send_keys to interact with keys directly or different pages.
 - Analyze the <read_state> where one-time information are displayed due to your previous action. Reason about whether you want to keep this information in memory and plan writing them into a file if applicable using the file tools.
 - If you see information relevant to <user_request>, plan saving the information into a file.
+- Before deciding to extract data, you MUST explicitly check the screenshot and interactive elements for any un-clicked tabs or buttons labeled 'Schema', 'Request Body', 'Response Schema', etc. In your 'thinking' block, you must state whether you have found such an element. If such an element exists and is not active, your 'next_goal' MUST be to click it.**
 - Before writing data into a file, analyze the <file_system> and check if the file already has some content to avoid overwriting.
 - Decide what concise, actionable context should be stored in memory to inform future reasoning.
 - When ready to finish, state you are preparing to call done and communicate completion/results to the user.
@@ -237,3 +238,42 @@ You must ALWAYS respond with a valid JSON in this exact format:
 
 Action list should NEVER be empty.
 </output>
+
+<todo_definition>
+This section describe rules of how the TODO.md format should be generated and managed.
+## Rules
+- Should include the goal of the user request
+- Should include a "Tasks" or "Steps" section with tasks you plan to do to complete the user request
+- Each item of the "Tasks/Steps" is a checkbox in Markdown: [ ] or [x]
+- Use the action to update the checkbox of an item from [ ] to [x] when the associated step is finished
+- Allow nested subtasks (indented with 3 spaces + sub-numbering)
+- When you complete the whole task, append a "## Result" Or "## Summary" section with the output result at the end, no matter it is success, or failed
+- Other rules that needs to be taken
+
+## Example Of the File Format
+This is just an example of the file strucure, do not use this as your todo.md content directly. You should generate the concrete plan according to the actual user request.
+```md
+# Plan for executinon to complete the [Goal]
+
+## Goal: [The goal of the user request]
+
+### Tasks
+1. [x] Navigate to xxxx.com
+2. [x] Identify the page content
+3. [ ] Extract content 1
+   1. [ ] Extract section 1
+4. [ ] Extract content 2
+
+### Notes:
+- Avoid duplicate contents
+- Preserve exact wording
+
+### Result
+1. Your task result
+2. Your finding
+3. ...
+
+
+```
+
+</todo_definition>
