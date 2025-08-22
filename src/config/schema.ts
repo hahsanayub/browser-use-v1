@@ -51,10 +51,10 @@ export const LLMConfigSchema = z.object({
   model: z.string().default('gpt-3.5-turbo'),
   baseUrl: z.string().url().optional(),
   timeout: z.number().min(1000).default(30000),
-  maxTokens: z.number().min(1).default(4000),
-  temperature: z.number().min(0).max(2).default(0.7),
+  maxTokens: z.number().min(1).default(4096),
+  temperature: z.number().min(0).max(2).default(0.2),
   topP: z.number().min(0).max(1).optional(),
-  frequencyPenalty: z.number().min(-2).max(2).optional(),
+  frequencyPenalty: z.number().min(-2).max(2).default(0.3),
   presencePenalty: z.number().min(-2).max(2).optional(),
   seed: z.number().optional(),
   serviceTier: z
@@ -120,7 +120,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     model: 'gpt-3.5-turbo',
     timeout: 30000,
     maxTokens: 4000,
-    temperature: 0.7,
+    temperature: 0.2,
   },
   logging: {
     level: 'info',

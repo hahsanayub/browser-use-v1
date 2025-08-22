@@ -102,8 +102,7 @@ export async function run(
                 ? 'claude-3-sonnet-20240229'
                 : 'gpt-3.5-turbo',
             timeout: 30000,
-            maxTokens: 4000,
-            temperature: 0.7,
+            maxTokens: 4096,
           },
           browser: {
             browserType: 'chromium' as const,

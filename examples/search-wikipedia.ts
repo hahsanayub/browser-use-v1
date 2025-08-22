@@ -85,7 +85,6 @@ async function main() {
 
         timeout: 60000,
         maxTokens: 16384,
-        temperature: 0.7,
       },
       browser: {
         headless: true,
