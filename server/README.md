@@ -10,13 +10,13 @@ This is an extensible API server for triggering various browser-use functionalit
 # Development mode (auto-restart)
 npm run api-server:dev
 
-# 或者
+# or
 yarn api-server:dev
 
 # Production mode
 npm run api-server
 
-# 或者
+# or
 yarn api-server
 ```
 
@@ -131,7 +131,7 @@ curl -X POST http://localhost:3000/api/extract/custom \
   }'
 ```
 
-**响应示例：**
+**Response Example：**
 ```json
 {
   "success": true,
