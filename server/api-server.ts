@@ -33,19 +33,21 @@ const apiRouter = express.Router();
 // Extract API documentation endpoint
 apiRouter.post('/extract/tickets', async (req, res) => {
   try {
-    const { userRequest } = req.body;
+    const { userRequest, sessionId } = req.body;
 
     console.log('Starting tickets API extraction...');
     console.log('User Request:', userRequest || 'Using default request');
+    console.log('Session ID:', sessionId || 'default');
 
-    const result = await extractTicketsAPI(userRequest);
+    const result = await extractTicketsAPI(userRequest, sessionId);
 
     res.json({
       success: true,
       message: 'Tickets API extraction completed successfully',
       data: result,
       parameters: {
-        userRequest: userRequest || 'Default tickets extraction request'
+        userRequest: userRequest || 'Default tickets extraction request',
+        sessionId: sessionId || 'default'
       },
       timestamp: new Date().toISOString()
     });

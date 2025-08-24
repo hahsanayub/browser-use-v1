@@ -190,10 +190,10 @@ export class ExtractDataActions {
         if (content.length <= maxChars) {
           // Small content - process normally
           const extractionPrompt = ExtractDataActions.readExtractionPrompt();
-          const prompt = `You convert websites into structured information. Extract information from this webpage based on the query. 
+          const prompt = `You convert websites into structured information. Extract information from this webpage based on the query.
             ${extractionPrompt}
 
-Focus only on content relevant to the query. If 
+Focus only on content relevant to the query. If
 1. The query is vague
 2. Does not make sense for the page
 3. Some/all of the information is not available
@@ -298,7 +298,7 @@ Explain the content of the page and that the requested information is not availa
               for (let i = 0; i < chunkResponses.length; i++) {
                 chunksContent += `--- Chunk ${i + 1} ---\n${chunkResponses[i]}\n\n`;
               }
-              
+
               const chunksFileName = `extracted_content_${pageIndex}.chunks.md`;
               const chunksFilePath = path.join(context.fileSystem.getDir(), chunksFileName);
               await fs.writeFile(chunksFilePath, chunksContent, 'utf-8');
@@ -427,15 +427,15 @@ Explain the content of the page and that the requested information is not availa
    */
   private static buildChunkPrompt(query: string, chunk: string, chunkIndex: number, totalChunks: number): string {
     const extractionPrompt = ExtractDataActions.readExtractionPrompt();
-    return `This is chunk ${chunkIndex} of ${totalChunks} from a webpage. 
+    return `This is chunk ${chunkIndex} of ${totalChunks} from a webpage.
 Extract information based on the query: ${query}
-                        
+
 ${extractionPrompt}
-                        
-Focus only on content relevant to the query. Extract as much as possible information that match any part of the query from the chunk. Indicate the information that is not available in the chunk. 
+
+Focus only on content relevant to the query. Extract as much as possible information that match any part of the query from the chunk. Indicate the information that is not available in the chunk.
 Respond in JSON format.
 
-IMPORTANT: This chunk may contain overlapping content with adjacent chunks to maintain context. 
+IMPORTANT: This chunk may contain overlapping content with adjacent chunks to maintain context.
 Focus on extracting unique information while being aware that some content may be duplicated.
 
 Website chunk content:
@@ -536,20 +536,20 @@ ${chunkResponses.join('\n\n---\n\n')}
 
         const endpointNameInfo = endpointName ? `\n<endpoint_extracted>${endpointName}</endpoint_extracted>` : '';
         message = `Extracted content from ${url}\n<query>${query}\n</query>\n<extracted_content>\n${display}${lines.length - displayLinesCount} more lines...\n</extracted_content>\n<file_system>File saved at: extracted_content_${pageIndex}.md</file_system>${endpointNameInfo}`;
-        
+
         // Append to todo.md (matching Python version)
         if (endpointName && context.fileSystem) {
           try {
             const todoFilePath = 'todo.md';
             let todoContent = '';
-            
+
             try {
               todoContent = await context.fileSystem.readFile(todoFilePath);
             } catch (error) {
               console.warn('Error reading todo.md:', error);
               todoContent = '';
             }
-            
+
             // Append the endpoint to the todo.md
             todoContent += `\n## Extraction Record\n\t- [x] Explored endpoint: ${endpointName}\n`;
             // Note: In Python version, this line is commented out, so we'll also skip writing
@@ -558,7 +558,7 @@ ${chunkResponses.join('\n\n---\n\n')}
             console.warn('Error updating todo.md:', error);
           }
         }
-        
+
         includeExtractedContentOnlyOnce = true;
       } catch (error) {
         console.error('Failed to save extracted content:', error);
@@ -585,8 +585,6 @@ ${chunkResponses.join('\n\n---\n\n')}
     };
   }
 }
-
-const timestamp = new Date().toISOString();
 
 const customInstructions = `
 
@@ -748,7 +746,7 @@ This is just an example of the file strucure, do not use this as your todo.md co
 </todo_definition>
 `;
 
-export async function main(userRequest?: string) {
+export async function main(userRequest: string, sessionId: string) {
   const request = `
 ${userRequest}
 
@@ -802,8 +800,8 @@ ${userRequest}
       actionTimeout: 15000,
       continueOnFailure: true,
       customInstructions,
-      saveConversationPath: `logs/${timestamp}/conversations`,
-      fileSystemPath: `logs/${timestamp}`,
+      saveConversationPath: `projects/${sessionId}/conversations`,
+      fileSystemPath: `projects/${sessionId}`,
     };
 
     const history = await controller.run(request, agentConfig);
