@@ -1,5 +1,5 @@
 import express from 'express';
-import { main as extractTicketsAPI } from './browser_use_agent';
+import { execute } from './browser_use_agent';
 
 const router = express.Router();
 
@@ -12,7 +12,7 @@ router.post('/run', async (req, res) => {
     console.log('User Request:', userRequest || 'Using default request');
     console.log('Session ID:', sessionId || 'default');
 
-    const result = await extractTicketsAPI(userRequest, sessionId);
+    const result = await execute(userRequest, sessionId);
 
     res.json({
       success: true,
