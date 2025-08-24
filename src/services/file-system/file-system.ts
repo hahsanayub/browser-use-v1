@@ -173,6 +173,13 @@ export class FileSystem {
   }
 
   /**
+   * Get the current extracted content count
+   */
+  getExtractedContentCount(): number {
+    return this.extractedContentCount;
+  }
+
+  /**
    * Get a file object by full filename
    */
   getFile(fullFilename: string): BaseFile | null {

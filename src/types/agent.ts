@@ -38,6 +38,10 @@ export interface ActionResult {
   attachments?: string[];
   /** Additional metadata */
   metadata?: Record<string, any>;
+  /** Enhanced fields for read_state functionality */
+  extractedContent?: string;
+  includeExtractedContentOnlyOnce?: boolean;
+  longTermMemory?: string;
 }
 
 export interface AgentConfig {
