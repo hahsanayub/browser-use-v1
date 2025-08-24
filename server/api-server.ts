@@ -1,6 +1,7 @@
 import express from 'express';
 import 'dotenv/config';
-import { main as extractTicketsAPI } from './openapi';
+import fileRoutes from './file-routes';
+import browserUseRoutes from './browser-use-routes';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -30,41 +31,11 @@ app.get('/health', (req, res) => {
 // API routes base path
 const apiRouter = express.Router();
 
-// Extract API documentation endpoint
-apiRouter.post('/extract/tickets', async (req, res) => {
-  try {
-    const { userRequest, sessionId } = req.body;
-
-    console.log('Starting tickets API extraction...');
-    console.log('User Request:', userRequest || 'Using default request');
-    console.log('Session ID:', sessionId || 'default');
-
-    const result = await extractTicketsAPI(userRequest, sessionId);
-
-    res.json({
-      success: true,
-      message: 'Tickets API extraction completed successfully',
-      data: result,
-      parameters: {
-        userRequest: userRequest || 'Default tickets extraction request',
-        sessionId: sessionId || 'default'
-      },
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('Error extracting tickets API:', error);
-
-    res.status(500).json({
-      success: false,
-      message: 'Failed to extract tickets API',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
-    });
-  }
-});
+apiRouter.use('/filesystem', fileRoutes);
+apiRouter.use('/browser-use', browserUseRoutes);
 
 // Register API routes
-app.use('/api', apiRouter);
+app.use('/api/v1', apiRouter);
 
 // 404 handler
 app.use((req, res) => {
@@ -92,7 +63,9 @@ if (import.meta.url.endsWith(process.argv[1]) || process.argv[1].endsWith('api-s
   app.listen(PORT, () => {
     console.log(`🚀 API Server is running on port ${PORT}`);
     console.log(`📖 Health check: http://localhost:${PORT}/health`);
-    console.log(`🎫 Extract tickets: POST http://localhost:${PORT}/api/extract/tickets`);
+    console.log(`🤖 Browser-use run: POST http://localhost:${PORT}/api/v1/browser-use/run`);
+    console.log(`📁 Download file: GET http://localhost:${PORT}/api/v1/filesystem/download?file=<filepath>&sessionId=<sessionId>`);
+    console.log(`📂 List files: GET http://localhost:${PORT}/api/v1/filesystem/files/list?projectId=<projectId>&directory=<directory>`);
   });
 }
 

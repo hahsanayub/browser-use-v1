@@ -823,5 +823,5 @@ ${userRequest}
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main();
+  main('Extract all API endpoints from the documentation', 'default');
 }
