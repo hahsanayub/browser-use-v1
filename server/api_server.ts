@@ -1,7 +1,7 @@
 import express from 'express';
 import 'dotenv/config';
-import fileRoutes from './file-routes';
-import browserUseRoutes from './browser-use-routes';
+import fileRoutes from './file_routes';
+import browserUseRoutes from './browser_use_routes';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
