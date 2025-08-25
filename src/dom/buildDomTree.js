@@ -9,6 +9,25 @@
   const { doHighlightElements, focusHighlightIndex, viewportExpansion, debugMode } = args;
   let highlightIndex = 0; // Reset highlight index
 
+  const HIGHLIGHT_CONTAINER_ID = "playwright-highlight-container";
+
+  // Add this function to perform cleanup when needed
+  function cleanupHighlights() {
+    if (typeof window !== 'undefined' && window._highlightCleanupFunctions && window._highlightCleanupFunctions.length) {
+      window._highlightCleanupFunctions.forEach(fn => fn());
+      window._highlightCleanupFunctions = [];
+    }
+
+    // Also remove the container
+    if (typeof document !== 'undefined') {
+      const container = document.getElementById(HIGHLIGHT_CONTAINER_ID);
+      if (container) container.remove();
+    }
+  }
+
+  // Clean up any existing highlights before starting new ones
+  cleanupHighlights();
+
   // Add caching mechanisms at the top level
   const DOM_CACHE = {
     boundingRects: new WeakMap(),
@@ -92,8 +111,6 @@
   const DOM_HASH_MAP = {};
 
   const ID = { current: 0 };
-
-  const HIGHLIGHT_CONTAINER_ID = "playwright-highlight-container";
 
   // Add a WeakMap cache for XPath strings
   const xpathCache = new WeakMap();
@@ -342,18 +359,6 @@
       }
     }
   }
-
-  // // Add this function to perform cleanup when needed
-  // function cleanupHighlights() {
-  //   if (window._highlightCleanupFunctions && window._highlightCleanupFunctions.length) {
-  //     window._highlightCleanupFunctions.forEach(fn => fn());
-  //     window._highlightCleanupFunctions = [];
-  //   }
-
-  //   // Also remove the container
-  //   const container = document.getElementById(HIGHLIGHT_CONTAINER_ID);
-  //   if (container) container.remove();
-  // }
 
   /**
    * Gets the position of an element in its parent.
