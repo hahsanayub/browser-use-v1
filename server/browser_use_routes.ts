@@ -36,10 +36,10 @@ router.post('/sse', async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 'Cache-Control, Content-Type, Accept');
 
-    // Send event function
-    const sendEvent = (eventLevel: string, eventType: string, data: any) => {
+    // Send event function - matching Python version format
+    const sendEvent = (eventType: string, data: any) => {
       if (!res.destroyed) {
-        res.write(`event: ${eventLevel}\n`);
+        res.write(`event: ${eventType}\n`);
         res.write(`data: ${JSON.stringify(data)}\n\n`);
       }
     };

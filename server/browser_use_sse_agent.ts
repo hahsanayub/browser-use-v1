@@ -84,7 +84,7 @@ export class ExtractDataActions {
           type: 'extraction_start',
           url: p.url(),
           query,
-          timestamp: Date.now(),
+          timestamp: new Date().toISOString(),
         });
 
         // Get page HTML content with timeout
@@ -676,13 +676,12 @@ export class BrowserUseSSEAgent {
 
       // Start execution event
       const startEvent: BrowserUseEvent = {
-        type: 'execution_start',
-        timestamp: Date.now(),
-        sessionId: sessionId || this.sessionId,
-        message: 'Agent execution started'
-      };
+          type: 'execution_start',
+          timestamp: new Date().toISOString(),
+          session_id: sessionId || this.sessionId || 'default',
+          message: 'Agent execution started'
+        };
       if (sendEvent) sendEvent(startEvent);
-      yield startEvent;
 
       // Enhanced agent config with SSE event handling
       const enhancedConfig: AgentConfig = {
@@ -695,38 +694,90 @@ export class BrowserUseSSEAgent {
         saveConversationPath: `projects/${sessionId || this.sessionId || 'default'}/conversations`,
         fileSystemPath: `projects/${sessionId || this.sessionId || 'default'}`,
         onStepStart: async (agent: Agent) => {
-          const event: BrowserUseEvent = {
-            type: 'step_start',
-            step: agent.getCurrentStep(),
-            timestamp: Date.now(),
-            sessionId: sessionId || this.sessionId,
-            data: {
-              consecutiveFailures: agent.getConsecutiveFailures(),
-              isPaused: agent.isPaused(),
-              isStopped: agent.isStopped(),
-              isRunning: agent.getIsRunning()
-            }
-          };
-          if (sendEvent) sendEvent(event);
+          try {
+            // Get current page state from browser session
+            const browserSession = (agent as any).browserSession;
+            const context = browserSession?.getContext();
+            const page = context?.pages().slice(-1)[0];
+            const currentUrl = page ? page.url() : 'N/A';
+
+            // Get agent state information
+            const history = agent.getHistory();
+            const stepNumber = agent.getCurrentStep();
+
+            // Extract history data using safe method
+            const historyData = this._extractSafeHistoryData(history);
+
+            // Create step event data matching Python format
+            const stepData = {
+              step: stepNumber,
+              url: currentUrl,
+              ...historyData,
+              timestamp: new Date().toISOString(),
+            };
+
+            const event: BrowserUseEvent = {
+              type: 'step_start',
+              message: `Starting step ${stepNumber}`,
+              timestamp: new Date().toISOString(),
+              session_id: sessionId || this.sessionId || 'default',
+              data: stepData
+            };
+            if (sendEvent) sendEvent(event);
+          } catch (error) {
+            console.error('Error in step start hook:', error);
+            const errorEvent: BrowserUseEvent = {
+              type: 'error',
+              message: `Error in step start hook: ${error}`,
+              timestamp: new Date().toISOString(),
+              session_id: sessionId || this.sessionId || 'default',
+              error: String(error)
+            };
+            if (sendEvent) sendEvent(errorEvent);
+          }
         },
         onStepEnd: async (agent: Agent) => {
-          const history = agent.getHistory();
-          const lastStep = history[history.length - 1];
+          try {
+            // Get current page state from browser session
+            const browserSession = (agent as any).browserSession;
+            const context = browserSession?.getContext();
+            const page = context?.pages().slice(-1)[0];
+            const currentUrl = page ? page.url() : 'N/A';
 
-          const event: BrowserUseEvent = {
-            type: 'step_end',
-            step: agent.getCurrentStep(),
-            timestamp: Date.now(),
-            sessionId: sessionId || this.sessionId,
-            data: {
-              action: lastStep?.action,
-              result: lastStep?.result ? {
-                success: lastStep.result.success,
-                message: lastStep.result.message
-              } : null
-            }
-          };
-          if (sendEvent) sendEvent(event);
+            // Get agent state information
+            const history = agent.getHistory();
+            const stepNumber = agent.getCurrentStep();
+
+            // Extract history data using safe method
+            const historyData = this._extractSafeHistoryData(history);
+
+            // Create step completion event data matching Python format
+            const stepData = {
+              step: stepNumber,
+              url: currentUrl,
+              ...historyData,
+              timestamp: new Date().toISOString(),
+            };
+
+            const event: BrowserUseEvent = {
+              type: 'step_complete',
+              message: `Completed step ${stepNumber}`,
+              timestamp: new Date().toISOString(),
+              session_id: sessionId || this.sessionId || 'default',
+              data: stepData
+            };
+            if (sendEvent) sendEvent(event);
+          } catch (error) {
+            console.error('Error in step end hook:', error);
+            const errorEvent: BrowserUseEvent = {
+              type: 'error',
+              message: `Error in step end hook: ${error}`,
+              timestamp: new Date().toISOString(),
+              session_id: sessionId || this.sessionId || 'default',
+              error: String(error)
+            };
+            if (sendEvent) sendEvent(errorEvent);
+          }
         }
       };
 
@@ -763,8 +814,8 @@ ${userRequest}
       // Send completion event
       const completeEvent: BrowserUseEvent = {
         type: this.cancelled ? 'cancelled' : 'agent_complete',
-        timestamp: Date.now(),
-        sessionId: sessionId || this.sessionId,
+        timestamp: new Date().toISOString(),
+        session_id: sessionId || this.sessionId || 'default',
         data: {
           stepsExecuted: history.length,
           finalPage: finalPageInfo
@@ -772,18 +823,15 @@ ${userRequest}
         message: this.cancelled ? 'Agent execution cancelled' : 'Agent execution completed successfully'
       };
       if (sendEvent) sendEvent(completeEvent);
-      yield completeEvent;
-
     } catch (error) {
       const errorEvent: BrowserUseEvent = {
         type: 'error',
-        timestamp: Date.now(),
-        sessionId: sessionId || this.sessionId,
+        timestamp: new Date().toISOString(),
+        session_id: sessionId || this.sessionId || 'default',
         message: (error as Error).message,
         error: (error as Error).message
       };
       if (sendEvent) sendEvent(errorEvent);
-      yield errorEvent;
     } finally {
       // Cleanup
       if (this.controller) {
@@ -802,37 +850,97 @@ ${userRequest}
   }
 
   /**
-   * Safely serialize data for SSE transmission
+   * Safely extract data from browser_use history object.
+   * Matches Python version's _extract_safe_history_data functionality.
    */
-  private safeSerialize(data: any): string {
+  private _extractSafeHistoryData(history: any[]): any {
     try {
-      return JSON.stringify(data, (key, value) => {
-        // Handle undefined values
-        if (value === undefined) {
-          return null;
+      // Validate history object
+      if (!history || !Array.isArray(history)) {
+        console.warn('Invalid history object provided');
+        return {
+          model_thoughts: null,
+          model_outputs: null,
+          model_actions: null,
+          extracted_content: null,
+          urls: [],
+        };
+      }
+
+      if (history.length === 0) {
+        console.warn('Empty history object provided');
+        return {
+          model_thoughts: null,
+          model_outputs: null,
+          model_actions: null,
+          extracted_content: null,
+          urls: [],
+        };
+      }
+
+      // Extract data from all history steps, similar to Python version
+      const model_thoughts: string[] = [];
+      const model_outputs: string[] = [];
+      const model_actions: any[] = [];
+      const extracted_contents: string[] = [];
+      const urls: string[] = [];
+
+      // Process each history step
+      for (const step of history) {
+        if (!step) continue;
+
+        // Extract thoughts from various possible locations
+        // Check result.metadata.thoughts, result.longTermMemory, or action reasoning
+        const thoughts = step.result?.metadata?.thoughts ||
+                        step.result?.longTermMemory ||
+                        (typeof step.action === 'object' && step.action?.reasoning) ||
+                        null;
+        if (thoughts && typeof thoughts === 'string') {
+          model_thoughts.push(thoughts);
         }
-        // Handle functions
-        if (typeof value === 'function') {
-          return '[Function]';
+
+        // Extract model outputs (result messages)
+        const output = step.result?.message;
+        if (output && typeof output === 'string') {
+          model_outputs.push(output);
         }
-        // Handle circular references and other complex objects
-        if (typeof value === 'object' && value !== null) {
-          // Simple check for circular references
-          try {
-            JSON.stringify(value);
-            return value;
-          } catch {
-            return '[Circular Reference]';
-          }
+
+        // Extract actions
+        if (step.action) {
+          model_actions.push(step.action);
         }
-        return value;
-      });
+
+        // Extract content
+        const content = step.result?.extractedContent;
+        if (content && typeof content === 'string') {
+          extracted_contents.push(content);
+        }
+
+        // Extract URLs from page state
+        const url = step.pageState?.url;
+        if (url && typeof url === 'string') {
+          urls.push(url);
+        }
+      }
+
+      // Return the last item for most fields (matching Python behavior)
+      // and all URLs
+      return {
+        model_thoughts: model_thoughts.length > 0 ? model_thoughts[model_thoughts.length - 1] : null,
+        model_outputs: model_outputs.length > 0 ? model_outputs[model_outputs.length - 1] : null,
+        model_actions: model_actions.length > 0 ? model_actions[model_actions.length - 1] : null,
+        extracted_content: extracted_contents.length > 0 ? extracted_contents[extracted_contents.length - 1] : null,
+        urls: [...new Set(urls)], // Remove duplicates
+      };
     } catch (error) {
-      return JSON.stringify({
-        type: 'serialization_error',
-        timestamp: Date.now(),
-        error: 'Failed to serialize event data'
-      });
+      console.warn(`Failed to extract history data: ${error}`);
+      return {
+        model_thoughts: null,
+        model_outputs: null,
+        model_actions: null,
+        extracted_content: null,
+        urls: [],
+      };
     }
   }
 
@@ -891,12 +999,15 @@ export function cancelSession(sessionId: string): boolean {
 // Export event type for better type safety
 export interface BrowserUseEvent {
   type: string;
-  timestamp: number;
-  sessionId?: string;
+  session_id: string;
+  timestamp?: string;
   step?: number;
   data?: any;
   message?: string;
   error?: string;
+  url?: string;
+  history?: any[];
+  screenshot?: string;
 }
 
 // Initialize PromptConfig instance

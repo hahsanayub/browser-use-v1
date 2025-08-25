@@ -3,14 +3,18 @@ import { execute } from './browser_use_agent';
 import { randomUUID } from 'crypto';
 
 export class BrowserUseService {
-  private sseSender?: (eventLevel: string, eventType: string, data: any) => void;
+  private sseSender?: (eventType: string, data: any) => void;
   private activeSessions = new Map<string, BrowserUseSSEAgent>();
+  private heartbeatInterval?: NodeJS.Timeout;
+  private heartbeatIntervalMs: number = 30000; // 30秒心跳间隔
+  private isHeartbeatActive: boolean = false;
 
   /**
    * Set SSE sender function for real-time event streaming
    */
-  setSseSender(sender: (eventLevel: string, eventType: string, data: any) => void): void {
+  setSseSender(sender: (eventType: string, data: any) => void): void {
     this.sseSender = sender;
+    this.startHeartbeat();
   }
 
   /**
@@ -18,14 +22,73 @@ export class BrowserUseService {
    */
   clearSseSender(): void {
     this.sseSender = undefined;
+    this.stopHeartbeat();
+  }
+
+  /**
+   * Start heartbeat mechanism
+   */
+  private startHeartbeat(): void {
+    if (this.isHeartbeatActive) {
+      return;
+    }
+
+    this.isHeartbeatActive = true;
+    this.heartbeatInterval = setInterval(() => {
+      this.sendHeartbeat();
+    }, this.heartbeatIntervalMs);
+
+    console.log(`Heartbeat started with interval: ${this.heartbeatIntervalMs}ms`);
+  }
+
+  /**
+   * Stop heartbeat mechanism
+   */
+  private stopHeartbeat(): void {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = undefined;
+    }
+    this.isHeartbeatActive = false;
+    console.log('Heartbeat stopped');
+  }
+
+  /**
+   * Send heartbeat event
+   */
+  private sendHeartbeat(): void {
+    if (this.sseSender) {
+      this.sendEvent('heartbeat', {
+        message: 'Server heartbeat',
+        timestamp: new Date().toISOString(),
+        serverTime: Date.now()
+      });
+    }
+  }
+
+  /**
+   * Set heartbeat interval (in milliseconds)
+   */
+  setHeartbeatInterval(intervalMs: number): void {
+    if (intervalMs < 5000) {
+      throw new Error('Heartbeat interval must be at least 5 seconds');
+    }
+    
+    this.heartbeatIntervalMs = intervalMs;
+    
+    // Restart heartbeat with new interval if currently active
+    if (this.isHeartbeatActive) {
+      this.stopHeartbeat();
+      this.startHeartbeat();
+    }
   }
 
   /**
    * Send event through SSE if sender is available
    */
-  private sendEvent(eventLevel: string, eventType: string, data: any): void {
+  private sendEvent(eventType: string, data: any): void {
     if (this.sseSender) {
-      this.sseSender(eventLevel, eventType, data);
+      this.sseSender(eventType, data);
     }
   }
 
@@ -68,7 +131,7 @@ export class BrowserUseService {
     console.log('Max Steps:', maxSteps);
 
     // Send initial connection event
-    this.sendEvent('info', 'connection', {
+    this.sendEvent('connection', {
       message: 'SSE connection established',
       sessionId: finalSessionId,
       timestamp: new Date().toISOString()
@@ -83,7 +146,7 @@ export class BrowserUseService {
       this.executeWithSseEvents(agent, userRequest, maxSteps, finalSessionId)
         .catch(error => {
           console.error('Error in SSE execution:', error);
-          this.sendEvent('error', 'execution_error', {
+          this.sendEvent('execution_error', {
             message: `Execution error: ${error}`,
             sessionId: finalSessionId,
             error: error instanceof Error ? error.message : String(error),
@@ -98,7 +161,7 @@ export class BrowserUseService {
       return finalSessionId;
     } catch (error) {
       console.error('Error starting SSE execution:', error);
-      this.sendEvent('error', 'start_error', {
+      this.sendEvent('start_error', {
         message: `Failed to start execution: ${error}`,
         sessionId: finalSessionId,
         error: error instanceof Error ? error.message : String(error),
@@ -120,7 +183,7 @@ export class BrowserUseService {
     try {
       // Use the unified sendEvent function with correct signature
       const sendEvent = (event: any) => {
-        this.sendEvent('data', event.type, {
+        this.sendEvent(event.type, {
           ...event,
           sessionId,
           timestamp: new Date().toISOString()
@@ -137,7 +200,7 @@ export class BrowserUseService {
       }
     } catch (error) {
       console.error('Error in executeWithSseEvents:', error);
-      this.sendEvent('error', 'execution_error', {
+      this.sendEvent('execution_error', {
         message: `Execution error: ${error}`,
         sessionId,
         error: error instanceof Error ? error.message : String(error),
@@ -158,6 +221,11 @@ export class BrowserUseService {
       status: {
         serviceRunning: true,
         activeSessionCount: activeSessions.length,
+        heartbeat: {
+          active: this.isHeartbeatActive,
+          intervalMs: this.heartbeatIntervalMs,
+          hasSSEConnection: !!this.sseSender
+        },
         timestamp: Date.now()
       },
       activeSessions: activeSessions,
@@ -175,7 +243,7 @@ export class BrowserUseService {
       // Remove from local tracking
       this.activeSessions.delete(sessionId);
 
-      this.sendEvent('info', 'session_cancelled', {
+      this.sendEvent('session_cancelled', {
         message: `Session ${sessionId} cancelled successfully`,
         sessionId,
         timestamp: new Date().toISOString()
@@ -190,6 +258,40 @@ export class BrowserUseService {
    */
   getActiveSessions(): Array<{ sessionId: string; status: any }> {
     return BrowserUseSSEAgent.getActiveSessions();
+  }
+
+  /**
+   * Get heartbeat status
+   */
+  getHeartbeatStatus(): { active: boolean; intervalMs: number; hasSSEConnection: boolean } {
+    return {
+      active: this.isHeartbeatActive,
+      intervalMs: this.heartbeatIntervalMs,
+      hasSSEConnection: !!this.sseSender
+    };
+  }
+
+  /**
+   * Cleanup service resources
+   */
+  cleanup(): void {
+    console.log('Cleaning up BrowserUseService...');
+    
+    // Stop heartbeat
+    this.stopHeartbeat();
+    
+    // Clear SSE sender
+    this.clearSseSender();
+    
+    // Cancel all active sessions
+    for (const sessionId of this.activeSessions.keys()) {
+      this.cancelSession(sessionId);
+    }
+    
+    // Clear active sessions map
+    this.activeSessions.clear();
+    
+    console.log('BrowserUseService cleanup completed');
   }
 
   /**
