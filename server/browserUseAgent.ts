@@ -17,7 +17,7 @@ import TurndownService from 'turndown';
 import * as path from 'path';
 import { promises as fs } from 'fs';
 import { FileSystem } from '../src/services/file-system';
-import { PromptConfig } from './prompt_config';
+import { PromptConfig } from './promptConfig';
 
 // Helper function for Promise.race with proper timeout cleanup
 function withTimeout<T>(

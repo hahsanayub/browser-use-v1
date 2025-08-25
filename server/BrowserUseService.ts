@@ -1,4 +1,4 @@
-import { BrowserUseSSEAgent, type BrowserUseEvent } from './browser_use_sse_agent';
+import { BrowserUseSSEAgent, type BrowserUseEvent } from './browserUseAgent';
 import { randomUUID } from 'crypto';
 
 export class BrowserUseService {

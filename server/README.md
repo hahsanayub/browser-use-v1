@@ -164,7 +164,7 @@ All API endpoints return a unified error format when errors occur:
 
 To add new API endpoints, follow these steps:
 
-1. Add new routes to `apiRouter` in `server/api-server.ts`
+1. Add new routes to `apiRouter` in `server/apiServer.ts`
 2. Implement corresponding processing logic
 3. Update the task list returned by `/api/extract/tasks` endpoint
 4. Update this documentation

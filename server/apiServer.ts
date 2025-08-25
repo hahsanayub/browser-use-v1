@@ -1,7 +1,7 @@
 import express from 'express';
 import 'dotenv/config';
-import fileRoutes from './file_routes';
-import browserUseRoutes from './browser_use_routes';
+import fileRoutes from './fileRoute';
+import browserUseRoutes from './browserUseRoute';
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -59,7 +59,7 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 });
 
 // Start server
-if (import.meta.url.endsWith(process.argv[1]) || process.argv[1].endsWith('api-server.ts')) {
+if (import.meta.url.endsWith(process.argv[1]) || process.argv[1].endsWith('apiServer.ts')) {
   app.listen(PORT, () => {
     console.log(`🚀 API Server is running on port ${PORT}`);
     console.log(`📖 Health check: http://localhost:${PORT}/health`);

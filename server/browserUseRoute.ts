@@ -1,5 +1,5 @@
 import express from 'express';
-import { BrowserUseService } from './BrowserUseService';
+import { BrowserUseService } from './browserUseService';
 
 const router = express.Router();
 const browserUseService = new BrowserUseService();
