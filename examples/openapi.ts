@@ -237,6 +237,7 @@ Extract detailed API documentation content for the 'Tickets' API from 'https://d
 - NEVER click on elements with "+", "-", "▼", "▲" symbols in "Response samples"/"Requeset samples" sections
 - NEVER interact with any UI controls in sample/example sections
 - Ignore all "Copy", "Expand", "Collapse" buttons in sample areas
+- When you think content can be extracted and before calling extract_structured_data, if there are elements like 200, 400, 500 and so on, please click them first(Regardless of whether the information for 200, 400, 500, etc., is already displayed, please use the history to determine this and make sure to click it once.). Then, consider if there is any "default" related information (if so, be sure to click the "default" element), and then call extract_structured_data.
 `;
 
 async function main() {
@@ -259,7 +260,7 @@ async function main() {
         maxTokens: 16384,
       },
       browser: {
-        headless: true,
+        headless: false,
         browserType: 'chromium',
         viewport: { width: 1440, height: 900 },
         timeout: 45000,
