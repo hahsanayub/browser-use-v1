@@ -155,24 +155,25 @@ You are controlling a browser to extract complete information from an API docume
 
 ## Detailed Info Discovery Instructions
 
-#### 0️⃣ Close Overlay
-Before extracting any content:
-- Look for and close any overlays that may block access to the main content, such as:
-  - Cookie consent banners
-  - Cookie Policy prompts
+#### 0️⃣ Close Overlay: Highest Priority Action
+
+CRITICAL: Before proceeding with any other actions on a new page (including those planned in todo.md), you MUST first scan the entire page for any overlays.
+
+- **What to look for:** Overlays are elements that may block access to the main content. They include, but are not limited to:
+  - Cookie consent banners & Cookie Policy prompts
   - Pop-up modals
-  - Subscription prompts
-  - Sign-in dialogs
+  - Subscription prompts or sign-in dialogs
   - Floating ads or tooltips
-  - Full-screen overlays
 
-Identify and click buttons or icons commonly used to dismiss these overlays, such as:
-- “Accept”, “Close”, “X”, “No thanks”, “Got it”, or “Dismiss”
-- Icons that look like X, × (close) or checkmarks
+- **What to do:** If an overlay is detected, your **immediate and only action for the current step must be to click the button or icon to dismiss it.**
+  - Look for common dismissal elements like: “Accept”, “Close”, “X”, “No thanks”, “Got it”, or “Dismiss”.
+  - Icons that look like X, × (close) or checkmarks are also valid targets.
 
-If the overlay cannot be closed or skipped, attempt to scroll or interact to bypass it.
-
-Wait 1–2 seconds after each interaction to allow the interface to update.
+- **Important Constraints:**
+  - Defer your originally planned task to the next step after the overlay has been successfully closed.
+  - Do not combine closing an overlay with any other action in the same step.
+  - If an overlay cannot be closed, attempt to scroll or interact to bypass it.
+  - Always wait 1–2 seconds after the interaction to allow the interface to update.
 
 ---
 
@@ -185,6 +186,7 @@ Wait 1–2 seconds after each interaction to allow the interface to update.
 - If the navigation menu bar(panel) is too long, you can scroll that container to get more content visible.
 - Observe and learn the page to explore and expand the nav menu appropriatly.
 - Wait 1-2s for content to load before proceeding.
+
 ---
 
 #### 2️⃣ Discover Each Endpoint
