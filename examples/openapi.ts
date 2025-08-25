@@ -255,7 +255,7 @@ Extract raw api document content for "Get users" endpoint, including: HTTP metho
 `;
 
 const userRequest = `
-Extract the entire original API documentation content for the List Tickets API from this page: https://developers.hubspot.com/docs/reference/api/crm/objects/tickets. You must extract all available details required for OpenAPI Spec, including endpoints, HTTP methods, versioning, baseApiUrl, auth requirements, request parameters, request body schema, response codes, bodies, and error responses. Preserve exact wording from the source.
+I would like to generate the spec for "Transfers" related API from Adyen https://docs.adyen.com/api-explorer/transfers/4/overview
 
 # Important Rules:
 - This is "multi-step" task, you need to create a detailed plan with "todo.md" file before you start the task. Reference the <todo_file_management> section for the format of the "todo.md" file.
@@ -348,7 +348,7 @@ async function main() {
 
   try {
     await controller.goto(
-      'https://developers.hubspot.com/docs/reference/api/crm/objects/tickets'
+      'https://docs.adyen.com/api-explorer/transfers/4/overview'
     );
 
     const agentConfig: AgentConfig = {
