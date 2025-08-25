@@ -70,23 +70,81 @@ const timestamp = new Date().toISOString();
 
 const customInstructions = `
 
+<todo_file_management>
+This section defines the rules for how the TODO.md file should be generated, updated, and maintained by the agent.
+
+**Rules**
+- Always begin with a **title** (e.g., "Plan for extracting X API documentation").
+- Must include a **## Goal** section that restates the user’s request in natural language.
+- Must include a **## Steps** (or **## Tasks**) section with a numbered checklist of actions.
+  - Each task is a Markdown checkbox:
+    - \`[ ]\` = incomplete
+    - \`[x]\` = complete
+    - \`[-]\` = start processing, or in the progress
+  - Subtasks are allowed:
+    - Indented by 3 spaces
+    - Numbered (1., 2., 3., etc.)
+- When a parent step has in-process sub-task, update its checkbox from \`[ ]\` → \`[-]\`.
+- When a step is starting, update its checkbox from \`[ ]\` → \`[-]\`.
+- When a step is completed, update its checkbox from e.g. \`[ ]\`, \`[-]\` → \`[x]\`.
+- When the workflow is finished (success, partial, or failure), append or update a **## Result** (or **## Summary**) section at the end.
+  - This section must include a **brief summary of the final output** or the outcome of the workflow. E.g. what has been extracted for the user request, what files generated for what extracted.
+- Do not delete or overwrite existing tasks; only update their status or append new ones.
+- Always preserve the overall structure of the file when updating.
+
+**Example**
+This is just an example of the file strucure, never copy this this as your todo.md content directly.
+\`\`\`md
+# Plan for extracting Tasks-related API documentation
+
+## Goal
+Extract all Tasks-related API endpoint documentation content from the HubSpot CRM API documentation.
+
+## Steps
+
+### Discovery
+1. [x] Navigate to HubSpot CRM API documentation home page
+2. [ ] Locate "Tasks" section
+3. [ ] Expand to reveal all endpoints
+
+### Enumeration
+1. [ ] List all Tasks-related endpoints
+
+### Extraction
+1. [ ] Archive a batch of tasks by ID
+2. [ ] Create a batch of tasks
+3. [ ] Create a task
+4. [ ] Update a task by ID
+
+### Verification
+1. [ ] Confirm all listed endpoints are extracted
+
+## Result
+- Navigation complete.
+- Enumeration in progress.
+\`\`\`
+
+</todo_file_management>
+
+
+
+
+<api_document_content_page_explore_guidelines>
 You are controlling a browser to extract complete information from an API documentation page.
 
 ## Workflow Guideline You Must Apply to Browse the page to Extract API document content
-0. Firtly, you must identify what pages(endpoints) you need to browse to complete the user_request in your plan, follow this when you process your steps. Skip the pages (endpoints) that doesn't match the user_request. Refernce <identify_entpoints> rules to help you generate plan.
+0. Firtly, you must identify what pages(endpoints) you need to browse to complete the user_request in your plan, follow this when you process your steps. Skip the pages (endpoints) that doesn't match the user_request.
 1. Do not start browsing and extracting page content in a group section menu scope, always click the endpoint mene item. If the navigation section has many endpoints, open them by clicking one by one.
 2. If the page doesn't look like an "API-endpoint" document page, for example the page just tells the end-point usage, api versions, rate-limit info, general authorzation-info of the API service, you should just extract the page content's summary content with a query like: \`Extract summary info, and what this page describes.\`.
 3. You must memorize clearly what elements have been expanded, do not repeat to click them again.
 4. Your goal is to explore the every single endpoint page, you should be able to distinglish if the page is a category section, or an endpoint detailed page. Click its sub nav items to enter the endpoint page, instead of doing extraction for the entire section.
 5. Handle navigation menu:
-  1. If the entry page open but the selected navigation menu item is not fully visible, you must observe the navigation panel and do necessary interaction\scrollin(0.5 page to 1 page) individually on the panel as needed to make sure the selected navigation item of the entry page is visible before calling "extract_structure_data" tool to do extraction. For example, you can locate the first "nav" or "NavMenu" element on the page, or a div with class "SideNav" (or similar), this element is scrollable vertically.
+  1. If the entry page open but the selected navigation menu item is not fully visible, you must observe the navigation panel and do necessary interaction scrollin(0.5 page to 1 page) individually on the panel as needed to make sure the selected navigation item of the entry page is visible before doing API document content extraction. For example, you can locate the first "nav" or "NavMenu" element on the page, or a div with class "SideNav" (or similar), this element is scrollable vertically.
   2. Make sure to get the selected endpoint page, or the endpoint you're currently exploring is visible in the navigation menu (if has) by using the scrolling tool, or do necessary interaction on the nav menu, nav panel decidedly.
   3. If the Nav item is already expanded, do not click to collapse them.
 6. **IMPORTANT** Process indivisual endpoint at once, when the page contains multiple endpoints, please keep navivating to the sub endpoint.
 7. Ignore **deprecated** endpoints, endpoint pages with "strikethrough" line. Skip those pages, indicate this in the todo.md file in your plan.
-8. DO NOT repeat extraction on the page(endpoint) you have already extracted, <read_state /> and <todo_contents> recored what endpoints you have extracted already.
-9. Folllow the **Detailed Info Discovery Instructions** below to browse the page to identify and discover API Spec content.
-10. Identify/explore all pages you must explore based on the <user_request>, call the \`done\` action when you think you have fully completed all endpoints the user requested.
+8. Folllow the **Detailed Info Discovery Instructions** below to browse the page to identify and discover API Spec content.
 
 ## IMPORTANT INTERACTION RULES:
 - NEVER click on elements with "+", "-", "▼", "▲" symbols in "Response samples"/"Requeset samples" sections
@@ -94,12 +152,14 @@ You are controlling a browser to extract complete information from an API docume
 - Focus only on the main API documentation content
 - Ignore all "Copy", "Expand", "Collapse" buttons in sample areas
 
+
 ## Detailed Info Discovery Instructions
 
 #### 0️⃣ Close Overlay
 Before extracting any content:
 - Look for and close any overlays that may block access to the main content, such as:
   - Cookie consent banners
+  - Cookie Policy prompts
   - Pop-up modals
   - Subscription prompts
   - Sign-in dialogs
@@ -108,7 +168,7 @@ Before extracting any content:
 
 Identify and click buttons or icons commonly used to dismiss these overlays, such as:
 - “Accept”, “Close”, “X”, “No thanks”, “Got it”, or “Dismiss”
-- Icons that look like × (close) or checkmarks
+- Icons that look like X, × (close) or checkmarks
 
 If the overlay cannot be closed or skipped, attempt to scroll or interact to bypass it.
 
@@ -144,6 +204,9 @@ Within each endpoint section:
 - **Important** If the elements are already expanded/visible, DO NOT click the element to collapse it.
 - Avoid duplicate clicks on already active tabs.
 
+**CRITICAL RULE: You MUST FIRST CLICK on tabs labeled 'Schema', 'Request Schema', or 'Response Schema' to reveal their content.**
+**NEVER call \`extract_structured_data\` on an API endpoint section IF a 'Schema' tab is visible but not active.**Your immediate next action must be to \`click\` the schema tab. Only after the schema content is visible can you proceed with extraction in a subsequent step. This is a mandatory prerequisite, not an optional step.
+
 ---
 
 #### 4️⃣ Discover **Response** Definitions
@@ -159,9 +222,6 @@ Within each endpoint section:
 - If the elements are already expanded/visible, DO NOT click the element to collapse it.
 - Be careful to avoid duplicate clicks on the same element with multiple Indexes.
 
-**CRITICAL RULE: You MUST FIRST CLICK on tabs labeled 'Schema', 'Request Schema', or 'Response Schema' to reveal their content.**
-**NEVER call \`extract_structured_data\` on an API endpoint section IF a 'Schema' tab is visible but not active.**Your immediate next action must be to \`click\` the schema tab. Only after the schema content is visible can you proceed with extraction in a subsequent step. This is a mandatory prerequisite, not an optional step.
-
 ---
 
 #### 5️⃣ Sections You Should Ignore To Expand
@@ -170,74 +230,85 @@ Within each endpoint section:
 ---
 
 
-#### 6️⃣ Track processed page/navigation items
-- You must write down what endpoints items you have processed in the "todo.md" file in your plan, DO NOT repeat navigating/extracting content to the same page already processed!
-
----
-
-
-#### 7️⃣ Ignore Those Items
+#### 6️⃣ Ignore Those Items
 - "API docs by Redocly" This is not an API endpoint.
 
 ---
 
+</api_document_content_page_explore_guidelines>
 
-<identify_entpoints>
-This node introduction helps you better identify and memorize endpoints you need to explore for API document extraction task.
-# Guideline
-1. You must analyse the user request to regonize what endpoints to browse from the initial page, we can mark it as a "Scope"
-2. Write down the Scope in the todo under the "# Goal" when you generate the todo.md
-3. Once you navigate to the initial page, you should explore the page content and analyse all endpoints are belongs to the "Scope"
-4. Follow the <todo_definition> rules to write down the endpoints in your "# Tasks"
-</identify_entpoints>
 
-<todo_definition>
-This section describe rules of how the TODO.md format should be generated and managed.
-## Rules
-- Should include the goal of the user request
-- Should include a "Tasks" or "Steps" section with tasks you plan to do to complete the user request
-- Each item of the "Tasks/Steps" is a checkbox in Markdown: [ ] or [x]
-- Use the action to update the checkbox of an item from [ ] to [x] when the associated step is finished
-- Allow nested subtasks (indented with 3 spaces + sub-numbering)
-- When you complete the whole task, append a "## Result" Or "## Summary" section with the output result at the end, no matter it is success, or failed
-- Other rules that needs to be taken
+## CRITICAL: API Document information Extraction Rules
+<api_document_page_extraction_rules>
+CRITICAL: API Document Information Extraction Rules
 
-## Example Of the File Format
-This is just an example of the file strucure, do not use this as your todo.md content directly. You should generate the concrete plan according to the actual user request.
-\`\`\`md
-# Plan for executinon to complete the [Goal]
+**extract_api_document_structured_data Query Guidelines for API Documentation:**
 
-## Goal: [The goal of the user request]
-
-### Tasks
-1. [x] Navigate to xxxx.com
-2. [x] Identify the page content
-3. [ ] Extract content 1
-   1. [ ] Extract section 1
-4. [ ] Extract content 2
-
-### Notes:
-- Avoid duplicate contents
-- Preserve exact wording
-
-### Result
-1. Your task result
-2. Your finding
-3. ...
+### For API Endpoint Page Content Extraction
+1. When calling \`extract_api_document_structured_data\` for indivisual API documentation pages, you should bring below intent and combine it to the \`query\` with what endpoint (page) you think it needs to extract to the current browser state page you'r focusing on:
 \`\`\`
-</todo_definition>
+Extract raw api document content for "Get users" endpoint, including: HTTP method, path, baseApiUrl, endpoint description, parameters (name, type, required/optional, description), request content type, query parameters, request headers, request body schema, detailed response schemas for each HTTP status code, including field descriptions, types, and required/optional properties. Preserve exact formatting and content. Do not fabricate data for API endpoint path, parameter name, type etc. Do not miss response/request fields.
+\`\`\`
+**Important**: Do not fabricate data for API endpoint path, parameter name, type etc.
+</api_document_page_extraction_rules>
+
 `;
 
 const userRequest = `
-Extract detailed API documentation content for the 'Tickets' API from 'https://developers.hubspot.com/docs/reference/api/crm/objects/tickets'
+Extract the entire original API documentation content for the List Tickets API from this page: https://developers.hubspot.com/docs/reference/api/crm/objects/tickets. You must extract all available details required for OpenAPI Spec, including endpoints, HTTP methods, versioning, baseApiUrl, auth requirements, request parameters, request body schema, response codes, bodies, and error responses. Preserve exact wording from the source.
 
 # Important Rules:
-- This is "multi-step" task, you need to create a plan with "todo.md" and execute it step by step. Dynamically update the "todo.md" file with the new steps you need to take. Reference the <todo_definition> section for the format of the "todo.md" file.
-- You must write down the endpoints you identified and what pages you need to browse and extract the API document content in the "todo.md" file.
-- NEVER click on elements with "+", "-", "▼", "▲" symbols in "Response samples"/"Requeset samples" sections
-- NEVER interact with any UI controls in sample/example sections
-- Ignore all "Copy", "Expand", "Collapse" buttons in sample areas
+- This is "multi-step" task, you need to create a detailed plan with "todo.md" file before you start the task. Reference the <todo_file_management> section for the format of the "todo.md" file.
+- Dynamically update the "todo.md" file with the new steps you need to take.
+- Reference the <additional_todo_definition_rules> for the additional rules to organize tasks into logical phases for API document content extraction task.
+- Follow the <additional_todo_management_rules> to explore/navigate the page content and extract the API document content.
+- **Prioritize Interaction over Visibility**: Before checking for visible content, you MUST first inspect elements for clear interactive roles or attributes. If an element has a WAI-ARIA role like role='option', role='tab', role='radio', or a state attribute like aria-expanded='false', you must prioritize **clicking** it. This action is necessary to ensure the corresponding view is fully loaded and active. This rule **overrides** the general rule of extracting data just because some content appears to be visible.
 - When you think content can be extracted and before calling extract_structured_data, if there are elements like 200, 400, 500 and so on, please click them first(Regardless of whether the information for 200, 400, 500, etc., is already displayed, please use the history to determine this and make sure to click it once.). Then, consider if there is any "default" related information (if so, be sure to click the "default" element), and then call extract_structured_data.
+
+<additional_todo_management_rules>
+CRITICAL Rules to organize tasks into logical phases:
+- Organize tasks into the following logical phases. The todo.md should be structured with headings that reflect these phases.
+  - **Discovery**: The first phase for navigation, locating the relevant API documentation sections, and revealing all the endpoints.
+  - **Enumeration**: The phase for listing all relevant items. Create a single, comprehensive checklist. List every individual endpoint you need to process as a **numbered** checkbox item (e.g., \`1. [ ] Endpoint Name\`).
+  - **Extraction**: The execution phase. Work through the checklist created during the Enumeration phase. As soon as you have extracted data for an endpoint, mark its corresponding checkbox from \`[ ]\` to \`[x]\` in that same list.
+  - **Verification**: The final phase. After all items in the checklist are marked as complete, confirm that all work has been done correctly.
+
+**Example**
+This is just an example of the file strucure, never copy this this as your todo.md content directly.
+\`\`\`md
+# Plan for extracting Tasks-related API documentation
+
+## Goal
+Extract all Tasks-related API endpoint documentation content from the HubSpot CRM API documentation.
+
+## Steps
+
+### Discovery
+1. [x] Navigate to HubSpot CRM API documentation home page
+2. [ ] Locate "Tasks" section
+3. [ ] Expand to reveal all endpoints
+
+### Enumeration
+1. [x] Archive a batch of tasks by ID
+2. [-] Create a batch of tasks
+3. [ ] Create a task
+4. [ ] Update a task by ID
+
+### Extraction
+1. [x] Archive a batch of tasks by ID
+2. [-] Create a batch of tasks
+3. [ ] Create a task
+4. [ ] Update a task by ID
+
+### Verification
+1. [ ] Confirm all listed endpoints are extracted
+
+## Result
+- Navigation complete.
+- Enumeration in progress.
+\`\`\`
+
+</additional_todo_management_rules>
 `;
 
 async function main() {
