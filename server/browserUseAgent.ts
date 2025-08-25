@@ -379,7 +379,7 @@ Explain the content of the page and that the requested information is not availa
    */
   private static readExtractionPrompt(): string {
     try {
-      const promptPath = path.join(__dirname, '..', '..', 'extraction_prompt.md');
+      const promptPath = path.join(__dirname, 'prompt', 'extraction_prompt.md');
       return require('fs').readFileSync(promptPath, 'utf-8');
     } catch (error) {
       // Fallback prompt if file not found

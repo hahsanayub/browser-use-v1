@@ -11,7 +11,7 @@ export class PromptConfig {
 
   constructor() {
     // Store the file paths for dynamic reading
-    this.promptFilePath = path.join(__dirname, 'browser_prompt.md');
+    this.promptFilePath = path.join(__dirname, 'prompt', 'browser_prompt.md');
   }
 
   /**
