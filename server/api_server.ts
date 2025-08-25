@@ -63,8 +63,10 @@ if (import.meta.url.endsWith(process.argv[1]) || process.argv[1].endsWith('api-s
   app.listen(PORT, () => {
     console.log(`🚀 API Server is running on port ${PORT}`);
     console.log(`📖 Health check: http://localhost:${PORT}/health`);
-    console.log(`🤖 Browser-use run: POST http://localhost:${PORT}/api/v1/browser-use/run`);
     console.log(`🌊 Browser-use SSE: POST http://localhost:${PORT}/api/v1/browser-use/sse`);
+    console.log(`📊 Browser-use status: GET http://localhost:${PORT}/api/v1/browser-use/status`);
+    console.log(`❌ Browser-use cancel: POST http://localhost:${PORT}/api/v1/browser-use/cancel`);
+    console.log(`📋 Browser-use sessions: GET http://localhost:${PORT}/api/v1/browser-use/sessions`);
     console.log(`📁 Download file: GET http://localhost:${PORT}/api/v1/filesystem/download?file=<filepath>&sessionId=<sessionId>`);
     console.log(`📂 List files: GET http://localhost:${PORT}/api/v1/filesystem/files/list?projectId=<projectId>&directory=<directory>`);
   });

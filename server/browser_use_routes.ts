@@ -4,22 +4,6 @@ import { BrowserUseService } from './BrowserUseService';
 const router = express.Router();
 const browserUseService = new BrowserUseService();
 
-// Browser-use run endpoint
-router.post('/run', async (req, res) => {
-  try {
-    const { user_request, session_id } = req.body;
-    const result = await browserUseService.executeBrowserUse(user_request, session_id);
-    res.json(result);
-  } catch (error) {
-    console.error('Error running browser-use:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to run browser-use',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
-    });
-  }
-});
 
 // SSE endpoint for real-time browser-use execution
 router.post('/sse', async (req, res) => {
@@ -79,22 +63,6 @@ router.post('/sse', async (req, res) => {
   }
 });
 
-// Test endpoint for non-SSE execution
-router.post('/test', async (req, res) => {
-  try {
-    const { userRequest, maxSteps = 200, sessionId } = req.body;
-    const result = await browserUseService.testExecution(userRequest, maxSteps, sessionId);
-    res.json(result);
-  } catch (error) {
-    console.error('Error in test execution:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to execute browser-use test',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString(),
-    });
-  }
-});
 
 // Status endpoint
 router.get('/status', (req, res) => {

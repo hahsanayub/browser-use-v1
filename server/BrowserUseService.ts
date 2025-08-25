@@ -1,5 +1,4 @@
 import { BrowserUseSSEAgent, type BrowserUseEvent } from './browser_use_sse_agent';
-import { execute } from './browser_use_agent';
 import { randomUUID } from 'crypto';
 
 export class BrowserUseService {
@@ -73,9 +72,9 @@ export class BrowserUseService {
     if (intervalMs < 5000) {
       throw new Error('Heartbeat interval must be at least 5 seconds');
     }
-    
+
     this.heartbeatIntervalMs = intervalMs;
-    
+
     // Restart heartbeat with new interval if currently active
     if (this.isHeartbeatActive) {
       this.stopHeartbeat();
@@ -89,33 +88,6 @@ export class BrowserUseService {
   private sendEvent(eventType: string, data: any): void {
     if (this.sseSender) {
       this.sseSender(eventType, data);
-    }
-  }
-
-  /**
-   * Execute browser-use task with regular response
-   */
-  async executeBrowserUse(userRequest?: string, sessionId?: string): Promise<any> {
-    try {
-      console.log('Starting browser-use execution...');
-      console.log('User Request:', userRequest || 'Using default request');
-      console.log('Session ID:', sessionId || 'default');
-
-      const result = await execute(userRequest || 'Default browser-use request', sessionId || 'default');
-
-      return {
-        success: true,
-        message: 'Browser-use execution completed successfully',
-        data: result,
-        parameters: {
-          userRequest: userRequest || 'Default browser-use request',
-          sessionId: sessionId || 'default'
-        },
-        timestamp: new Date().toISOString()
-      };
-    } catch (error) {
-      console.error('Error executing browser-use:', error);
-      throw error;
     }
   }
 
@@ -276,50 +248,22 @@ export class BrowserUseService {
    */
   cleanup(): void {
     console.log('Cleaning up BrowserUseService...');
-    
+
     // Stop heartbeat
     this.stopHeartbeat();
-    
+
     // Clear SSE sender
     this.clearSseSender();
-    
+
     // Cancel all active sessions
     for (const sessionId of this.activeSessions.keys()) {
       this.cancelSession(sessionId);
     }
-    
+
     // Clear active sessions map
     this.activeSessions.clear();
-    
+
     console.log('BrowserUseService cleanup completed');
   }
 
-  /**
-   * Test execution (non-SSE)
-   */
-  async testExecution(userRequest: string, maxSteps: number = 200, sessionId?: string): Promise<any> {
-    try {
-      console.log('Starting test browser-use execution...');
-      console.log('User Request:', userRequest);
-      console.log('Session ID:', sessionId || 'test');
-      console.log('Max Steps:', maxSteps);
-
-      const result = await execute(userRequest, sessionId || 'test');
-
-      return {
-        success: true,
-        message: 'Browser-use test execution completed successfully',
-        data: result,
-        parameters: {
-          userRequest: userRequest,
-          sessionId: sessionId || 'test',
-          maxSteps: maxSteps
-        },
-        timestamp: new Date().toISOString()
-      };
-    } catch (error) {
-      console.error('Error in test execution:', error);
-      throw error;
-    }
-  }
 }

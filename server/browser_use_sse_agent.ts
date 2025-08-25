@@ -36,6 +36,19 @@ function withTimeout<T>(
   });
 }
 
+// Global SSE event sender (single instance since no concurrency)
+let globalSSEEventSender: ((event: BrowserUseEvent) => void) | null = null;
+
+export function setGlobalSSEEventSender(sendEvent: (event: BrowserUseEvent) => void): void {
+  console.log('Trace Event setGlobalSSEEventSender');
+  globalSSEEventSender = sendEvent;
+}
+
+export function clearGlobalSSEEventSender(): void {
+  console.log('Trace Event clearGlobalSSEEventSender');
+  globalSSEEventSender = null;
+}
+
 export class ExtractDataActions {
   @action(
     'extract_structured_data',
@@ -485,6 +498,17 @@ ${chunkResponses.join('\n\n---\n\n')}
     try {
       // For now, just log the event. In the future, this could send to a trace service
       console.log('Trace Event:', JSON.stringify(eventData, null, 2));
+
+      if (globalSSEEventSender) {
+        const sseEvent: BrowserUseEvent = {
+          type: 'trace_event',
+          session_id: 'default',
+          timestamp: new Date().toISOString(),
+          data: eventData,
+          message: `Trace: ${eventData.type || 'unknown'}`
+        };
+        globalSSEEventSender(sseEvent);
+      }
     } catch (error) {
       console.warn('Failed to send trace event:', error);
     }
@@ -644,7 +668,14 @@ export class BrowserUseSSEAgent {
    * Execute agent with SSE event streaming (simplified)
    */
   async *executeWithSSE(userRequest: string, maxSteps: number = 100, sessionId?: string, sendEvent?: (event: BrowserUseEvent) => void): AsyncGenerator<BrowserUseEvent, void, unknown> {
+    const currentSessionId = sessionId || this.sessionId || 'default';
+
     try {
+      // Register SSE event sender if provided
+      if (sendEvent) {
+        setGlobalSSEEventSender(sendEvent);
+      }
+
       // Initialize controller
       this.controller = await createController({
         config: {
@@ -833,6 +864,11 @@ ${userRequest}
       };
       if (sendEvent) sendEvent(errorEvent);
     } finally {
+      // Unregister SSE event sender
+      if (sendEvent) {
+        clearGlobalSSEEventSender();
+      }
+
       // Cleanup
       if (this.controller) {
         try {
