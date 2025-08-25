@@ -7,7 +7,7 @@ import path from 'path';
 
 export const INVALID_FILENAME_ERROR_MESSAGE =
   'Error: Invalid filename format. Must be alphanumeric with supported extension.';
-export const DEFAULT_FILE_SYSTEM_PATH = 'browseruse_agent_data';
+export const DEFAULT_FILE_SYSTEM_PATH = '';
 
 /**
  * Custom exception for file system operations that should be shown to LLM
