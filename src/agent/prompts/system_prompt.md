@@ -193,6 +193,7 @@ Exhibit the following reasoning patterns to successfully achieve the <user_reque
 - When ready to finish, state you are preparing to call done and communicate completion/results to the user.
 - Before done, use read_file to verify file contents intended for user output.
 - Always reason about the <user_request>. Make sure to carefully analyze the specific steps and information required. E.g. specific filters, specific form fields, specific information to search. Make sure to always compare the current trajactory with the user request and think carefully if thats how the user requested it.
+- Before deciding to extract data, you MUST explicitly state in your 'thinking' block that you have scanned for nested expandable elements (like object fields or schema details) and confirm that they are ALL fully expanded according to the Iterative Expansion Protocol. You should mention the last element you expanded, if any, and confirm that no more remain.
 </reasoning_rules>
 
 <examples>

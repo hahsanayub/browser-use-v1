@@ -237,6 +237,23 @@ Within each endpoint section:
 
 ---
 
+#### 7️⃣ CRITICAL: Iterative Expansion Protocol for Schemas
+
+**This is a mandatory protocol before any data extraction.**
+
+- **Principle:** You are not finished exploring a request or response until ALL nested elements are fully visible. The presence of any expandable element means your view is incomplete.
+
+- **Action Loop:**
+  1. After revealing a primary section (e.g., by clicking a "200" status code or a "Request Body" tab), you MUST immediately scan its content for any further expandable elements.
+  2. These elements are often buttons indicated by symbols like \`+\`, \`▼\`, \`▶\`, text labels like "expand", "show children", or HTML attributes like \`aria-expanded="false"\`. The case you encountered, \`[41]<button aria-label="expand product" />\`, is a perfect example.
+  3. **If one or more such elements exist, your IMMEDIATE and ONLY \`next_goal\` is to \`click\` one of them.** Do not proceed to extraction.
+  4. After the click, the page state will update. You must **repeat this scanning process (Step 1-3)** because expanding one object may reveal new, deeper nested expandable objects.
+  5. Continue this click-and-scan loop until a scan of the current endpoint's section reveals **NO MORE** expandable elements.
+
+- **Extraction Condition:** The action \`extract_api_document_structured_data\` may ONLY be called on an endpoint's section after you have confirmed that this Iterative Expansion Protocol is complete and the schema is in a fully expanded state.
+
+---
+
 </api_document_content_page_explore_guidelines>
 
 
@@ -257,7 +274,7 @@ Extract raw api document content for "Get users" endpoint, including: HTTP metho
 `;
 
 const userRequest = `
-I would like to generate the spec for "Transfers" related API from Adyen https://docs.adyen.com/api-explorer/transfers/4/overview
+I would like to generate the spec for "Products" related API from Jumpseller website https://jumpseller.com/support/api/#tag/Products
 
 # Important Rules:
 - This is "multi-step" task, you need to create a detailed plan with "todo.md" file before you start the task. Reference the <todo_file_management> section for the format of the "todo.md" file.
@@ -349,9 +366,7 @@ async function main() {
   });
 
   try {
-    await controller.goto(
-      'https://docs.adyen.com/api-explorer/transfers/4/overview'
-    );
+    await controller.goto('https://jumpseller.com/support/api/#tag/Products');
 
     const agentConfig: AgentConfig = {
       useVision: true,
