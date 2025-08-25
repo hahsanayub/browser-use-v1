@@ -116,12 +116,29 @@ export class ExtractDataActions {
           throw new Error(`Couldn't extract page content: ${error}`);
         }
 
-        // Calculate page index based on api_doc_content_ files
+        // Calculate page index based on api_doc_content_ files in the project directory
         let pageIndex = 1;
         if (context.fileSystem) {
-          const existingFiles = Array.from(context.fileSystem.getFiles().keys());
-          const apiDocContentFiles = existingFiles.filter((filename: string) => filename.startsWith('api_doc_content_'));
-          pageIndex = apiDocContentFiles.length + 1;
+          try {
+            const projectDir = context.fileSystem.getDir();
+            const existingFiles = await fs.readdir(projectDir);
+            const apiDocContentFiles = existingFiles.filter((filename: string) => filename.startsWith('api_doc_content_'));
+            
+            // Extract unique page indices from filenames
+            const pageIndices = new Set<number>();
+            apiDocContentFiles.forEach(filename => {
+              const match = filename.match(/^api_doc_content_(\d+)/);
+              if (match) {
+                pageIndices.add(parseInt(match[1]));
+              }
+            });
+            
+            const maxIndex = pageIndices.size > 0 ? Math.max(...pageIndices) : 0;
+            pageIndex = maxIndex + 1;
+          } catch (error) {
+            console.warn('Failed to read project directory for pageIndex calculation:', error);
+            pageIndex = 1;
+          }
         }
 
         console.log(`[You are here] this is from TypeScript controller`);
