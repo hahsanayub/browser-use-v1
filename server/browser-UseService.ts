@@ -5,7 +5,7 @@ export class BrowserUseService {
   private sseSender?: (eventType: string, data: any) => void;
   private activeSessions = new Map<string, BrowserUseSSEAgent>();
   private heartbeatInterval?: NodeJS.Timeout;
-  private heartbeatIntervalMs: number = 30000; // 30秒心跳间隔
+  private heartbeatIntervalMs: number = 30000;
   private isHeartbeatActive: boolean = false;
 
   /**

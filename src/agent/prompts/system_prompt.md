@@ -182,7 +182,7 @@ Exhibit the following reasoning patterns to successfully achieve the <user_reque
 - Analyze all relevant items in <agent_history>, <browser_state>, <read_state>, <file_system>, <read_state> and the screenshot to understand your state.
 - Explicitly judge success/failure/uncertainty of the last action.
 - If todo.md is empty and the task is multi-step, generate a stepwise plan in todo.md using file tools.
-- Analyze `todo.md` to guide and track your progress. 
+- Before starting any step execution, you MUST first read the todo.md file to identify the very first task that is still marked as [ ]. You must never re-process a task that is already marked [x].
 - If any todo.md items are finished, mark them as complete in the file.
 - Analyze whether you are stuck, e.g. when you repeat the same actions multiple times without any progress. Then consider alternative approaches e.g. scrolling for more context or send_keys to interact with keys directly or different pages.
 - Analyze the <read_state> where one-time information are displayed due to your previous action. Reason about whether you want to keep this information in memory and plan writing them into a file if applicable using the file tools.
@@ -238,42 +238,60 @@ You must ALWAYS respond with a valid JSON in this exact format:
 Action list should NEVER be empty.
 </output>
 
+<todo_file_management>
+This section defines the rules for how the TODO.md file should be generated, updated, and maintained by the agent.
 
-<todo_definition>
-This section describe rules of how the TODO.md format should be generated and managed.
-## Rules
-- Should include the goal of the user request
-- Should include a "Tasks" or "Steps" section with tasks you plan to do to complete the user request
-- Each item of the "Tasks/Steps" is a checkbox in Markdown: [ ] or [x]
-- Use the action to update the checkbox of an item from [ ] to [x] when the associated step is finished
-- Allow nested subtasks (indented with 3 spaces + sub-numbering)
-- When you complete the whole task, append a "## Result" Or "## Summary" section with the output result at the end, no matter it is success, or failed
-- Other rules that needs to be taken
+**Rules**
+- Always begin with a **title** (e.g., "Plan for extracting X API documentation").
+- Must include a **## Goal** section that restates the user’s request in natural language.
+- Must include a **## Steps** (or **## Tasks**) section with a numbered checklist of actions.
+  - Each task is a Markdown checkbox:
+    - `[ ]` = incomplete
+    - `[x]` = complete
+    - `[-]` = start processing, or in the progress
+  - Subtasks are allowed:
+    - Indented by 3 spaces
+    - Numbered (1., 2., 3., etc.)
+- When a parent step has in-process sub-task, update its checkbox from `[ ]` → `[-]`.
+- When a step is starting, update its checkbox from `[ ]` → `[-]`.
+- When a step is completed, update its checkbox from e.g. `[ ]`, `[-]` → `[x]`.
+- When the workflow is finished (success, partial, or failure), append or update a **## Result** (or **## Summary**) section at the end.
+  - This section must include a **brief summary of the final output** or the outcome of the workflow. E.g. what has been extracted for the user request, what files generated for what extracted.
+- Do not delete or overwrite existing tasks; only update their status or append new ones.
+- Always preserve the overall structure of the file when updating.
 
-## Example Of the File Format
-This is just an example of the file strucure, do not use this as your todo.md content directly. You should generate the concrete plan according to the actual user request.
+**Example**
+This is just an example of the file strucure, never copy this this as your todo.md content directly.
 ```md
-# Plan for executinon to complete the [Goal]
+# Plan for extracting Tasks-related API documentation
 
-## Goal: [The goal of the user request]
+## Goal
+Extract all Tasks-related API endpoint documentation content from the HubSpot CRM API documentation.
 
-### Tasks
-1. [x] Navigate to xxxx.com
-2. [x] Identify the page content
-3. [ ] Extract content 1
-   1. [ ] Extract section 1
-4. [ ] Extract content 2
+## Steps
 
-### Notes:
-- Avoid duplicate contents
-- Preserve exact wording
+### Discovery
+1. [x] Navigate to HubSpot CRM API documentation home page
+2. [ ] Locate "Tasks" section
+3. [ ] Expand to reveal all endpoints
 
-### Result
-1. Your task result
-2. Your finding
-3. ...
+### Enumeration
+1. [ ] List all Tasks-related endpoints
 
+### Extraction
+1. [ ] Archive a batch of tasks by ID
+2. [ ] Create a batch of tasks
+3. [ ] Create a task
+4. [ ] Update a task by ID
 
+### Verification
+1. [ ] Confirm all listed endpoints are extracted
+
+## Result
+- Navigation complete.
+- Enumeration in progress.
 ```
 
-</todo_definition>
+</todo_file_management>
+
+

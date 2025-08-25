@@ -51,8 +51,8 @@ export function clearGlobalSSEEventSender(): void {
 
 export class ExtractDataActions {
   @action(
-    'extract_structured_data',
-    "Extract structured, semantic data (e.g. product description, price, all information about XYZ) from the current webpage based on a textual query. This tool takes the entire markdown of the page and extracts the query from it. Set extract_links=true ONLY if your query requires extracting links/URLs from the page. Only use this for specific queries for information retrieval from the page. Don't use this to get interactive elements - the tool does not see HTML elements, only the markdown.",
+    'extract_api_document_structured_data',
+    "Extract a single API document structured, semantic data from the current webpage based on a textual query. This tool takes the entire markdown of the page and extracts the query from it. Set extract_links=true ONLY if your query requires extracting links/URLs from the page. Set endpoint_name to the name of the endpoint if you are extracting an endpoint, this will be used to record the extracted endpoint in the memory. Example: 'Get a transfer' endpoint, \"Return a transfer\" endpoint, etc. Only use this for specific single API document content extraction query from the page. Don't use this to get interactive elements - the tool does not see HTML elements, only the markdown.",
     z.object({
       query: z
         .string()
@@ -62,15 +62,19 @@ export class ExtractDataActions {
         .boolean()
         .default(false)
         .describe('Whether to include links and images in the extraction'),
+      endpoint_name: z
+        .string()
+        .default('')
+        .describe('The name of the endpoint if extracting an endpoint, used for memory recording'),
     }),
     { isAvailableForPage: (page) => page && !page.isClosed() }
   )
-  static async extractStructuredData({
+  static async extractApiDocumentStructuredData({
     params,
     page,
     context,
   }: {
-    params: { query: string; extract_links: boolean };
+    params: { query: string; extract_links: boolean; endpoint_name: string };
     page: Page;
     context: {
       browserContext?: AgentBrowserContext;
@@ -80,7 +84,7 @@ export class ExtractDataActions {
       agent: Agent;
     };
   }): Promise<ActionResult> {
-    const { query, extract_links } = params;
+    const { query, extract_links, endpoint_name } = params;
 
     if (!context.llmClient) {
       return {
@@ -112,14 +116,26 @@ export class ExtractDataActions {
           throw new Error(`Couldn't extract page content: ${error}`);
         }
 
-        // Save raw HTML content (like Python version)
-        const pageIndex = context.fileSystem?.getExtractedContentCount() || 0;
+        // Calculate page index based on api_doc_content_ files
+        let pageIndex = 1;
+        if (context.fileSystem) {
+          const existingFiles = await fs.readdir(context.fileSystem.getDir()).catch(() => []);
+          const apiDocContentFiles = existingFiles.filter(filename => filename.startsWith('api_doc_content_'));
+          pageIndex = apiDocContentFiles.length + 1;
+        }
+
+        console.log(`[You are here] this is from TypeScript controller`);
+        console.log(`page_index of API document content files: ${pageIndex}`);
+
+        const apiDocContentExtractFilePrefix = 'api_doc_content';
+        const apiDocContentExtractContentFileName = `${apiDocContentExtractFilePrefix}_${pageIndex}.md`;
+
         if (context.fileSystem) {
           try {
-            const rawHtmlFileName = `extracted_content_${pageIndex}.raw.html`;
-            const rawHtmlFilePath = path.join(context.fileSystem.getDir(), rawHtmlFileName);
-            await fs.writeFile(rawHtmlFilePath, pageHtml, 'utf-8');
-            console.log(`Saved raw HTML to ${rawHtmlFilePath}`);
+            const contentRawFileName = `${apiDocContentExtractFilePrefix}_${pageIndex}.raw.html`;
+            const contentRawFilePath = path.join(context.fileSystem.getDir(), contentRawFileName);
+            await fs.writeFile(contentRawFilePath, pageHtml, 'utf-8');
+            console.log(`Saving raw content to ${contentRawFilePath}`);
           } catch (error) {
             console.warn('Failed to save raw HTML:', error);
           }
@@ -217,20 +233,25 @@ Explain the content of the page and that the requested information is not availa
           // Save raw prompt content (like Python version)
           if (context.fileSystem) {
             try {
-              const rawPromptFileName = `extracted_content_${pageIndex}.prompt.raw.md`;
-              const rawPromptFilePath = path.join(context.fileSystem.getDir(), rawPromptFileName);
-              await fs.writeFile(rawPromptFilePath, prompt, 'utf-8');
-              console.log(`Saved raw prompt to ${rawPromptFilePath}`);
+              const contentRawPromptName = `${apiDocContentExtractFilePrefix}_${pageIndex}.prompt.raw.md`;
+              const contentRawPromptFilePath = path.join(context.fileSystem.getDir(), contentRawPromptName);
+              await fs.writeFile(contentRawPromptFilePath, prompt, 'utf-8');
+              console.log(`Saving raw prompt to ${contentRawPromptFilePath}`);
             } catch (error) {
               console.warn('Failed to save raw prompt:', error);
             }
           }
 
           // Send trace event for LLM call
+          const contentRawPromptName = `${apiDocContentExtractFilePrefix}_${pageIndex}.prompt.raw.md`;
           await ExtractDataActions.sendTraceEvent({
-            type: 'llm_call_start',
-            contentLength: content.length,
-            timestamp: Date.now(),
+            type: 'action_act',
+            message: 'Calling llm to extract content...',
+            action: 'bu_calling_llm_extract_content',
+            data: {
+              query,
+              formatted_prompt: prompt.replace(content, `placeholder-in-log, see the content in the file: ${contentRawPromptName}, content-length: ${content.length}`),
+            },
           });
 
           // Call LLM with timeout
@@ -249,10 +270,12 @@ Explain the content of the page and that the requested information is not availa
             extractedContent,
             p.url(),
             query,
-            context
+            context,
+            endpoint_name
           );
         } else {
           // Large content - use chunking
+          console.log(`Content is large (${content.length} chars), splitting into chunks...`);
           await ExtractDataActions.sendTraceEvent({
             type: 'chunking_start',
             contentLength: content.length,
@@ -268,18 +291,26 @@ Explain the content of the page and that the requested information is not availa
             const chunk = chunks[i];
             const chunkPrompt = ExtractDataActions.buildChunkPrompt(query, chunk, i + 1, chunks.length);
 
+            console.log(`Processing chunk ${i + 1}/${chunks.length} (${chunk.length} chars)`);
+
+            // Send trace event for chunk processing
             await ExtractDataActions.sendTraceEvent({
-              type: 'chunk_processing',
-              chunkIndex: i + 1,
-              totalChunks: chunks.length,
-              chunkLength: chunk.length,
-              timestamp: Date.now(),
+              type: 'action_act',
+              message: `Processing chunk ${i + 1}/${chunks.length}`,
+              action: 'bu_processing_chunk',
+              data: {
+                chunk_number: i + 1,
+                total_content_length: content.length,
+                total_chunks: chunks.length,
+                chunk_size: chunk.length,
+                query,
+              },
             });
 
             // Save individual chunk prompt (like Python version)
             if (context.fileSystem) {
               try {
-                const chunkPromptFileName = `extracted_content_${pageIndex}.chunk_${i + 1}.prompt.raw.md`;
+                const chunkPromptFileName = `${apiDocContentExtractFilePrefix}_${pageIndex}.chunk_${i + 1}.prompt.raw.md`;
                 const chunkPromptFilePath = path.join(context.fileSystem.getDir(), chunkPromptFileName);
                 await fs.writeFile(chunkPromptFilePath, chunkPrompt, 'utf-8');
                 console.log(`Saved chunk ${i + 1} prompt to ${chunkPromptFilePath}`);
@@ -305,6 +336,8 @@ Explain the content of the page and that the requested information is not availa
             }
           }
 
+          console.log(`Chunk processing completed: ${chunkResponses.filter(r => !r.startsWith('Error')).length} successful, ${chunkResponses.filter(r => r.startsWith('Error')).length} failed`);
+
           // Save individual chunks content (like Python version)
           if (context.fileSystem) {
             try {
@@ -313,7 +346,7 @@ Explain the content of the page and that the requested information is not availa
                 chunksContent += `--- Chunk ${i + 1} ---\n${chunkResponses[i]}\n\n`;
               }
 
-              const chunksFileName = `extracted_content_${pageIndex}.chunks.md`;
+              const chunksFileName = `${apiDocContentExtractFilePrefix}_${pageIndex}.chunks.md`;
               const chunksFilePath = path.join(context.fileSystem.getDir(), chunksFileName);
               await fs.writeFile(chunksFilePath, chunksContent, 'utf-8');
               console.log(`Saved chunks result to ${chunksFilePath}`);
@@ -323,10 +356,15 @@ Explain the content of the page and that the requested information is not availa
           }
 
           // Merge chunk responses
+          console.log('Merging chunk responses...');
           await ExtractDataActions.sendTraceEvent({
-            type: 'merging_start',
-            chunkCount: chunkResponses.length,
-            timestamp: Date.now(),
+            type: 'action_act',
+            message: 'Merging chunk responses',
+            action: 'bu_merging_chunks',
+            data: {
+              chunk_count: chunkResponses.length,
+              query,
+            },
           });
 
           const mergedResponse = await ExtractDataActions.mergeChunkResponses(
@@ -337,7 +375,7 @@ Explain the content of the page and that the requested information is not availa
           // Save final merged result (like Python version)
           if (context.fileSystem) {
             try {
-              const mergedFileName = `extracted_content_${pageIndex}.md`;
+              const mergedFileName = `${apiDocContentExtractFilePrefix}_${pageIndex}.md`;
               const mergedFilePath = path.join(context.fileSystem.getDir(), mergedFileName);
               const mergedContent = `# Merged Chunk Processing Results\n\nTotal chunks: ${chunkResponses.length}\nQuery: ${query}\n\n## Merged Response:\n${mergedResponse}`;
               await fs.writeFile(mergedFilePath, mergedContent, 'utf-8');
@@ -355,20 +393,39 @@ Explain the content of the page and that the requested information is not availa
             extractedContent,
             p.url(),
             query,
-            context
+            context,
+            endpoint_name
           );
         }
       } catch (error) {
+        // Handle different types of errors (like Python version)
+        let errorMessage = 'Unknown error';
+        let errorType = 'general_error';
+
+        if (error instanceof Error) {
+          errorMessage = error.message;
+          if (error.message.includes('timeout') || error.message.includes('TimeoutError')) {
+            errorType = 'llm_timeout';
+            console.error('LLM call timed out during extraction');
+          }
+        }
+
         await ExtractDataActions.sendTraceEvent({
-          type: 'extraction_error',
-          error: (error as Error).message,
-          timestamp: Date.now(),
+          type: 'action_act',
+          message: `Extraction failed: ${errorMessage}`,
+          action: 'bu_extraction_error',
+          data: {
+            error_type: errorType,
+            error_message: errorMessage,
+            endpoint_name: endpoint_name || 'unknown',
+            query,
+          },
         });
 
         return {
           success: false,
-          message: `Failed to extract structured data: ${(error as Error).message}`,
-          error: (error as Error).message,
+          message: `Failed to extract structured data: ${errorMessage}`,
+          error: errorMessage,
         };
       }
     });
@@ -525,7 +582,7 @@ ${chunkResponses.join('\n\n---\n\n')}
       fileSystem?: FileSystem;
       agent: Agent;
     },
-    endpointName?: string
+    endpoint_name?: string
   ): Promise<ActionResult> {
     // Determine if we need to save to file or include in memory (matching Python version)
     const MAX_MEMORY_SIZE = 600;
@@ -559,11 +616,11 @@ ${chunkResponses.join('\n\n---\n\n')}
           await context.fileSystem.saveExtractedContent(extractedContent);
         }
 
-        const endpointNameInfo = endpointName ? `\n<endpoint_extracted>${endpointName}</endpoint_extracted>` : '';
+        const endpointNameInfo = endpoint_name ? `\n<endpoint_extracted>${endpoint_name}</endpoint_extracted>` : '';
         message = `Extracted content from ${url}\n<query>${query}\n</query>\n<extracted_content>\n${display}${lines.length - displayLinesCount} more lines...\n</extracted_content>\n<file_system>File saved at: extracted_content_${pageIndex}.md</file_system>${endpointNameInfo}`;
 
         // Append to todo.md (matching Python version)
-        if (endpointName && context.fileSystem) {
+        if (endpoint_name && context.fileSystem) {
           try {
             const todoFilePath = 'todo.md';
             let todoContent = '';
@@ -576,7 +633,7 @@ ${chunkResponses.join('\n\n---\n\n')}
             }
 
             // Append the endpoint to the todo.md
-            todoContent += `\n## Extraction Record\n\t- [x] Explored endpoint: ${endpointName}\n`;
+            todoContent += `\n## Extraction Record\n\t- [x] Explored endpoint: ${endpoint_name}\n`;
             // Note: In Python version, this line is commented out, so we'll also skip writing
             // await context.fileSystem.writeFile(todoFilePath, todoContent);
           } catch (error) {
@@ -812,16 +869,61 @@ export class BrowserUseSSEAgent {
         }
       };
 
-      // Build request
       const request = `
 ${userRequest}
 
 # Important Rules:
-- This is "multi-step" task, you need to create a plan with "todo.md" and execute it step by step. Dynamically update the "todo.md" file with the new steps you need to take. Reference the <todo_definition> section for the format of the "todo.md" file.
-- You must write down the endpoints you identified and what pages you need to browse and extract the API document content in the "todo.md" file.
-- NEVER click on elements with "+", "-", "▼", "▲" symbols in "Response samples"/"Requeset samples" sections
-- NEVER interact with any UI controls in sample/example sections
-- Ignore all "Copy", "Expand", "Collapse" buttons in sample areas
+- This is "multi-step" task, you need to create a detailed plan with "todo.md" file before you start the task. Reference the <todo_file_management> section for the format of the "todo.md" file.
+- Dynamically update the "todo.md" file with the new steps you need to take.
+- Reference the <additional_todo_definition_rules> for the additional rules to organize tasks into logical phases for API document content extraction task.
+- Follow the <additional_todo_management_rules> to explore/navigate the page content and extract the API document content.
+- **Prioritize Interaction over Visibility**: Before checking for visible content, you MUST first inspect elements for clear interactive roles or attributes. If an element has a WAI-ARIA role like role='option', role='tab', role='radio', role='presentation', or a state attribute like aria-expanded='false', you must prioritize **clicking** it. This action is necessary to ensure the corresponding view is fully loaded and active. This rule **overrides** the general rule of extracting data just because some content appears to be visible.
+- When you think content can be extracted and before calling extract_api_document_structured_data, if there are buttons like 200, 400, 500 and so on, please click them first(Regardless of whether the information for 200, 400, 500, etc., is already displayed, please use the history to determine this and make sure to click it once.). Then, consider if there is any "default" related information (if so, be sure to click the "default" element), and then call extract_structured_data.
+
+<additional_todo_management_rules>
+CRITICAL Rules to organize tasks into logical phases:
+- Organize tasks into the following logical phases. The todo.md should be structured with headings that reflect these phases.
+  - **Discovery**: The first phase for navigation, locating the relevant API documentation sections, and revealing all the endpoints.
+  - **Enumeration**: The phase for listing all relevant items. Create a single, comprehensive checklist. List every individual endpoint you need to process as a **numbered** checkbox item (e.g., \`1. [ ] Endpoint Name\`).
+  - **Extraction**: The execution phase. Work through the checklist created during the Enumeration phase. As soon as you have extracted data for an endpoint, mark its corresponding checkbox from \`[ ]\` to \`[x]\` in that same list.
+  - **Verification**: The final phase. After all items in the checklist are marked as complete, confirm that all work has been done correctly.
+
+**Example**
+This is just an example of the file strucure, never copy this this as your todo.md content directly.
+\`\`\`md
+# Plan for extracting Tasks-related API documentation
+
+## Goal
+Extract all Tasks-related API endpoint documentation content from the HubSpot CRM API documentation.
+
+## Steps
+
+### Discovery
+1. [x] Navigate to HubSpot CRM API documentation home page
+2. [ ] Locate "Tasks" section
+3. [ ] Expand to reveal all endpoints
+
+### Enumeration
+1. [x] Archive a batch of tasks by ID
+2. [-] Create a batch of tasks
+3. [ ] Create a task
+4. [ ] Update a task by ID
+
+### Extraction
+1. [x] Archive a batch of tasks by ID
+2. [-] Create a batch of tasks
+3. [ ] Create a task
+4. [ ] Update a task by ID
+
+### Verification
+1. [ ] Confirm all listed endpoints are extracted
+
+## Result
+- Navigation complete.
+- Enumeration in progress.
+\`\`\`
+
+</additional_todo_management_rules>
 `;
 
       // Execute agent
