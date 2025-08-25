@@ -587,11 +587,151 @@ ${chunkResponses.join('\n\n---\n\n')}
   }
 }
 
-// Initialize PromptConfig instance
-const promptConfig = new PromptConfig();
+// SSE-specific types and interfaces
+export interface AgentConfigSSE extends AgentConfig {
+  sessionId?: string;
+}
 
-export async function execute(userRequest: string, sessionId: string) {
-  const request = `
+// Global session registry for managing active sessions
+const sessionRegistry = new Map<string, BrowserUseSSEAgent>();
+
+// Simplified SSE Agent class focused on core functionality
+export class BrowserUseSSEAgent {
+  private cancelled = false;
+  private controller?: any;
+  private sessionId?: string;
+
+  constructor(sessionId?: string) {
+    this.sessionId = sessionId;
+
+    // Register session if sessionId is provided
+    if (sessionId) {
+      sessionRegistry.set(sessionId, this);
+    }
+  }
+
+  /**
+   * Cancel the current agent execution
+   */
+  cancel(): void {
+    this.cancelled = true;
+  }
+
+  /**
+   * Cleanup agent resources
+   */
+  async cleanup(): Promise<void> {
+    try {
+      // Cancel any ongoing execution
+      this.cancel();
+
+      // Cleanup controller if exists
+      if (this.controller) {
+        await this.controller.cleanup();
+        this.controller = null;
+      }
+
+      // Remove from session registry
+      if (this.sessionId) {
+        sessionRegistry.delete(this.sessionId);
+      }
+    } catch (error) {
+      console.warn('Error during cleanup:', error);
+    }
+  }
+
+  /**
+   * Execute agent with SSE event streaming (simplified)
+   */
+  async *executeWithSSE(userRequest: string, maxSteps: number = 100, sessionId?: string, sendEvent?: (event: BrowserUseEvent) => void): AsyncGenerator<BrowserUseEvent, void, unknown> {
+    try {
+      // Initialize controller
+      this.controller = await createController({
+        config: {
+          llm: {
+            provider: 'azure',
+            model: 'gpt-5',
+            azureEndpoint: 'https://oai-ai4m-rnd-eastus-001.openai.azure.com',
+            azureDeployment: 'oai-ai4m-rnd-eastus-001-gpt-4-0125-Preview-001',
+            apiVersion: '2025-03-01-preview',
+            apiKey: process.env.AZURE_OPENAI_API_KEY,
+            timeout: 60000,
+            maxTokens: 16384,
+          },
+          browser: {
+            headless: true,
+            browserType: 'chromium',
+            viewport: { width: 1440, height: 900 },
+            timeout: 45000,
+            args: [],
+          },
+          logging: {
+            level: 'debug',
+            console: true,
+            json: false,
+          },
+          maxSteps: maxSteps,
+        },
+      });
+
+      // Start execution event
+      const startEvent: BrowserUseEvent = {
+        type: 'execution_start',
+        timestamp: Date.now(),
+        sessionId: sessionId || this.sessionId,
+        message: 'Agent execution started'
+      };
+      if (sendEvent) sendEvent(startEvent);
+      yield startEvent;
+
+      // Enhanced agent config with SSE event handling
+      const enhancedConfig: AgentConfig = {
+        useVision: true,
+        maxSteps: maxSteps,
+        actionTimeout: 15000,
+        continueOnFailure: true,
+        useThinking: true,
+        customInstructions: promptConfig.extendPromptMessage,
+        saveConversationPath: `projects/${sessionId || this.sessionId || 'default'}/conversations`,
+        fileSystemPath: `projects/${sessionId || this.sessionId || 'default'}`,
+        onStepStart: async (agent: Agent) => {
+          const event: BrowserUseEvent = {
+            type: 'step_start',
+            step: agent.getCurrentStep(),
+            timestamp: Date.now(),
+            sessionId: sessionId || this.sessionId,
+            data: {
+              consecutiveFailures: agent.getConsecutiveFailures(),
+              isPaused: agent.isPaused(),
+              isStopped: agent.isStopped(),
+              isRunning: agent.getIsRunning()
+            }
+          };
+          if (sendEvent) sendEvent(event);
+        },
+        onStepEnd: async (agent: Agent) => {
+          const history = agent.getHistory();
+          const lastStep = history[history.length - 1];
+
+          const event: BrowserUseEvent = {
+            type: 'step_end',
+            step: agent.getCurrentStep(),
+            timestamp: Date.now(),
+            sessionId: sessionId || this.sessionId,
+            data: {
+              action: lastStep?.action,
+              result: lastStep?.result ? {
+                success: lastStep.result.success,
+                message: lastStep.result.message
+              } : null
+            }
+          };
+          if (sendEvent) sendEvent(event);
+        }
+      };
+
+      // Build request
+      const request = `
 ${userRequest}
 
 # Important Rules:
@@ -601,93 +741,169 @@ ${userRequest}
 - NEVER interact with any UI controls in sample/example sections
 - Ignore all "Copy", "Expand", "Collapse" buttons in sample areas
 `;
-  const controller = await createController({
-    config: {
-      llm: {
-        provider: 'azure',
-        model: 'gpt-5',
-        azureEndpoint: 'https://oai-ai4m-rnd-eastus-001.openai.azure.com',
-        azureDeployment: 'oai-ai4m-rnd-eastus-001-gpt-4-0125-Preview-001',
-        apiVersion: '2025-03-01-preview',
-        apiKey: process.env.AZURE_OPENAI_API_KEY,
 
-        // provider: 'google',
-        // model: 'gemini-2.5-flash',
-        // baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-        // apiKey: process.env.GOOGLE_API_KEY,
+      // Execute agent
+      const history = await this.controller.run(request, enhancedConfig);
 
-        timeout: 60000,
-        maxTokens: 16384,
-      },
-      browser: {
-        headless: true,
-        browserType: 'chromium',
-        viewport: { width: 1440, height: 900 },
-        timeout: 45000,
-        args: [],
-      },
-      logging: {
-        level: 'debug',
-        console: true,
-        json: false,
-      },
-      maxSteps: 100,
-    },
-  });
+      // Get final page info
+      const browserContext = this.controller.getBrowserContext();
+      const page = browserContext?.getActivePage();
+      let finalPageInfo = null;
 
-  try {
-    // await controller.goto(targetUrl);
-
-    const agentConfig: AgentConfig = {
-      useVision: true,
-      maxSteps: 100,
-      actionTimeout: 15000,
-      continueOnFailure: true,
-      useThinking: true,
-      customInstructions: promptConfig.extendPromptMessage,
-      saveConversationPath: `projects/${sessionId}/conversations`,
-      fileSystemPath: `projects/${sessionId}`,
-      onStepStart: async (agent: Agent) => {
-        console.log(`[Step ${agent.getCurrentStep()}] Starting step...`);
-        console.log(`[Step ${agent.getCurrentStep()}] Current state:`, {
-          consecutiveFailures: agent.getConsecutiveFailures(),
-          isPaused: agent.isPaused(),
-          isStopped: agent.isStopped(),
-          isRunning: agent.getIsRunning()
-        });
-      },
-      onStepEnd: async (agent: Agent) => {
-        console.log(`[Step ${agent.getCurrentStep()}] Step completed.`);
-        const history = agent.getHistory();
-        const lastStep = history[history.length - 1];
-        if (lastStep) {
-          console.log(`[Step ${agent.getCurrentStep()}] Last action:`, lastStep.action);
-          console.log(`[Step ${agent.getCurrentStep()}] Result:`, {
-            success: lastStep.result.success,
-            message: lastStep.result.message
-          });
+      if (page) {
+        try {
+          const title = await page.title();
+          const url = page.url();
+          finalPageInfo = { title, url };
+        } catch (error) {
+          console.warn('Failed to get final page info:', error);
         }
-      },
-    };
+      }
 
-    const history = await controller.run(request, agentConfig);
+      // Send completion event
+      const completeEvent: BrowserUseEvent = {
+        type: this.cancelled ? 'cancelled' : 'agent_complete',
+        timestamp: Date.now(),
+        sessionId: sessionId || this.sessionId,
+        data: {
+          stepsExecuted: history.length,
+          finalPage: finalPageInfo
+        },
+        message: this.cancelled ? 'Agent execution cancelled' : 'Agent execution completed successfully'
+      };
+      if (sendEvent) sendEvent(completeEvent);
+      yield completeEvent;
 
-    const browserContext = controller.getBrowserContext();
-    const page = browserContext?.getActivePage();
-    if (page) {
-      const title = await page.title();
-      const url = page.url();
-      console.log(`Final page: ${title} (${url})`);
+    } catch (error) {
+      const errorEvent: BrowserUseEvent = {
+        type: 'error',
+        timestamp: Date.now(),
+        sessionId: sessionId || this.sessionId,
+        message: (error as Error).message,
+        error: (error as Error).message
+      };
+      if (sendEvent) sendEvent(errorEvent);
+      yield errorEvent;
+    } finally {
+      // Cleanup
+      if (this.controller) {
+        try {
+          await this.controller.cleanup();
+        } catch (error) {
+          console.warn('Error during cleanup:', error);
+        }
+      }
+
+      // Remove from session registry
+      if (this.sessionId) {
+        sessionRegistry.delete(this.sessionId);
+      }
     }
+  }
 
-    console.log(`Steps executed: ${history.length}`);
-  } catch (error) {
-    console.error('example failed:', error);
-  } finally {
-    await controller.cleanup();
+  /**
+   * Safely serialize data for SSE transmission
+   */
+  private safeSerialize(data: any): string {
+    try {
+      return JSON.stringify(data, (key, value) => {
+        // Handle undefined values
+        if (value === undefined) {
+          return null;
+        }
+        // Handle functions
+        if (typeof value === 'function') {
+          return '[Function]';
+        }
+        // Handle circular references and other complex objects
+        if (typeof value === 'object' && value !== null) {
+          // Simple check for circular references
+          try {
+            JSON.stringify(value);
+            return value;
+          } catch {
+            return '[Circular Reference]';
+          }
+        }
+        return value;
+      });
+    } catch (error) {
+      return JSON.stringify({
+        type: 'serialization_error',
+        timestamp: Date.now(),
+        error: 'Failed to serialize event data'
+      });
+    }
+  }
+
+  /**
+   * Static method to get active sessions
+   */
+  static getActiveSessions(): Array<{ sessionId: string; status: any }> {
+    const sessions: Array<{ sessionId: string; status: any }> = [];
+    for (const [sessionId, agent] of sessionRegistry.entries()) {
+      sessions.push({
+        sessionId,
+        status: agent.getStatus()
+      });
+    }
+    return sessions;
+  }
+
+  /**
+   * Static method to cancel a session
+   */
+  static cancelSession(sessionId: string): boolean {
+    const agent = sessionRegistry.get(sessionId);
+    if (agent) {
+      agent.cancel();
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Get session status
+   */
+  getStatus(): any {
+    return {
+      sessionId: this.sessionId,
+      cancelled: this.cancelled,
+      isRunning: !!this.controller,
+      timestamp: Date.now()
+    };
   }
 }
 
+// Session management functions
+export function getSession(sessionId: string): BrowserUseSSEAgent | undefined {
+  return sessionRegistry.get(sessionId);
+}
+
+export function getAllSessions(): Array<{ sessionId: string; status: any }> {
+  return BrowserUseSSEAgent.getActiveSessions();
+}
+
+export function cancelSession(sessionId: string): boolean {
+  return BrowserUseSSEAgent.cancelSession(sessionId);
+}
+
+// Export event type for better type safety
+export interface BrowserUseEvent {
+  type: string;
+  timestamp: number;
+  sessionId?: string;
+  step?: number;
+  data?: any;
+  message?: string;
+  error?: string;
+}
+
+// Initialize PromptConfig instance
+const promptConfig = new PromptConfig();
+
 if (import.meta.url === `file://${process.argv[1]}`) {
-  execute('Extract all API endpoints from the documentation', 'default');
+  // For testing purposes, you can create an SSE agent and test executeWithSSE
+  const agent = new BrowserUseSSEAgent('test-session');
+  // agent.executeWithSSE('Extract all API endpoints from the documentation', 100, 'test-session');
 }

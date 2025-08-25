@@ -4,7 +4,7 @@ import fileRoutes from './file_routes';
 import browserUseRoutes from './browser_use_routes';
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8000;
 
 // CORS middleware
 app.use((req, res, next) => {
@@ -64,6 +64,7 @@ if (import.meta.url.endsWith(process.argv[1]) || process.argv[1].endsWith('api-s
     console.log(`🚀 API Server is running on port ${PORT}`);
     console.log(`📖 Health check: http://localhost:${PORT}/health`);
     console.log(`🤖 Browser-use run: POST http://localhost:${PORT}/api/v1/browser-use/run`);
+    console.log(`🌊 Browser-use SSE: POST http://localhost:${PORT}/api/v1/browser-use/sse`);
     console.log(`📁 Download file: GET http://localhost:${PORT}/api/v1/filesystem/download?file=<filepath>&sessionId=<sessionId>`);
     console.log(`📂 List files: GET http://localhost:${PORT}/api/v1/filesystem/files/list?projectId=<projectId>&directory=<directory>`);
   });

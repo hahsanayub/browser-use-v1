@@ -71,9 +71,10 @@ async function testAPI() {
     // 4. Test Tickets API extraction (using custom parameters)
     console.log('\n4. Test Tickets API extraction (custom parameters)');
     const customTicketsData = {
+      sessionId: '123456',
       userRequest: 'https://www.zoho.com/bookings/help/api/v1/get-appointment.html only parse this one page and extract to OpenAPI Spec (JSON file)'
     };
-    const customTicketsResponse = await makeRequest('POST', '/api/extract/tickets', customTicketsData);
+    const customTicketsResponse = await makeRequest('POST', '/api/v1/browser-use/run', customTicketsData);
     console.log('Status code:', customTicketsResponse.status);
     console.log('Request parameters:', JSON.stringify(customTicketsData, null, 2));
     console.log('Response:', JSON.stringify(customTicketsResponse.data, null, 2));
