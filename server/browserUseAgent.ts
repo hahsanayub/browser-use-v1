@@ -119,8 +119,8 @@ export class ExtractDataActions {
         // Calculate page index based on api_doc_content_ files
         let pageIndex = 1;
         if (context.fileSystem) {
-          const existingFiles = await fs.readdir(context.fileSystem.getDir()).catch(() => []);
-          const apiDocContentFiles = existingFiles.filter(filename => filename.startsWith('api_doc_content_'));
+          const existingFiles = Array.from(context.fileSystem.getFiles().keys());
+          const apiDocContentFiles = existingFiles.filter((filename: string) => filename.startsWith('api_doc_content_'));
           pageIndex = apiDocContentFiles.length + 1;
         }
 
@@ -377,8 +377,7 @@ Explain the content of the page and that the requested information is not availa
             try {
               const mergedFileName = `${apiDocContentExtractFilePrefix}_${pageIndex}.md`;
               const mergedFilePath = path.join(context.fileSystem.getDir(), mergedFileName);
-              const mergedContent = `# Merged Chunk Processing Results\n\nTotal chunks: ${chunkResponses.length}\nQuery: ${query}\n\n## Merged Response:\n${mergedResponse}`;
-              await fs.writeFile(mergedFilePath, mergedContent, 'utf-8');
+              await fs.writeFile(mergedFilePath, mergedResponse, 'utf-8');
               console.log(`Saved merged result to ${mergedFilePath}`);
             } catch (error) {
               console.warn('Failed to save merged result:', error);

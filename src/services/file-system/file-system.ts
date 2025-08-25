@@ -180,6 +180,13 @@ export class FileSystem {
   }
 
   /**
+   * Get the files Map for direct access (to maintain consistency with Python version)
+   */
+  getFiles(): Map<string, BaseFile> {
+    return this.files;
+  }
+
+  /**
    * Get a file object by full filename
    */
   getFile(fullFilename: string): BaseFile | null {
