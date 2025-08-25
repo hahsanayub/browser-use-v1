@@ -57,10 +57,8 @@ export class BrowserUseService {
    */
   private sendHeartbeat(): void {
     if (this.sseSender) {
-      this.sendEvent('heartbeat', {
-        message: 'Server heartbeat',
-        timestamp: new Date().toISOString(),
-        serverTime: Date.now()
+      this.sendEvent('', {
+        message: `ping - ${new Date().toISOString()}`
       });
     }
   }
@@ -152,6 +150,8 @@ export class BrowserUseService {
     maxSteps: number,
     sessionId: string
   ): Promise<void> {
+    let executionCompleted = false;
+    
     try {
       // Use the unified sendEvent function with correct signature
       const sendEvent = (event: any) => {
@@ -167,17 +167,38 @@ export class BrowserUseService {
 
         // Break on completion or error events
         if (['agent_complete', 'error', 'cancelled'].includes(event.type)) {
+          executionCompleted = true;
           break;
         }
       }
+      
+      // 如果正常完成但没有收到 agent_complete 事件，发送 session_complete 事件
+      if (!executionCompleted) {
+        this.sendEvent('session_complete', {
+          message: 'Session completed successfully',
+          sessionId,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
     } catch (error) {
       console.error('Error in executeWithSseEvents:', error);
+      
+      // 发送执行错误事件
       this.sendEvent('execution_error', {
         message: `Execution error: ${error}`,
         sessionId,
         error: error instanceof Error ? error.message : String(error),
         timestamp: new Date().toISOString()
       });
+      
+    } finally {
+      // 清理会话
+      this.activeSessions.delete(sessionId);
+      
+      // 注意：不在这里调用 clearSseSender()，让路由层控制连接关闭
+      // 这样可以确保最后的事件能够正确发送
+      console.log(`Session ${sessionId} execution finished, cleaned up from active sessions`);
     }
   }
 

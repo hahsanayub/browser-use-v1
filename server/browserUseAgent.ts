@@ -982,8 +982,8 @@ Extract all Tasks-related API endpoint documentation content from the HubSpot CR
       };
       if (sendEvent) sendEvent(errorEvent);
     } finally {
-      // Unregister SSE event sender
-      if (sendEvent) {
+      // Disconnect SSE connection
+      if (globalSSEEventSender) {
         clearGlobalSSEEventSender();
       }
 

@@ -7,6 +7,27 @@ const browserUseService = new BrowserUseService();
 
 // SSE endpoint for real-time browser-use execution
 router.post('/sse', async (req, res) => {
+  let sessionId: string | null = null;
+  let connectionClosed = false;
+
+  // 安全关闭连接的函数
+  const closeConnection = () => {
+    if (!connectionClosed && !res.destroyed) {
+      connectionClosed = true;
+      try {
+        // 发送连接关闭事件
+        res.write(`event: connection_close\n`);
+        res.write(`data: ${JSON.stringify({ message: 'Connection closed', timestamp: new Date().toISOString() })}\n\n`);
+        // 正确结束 SSE 连接
+        res.end();
+      } catch (error) {
+        console.warn('Error closing SSE connection:', error);
+        // 强制结束连接
+        res.destroy();
+      }
+    }
+  };
+
   try {
     const { user_request, maxSteps = 200, session_id } = req.body;
 
@@ -22,9 +43,19 @@ router.post('/sse', async (req, res) => {
 
     // Send event function - matching Python version format
     const sendEvent = (eventType: string, data: any) => {
-      if (!res.destroyed) {
-        res.write(`event: ${eventType}\n`);
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      if (!res.destroyed && !connectionClosed) {
+        try {
+          res.write(`event: ${eventType}\n`);
+          res.write(`data: ${JSON.stringify(data)}\n\n`);
+          
+          // 检查是否是完成或错误事件，如果是则关闭连接
+          if (['agent_complete', 'session_complete', 'execution_error', 'error', 'cancelled'].includes(eventType)) {
+            setTimeout(() => closeConnection(), 100); // 延迟关闭，确保事件发送完成
+          }
+        } catch (error) {
+          console.error('Error sending SSE event:', error);
+          closeConnection();
+        }
       }
     };
 
@@ -32,11 +63,12 @@ router.post('/sse', async (req, res) => {
     browserUseService.setSseSender(sendEvent);
 
     // Start execution
-    const sessionId = await browserUseService.startSseExecution(user_request, maxSteps, session_id);
+    sessionId = await browserUseService.startSseExecution(user_request, maxSteps, session_id);
 
     // Handle client disconnect
     req.on('close', () => {
       console.log('Browser-use SSE: Client disconnected');
+      connectionClosed = true;
       browserUseService.clearSseSender();
       if (sessionId) {
         browserUseService.cancelSession(sessionId);
@@ -45,13 +77,35 @@ router.post('/sse', async (req, res) => {
 
     req.on('error', (error) => {
       console.error('Browser-use SSE: Connection error:', error);
+      closeConnection();
       browserUseService.clearSseSender();
       if (sessionId) {
         browserUseService.cancelSession(sessionId);
       }
     });
+
+    // 设置超时保护，防止连接无限期保持
+    const timeout = setTimeout(() => {
+      console.log('SSE connection timeout, closing...');
+      closeConnection();
+      if (sessionId) {
+        browserUseService.cancelSession(sessionId);
+      }
+    }, 300000); // 5分钟超时
+
+    // 清理超时定时器
+    req.on('close', () => clearTimeout(timeout));
+    req.on('error', () => clearTimeout(timeout));
+
   } catch (error) {
     console.error('Error in SSE endpoint:', error);
+    
+    // 清理资源
+    if (sessionId) {
+      browserUseService.cancelSession(sessionId);
+    }
+    browserUseService.clearSseSender();
+    
     if (!res.headersSent) {
       res.status(500).json({
         success: false,
@@ -59,6 +113,19 @@ router.post('/sse', async (req, res) => {
         error: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString(),
       });
+    } else {
+      // 如果已经发送了 SSE 头，发送错误事件并关闭连接
+      try {
+        res.write(`event: error\n`);
+        res.write(`data: ${JSON.stringify({
+          message: 'Server error occurred',
+          error: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date().toISOString()
+        })}\n\n`);
+      } catch (writeError) {
+        console.error('Error writing error event:', writeError);
+      }
+      closeConnection();
     }
   }
 });
