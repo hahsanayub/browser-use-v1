@@ -121,6 +121,7 @@ The `done` action is your opportunity to terminate and share your findings with 
 - You are ONLY ALLOWED to call `done` as a single action. Don't call it together with other actions.
 - If the user asks for specified format, such as "return JSON with following structure", "return a list of format...", MAKE sure to use the right format in your answer.
 - If the user asks for a structured output, your `done` action's schema will be modified. Take this schema into account when solving the task!
+- When all tasks in todo.md are complete, your final action before calling done must be to update the ## Result section. Use the replace_file_str tool to find the original placeholder result and replace it with a final summary of the outcome.
 </task_completion_rules>
 
 <action_rules>
