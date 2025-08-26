@@ -249,10 +249,21 @@ export class BrowserSession {
 
     await this.waitForPageAndFramesLoad(page);
 
+    // Create DOM options from session config
+    const domOptions = {
+      viewportExpansion: this.config.viewportExpansion,
+      markInteractive: this.config.highlightElements,
+      includeHidden: this.config.includeHiddenElements,
+      maxTextLength: this.config.maxTextLength,
+      removeScripts: this.config.removeScripts,
+      removeStyles: this.config.removeStyles,
+      removeComments: this.config.removeComments,
+    };
+
     const pageView = await this.domService.getPageView(
       healthyPage,
       this.context!,
-      {},
+      domOptions,
       true
     );
     const selectorMap = this.buildSelectorMap(pageView.domState);
@@ -1163,12 +1174,12 @@ export class BrowserSession {
     // Build a BrowserProfile from the current session config for consistent args and viewport logic
     const browserConfig = {
       browserType: 'chromium' as const,
-      headless: this.config.headless,
+      headless: this.config.headless ?? true,
       userDataDir: this.config.userDataDir,
-      args: this.config.args,
-      timeout: this.config.timeout,
-      viewport: this.config.viewport,
-      windowSize: this.config.viewport,
+      args: this.config.args ?? [],
+      timeout: this.config.timeout ?? 30000,
+      viewport: this.config.viewport ?? { width: 1280, height: 720 },
+      windowSize: this.config.viewport ?? { width: 1280, height: 720 },
       // Keep defaults for optimized args/stealth/extensions as provided by caller presets
       useOptimizedArgs: false,
       enableStealth: false,
@@ -1176,6 +1187,16 @@ export class BrowserSession {
       disableSecurity: false,
       enableDeterministicRendering: false,
       profileDirectory: 'Default',
+      customExtensions: [],
+      keepAlive: false,
+      // DOM processing configuration (use session config or defaults)
+      viewportExpansion: this.config.viewportExpansion ?? 500,
+      highlightElements: this.config.highlightElements ?? true,
+      includeHiddenElements: this.config.includeHiddenElements ?? false,
+      maxTextLength: this.config.maxTextLength,
+      removeScripts: this.config.removeScripts ?? false,
+      removeStyles: this.config.removeStyles ?? false,
+      removeComments: this.config.removeComments ?? false,
     };
 
     this.profile = await BrowserProfile.fromConfig(browserConfig);

@@ -2,7 +2,7 @@
  * Predefined browser configuration presets for common use cases
  */
 
-import type { BrowserConfig } from '../../types/browser';
+import type { BrowserConfig } from '../../config/schema';
 
 /**
  * Default configuration - lightweight and fast
@@ -10,14 +10,24 @@ import type { BrowserConfig } from '../../types/browser';
 export const DEFAULT_PRESET: BrowserConfig = {
   browserType: 'chromium',
   headless: true,
+  args: [],
+  timeout: 30000,
+  viewport: { width: 1280, height: 720 },
   useOptimizedArgs: false,
   enableStealth: false,
   disableSecurity: false,
   enableDeterministicRendering: false,
   enableDefaultExtensions: false,
+  customExtensions: [],
   keepAlive: false,
-  timeout: 30000,
-  viewport: { width: 1280, height: 720 },
+  profileDirectory: 'Default',
+  // DOM processing configuration (aligned with Python version)
+  viewportExpansion: 500,
+  highlightElements: true,
+  includeHiddenElements: false,
+  removeScripts: false,
+  removeStyles: false,
+  removeComments: false,
 };
 
 /**

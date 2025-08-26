@@ -2,7 +2,7 @@
  * Configuration type definitions
  */
 
-import { BrowserConfig } from './browser';
+import { BrowserConfig } from '../config/schema';
 
 export interface LLMConfig {
   /** LLM provider (openai, anthropic, google, etc.) */

@@ -18,46 +18,8 @@ export interface ExtensionConfig {
   enabled?: boolean;
 }
 
-export interface BrowserConfig {
-  /** Browser type to use (chromium, firefox, webkit) */
-  browserType?: 'chromium' | 'firefox' | 'webkit';
-  /** Whether to run browser in headless mode */
-  headless?: boolean;
-  /** User data directory for persistent browser session */
-  userDataDir?: string;
-  /** Additional browser launch arguments */
-  args?: string[];
-  /** Browser executable path (optional) */
-  executablePath?: string;
-  /** Timeout for browser operations in milliseconds */
-  timeout?: number;
-  /** Viewport size */
-  viewport?: ViewportSize;
-
-  // Enhanced configuration options
-  /** Use optimized Chrome arguments for automation */
-  useOptimizedArgs?: boolean;
-  /** Enable stealth mode to avoid detection */
-  enableStealth?: boolean;
-  /** Disable security features for testing */
-  disableSecurity?: boolean;
-  /** Enable deterministic rendering for consistent screenshots */
-  enableDeterministicRendering?: boolean;
-  /** Enable default automation-optimized extensions */
-  enableDefaultExtensions?: boolean;
-  /** Custom extensions to load */
-  customExtensions?: ExtensionConfig[];
-  /** List of allowed domains for navigation */
-  allowedDomains?: string[];
-  /** Window size for non-headless mode */
-  windowSize?: ViewportSize;
-  /** Window position for non-headless mode */
-  windowPosition?: ViewportSize;
-  /** Whether to keep browser alive after session ends */
-  keepAlive?: boolean;
-  /** Profile directory name (e.g., 'Default', 'Profile 1') */
-  profileDirectory?: string;
-}
+// BrowserConfig is now exported from config/schema.ts to maintain single source of truth
+// Import it from there: import { BrowserConfig } from '../config/schema'
 
 export interface BrowserContextConfig {
   /** User data directory for this specific context */
@@ -121,4 +83,20 @@ export interface BrowserSessionConfig {
   defaultJpegQuality?: number;
   /** Whether to use viewport-only screenshots by default for better performance */
   defaultViewportScreenshots?: boolean;
+
+  // DOM processing configuration (aligned with Python version)
+  /** Viewport expansion in pixels (-1 for all elements) */
+  viewportExpansion?: number;
+  /** Whether to highlight interactive elements */
+  highlightElements?: boolean;
+  /** Whether to include hidden elements */
+  includeHiddenElements?: boolean;
+  /** Maximum text length for elements */
+  maxTextLength?: number;
+  /** Whether to remove script tags */
+  removeScripts?: boolean;
+  /** Whether to remove style tags */
+  removeStyles?: boolean;
+  /** Whether to remove comments */
+  removeComments?: boolean;
 }

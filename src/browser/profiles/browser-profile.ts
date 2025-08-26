@@ -2,11 +2,8 @@
  * Browser profile manager that combines arguments, extensions, and environment detection
  */
 
-import type {
-  BrowserConfig,
-  ViewportSize,
-  ExtensionConfig,
-} from '../../types/browser';
+import type { BrowserConfig } from '../../config/schema';
+import type { ViewportSize, ExtensionConfig } from '../../types/browser';
 import { getSystemInfo, getWindowAdjustments } from './environment';
 import { ExtensionManager, DEFAULT_EXTENSIONS } from './extensions';
 import {
@@ -60,9 +57,9 @@ export class BrowserProfile {
         this.config.viewport = { width: 1280, height: 720 };
       }
     } else {
-      // Headful: if window size not set, we'll start maximized via args; leave viewport undefined
+      // Headful: if window size not set, we'll start maximized via args; use default viewport
       if (!this.config.windowSize) {
-        this.config.viewport = undefined;
+        this.config.viewport = { width: 1280, height: 720 };
       }
     }
 

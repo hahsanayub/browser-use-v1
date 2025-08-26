@@ -18,6 +18,7 @@ import type {
   PageInfo,
   TabsInfo,
 } from '../types/dom';
+import type { BrowserConfig } from '../config/schema';
 import { getLogger } from './logging';
 import { DOMTreeSerializer } from './dom-tree-serializer';
 import { DOMTreeAdapter } from './dom-tree-adapter';
@@ -44,14 +45,42 @@ export class DOMService {
   constructor() {}
 
   /**
+   * Create DOMProcessingOptions from BrowserConfig
+   */
+  private createDOMOptionsFromBrowserConfig(
+    browserConfig: BrowserConfig,
+    overrides: DOMProcessingOptions = {}
+  ): DOMProcessingOptions {
+    return {
+      viewportExpansion: browserConfig.viewportExpansion,
+      markInteractive: browserConfig.highlightElements,
+      includeHidden: browserConfig.includeHiddenElements,
+      maxTextLength: browserConfig.maxTextLength,
+      removeScripts: browserConfig.removeScripts,
+      removeStyles: browserConfig.removeStyles,
+      removeComments: browserConfig.removeComments,
+      ...overrides, // Allow explicit overrides
+    };
+  }
+
+  /**
    * Get a processed view of the current page
    */
   async getPageView(
     page: Page,
     browserContext: BrowserContext,
     options: DOMProcessingOptions = {},
-    forceRefresh: boolean = false
+    forceRefresh: boolean = false,
+    browserConfig?: BrowserConfig
   ): Promise<PageView> {
+    // If browserConfig is provided, merge its DOM settings with options
+    if (browserConfig) {
+      const browserDOMOptions = this.createDOMOptionsFromBrowserConfig(
+        browserConfig,
+        options
+      );
+      options = browserDOMOptions;
+    }
     const url = page.url();
     const cacheKey = `${url}_${JSON.stringify(options)}`;
 
@@ -392,10 +421,9 @@ export class DOMService {
         {
           script: this.buildDomTreeScript,
           args: {
-            doHighlightElements: true,
-            // Expand viewport to include all to ensure highlightIndex stability
-            // viewportExpansion: -1,
-            // debugMode: false,
+            doHighlightElements: options.markInteractive ?? true,
+            viewportExpansion: options.viewportExpansion ?? 500, // Default to Python version value
+            debugMode: false,
             ...options,
           },
         }
@@ -409,9 +437,9 @@ export class DOMService {
           {
             script: this.buildDomTreeScript!,
             args: {
-              doHighlightElements: true,
-              // viewportExpansion: -1,
-              // debugMode: false,
+              doHighlightElements: options.markInteractive ?? true,
+              viewportExpansion: options.viewportExpansion ?? 500, // Default to Python version value
+              debugMode: false,
               ...options,
             },
           }

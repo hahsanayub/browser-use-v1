@@ -45,7 +45,6 @@ describe('JsonParser', () => {
       expect(result).toEqual({ name: 'test', value: 123 });
     });
 
-
     it('should parse nested JSON objects', () => {
       const input = '{"user": {"name": "John", "age": 30}, "active": true}';
       const result = JsonParser.parse(input);
@@ -124,13 +123,11 @@ invalid json {
       expect(result).toEqual({ extracted: true, number: 42 });
     });
 
-
     it('should prefer object over array when object comes first', () => {
       const input = 'Text {"object": 1} then [1, 2, 3] more';
       const result = JsonParser.parse(input);
       expect(result).toEqual({ object: 1 });
     });
-
 
     it('should handle nested objects and arrays in extraction', () => {
       const input =
@@ -155,7 +152,6 @@ invalid json {
       const result = JsonParser.parse(input);
       expect(result).toEqual({ name: 'test', value: 123 });
     });
-
 
     it('should escape backticks in JSON strings', () => {
       const input = '{"code": "`console.log(test)`", "type": "javascript"}';
@@ -183,7 +179,6 @@ invalid json {
       const result = JsonParser.parse(input);
       expect(result).toEqual({ name: 'test', value: 123 });
     });
-
 
     it('should handle multiple repair issues that are actually supported', () => {
       const input = '{{"name": "test", "values": [1, 2, 3,], "active": true,}}';
@@ -266,8 +261,6 @@ More text
   });
 
   describe('parse() - Edge cases and error handling', () => {
-
-
     it('should handle text without any JSON', () => {
       expect(() =>
         JsonParser.parse('This is just plain text without any JSON content')
@@ -308,7 +301,6 @@ More text
       const result = JsonParser.parse(input);
       expect(result).toEqual(nested);
     });
-
 
     it('should handle strings with special characters', () => {
       const input = '{"special": "áéíóú ñ ç § € ¥ © ® ™ ← → ↑ ↓"}';
@@ -353,7 +345,6 @@ More text
       const result = JsonParser.parse(input);
       expect(result).toEqual({ message: 'Hello world', type: 'greeting' });
     });
-
 
     it('should handle nested objects with trailing commas', () => {
       const input = '{"user": {"name": "John", "age": 30,}, "active": true,}';
@@ -492,13 +483,17 @@ The API response should be structured as {"status": "success", "data": {"items":
 
     it('should handle single property without quotes by wrapping', () => {
       const input = 'status: "active"';
-      expect(() => JsonParser.parse(input)).toThrow('Unable to parse LLM JSON output:');
+      expect(() => JsonParser.parse(input)).toThrow(
+        'Unable to parse LLM JSON output:'
+      );
     });
 
     it('should handle array-like content that gets wrapped incorrectly', () => {
       // This tests the limitation of the current implementation
       const input = '1, 2, 3';
-      expect(() => JsonParser.parse(input)).toThrow('Unable to parse LLM JSON output:');
+      expect(() => JsonParser.parse(input)).toThrow(
+        'Unable to parse LLM JSON output:'
+      );
     });
   });
 
@@ -517,7 +512,9 @@ no closing fence`;
 \`\`\`json
 \`\`\`
 `;
-      expect(() => JsonParser.parse(input)).toThrow('Unable to parse LLM JSON output:');
+      expect(() => JsonParser.parse(input)).toThrow(
+        'Unable to parse LLM JSON output:'
+      );
     });
 
     it('should handle case insensitive language markers', () => {
@@ -542,7 +539,7 @@ no closing fence`;
       const result = JsonParser.parse(input);
       expect(result).toEqual({
         code: "```bash\necho 'hello'\n```",
-        nested: true
+        nested: true,
       });
     });
 
@@ -553,15 +550,19 @@ no closing fence`;
 \`\`\`
 `;
       const result = JsonParser.parse(input);
-      expect(result).toEqual({ mixed: "language tags" });
+      expect(result).toEqual({ mixed: 'language tags' });
     });
   });
 
   describe('parse() - sliceFirstJsonLike edge cases', () => {
     it('should handle JSON with brackets in string values', () => {
-      const input = 'Text {"message": "Use [brackets] and {braces}", "type": "info"} more';
+      const input =
+        'Text {"message": "Use [brackets] and {braces}", "type": "info"} more';
       const result = JsonParser.parse(input);
-      expect(result).toEqual({ message: 'Use [brackets] and {braces}', type: 'info' });
+      expect(result).toEqual({
+        message: 'Use [brackets] and {braces}',
+        type: 'info',
+      });
     });
 
     it('should handle deeply nested structures in extraction', () => {
@@ -577,7 +578,8 @@ no closing fence`;
     });
 
     it('should handle JSON with escaped quotes in complex strings', () => {
-      const input = 'Text {"quote": "He said \\"Hello\\" to me", "valid": true} more';
+      const input =
+        'Text {"quote": "He said \\"Hello\\" to me", "valid": true} more';
       const result = JsonParser.parse(input);
       expect(result).toEqual({ quote: 'He said "Hello" to me', valid: true });
     });
@@ -609,9 +611,14 @@ no closing fence`;
     });
 
     it('should handle combination of some repairs', () => {
-      const input = '{{\"mixed\": \'quotes\', \"command\": \"\\`test\\`\", \"trailing\": \"comma\",}}';
+      const input =
+        '{{\"mixed\": \'quotes\', \"command\": \"\\`test\\`\", \"trailing\": \"comma\",}}';
       const result = JsonParser.parse(input);
-      expect(result).toEqual({ mixed: 'quotes', command: '`test`', trailing: 'comma' });
+      expect(result).toEqual({
+        mixed: 'quotes',
+        command: '`test`',
+        trailing: 'comma',
+      });
     });
   });
 
@@ -639,7 +646,9 @@ no closing fence`;
 
     it('should handle invalid JSON that cannot be repaired', () => {
       const input = '{"incomplete": true, "missing": "quotes and stuff';
-      expect(() => JsonParser.parse(input)).toThrow('Unable to parse LLM JSON output:');
+      expect(() => JsonParser.parse(input)).toThrow(
+        'Unable to parse LLM JSON output:'
+      );
     });
   });
 
@@ -651,26 +660,31 @@ no closing fence`;
     });
 
     it('should handle JSON with complex escape sequences', () => {
-      const input = '{"escaped": "Line1\\nLine2\\tTabbed", "path": "C:\\\\Users\\\\test"}';
+      const input =
+        '{"escaped": "Line1\\nLine2\\tTabbed", "path": "C:\\\\Users\\\\test"}';
       const result = JsonParser.parse(input);
-      expect(result).toEqual({ 
-        escaped: 'Line1\nLine2\tTabbed', 
-        path: 'C:\\Users\\test' 
+      expect(result).toEqual({
+        escaped: 'Line1\nLine2\tTabbed',
+        path: 'C:\\Users\\test',
       });
     });
 
     it('should handle JSON with regex-like patterns in strings', () => {
       const input = '{"pattern": "/^[a-zA-Z0-9]+$/", "replacement": "$1-$2"}';
       const result = JsonParser.parse(input);
-      expect(result).toEqual({ pattern: '/^[a-zA-Z0-9]+$/', replacement: '$1-$2' });
+      expect(result).toEqual({
+        pattern: '/^[a-zA-Z0-9]+$/',
+        replacement: '$1-$2',
+      });
     });
 
     it('should handle JSON with HTML-like content', () => {
-      const input = '{"html": "<div class=\\"test\\">Content</div>", "tag": "<br/>"}';
+      const input =
+        '{"html": "<div class=\\"test\\">Content</div>", "tag": "<br/>"}';
       const result = JsonParser.parse(input);
-      expect(result).toEqual({ 
-        html: '<div class="test">Content</div>', 
-        tag: '<br/>' 
+      expect(result).toEqual({
+        html: '<div class="test">Content</div>',
+        tag: '<br/>',
       });
     });
   });

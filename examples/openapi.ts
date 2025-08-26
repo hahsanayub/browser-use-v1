@@ -368,9 +368,10 @@ async function main() {
       browser: {
         headless: false,
         browserType: 'chromium',
-        viewport: { width: 1440, height: 900 },
+        viewport: { width: 1440, height: 1080 },
         timeout: 45000,
         args: [],
+        viewportExpansion: 2000,
       },
       logging: {
         level: 'debug',

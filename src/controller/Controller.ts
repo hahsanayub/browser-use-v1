@@ -190,6 +190,14 @@ export class Controller {
           saveState: true,
           timeout: this.config.browser.timeout,
           viewport: this.config.browser.viewport,
+          // DOM processing configuration from BrowserConfig
+          viewportExpansion: this.config.browser.viewportExpansion,
+          highlightElements: this.config.browser.highlightElements,
+          includeHiddenElements: this.config.browser.includeHiddenElements,
+          maxTextLength: this.config.browser.maxTextLength,
+          removeScripts: this.config.browser.removeScripts,
+          removeStyles: this.config.browser.removeStyles,
+          removeComments: this.config.browser.removeComments,
         },
       });
       await this.browserSession.start();

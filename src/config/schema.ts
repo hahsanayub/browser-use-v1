@@ -40,6 +40,15 @@ export const BrowserConfigSchema = z.object({
   windowPosition: ViewportSizeSchema.optional(),
   keepAlive: z.boolean().default(false),
   profileDirectory: z.string().default('Default'),
+
+  // DOM processing configuration (aligned with Python version)
+  viewportExpansion: z.number().min(-1).max(2000).default(500),
+  highlightElements: z.boolean().default(true),
+  includeHiddenElements: z.boolean().default(false),
+  maxTextLength: z.number().min(1).optional(),
+  removeScripts: z.boolean().default(false),
+  removeStyles: z.boolean().default(false),
+  removeComments: z.boolean().default(false),
 });
 
 // LLM configuration schema
@@ -114,6 +123,13 @@ export const DEFAULT_CONFIG: AppConfig = {
     customExtensions: [],
     keepAlive: false,
     profileDirectory: 'Default',
+    // DOM processing configuration (aligned with Python version)
+    viewportExpansion: 500,
+    highlightElements: true,
+    includeHiddenElements: false,
+    removeScripts: false,
+    removeStyles: false,
+    removeComments: false,
   },
   llm: {
     provider: 'openai',
@@ -121,6 +137,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     timeout: 30000,
     maxTokens: 4000,
     temperature: 0.2,
+    frequencyPenalty: 0.3,
   },
   logging: {
     level: 'info',

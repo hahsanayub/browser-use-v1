@@ -272,7 +272,8 @@ export async function generatePageContextPrompt(
   // Use simplified DOM processing if available and enabled
   if (pageView.domState?.elementTree && useViewportAware) {
     // Use provided ViewportDOMService instance or create a new one as fallback
-    const viewportAwareDOMService = viewportDOMService || new ViewportDOMService();
+    const viewportAwareDOMService =
+      viewportDOMService || new ViewportDOMService();
 
     const options: SimplifiedDOMOptions = {
       maxTotalLength: maxClickableElementsLength,

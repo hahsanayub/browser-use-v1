@@ -9,7 +9,7 @@ import {
   Browser as PlaywrightBrowser,
   BrowserType,
 } from 'playwright';
-import type { BrowserConfig } from '../types/browser';
+import type { BrowserConfig } from '../config/schema';
 import { BrowserProfile, type ProfileBuildResult } from './profiles';
 import { PLAYWRIGHT_IGNORED_DEFAULT_ARGS } from './profiles/chrome-args';
 import { getLogger } from '../services/logging';

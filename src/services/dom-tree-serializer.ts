@@ -919,13 +919,19 @@ export class DOMTreeSerializer {
 
         // Check if this element is new (implement proper new element detection)
         let isNew = false;
-        if (isInteractive && elementNode.highlightIndex && previousSelectorMap) {
+        if (
+          isInteractive &&
+          elementNode.highlightIndex &&
+          previousSelectorMap
+        ) {
           // Find if element with same attributes exists in previous state
           const previousElements = Object.values(previousSelectorMap);
-          isNew = !previousElements.some(prevElement =>
-            prevElement.tagName === elementNode.tagName &&
-            prevElement.xpath === elementNode.xpath &&
-            JSON.stringify(prevElement.attributes) === JSON.stringify(elementNode.attributes)
+          isNew = !previousElements.some(
+            (prevElement) =>
+              prevElement.tagName === elementNode.tagName &&
+              prevElement.xpath === elementNode.xpath &&
+              JSON.stringify(prevElement.attributes) ===
+                JSON.stringify(elementNode.attributes)
           );
         }
 
