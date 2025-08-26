@@ -47,7 +47,7 @@ router.post('/sse', async (req, res) => {
         try {
           res.write(`event: ${eventType}\n`);
           res.write(`data: ${JSON.stringify(data)}\n\n`);
-          
+
           // 检查是否是完成或错误事件，如果是则关闭连接
           if (['agent_complete', 'session_complete', 'execution_error', 'error', 'cancelled'].includes(eventType)) {
             setTimeout(() => closeConnection(), 100); // 延迟关闭，确保事件发送完成
@@ -85,27 +85,27 @@ router.post('/sse', async (req, res) => {
     });
 
     // 设置超时保护，防止连接无限期保持
-    const timeout = setTimeout(() => {
-      console.log('SSE connection timeout, closing...');
-      closeConnection();
-      if (sessionId) {
-        browserUseService.cancelSession(sessionId);
-      }
-    }, 300000); // 5分钟超时
+    // const timeout = setTimeout(() => {
+    //   console.log('SSE connection timeout, closing...');
+    //   closeConnection();
+    //   if (sessionId) {
+    //     browserUseService.cancelSession(sessionId);
+    //   }
+    // }, 300000); // 5分钟超时
 
     // 清理超时定时器
-    req.on('close', () => clearTimeout(timeout));
-    req.on('error', () => clearTimeout(timeout));
+    // req.on('close', () => clearTimeout(timeout));
+    // req.on('error', () => clearTimeout(timeout));
 
   } catch (error) {
     console.error('Error in SSE endpoint:', error);
-    
+
     // 清理资源
     if (sessionId) {
       browserUseService.cancelSession(sessionId);
     }
     browserUseService.clearSseSender();
-    
+
     if (!res.headersSent) {
       res.status(500).json({
         success: false,

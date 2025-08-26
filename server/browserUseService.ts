@@ -5,7 +5,7 @@ export class BrowserUseService {
   private sseSender?: (eventType: string, data: any) => void;
   private activeSessions = new Map<string, BrowserUseSSEAgent>();
   private heartbeatInterval?: NodeJS.Timeout;
-  private heartbeatIntervalMs: number = 30000;
+  private heartbeatIntervalMs: number = 20000;
   private isHeartbeatActive: boolean = false;
 
   /**
@@ -151,7 +151,7 @@ export class BrowserUseService {
     sessionId: string
   ): Promise<void> {
     let executionCompleted = false;
-    
+
     try {
       // Use the unified sendEvent function with correct signature
       const sendEvent = (event: any) => {
@@ -171,7 +171,7 @@ export class BrowserUseService {
           break;
         }
       }
-      
+
       // 如果正常完成但没有收到 agent_complete 事件，发送 session_complete 事件
       if (!executionCompleted) {
         this.sendEvent('session_complete', {
@@ -180,10 +180,10 @@ export class BrowserUseService {
           timestamp: new Date().toISOString()
         });
       }
-      
+
     } catch (error) {
       console.error('Error in executeWithSseEvents:', error);
-      
+
       // 发送执行错误事件
       this.sendEvent('execution_error', {
         message: `Execution error: ${error}`,
@@ -191,11 +191,11 @@ export class BrowserUseService {
         error: error instanceof Error ? error.message : String(error),
         timestamp: new Date().toISOString()
       });
-      
+
     } finally {
       // 清理会话
       this.activeSessions.delete(sessionId);
-      
+
       // 注意：不在这里调用 clearSseSender()，让路由层控制连接关闭
       // 这样可以确保最后的事件能够正确发送
       console.log(`Session ${sessionId} execution finished, cleaned up from active sessions`);
