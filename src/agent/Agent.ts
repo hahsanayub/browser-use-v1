@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { BrowserSession } from '../browser/BrowserSession';
 import { DOMService } from '../services/dom-service';
+import { ViewportDOMService } from '../services/dom-tree-serializer';
 import { BaseLLMClient } from '../llm/base-client';
 import { ScreenshotService } from '../services/screenshot-service';
 import { FileSystem } from '../services/file-system';
@@ -47,6 +48,7 @@ export class Agent {
   private browserSession: BrowserSession;
   llmClient: BaseLLMClient;
   private domService: DOMService;
+  private viewportDOMService: ViewportDOMService; // Persistent ViewportDOMService for state management
   private fileSystem: FileSystem | null = null;
   private screenshotService: ScreenshotService | null = null;
   private config: AgentConfig;
@@ -69,6 +71,7 @@ export class Agent {
     this.browserSession = browserSession;
     this.llmClient = llmClient;
     this.domService = new DOMService();
+    this.viewportDOMService = new ViewportDOMService(); // Initialize persistent ViewportDOMService
     this.config = {
       maxSteps: 100,
       actionTimeout: 30000,
@@ -263,7 +266,8 @@ export class Agent {
         isLastStep: stepInfo.isLastStep(),
       },
       pageSpecificActions, // Pass page-specific actions
-      registry // Pass the action registry for default actions
+      registry, // Pass the action registry for default actions
+      this.viewportDOMService // Pass the persistent ViewportDOMService instance
     );
 
     // If vision is disabled or no screenshots available, return text-only message
@@ -1130,7 +1134,12 @@ export class Agent {
           this.fileSystem,
           true, // useViewportAware
           undefined, // simplifiedDOMOptions
-          this.agentHistoryManager // Pass the enhanced history manager
+          this.agentHistoryManager, // Pass the enhanced history manager
+          undefined, // readStateDescription
+          undefined, // stepInfo
+          undefined, // pageSpecificActions
+          undefined, // actionRegistry
+          this.viewportDOMService // Pass the persistent ViewportDOMService instance
         ),
       },
     ];

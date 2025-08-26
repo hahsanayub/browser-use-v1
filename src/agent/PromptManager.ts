@@ -263,14 +263,16 @@ export async function generatePageContextPrompt(
   readStateDescription?: string,
   stepInfo?: { stepNumber: number; maxSteps: number; isLastStep: boolean },
   pageSpecificActions?: string,
-  actionRegistry?: ActionRegistry
+  actionRegistry?: ActionRegistry,
+  viewportDOMService?: ViewportDOMService // Add ViewportDOMService parameter
 ): Promise<string> {
   let interactiveElementsList: string;
   let truncatedText = '';
 
   // Use simplified DOM processing if available and enabled
   if (pageView.domState?.elementTree && useViewportAware) {
-    const viewportAwareDOMService = new ViewportDOMService();
+    // Use provided ViewportDOMService instance or create a new one as fallback
+    const viewportAwareDOMService = viewportDOMService || new ViewportDOMService();
 
     const options: SimplifiedDOMOptions = {
       maxTotalLength: maxClickableElementsLength,

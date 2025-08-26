@@ -14,6 +14,21 @@ import { BrowserSession } from '../src/browser';
 import type { BrowserContext as AgentBrowserContext } from '../src/browser/BrowserContext';
 import { action } from '../src/controller/decorators';
 
+const request = {
+  hubspot: {
+    url: 'https://developers.hubspot.com/docs/reference/api/crm/objects/tickets',
+    text: `Extract the entire original API documentation content for the List Tickets API from this page: https://developers.hubspot.com/docs/reference/api/crm/objects/tickets. You must extract all available details required for OpenAPI Spec, including endpoints, HTTP methods, versioning, baseApiUrl, auth requirements, request parameters, request body schema, response codes, bodies, and error responses. Preserve exact wording from the source.`,
+  },
+  adyen: {
+    url: 'https://docs.adyen.com/api-explorer/transfers/4/overview',
+    text: `I would like to generate the spec for "Transfers" related API from Adyen https://docs.adyen.com/api-explorer/transfers/4/overview`,
+  },
+  jumpseller: {
+    url: 'https://jumpseller.com/support/api/#tag/Products',
+    text: `I would like to generate the spec for "Products" related API from Jumpseller website https://jumpseller.com/support/api/#tag/Products`,
+  },
+}[(process.env.API_NAME as string) ?? 'hubspot']!;
+
 export class ExtractDataActions {
   @action(
     'extract_structured_data',
@@ -274,7 +289,7 @@ Extract raw api document content for "Get users" endpoint, including: HTTP metho
 `;
 
 const userRequest = `
-I would like to generate the spec for "Products" related API from Jumpseller website https://jumpseller.com/support/api/#tag/Products
+${request.text}
 
 # Important Rules:
 - This is "multi-step" task, you need to create a detailed plan with "todo.md" file before you start the task. Reference the <todo_file_management> section for the format of the "todo.md" file.
@@ -345,7 +360,8 @@ async function main() {
         // model: 'gemini-2.5-flash',
         // baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
         // apiKey: process.env.GOOGLE_API_KEY,
-
+        temperature: 0.1,
+        frequencyPenalty: 0.2,
         timeout: 60000,
         maxTokens: 16384,
       },
@@ -366,7 +382,7 @@ async function main() {
   });
 
   try {
-    await controller.goto('https://jumpseller.com/support/api/#tag/Products');
+    await controller.goto(request.url);
 
     const agentConfig: AgentConfig = {
       useVision: true,

@@ -842,7 +842,8 @@ export class DOMTreeSerializer {
       'busy',
       'live',
       'ax_name',
-    ]
+    ],
+    previousSelectorMap?: Record<number, DOMElementNode>
   ): string {
     const logger = getLogger();
     logger.debug('Simplified DOM processing', {
@@ -853,7 +854,8 @@ export class DOMTreeSerializer {
     const result = this.serializeTreeSimplified(
       elementTree,
       includeAttributes,
-      0
+      0,
+      previousSelectorMap
     );
 
     // Apply length limiting if needed
@@ -881,7 +883,8 @@ export class DOMTreeSerializer {
   private static serializeTreeSimplified(
     node: DOMBaseNode | null,
     includeAttributes: string[],
-    depth: number = 0
+    depth: number = 0,
+    previousSelectorMap?: Record<number, DOMElementNode>
   ): string {
     if (!node) {
       return '';
@@ -914,6 +917,18 @@ export class DOMTreeSerializer {
           includeAttributes
         );
 
+        // Check if this element is new (implement proper new element detection)
+        let isNew = false;
+        if (isInteractive && elementNode.highlightIndex && previousSelectorMap) {
+          // Find if element with same attributes exists in previous state
+          const previousElements = Object.values(previousSelectorMap);
+          isNew = !previousElements.some(prevElement =>
+            prevElement.tagName === elementNode.tagName &&
+            prevElement.xpath === elementNode.xpath &&
+            JSON.stringify(prevElement.attributes) === JSON.stringify(elementNode.attributes)
+          );
+        }
+
         // Build the line based on element type
         let line = '';
         if (shouldShowScrollInfo && !isInteractive) {
@@ -921,7 +936,7 @@ export class DOMTreeSerializer {
           line = `${depthStr}|SCROLL|<${elementNode.tagName}`;
         } else if (isInteractive) {
           // Interactive (and possibly scrollable)
-          const newPrefix = (elementNode as any).isNew ? '*' : '';
+          const newPrefix = isNew ? '*' : '';
           const scrollPrefix = shouldShowScrollInfo ? '|SCROLL+' : '[';
           line = `${depthStr}${newPrefix}${scrollPrefix}${elementNode.highlightIndex}]<${elementNode.tagName}`;
         } else if (elementNode.tagName.toUpperCase() === 'IFRAME') {
@@ -953,7 +968,8 @@ export class DOMTreeSerializer {
         const childText = this.serializeTreeSimplified(
           child,
           includeAttributes,
-          nextDepth
+          nextDepth,
+          previousSelectorMap
         );
         if (childText) {
           formattedText.push(childText);
@@ -1029,6 +1045,7 @@ export class DOMTreeSerializer {
  */
 export class ViewportDOMService {
   private domLogger = getLogger();
+  private previousSelectorMap?: Record<number, DOMElementNode>;
 
   /**
    * Generate simplified clickable elements string consistent
@@ -1069,11 +1086,40 @@ export class ViewportDOMService {
       'ax_name',
     ]
   ): string {
-    return DOMTreeSerializer.clickableElementsToStringViewportAware(
+    const result = DOMTreeSerializer.clickableElementsToStringViewportAware(
       elementTree,
       options,
-      includeAttributes
+      includeAttributes,
+      this.previousSelectorMap
     );
+
+    // Update the previous selector map for next comparison
+    this.updatePreviousSelectorMap(elementTree);
+
+    return result;
+  }
+
+  /**
+   * Update the previous selector map with current interactive elements
+   */
+  private updatePreviousSelectorMap(elementTree: DOMElementNode): void {
+    this.previousSelectorMap = {};
+    this.collectInteractiveElements(elementTree);
+  }
+
+  /**
+   * Recursively collect interactive elements for comparison
+   */
+  private collectInteractiveElements(node: DOMElementNode): void {
+    if (node.highlightIndex !== null && this.previousSelectorMap) {
+      this.previousSelectorMap[node.highlightIndex] = node;
+    }
+
+    for (const child of node.children) {
+      if (child.type !== 'TEXT_NODE') {
+        this.collectInteractiveElements(child as DOMElementNode);
+      }
+    }
   }
 }
 
