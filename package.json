@@ -21,7 +21,6 @@
     "dev": "tsx src/index.ts",
     "api-server": "tsx server/apiServer.ts",
     "api-server:dev": "tsx --watch server/apiServer.ts",
-    "api-example": "node server/exampleUsage.cjs",
     "lint": "eslint . --ext .ts",
     "test": "vitest run",
     "test:watch": "vitest --watch",
