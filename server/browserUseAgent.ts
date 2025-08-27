@@ -289,7 +289,8 @@ Explain the content of the page and that the requested information is not availa
             p.url(),
             query,
             context,
-            endpoint_name
+            endpoint_name,
+            pageIndex,
           );
         } else {
           // Large content - use chunking
@@ -411,7 +412,8 @@ Explain the content of the page and that the requested information is not availa
             p.url(),
             query,
             context,
-            endpoint_name
+            endpoint_name,
+            pageIndex,
           );
         }
       } catch (error) {
@@ -535,18 +537,16 @@ ${chunk}`;
    */
   private static async mergeChunkResponses(chunkResponses: string[], llmClient: BaseLLMClient): Promise<string> {
     try {
+      console.log('Merging chunk responses...');
       const mergePrompt = `Merge the following chunk responses into a single response, and respond in JSON format. Preserve the original content, do not fabricate any data.
 
 # Rules
 - Ignore fields in the chunk that do not have valid info, for example field with:
     1. The provided chunk does not contain any information related to xxxx
     2. Not available in the chunk.
-- Combine and deduplicate information from all chunks
-- Maintain the structure and format of the original responses
-- If there are conflicts between chunks, prioritize the most complete information
 
 <chunked_responses>
-${chunkResponses.join('\n\n---\n\n')}
+${chunkResponses.join('\n\n')}
 </chunked_responses>`;
 
       const response = await withTimeout(
@@ -557,11 +557,16 @@ ${chunkResponses.join('\n\n---\n\n')}
         'Merge operation timed out after 2 minutes'
       );
 
+      console.log('Merged chunk done');
       return response.content;
     } catch (error) {
       console.error('Error merging chunk responses:', error);
-      // Fallback: return concatenated responses with clear separation
-      return `# Combined Chunk Responses\n\n${chunkResponses.map((response, index) => `## Chunk ${index + 1}\n\n${response}`).join('\n\n---\n\n')}`;
+      // Fallback: return concatenated responses with clear separation (matching Python version)
+      let fallbackResponse = `Combined results from ${chunkResponses.length} chunks:\n\n`;
+      for (let i = 0; i < chunkResponses.length; i++) {
+        fallbackResponse += `--- Chunk ${i + 1} ---\n${chunkResponses[i]}\n\n`;
+      }
+      return fallbackResponse;
     }
   }
 
@@ -599,7 +604,8 @@ ${chunkResponses.join('\n\n---\n\n')}
       fileSystem?: FileSystem;
       agent: Agent;
     },
-    endpoint_name?: string
+    endpoint_name?: string,
+    pageIndex?: number
   ): Promise<ActionResult> {
     // Determine if we need to save to file or include in memory (matching Python version)
     const MAX_MEMORY_SIZE = 600;
@@ -625,16 +631,16 @@ ${chunkResponses.join('\n\n---\n\n')}
         }
       }
 
-      const pageIndex = context.fileSystem?.getExtractedContentCount() || 0;
+      const apiDocContentExtractContentFileName = `api_doc_content_${pageIndex}.md`;
 
       try {
-        // Save using file system if available (matching Python version logic)
+        // Save using specific filename format (matching Python version logic)
         if (context.fileSystem) {
-          await context.fileSystem.saveExtractedContent(extractedContent);
+          await context.fileSystem.writeFile(apiDocContentExtractContentFileName, extractedContent);
         }
 
         const endpointNameInfo = endpoint_name ? `\n<endpoint_extracted>${endpoint_name}</endpoint_extracted>` : '';
-        message = `Extracted content from ${url}\n<query>${query}\n</query>\n<extracted_content>\n${display}${lines.length - displayLinesCount} more lines...\n</extracted_content>\n<file_system>File saved at: extracted_content_${pageIndex}.md</file_system>${endpointNameInfo}`;
+        message = `Extracted content from ${url}\n<query>${query}\n</query>\n<extracted_content>\n${display}${lines.length - displayLinesCount} more lines...\n</extracted_content>\n<file_system>File saved at: ${apiDocContentExtractContentFileName}</file_system>${endpointNameInfo}`;
 
         // Append to todo.md (matching Python version)
         if (endpoint_name && context.fileSystem) {
@@ -683,6 +689,7 @@ ${chunkResponses.join('\n\n---\n\n')}
       includeExtractedContentOnlyOnce,
     };
   }
+
 }
 
 const customInstructions = `
