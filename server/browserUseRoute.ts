@@ -145,14 +145,20 @@ router.post('/cancel', async (req, res) => {
   try {
     const { sessionId } = req.body;
 
+    // If no sessionId provided, cancel all sessions
     if (!sessionId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Session ID is required',
+      const result = await browserUseService.cancelAllSessions();
+      
+      return res.json({
+        success: true,
+        message: `Cancelled ${result.cancelled} out of ${result.total} active sessions`,
+        cancelled: result.cancelled,
+        total: result.total,
         timestamp: new Date().toISOString(),
       });
     }
 
+    // Cancel specific session
     const cancelled = await browserUseService.cancelSession(sessionId);
 
     if (cancelled) {

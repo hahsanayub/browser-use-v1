@@ -136,7 +136,6 @@ export class BrowserUseService {
 
   /**
    * Send event to a specific session through SSE if sender is available
-   * 向指定会话发送 SSE 事件
    */
   private sendEventToSession(sessionId: string, eventType: string, data: any): void {
     const session = this.sessions.get(sessionId);
@@ -329,6 +328,32 @@ export class BrowserUseService {
   }
 
   /**
+   * Cancel all active sessions
+   */
+  async cancelAllSessions(): Promise<{ cancelled: number; total: number }> {
+    const allSessions = Array.from(this.sessions.entries());
+    const activeSessions = allSessions.filter(([_, session]) => session.status === 'active');
+    
+    let cancelledCount = 0;
+    
+    for (const [sessionId, _] of activeSessions) {
+      try {
+        const cancelled = await this.cancelSession(sessionId);
+        if (cancelled) {
+          cancelledCount++;
+        }
+      } catch (error) {
+        console.error(`Failed to cancel session ${sessionId}:`, error);
+      }
+    }
+    
+    return {
+      cancelled: cancelledCount,
+      total: activeSessions.length
+    };
+  }
+
+  /**
    * Get heartbeat status
    */
   getHeartbeatStatus(): { active: boolean; intervalMs: number; hasSSEConnection: boolean } {
@@ -341,7 +366,6 @@ export class BrowserUseService {
 
   /**
    * Get a specific session by ID
-   * 获取指定 ID 的会话
    */
   getSession(sessionId: string): BrowserUseSSEAgent | undefined {
     const session = this.sessions.get(sessionId);
@@ -349,8 +373,7 @@ export class BrowserUseService {
   }
 
   /**
-   * Remove a session from registry
-   * 从注册表中移除会话（物理删除）
+   * Remove a session from registry (physical deletion)
    */
   removeSession(sessionId: string): boolean {
     return this.sessions.delete(sessionId);
@@ -358,7 +381,6 @@ export class BrowserUseService {
 
   /**
    * Get all sessions with their status
-   * 获取所有会话及其状态
    */
   getAllSessions(): Array<{ sessionId: string; status: string; createdAt: Date }> {
     return Array.from(this.sessions.entries()).map(([sessionId, session]) => ({
@@ -370,7 +392,6 @@ export class BrowserUseService {
 
   /**
    * Get active sessions with detailed status
-   * 获取活跃会话及详细状态
    */
   getActiveSessions(): Array<{ sessionId: string; status: any }> {
     const sessionList: Array<{ sessionId: string; status: any }> = [];
