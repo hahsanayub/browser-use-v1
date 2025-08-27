@@ -769,7 +769,7 @@ You are controlling a browser to extract complete information from an API docume
 6. **IMPORTANT** Process indivisual endpoint at once, when the page contains multiple endpoints, please keep navivating to the sub endpoint.
 7. Ignore **deprecated** endpoints, endpoint pages with "strikethrough" line. Skip those pages, indicate this in the todo.md file in your plan.
 8. Folllow the **Detailed Info Discovery Instructions** below to browse the page to identify and discover API Spec content.
-9. Use "extract_structured_data" tool to do API content extraction, and deliver the results.
+9. Use "extract_api_document_structured_data" tool to do API content extraction, and deliver the results.
 
 ## IMPORTANT INTERACTION RULES:
 - NEVER click on elements with "+", "-", "▼", "▲" symbols in "Response samples"/"Requeset samples" sections
@@ -832,7 +832,7 @@ Within each endpoint section:
 - Avoid duplicate clicks on already active tabs.
 
 **CRITICAL RULE: You MUST FIRST CLICK on tabs labeled 'Schema', 'Request Schema', or 'Response Schema' to reveal their content.**
-**NEVER call \`extract_structured_data\` on an API endpoint section IF a 'Schema' tab is visible but not active.**Your immediate next action must be to \`click\` the schema tab. Only after the schema content is visible can you proceed with extraction in a subsequent step. This is a mandatory prerequisite, not an optional step.
+**NEVER call \`extract_api_document_structured_data\` on an API endpoint section IF a 'Schema' tab is visible but not active.**Your immediate next action must be to \`click\` the schema tab. Only after the schema content is visible can you proceed with extraction in a subsequent step. This is a mandatory prerequisite, not an optional step.
 
 ---
 
@@ -850,7 +850,7 @@ Within each endpoint section:
 
 
 **CRITICAL RULE: You MUST FIRST CLICK on tabs labeled 'Schema', 'Request Schema', or 'Response Schema' to reveal their content.**
-**NEVER call \`extract_structured_data\` on an API endpoint section IF a 'Schema' tab is visible but not active.**Your immediate next action must be to \`click\` the schema tab. Only after the schema content is visible can you proceed with extraction in a subsequent step. This is a mandatory prerequisite, not an optional step.
+**NEVER call \`extract_api_document_structured_data\` on an API endpoint section IF a 'Schema' tab is visible but not active.**Your immediate next action must be to \`click\` the schema tab. Only after the schema content is visible can you proceed with extraction in a subsequent step. This is a mandatory prerequisite, not an optional step.
 ---
 
 #### 5️⃣ Sections You Should Ignore To Expand
@@ -888,10 +888,10 @@ Within each endpoint section:
 <api_document_page_extraction_rules>
 CRITICAL: API Document Information Extraction Rules
 
-**extract_structured_data Query Guidelines for API Documentation:**
+**extract_api_document_structured_data Query Guidelines for API Documentation:**
 
 ### For API Endpoint Page Content Extraction
-1. When calling \`extract_structured_data\` for indivisual API documentation pages, you should bring below intent and combine it to the \`query\` with what endpoint (page) you think it needs to extract the current browser page(endpoint) you'r focusing on:
+1. When calling \`extract_api_document_structured_data\` for indivisual API documentation pages, you should bring below intent and combine it to the \`query\` with what endpoint (page) you think it needs to extract the current browser page(endpoint) you'r focusing on:
 \`\`\`md
 Extract raw api document content for "Get users" endpoint, including:
   1. HTTP method, path, baseApiUrl, endpoint description
@@ -1001,7 +1001,7 @@ ${userRequest}
 - Reference the <additional_todo_definition_rules> for the additional rules to organize tasks into logical phases for API document content extraction task.
 - Follow the <additional_todo_management_rules> to explore/navigate the page content and extract the API document content.
 - **Prioritize Interaction over Visibility**: Before checking for visible content, you MUST first inspect elements for clear interactive roles or attributes. If an element has a WAI-ARIA role like role='option', role='tab', role='radio', role='presentation', or a state attribute like aria-expanded='false', you must prioritize **clicking** it. This action is necessary to ensure the corresponding view is fully loaded and active. This rule **overrides** the general rule of extracting data just because some content appears to be visible.
-- When you think content can be extracted and before calling extract_structured_data, if there are buttons like 200, 201, 400, 500 and so on, please click them first(Regardless of whether the information for 200, 201, 400, 500, etc., is already displayed, please use the history to determine this and make sure to click it once.). Then, consider if there is any "default" related information (if so, be sure to click the "default" element), and then call extract_structured_data.
+- When you think content can be extracted and before calling extract_api_document_structured_data, if there are buttons like 200, 201, 400, 500 and so on, please click them first(Regardless of whether the information for 200, 201, 400, 500, etc., is already displayed, please use the history to determine this and make sure to click it once.). Then, consider if there is any "default" related information (if so, be sure to click the "default" element), and then call extract_api_document_structured_data.
 
 <additional_todo_management_rules>
 CRITICAL Rules to organize tasks into logical phases:
@@ -1305,8 +1305,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const timestamp = new Date().toISOString();
   const request = {
   hubspot: {
-    url: 'https://developers.hubspot.com/docs/reference/api/crm/objects/tickets',
-    text: `Extract the entire original API documentation content for the List Tickets API from this page: https://developers.hubspot.com/docs/reference/api/crm/objects/tickets. You must extract all available details required for OpenAPI Spec, including endpoints, HTTP methods, versioning, baseApiUrl, auth requirements, request parameters, request body schema, response codes, bodies, and error responses. Preserve exact wording from the source.`,
+    url: 'https://developers.hubspot.com/docs/reference/api/crm/objects/contacts',
+    text: `Extract the API documentation content for the endpoints: read contact, create contact, and update contact from the page https://developers.hubspot.com/docs/reference/api/crm/objects/contacts. You must extract all available details required for OpenAPI Spec generation, including endpoints, HTTP methods, baseApiUrl, auth requirements, request params, request body schema, response codes, and error responses.`,
   },
   adyen: {
     url: 'https://docs.adyen.com/api-explorer/transfers/4/overview',
