@@ -16,11 +16,44 @@ import type { BrowserContext as AgentBrowserContext } from '../src/browser/Brows
 import { action } from '../src/controller/decorators';
 import { FileSystem } from '../src/services/file-system';
 import type { BrowserUseEvent } from './browserUseService';
+import TurndownService from 'turndown';
+import * as path from 'path';
+import { promises as fs } from 'fs';
+
+// Helper function for Promise.race with proper timeout cleanup
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  errorMessage: string = 'Operation timed out'
+): Promise<T> {
+  let timeoutId: NodeJS.Timeout;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(errorMessage)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+}
+
+// Global SSE event sender (single instance since no concurrency)
+let globalSSEEventSender: ((event: BrowserUseEvent) => void) | null = null;
+
+export function setGlobalSSEEventSender(sendEvent: (event: BrowserUseEvent) => void): void {
+  console.log('Trace Event setGlobalSSEEventSender');
+  globalSSEEventSender = sendEvent;
+}
+
+export function clearGlobalSSEEventSender(): void {
+  console.log('Trace Event clearGlobalSSEEventSender');
+  globalSSEEventSender = null;
+}
 
 export class ExtractDataActions {
   @action(
-    'extract_structured_data',
-    "Extract structured, semantic data (e.g. product description, price, all information about XYZ) from the current webpage based on a textual query. This tool takes the entire markdown of the page and extracts the query from it. Set extract_links=true ONLY if your query requires extracting links/URLs from the page. Only use this for specific queries for information retrieval from the page. Don't use this to get interactive elements - the tool does not see HTML elements, only the markdown.",
+    'extract_api_document_structured_data',
+    "Extract a single API document structured, semantic data from the current webpage based on a textual query. This tool takes the entire markdown of the page and extracts the query from it. Set extract_links=true ONLY if your query requires extracting links/URLs from the page. Set endpoint_name to the name of the endpoint if you are extracting an endpoint, this will be used to record the extracted endpoint in the memory. Example: 'Get a transfer' endpoint, \"Return a transfer\" endpoint, etc. Only use this for specific single API document content extraction query from the page. Don't use this to get interactive elements - the tool does not see HTML elements, only the markdown.",
     z.object({
       query: z
         .string()
@@ -30,15 +63,19 @@ export class ExtractDataActions {
         .boolean()
         .default(false)
         .describe('Whether to include links and images in the extraction'),
+      endpoint_name: z
+        .string()
+        .default('')
+        .describe('The name of the endpoint if extracting an endpoint, used for memory recording'),
     }),
     { isAvailableForPage: (page) => page && !page.isClosed() }
   )
-  static async extractStructuredData({
+  static async extractApiDocumentStructuredData({
     params,
     page,
     context,
   }: {
-    params: { query: string; extract_links: boolean };
+    params: { query: string; extract_links: boolean; endpoint_name: string };
     page: Page;
     context: {
       browserContext?: AgentBrowserContext;
@@ -48,8 +85,7 @@ export class ExtractDataActions {
       agent: Agent;
     };
   }): Promise<ActionResult> {
-    console.log('extractStructuredData', params);
-    // const { query, extract_links } = params;
+    const { query, extract_links, endpoint_name } = params;
 
     if (!context.llmClient) {
       return {
@@ -60,12 +96,592 @@ export class ExtractDataActions {
     }
 
     return withHealthCheck(page, async (p) => {
-      return {
-        success: true,
-        message: 'Extracted structured data',
-        attachments: [],
-      };
+      try {
+        // Send trace event for extraction start
+        await ExtractDataActions.sendTraceEvent({
+          type: 'extraction_start',
+          url: p.url(),
+          query,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Get page HTML content with timeout
+        let pageHtml: string;
+        try {
+          pageHtml = await withTimeout(
+            p.content(),
+            10000,
+            'Page content extraction timed out after 10 seconds'
+          );
+        } catch (error) {
+          throw new Error(`Couldn't extract page content: ${error}`);
+        }
+
+        // Calculate page index based on api_doc_content_ files in the project directory
+        let pageIndex = 1;
+        if (context.fileSystem) {
+          try {
+            const projectDir = context.fileSystem.getDir();
+            const existingFiles = await fs.readdir(projectDir);
+            const apiDocContentFiles = existingFiles.filter((filename: string) => filename.startsWith('api_doc_content_'));
+
+            // Extract unique page indices from filenames
+            const pageIndices = new Set<number>();
+            apiDocContentFiles.forEach(filename => {
+              const match = filename.match(/^api_doc_content_(\d+)/);
+              if (match) {
+                pageIndices.add(parseInt(match[1]));
+              }
+            });
+
+            const maxIndex = pageIndices.size > 0 ? Math.max(...pageIndices) : 0;
+            pageIndex = maxIndex + 1;
+          } catch (error) {
+            console.warn('Failed to read project directory for pageIndex calculation:', error);
+            pageIndex = 1;
+          }
+        }
+
+        console.log(`[You are here] this is from TypeScript controller`);
+        console.log(`page_index of API document content files: ${pageIndex}`);
+
+        const apiDocContentExtractFilePrefix = 'api_doc_content';
+        const apiDocContentExtractContentFileName = `${apiDocContentExtractFilePrefix}_${pageIndex}.md`;
+
+        if (context.fileSystem) {
+          try {
+            const contentRawFileName = `${apiDocContentExtractFilePrefix}_${pageIndex}.raw.html`;
+            const contentRawFilePath = path.join(context.fileSystem.getDir(), contentRawFileName);
+            await fs.writeFile(contentRawFilePath, pageHtml, 'utf-8');
+            console.log(`Saving raw content to ${contentRawFilePath}`);
+          } catch (error) {
+            console.warn('Failed to save raw HTML:', error);
+          }
+        }
+
+        // Initialize Turndown service for HTML to Markdown conversion
+        const turndownService = new TurndownService({
+          headingStyle: 'atx',
+          codeBlockStyle: 'fenced',
+        });
+
+        // Configure what to strip based on extract_links parameter
+        if (!extract_links) {
+          // Remove links and images if not needed
+          turndownService.remove(['a', 'img']);
+        }
+
+        // Convert HTML to markdown
+        let content: string;
+        try {
+          content = await withTimeout(
+            Promise.resolve(turndownService.turndown(pageHtml)),
+            5000,
+            'HTML to markdown conversion timed out'
+          );
+        } catch (error) {
+          throw new Error(`Could not convert HTML to markdown: ${error}`);
+        }
+
+        // Process iframe content (simplified version - Playwright has limitations with cross-origin iframes)
+        for (const frame of p.frames()) {
+          if (
+            frame.url() !== p.url() &&
+            !frame.url().startsWith('data:') &&
+            !frame.url().startsWith('about:')
+          ) {
+            try {
+              // Wait for iframe to load with aggressive timeout
+              await withTimeout(
+                frame.waitForLoadState('domcontentloaded'),
+                1000,
+                'Iframe load timeout'
+              );
+
+              const iframeHtml = await withTimeout(
+                frame.content(),
+                2000,
+                'Iframe content extraction timeout'
+              );
+
+              const iframeMarkdown = await withTimeout(
+                Promise.resolve(turndownService.turndown(iframeHtml)),
+                2000,
+                'Iframe markdown conversion timeout'
+              );
+
+              content += `\n\nIFRAME ${frame.url()}:\n${iframeMarkdown}`;
+            } catch {
+              // Skip failed iframes silently
+            }
+          }
+        }
+
+        // Remove multiple sequential newlines
+        content = content.replace(/\n+/g, '\n');
+
+        // Limit content length to 300000 characters - remove text in the middle (≈150000 tokens)
+        const maxContentChars = 300000;
+        if (content.length > maxContentChars) {
+          const halfMax = Math.floor(maxContentChars / 2);
+          content =
+            content.substring(0, halfMax) +
+            '\n... left out the middle because it was too long ...\n' +
+            content.substring(content.length - halfMax);
+        }
+
+        // Use chunking for large content
+        const maxChars = 47000; // Match Python version chunk size
+        const maxChunks = 10;
+        const overlapSize = 500; // Fixed overlap size like Python version (OVERLAP_SIZE = 500)
+
+        if (content.length <= maxChars) {
+          // Small content - process normally
+          const extractionPrompt = ExtractDataActions.readExtractionPrompt();
+          const prompt = `You convert websites into structured information. Extract information from this webpage based on the query.
+            ${extractionPrompt}
+
+Focus only on content relevant to the query. If
+1. The query is vague
+2. Does not make sense for the page
+3. Some/all of the information is not available
+
+Explain the content of the page and that the requested information is not available in the page. Respond in JSON format.\nQuery: ${query}\n Website:\n${content}`;
+
+          // Save raw prompt content (like Python version)
+          if (context.fileSystem) {
+            try {
+              const contentRawPromptName = `${apiDocContentExtractFilePrefix}_${pageIndex}.prompt.raw.md`;
+              const contentRawPromptFilePath = path.join(context.fileSystem.getDir(), contentRawPromptName);
+              await fs.writeFile(contentRawPromptFilePath, prompt, 'utf-8');
+              console.log(`Saving raw prompt to ${contentRawPromptFilePath}`);
+            } catch (error) {
+              console.warn('Failed to save raw prompt:', error);
+            }
+          }
+
+          // Send trace event for LLM call
+          const contentRawPromptName = `${apiDocContentExtractFilePrefix}_${pageIndex}.prompt.raw.md`;
+          await ExtractDataActions.sendTraceEvent({
+            type: 'action_act',
+            message: 'Calling llm to extract content...',
+            action: 'bu_calling_llm_extract_content',
+            data: {
+              query,
+              formatted_prompt: prompt.replace(content, `placeholder-in-log, see the content in the file: ${contentRawPromptName}, content-length: ${content.length}`),
+            },
+          });
+
+          // Call LLM with timeout
+          const response = await withTimeout(
+            context.llmClient!.generateResponse([
+              { role: 'user', content: prompt },
+            ]),
+            120000,
+            'LLM call timed out after 2 minutes'
+          );
+
+          const extractedContent = `Page Link: ${p.url()}\nQuery: ${query}\nExtracted Content:\n${response.content}`;
+
+          // Save extracted content and manage memory
+          return await ExtractDataActions.saveExtractedContent(
+            extractedContent,
+            p.url(),
+            query,
+            context,
+            endpoint_name
+          );
+        } else {
+          // Large content - use chunking
+          console.log(`Content is large (${content.length} chars), splitting into chunks...`);
+          await ExtractDataActions.sendTraceEvent({
+            type: 'chunking_start',
+            contentLength: content.length,
+            maxChars,
+            timestamp: Date.now(),
+          });
+
+          const chunks = ExtractDataActions.chunkContent(content, maxChars, maxChunks);
+          const chunkResponses: string[] = [];
+
+          // Process each chunk
+          for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+            const chunkPrompt = ExtractDataActions.buildChunkPrompt(query, chunk, i + 1, chunks.length);
+
+            console.log(`Processing chunk ${i + 1}/${chunks.length} (${chunk.length} chars)`);
+
+            // Send trace event for chunk processing
+            await ExtractDataActions.sendTraceEvent({
+              type: 'action_act',
+              message: `Processing chunk ${i + 1}/${chunks.length}`,
+              action: 'bu_processing_chunk',
+              data: {
+                chunk_number: i + 1,
+                total_content_length: content.length,
+                total_chunks: chunks.length,
+                chunk_size: chunk.length,
+                query,
+              },
+            });
+
+            // Save individual chunk prompt (like Python version)
+            if (context.fileSystem) {
+              try {
+                const chunkPromptFileName = `${apiDocContentExtractFilePrefix}_${pageIndex}.chunk_${i + 1}.prompt.raw.md`;
+                const chunkPromptFilePath = path.join(context.fileSystem.getDir(), chunkPromptFileName);
+                await fs.writeFile(chunkPromptFilePath, chunkPrompt, 'utf-8');
+                console.log(`Saved chunk ${i + 1} prompt to ${chunkPromptFilePath}`);
+              } catch (error) {
+                console.warn(`Failed to save chunk ${i + 1} prompt:`, error);
+              }
+            }
+
+            try {
+              const chunkResponse = await withTimeout(
+                context.llmClient!.generateResponse([
+                  { role: 'user', content: chunkPrompt },
+                ]),
+                60000,
+                `Chunk ${i + 1} LLM call timed out`
+              );
+
+              chunkResponses.push(chunkResponse.content);
+              console.log(`Chunk ${i + 1} processed successfully`);
+            } catch (error) {
+              console.error(`Error processing chunk ${i + 1}:`, error);
+              chunkResponses.push(`Error processing chunk ${i + 1}: ${(error as Error).message}`);
+            }
+          }
+
+          console.log(`Chunk processing completed: ${chunkResponses.filter(r => !r.startsWith('Error')).length} successful, ${chunkResponses.filter(r => r.startsWith('Error')).length} failed`);
+
+          // Save individual chunks content (like Python version)
+          if (context.fileSystem) {
+            try {
+              let chunksContent = `Combined results from ${chunks.length} chunks:\n\n`;
+              for (let i = 0; i < chunkResponses.length; i++) {
+                chunksContent += `--- Chunk ${i + 1} ---\n${chunkResponses[i]}\n\n`;
+              }
+
+              const chunksFileName = `${apiDocContentExtractFilePrefix}_${pageIndex}.chunks.md`;
+              const chunksFilePath = path.join(context.fileSystem.getDir(), chunksFileName);
+              await fs.writeFile(chunksFilePath, chunksContent, 'utf-8');
+              console.log(`Saved chunks result to ${chunksFilePath}`);
+            } catch (error) {
+              console.warn('Failed to save chunks result:', error);
+            }
+          }
+
+          // Merge chunk responses
+          console.log('Merging chunk responses...');
+          await ExtractDataActions.sendTraceEvent({
+            type: 'action_act',
+            message: 'Merging chunk responses',
+            action: 'bu_merging_chunks',
+            data: {
+              chunk_count: chunkResponses.length,
+              query,
+            },
+          });
+
+          const mergedResponse = await ExtractDataActions.mergeChunkResponses(
+            chunkResponses,
+            context.llmClient!
+          );
+
+          // Save final merged result (like Python version)
+          if (context.fileSystem) {
+            try {
+              const mergedFileName = `${apiDocContentExtractFilePrefix}_${pageIndex}.md`;
+              const mergedFilePath = path.join(context.fileSystem.getDir(), mergedFileName);
+              await fs.writeFile(mergedFilePath, mergedResponse, 'utf-8');
+              console.log(`Saved merged result to ${mergedFilePath}`);
+            } catch (error) {
+              console.warn('Failed to save merged result:', error);
+            }
+          }
+
+          const extractedContent = `Page Link: ${p.url()}\nQuery: ${query}\nExtracted Content:\n${mergedResponse}`;
+          console.log(`Extracted content length: ${extractedContent.length}`);
+
+          // Save extracted content and manage memory (matching Python version)
+          return await ExtractDataActions.saveExtractedContent(
+            extractedContent,
+            p.url(),
+            query,
+            context,
+            endpoint_name
+          );
+        }
+      } catch (error) {
+        // Handle different types of errors (like Python version)
+        let errorMessage = 'Unknown error';
+        let errorType = 'general_error';
+
+        if (error instanceof Error) {
+          errorMessage = error.message;
+          if (error.message.includes('timeout') || error.message.includes('TimeoutError')) {
+            errorType = 'llm_timeout';
+            console.error('LLM call timed out during extraction');
+          }
+        }
+
+        await ExtractDataActions.sendTraceEvent({
+          type: 'action_act',
+          message: `Extraction failed: ${errorMessage}`,
+          action: 'bu_extraction_error',
+          data: {
+            error_type: errorType,
+            error_message: errorMessage,
+            endpoint_name: endpoint_name || 'unknown',
+            query,
+          },
+        });
+
+        return {
+          success: false,
+          message: `Failed to extract structured data: ${errorMessage}`,
+          error: errorMessage,
+        };
+      }
     });
+  }
+
+  /**
+   * Read extraction prompt from file
+   */
+  private static readExtractionPrompt(): string {
+    try {
+      const promptPath = path.join(__dirname, 'prompt', 'extraction_prompt.md');
+      return require('fs').readFileSync(promptPath, 'utf-8');
+    } catch (error) {
+      // Fallback prompt if file not found
+      return `You convert websites into structured information. Extract information from this webpage based on the query. Focus only on content relevant to the query. If
+1. The query is vague
+2. Does not make sense for the page
+3. Some/all of the information is not available
+
+Explain the content of the page and that the requested information is not available in the page. Respond in JSON format.`;
+    }
+  }
+
+  /**
+   * Chunk content into smaller pieces for processing (matching Python version logic)
+   */
+  private static chunkContent(content: string, maxChars: number, maxChunks: number): string[] {
+    if (content.length <= maxChars) {
+      return [content];
+    }
+
+    const chunks: string[] = [];
+    const overlapSize = 500; // Fixed overlap size like Python version (OVERLAP_SIZE = 500)
+    let start = 0;
+    let chunkCount = 0;
+
+    while (start < content.length && chunkCount < maxChunks) {
+      let end = start + maxChars;
+      if (end > content.length) {
+        end = content.length;
+      }
+
+      // Try to break at a line boundary to avoid cutting words/sentences
+      if (end < content.length) {
+        const lastNewline = content.lastIndexOf('\n', end);
+        if (lastNewline > start) {
+          end = lastNewline;
+        }
+      }
+
+      const chunk = content.substring(start, end);
+      chunks.push(chunk);
+      chunkCount++;
+
+      // Move start position with overlap (except for the last chunk)
+      if (end < content.length) {
+        start = end - overlapSize;
+        // Ensure we don't go backwards
+        if (start < 0) start = 0;
+      } else {
+        break;
+      }
+    }
+
+    return chunks;
+  }
+
+  /**
+   * Build prompt for chunk processing (matching Python version)
+   */
+  private static buildChunkPrompt(query: string, chunk: string, chunkIndex: number, totalChunks: number): string {
+    const extractionPrompt = ExtractDataActions.readExtractionPrompt();
+    return `This is chunk ${chunkIndex} of ${totalChunks} from a webpage.
+Extract information based on the query: ${query}
+
+${extractionPrompt}
+
+Focus only on content relevant to the query. Extract as much as possible information that match any part of the query from the chunk. Indicate the information that is not available in the chunk.
+Respond in JSON format.
+
+IMPORTANT: This chunk may contain overlapping content with adjacent chunks to maintain context.
+Focus on extracting unique information while being aware that some content may be duplicated.
+
+Website chunk content:
+${chunk}`;
+  }
+
+  /**
+   * Merge chunk responses into a single response (matching Python version)
+   */
+  private static async mergeChunkResponses(chunkResponses: string[], llmClient: BaseLLMClient): Promise<string> {
+    try {
+      const mergePrompt = `Merge the following chunk responses into a single response, and respond in JSON format. Preserve the original content, do not fabricate any data.
+
+# Rules
+- Ignore fields in the chunk that do not have valid info, for example field with:
+    1. The provided chunk does not contain any information related to xxxx
+    2. Not available in the chunk.
+- Combine and deduplicate information from all chunks
+- Maintain the structure and format of the original responses
+- If there are conflicts between chunks, prioritize the most complete information
+
+<chunked_responses>
+${chunkResponses.join('\n\n---\n\n')}
+</chunked_responses>`;
+
+      const response = await withTimeout(
+        llmClient.generateResponse([
+          { role: 'user', content: mergePrompt },
+        ]),
+        120000,
+        'Merge operation timed out after 2 minutes'
+      );
+
+      return response.content;
+    } catch (error) {
+      console.error('Error merging chunk responses:', error);
+      // Fallback: return concatenated responses with clear separation
+      return `# Combined Chunk Responses\n\n${chunkResponses.map((response, index) => `## Chunk ${index + 1}\n\n${response}`).join('\n\n---\n\n')}`;
+    }
+  }
+
+  /**
+   * Send trace event
+   */
+  private static async sendTraceEvent(eventData: Record<string, any>): Promise<void> {
+    try {
+      // For now, just log the event. In the future, this could send to a trace service
+      console.log('Trace Event:', JSON.stringify(eventData, null, 2));
+
+      if (globalSSEEventSender) {
+        const sseEvent: BrowserUseEvent = {
+          type: 'trace_event',
+          session_id: 'default',
+          timestamp: new Date().toISOString(),
+          data: eventData,
+          message: `Trace: ${eventData.type || 'unknown'}`
+        };
+        globalSSEEventSender(sseEvent);
+      }
+    } catch (error) {
+      console.warn('Failed to send trace event:', error);
+    }
+  }
+
+  /**
+   * Save extracted content and manage memory
+   */
+  private static async saveExtractedContent(
+    extractedContent: string,
+    url: string,
+    query: string,
+    context: {
+      fileSystem?: FileSystem;
+      agent: Agent;
+    },
+    endpoint_name?: string
+  ): Promise<ActionResult> {
+    // Determine if we need to save to file or include in memory (matching Python version)
+    const MAX_MEMORY_SIZE = 600;
+    let message: string;
+    let attachments: string[] | undefined;
+    let includeExtractedContentOnlyOnce = false;
+
+    if (extractedContent.length < MAX_MEMORY_SIZE) {
+      message = extractedContent;
+      includeExtractedContentOnlyOnce = false;
+    } else {
+      // Save to file if content is too long (matching Python version logic)
+      const lines = extractedContent.split('\n');
+      let display = '';
+      let displayLinesCount = 0;
+
+      for (const line of lines) {
+        if (display.length + line.length < MAX_MEMORY_SIZE) {
+          display += line + '\n';
+          displayLinesCount++;
+        } else {
+          break;
+        }
+      }
+
+      const pageIndex = context.fileSystem?.getExtractedContentCount() || 0;
+
+      try {
+        // Save using file system if available (matching Python version logic)
+        if (context.fileSystem) {
+          await context.fileSystem.saveExtractedContent(extractedContent);
+        }
+
+        const endpointNameInfo = endpoint_name ? `\n<endpoint_extracted>${endpoint_name}</endpoint_extracted>` : '';
+        message = `Extracted content from ${url}\n<query>${query}\n</query>\n<extracted_content>\n${display}${lines.length - displayLinesCount} more lines...\n</extracted_content>\n<file_system>File saved at: extracted_content_${pageIndex}.md</file_system>${endpointNameInfo}`;
+
+        // Append to todo.md (matching Python version)
+        if (endpoint_name && context.fileSystem) {
+          try {
+            const todoFilePath = 'todo.md';
+            let todoContent = '';
+
+            try {
+              todoContent = await context.fileSystem.readFile(todoFilePath);
+            } catch (error) {
+              console.warn('Error reading todo.md:', error);
+              todoContent = '';
+            }
+
+            // Append the endpoint to the todo.md
+            todoContent += `\n## Extraction Record\n\t- [x] Explored endpoint: ${endpoint_name}\n`;
+            // Note: In Python version, this line is commented out, so we'll also skip writing
+            // await context.fileSystem.writeFile(todoFilePath, todoContent);
+          } catch (error) {
+            console.warn('Error updating todo.md:', error);
+          }
+        }
+
+        includeExtractedContentOnlyOnce = true;
+      } catch (error) {
+        console.error('Failed to save extracted content:', error);
+        // Fallback to truncated content if file saving fails
+        message = display + (lines.length - displayLinesCount > 0 ? `${lines.length - displayLinesCount} more lines...` : '');
+        includeExtractedContentOnlyOnce = false;
+      }
+    }
+
+    console.log(`📄 ${message}`);
+
+    await ExtractDataActions.sendTraceEvent({
+      type: 'extraction_complete',
+      contentLength: extractedContent.length,
+      savedToFile: includeExtractedContentOnlyOnce,
+      timestamp: Date.now(),
+    });
+
+    return {
+      success: true,
+      message,
+      attachments,
+      includeExtractedContentOnlyOnce,
+    };
   }
 }
 
