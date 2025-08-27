@@ -40,7 +40,9 @@ function withTimeout<T>(
 // Global SSE event sender (single instance since no concurrency)
 let globalSSEEventSender: ((event: BrowserUseEvent) => void) | null = null;
 
-export function setGlobalSSEEventSender(sendEvent: (event: BrowserUseEvent) => void): void {
+export function setGlobalSSEEventSender(
+  sendEvent: (event: BrowserUseEvent) => void
+): void {
   console.log('Trace Event setGlobalSSEEventSender');
   globalSSEEventSender = sendEvent;
 }
@@ -66,7 +68,9 @@ export class ExtractDataActions {
       endpoint_name: z
         .string()
         .default('')
-        .describe('The name of the endpoint if extracting an endpoint, used for memory recording'),
+        .describe(
+          'The name of the endpoint if extracting an endpoint, used for memory recording'
+        ),
     }),
     { isAvailableForPage: (page) => page && !page.isClosed() }
   )
@@ -123,21 +127,27 @@ export class ExtractDataActions {
           try {
             const projectDir = context.fileSystem.getDir();
             const existingFiles = await fs.readdir(projectDir);
-            const apiDocContentFiles = existingFiles.filter((filename: string) => filename.startsWith('api_doc_content_'));
+            const apiDocContentFiles = existingFiles.filter(
+              (filename: string) => filename.startsWith('api_doc_content_')
+            );
 
             // Extract unique page indices from filenames
             const pageIndices = new Set<number>();
-            apiDocContentFiles.forEach(filename => {
+            apiDocContentFiles.forEach((filename) => {
               const match = filename.match(/^api_doc_content_(\d+)/);
               if (match) {
                 pageIndices.add(parseInt(match[1]));
               }
             });
 
-            const maxIndex = pageIndices.size > 0 ? Math.max(...pageIndices) : 0;
+            const maxIndex =
+              pageIndices.size > 0 ? Math.max(...pageIndices) : 0;
             pageIndex = maxIndex + 1;
           } catch (error) {
-            console.warn('Failed to read project directory for pageIndex calculation:', error);
+            console.warn(
+              'Failed to read project directory for pageIndex calculation:',
+              error
+            );
             pageIndex = 1;
           }
         }
@@ -151,7 +161,10 @@ export class ExtractDataActions {
         if (context.fileSystem) {
           try {
             const contentRawFileName = `${apiDocContentExtractFilePrefix}_${pageIndex}.raw.html`;
-            const contentRawFilePath = path.join(context.fileSystem.getDir(), contentRawFileName);
+            const contentRawFilePath = path.join(
+              context.fileSystem.getDir(),
+              contentRawFileName
+            );
             await fs.writeFile(contentRawFilePath, pageHtml, 'utf-8');
             console.log(`Saving raw content to ${contentRawFilePath}`);
           } catch (error) {
@@ -252,7 +265,10 @@ Explain the content of the page and that the requested information is not availa
           if (context.fileSystem) {
             try {
               const contentRawPromptName = `${apiDocContentExtractFilePrefix}_${pageIndex}.prompt.raw.md`;
-              const contentRawPromptFilePath = path.join(context.fileSystem.getDir(), contentRawPromptName);
+              const contentRawPromptFilePath = path.join(
+                context.fileSystem.getDir(),
+                contentRawPromptName
+              );
               await fs.writeFile(contentRawPromptFilePath, prompt, 'utf-8');
               console.log(`Saving raw prompt to ${contentRawPromptFilePath}`);
             } catch (error) {
@@ -268,7 +284,10 @@ Explain the content of the page and that the requested information is not availa
             action: 'bu_calling_llm_extract_content',
             data: {
               query,
-              formatted_prompt: prompt.replace(content, `placeholder-in-log, see the content in the file: ${contentRawPromptName}, content-length: ${content.length}`),
+              formatted_prompt: prompt.replace(
+                content,
+                `placeholder-in-log, see the content in the file: ${contentRawPromptName}, content-length: ${content.length}`
+              ),
             },
           });
 
@@ -290,11 +309,13 @@ Explain the content of the page and that the requested information is not availa
             query,
             context,
             endpoint_name,
-            pageIndex,
+            pageIndex
           );
         } else {
           // Large content - use chunking
-          console.log(`Content is large (${content.length} chars), splitting into chunks...`);
+          console.log(
+            `Content is large (${content.length} chars), splitting into chunks...`
+          );
           await ExtractDataActions.sendTraceEvent({
             type: 'chunking_start',
             contentLength: content.length,
@@ -302,15 +323,26 @@ Explain the content of the page and that the requested information is not availa
             timestamp: Date.now(),
           });
 
-          const chunks = ExtractDataActions.chunkContent(content, maxChars, maxChunks);
+          const chunks = ExtractDataActions.chunkContent(
+            content,
+            maxChars,
+            maxChunks
+          );
           const chunkResponses: string[] = [];
 
           // Process each chunk
           for (let i = 0; i < chunks.length; i++) {
             const chunk = chunks[i];
-            const chunkPrompt = ExtractDataActions.buildChunkPrompt(query, chunk, i + 1, chunks.length);
+            const chunkPrompt = ExtractDataActions.buildChunkPrompt(
+              query,
+              chunk,
+              i + 1,
+              chunks.length
+            );
 
-            console.log(`Processing chunk ${i + 1}/${chunks.length} (${chunk.length} chars)`);
+            console.log(
+              `Processing chunk ${i + 1}/${chunks.length} (${chunk.length} chars)`
+            );
 
             // Send trace event for chunk processing
             await ExtractDataActions.sendTraceEvent({
@@ -330,9 +362,14 @@ Explain the content of the page and that the requested information is not availa
             if (context.fileSystem) {
               try {
                 const chunkPromptFileName = `${apiDocContentExtractFilePrefix}_${pageIndex}.chunk_${i + 1}.prompt.raw.md`;
-                const chunkPromptFilePath = path.join(context.fileSystem.getDir(), chunkPromptFileName);
+                const chunkPromptFilePath = path.join(
+                  context.fileSystem.getDir(),
+                  chunkPromptFileName
+                );
                 await fs.writeFile(chunkPromptFilePath, chunkPrompt, 'utf-8');
-                console.log(`Saved chunk ${i + 1} prompt to ${chunkPromptFilePath}`);
+                console.log(
+                  `Saved chunk ${i + 1} prompt to ${chunkPromptFilePath}`
+                );
               } catch (error) {
                 console.warn(`Failed to save chunk ${i + 1} prompt:`, error);
               }
@@ -351,11 +388,15 @@ Explain the content of the page and that the requested information is not availa
               console.log(`Chunk ${i + 1} processed successfully`);
             } catch (error) {
               console.error(`Error processing chunk ${i + 1}:`, error);
-              chunkResponses.push(`Error processing chunk ${i + 1}: ${(error as Error).message}`);
+              chunkResponses.push(
+                `Error processing chunk ${i + 1}: ${(error as Error).message}`
+              );
             }
           }
 
-          console.log(`Chunk processing completed: ${chunkResponses.filter(r => !r.startsWith('Error')).length} successful, ${chunkResponses.filter(r => r.startsWith('Error')).length} failed`);
+          console.log(
+            `Chunk processing completed: ${chunkResponses.filter((r) => !r.startsWith('Error')).length} successful, ${chunkResponses.filter((r) => r.startsWith('Error')).length} failed`
+          );
 
           // Save individual chunks content (like Python version)
           if (context.fileSystem) {
@@ -366,7 +407,10 @@ Explain the content of the page and that the requested information is not availa
               }
 
               const chunksFileName = `${apiDocContentExtractFilePrefix}_${pageIndex}.chunks.md`;
-              const chunksFilePath = path.join(context.fileSystem.getDir(), chunksFileName);
+              const chunksFilePath = path.join(
+                context.fileSystem.getDir(),
+                chunksFileName
+              );
               await fs.writeFile(chunksFilePath, chunksContent, 'utf-8');
               console.log(`Saved chunks result to ${chunksFilePath}`);
             } catch (error) {
@@ -395,7 +439,10 @@ Explain the content of the page and that the requested information is not availa
           if (context.fileSystem) {
             try {
               const mergedFileName = `${apiDocContentExtractFilePrefix}_${pageIndex}.md`;
-              const mergedFilePath = path.join(context.fileSystem.getDir(), mergedFileName);
+              const mergedFilePath = path.join(
+                context.fileSystem.getDir(),
+                mergedFileName
+              );
               await fs.writeFile(mergedFilePath, mergedResponse, 'utf-8');
               console.log(`Saved merged result to ${mergedFilePath}`);
             } catch (error) {
@@ -413,7 +460,7 @@ Explain the content of the page and that the requested information is not availa
             query,
             context,
             endpoint_name,
-            pageIndex,
+            pageIndex
           );
         }
       } catch (error) {
@@ -423,7 +470,10 @@ Explain the content of the page and that the requested information is not availa
 
         if (error instanceof Error) {
           errorMessage = error.message;
-          if (error.message.includes('timeout') || error.message.includes('TimeoutError')) {
+          if (
+            error.message.includes('timeout') ||
+            error.message.includes('TimeoutError')
+          ) {
             errorType = 'llm_timeout';
             console.error('LLM call timed out during extraction');
           }
@@ -471,7 +521,11 @@ Explain the content of the page and that the requested information is not availa
   /**
    * Chunk content into smaller pieces for processing (matching Python version logic)
    */
-  private static chunkContent(content: string, maxChars: number, maxChunks: number): string[] {
+  private static chunkContent(
+    content: string,
+    maxChars: number,
+    maxChunks: number
+  ): string[] {
     if (content.length <= maxChars) {
       return [content];
     }
@@ -515,7 +569,12 @@ Explain the content of the page and that the requested information is not availa
   /**
    * Build prompt for chunk processing (matching Python version)
    */
-  private static buildChunkPrompt(query: string, chunk: string, chunkIndex: number, totalChunks: number): string {
+  private static buildChunkPrompt(
+    query: string,
+    chunk: string,
+    chunkIndex: number,
+    totalChunks: number
+  ): string {
     const extractionPrompt = ExtractDataActions.readExtractionPrompt();
     return `This is chunk ${chunkIndex} of ${totalChunks} from a webpage.
 Extract information based on the query: ${query}
@@ -535,7 +594,10 @@ ${chunk}`;
   /**
    * Merge chunk responses into a single response (matching Python version)
    */
-  private static async mergeChunkResponses(chunkResponses: string[], llmClient: BaseLLMClient): Promise<string> {
+  private static async mergeChunkResponses(
+    chunkResponses: string[],
+    llmClient: BaseLLMClient
+  ): Promise<string> {
     try {
       console.log('Merging chunk responses...');
       const mergePrompt = `Merge the following chunk responses into a single response, and respond in JSON format. Preserve the original content, do not fabricate any data.
@@ -550,9 +612,7 @@ ${chunkResponses.join('\n\n')}
 </chunked_responses>`;
 
       const response = await withTimeout(
-        llmClient.generateResponse([
-          { role: 'user', content: mergePrompt },
-        ]),
+        llmClient.generateResponse([{ role: 'user', content: mergePrompt }]),
         120000,
         'Merge operation timed out after 2 minutes'
       );
@@ -573,7 +633,9 @@ ${chunkResponses.join('\n\n')}
   /**
    * Send trace event
    */
-  private static async sendTraceEvent(eventData: Record<string, any>): Promise<void> {
+  private static async sendTraceEvent(
+    eventData: Record<string, any>
+  ): Promise<void> {
     try {
       // For now, just log the event. In the future, this could send to a trace service
       console.log('Trace Event:', JSON.stringify(eventData, null, 2));
@@ -584,7 +646,7 @@ ${chunkResponses.join('\n\n')}
           session_id: 'default',
           timestamp: new Date().toISOString(),
           data: eventData,
-          message: `Trace: ${eventData.type || 'unknown'}`
+          message: `Trace: ${eventData.type || 'unknown'}`,
         };
         globalSSEEventSender(sseEvent);
       }
@@ -636,10 +698,15 @@ ${chunkResponses.join('\n\n')}
       try {
         // Save using specific filename format (matching Python version logic)
         if (context.fileSystem) {
-          await context.fileSystem.writeFile(apiDocContentExtractContentFileName, extractedContent);
+          await context.fileSystem.writeFile(
+            apiDocContentExtractContentFileName,
+            extractedContent
+          );
         }
 
-        const endpointNameInfo = endpoint_name ? `\n<endpoint_extracted>${endpoint_name}</endpoint_extracted>` : '';
+        const endpointNameInfo = endpoint_name
+          ? `\n<endpoint_extracted>${endpoint_name}</endpoint_extracted>`
+          : '';
         message = `Extracted content from ${url}\n<query>${query}\n</query>\n<extracted_content>\n${display}${lines.length - displayLinesCount} more lines...\n</extracted_content>\n<file_system>File saved at: ${apiDocContentExtractContentFileName}</file_system>${endpointNameInfo}`;
 
         // Append to todo.md (matching Python version)
@@ -668,7 +735,11 @@ ${chunkResponses.join('\n\n')}
       } catch (error) {
         console.error('Failed to save extracted content:', error);
         // Fallback to truncated content if file saving fails
-        message = display + (lines.length - displayLinesCount > 0 ? `${lines.length - displayLinesCount} more lines...` : '');
+        message =
+          display +
+          (lines.length - displayLinesCount > 0
+            ? `${lines.length - displayLinesCount} more lines...`
+            : '');
         includeExtractedContentOnlyOnce = false;
       }
     }
@@ -689,10 +760,978 @@ ${chunkResponses.join('\n\n')}
       includeExtractedContentOnlyOnce,
     };
   }
+}
 
+export class TodoManagementActions {
+  @action(
+    'validate_current_todo_step',
+    'Validate current step against TODO plan and get the current TODO item that should be worked on. MUST be called at the beginning of each step.',
+    z.object({
+      step_number: z.number().describe('Current step number'),
+      proposed_actions: z
+        .array(z.union([z.string(), z.record(z.any())]))
+        .optional()
+        .describe('Actions you plan to take this step'),
+    }),
+    { isAvailableForPage: (page) => page && !page.isClosed() }
+  )
+  static async validateCurrentTodoStep({
+    params,
+    context,
+  }: {
+    params: {
+      step_number: number;
+      proposed_actions?: (string | Record<string, any>)[];
+    };
+    page: Page;
+    context: { fileSystem?: FileSystem };
+  }): Promise<ActionResult> {
+    const { step_number, proposed_actions = [] } = params;
+    const fileSystem = context?.fileSystem;
+
+    if (!fileSystem) {
+      return {
+        success: false,
+        message: 'FileSystem not available for TODO validation',
+        error: 'No file system available',
+      };
+    }
+
+    try {
+      const todoContent = fileSystem.getTodoContents();
+      if (!todoContent.trim()) {
+        return {
+          success: false,
+          message:
+            'TODO.md is empty. You must create a detailed TODO plan first using write_file action.',
+          error: 'NO_TODO_PLAN',
+        };
+      }
+
+      // 解析 TODO 内容，找到当前应该执行的项目
+      // 从文件系统路径推导 sessionId (简化实现)
+      const sessionId =
+        TodoManagementActions.extractSessionIdFromFileSystem(fileSystem);
+      const currentTodoAnalysis =
+        TodoManagementActions.analyzeTodoForCurrentStep(
+          todoContent,
+          step_number,
+          sessionId
+        );
+
+      if (!currentTodoAnalysis.currentItem) {
+        return {
+          success: false,
+          message:
+            'No current TODO item found. All items may be completed or TODO structure is invalid.',
+          error: 'NO_CURRENT_TODO_ITEM',
+        };
+      }
+
+      // 验证计划的 actions 是否符合当前 TODO 项
+      // Convert mixed array to strings for validation
+      const actionStrings = proposed_actions.map((action) =>
+        typeof action === 'string' ? action : JSON.stringify(action)
+      );
+      const actionValidation =
+        TodoManagementActions.validateActionsAgainstTodoItem(
+          actionStrings,
+          currentTodoAnalysis.currentItem
+        );
+
+      let validationMessage = `📋 CURRENT TODO FOCUS:\n`;
+      validationMessage += `Phase: ${currentTodoAnalysis.currentPhase}\n`;
+      validationMessage += `Current Item: ${currentTodoAnalysis.currentItem.title}\n`;
+      validationMessage += `Status: ${currentTodoAnalysis.currentItem.status}\n`;
+      validationMessage += `Progress: ${currentTodoAnalysis.progress.completed}/${currentTodoAnalysis.progress.total} items completed\n\n`;
+
+      if (actionValidation.isValid) {
+        validationMessage += `✅ Your planned actions align with current TODO item.\n`;
+        validationMessage += `💡 Step Guidance: ${currentTodoAnalysis.stepGuidance}\n`;
+      } else {
+        validationMessage += `❌ WARNING: Your planned actions don't align with current TODO item!\n`;
+        validationMessage += `🎯 You should focus on: ${currentTodoAnalysis.stepGuidance}\n`;
+        validationMessage += `⚠️ Reason: ${actionValidation.reason}\n`;
+      }
+
+      return {
+        success: actionValidation.isValid,
+        message: validationMessage,
+        includeExtractedContentOnlyOnce: true,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to validate TODO: ${(error as Error).message}`,
+        error: (error as Error).message,
+      };
+    }
+  }
+
+  @action(
+    'update_todo_progress',
+    'Mark a TODO item as completed or update its status. MUST be called when you complete a TODO item.',
+    z.object({
+      item_identifier: z
+        .string()
+        .describe('The TODO item title or identifier to update'),
+      new_status: z
+        .enum(['completed', 'in_progress', 'blocked', 'skipped'])
+        .describe('New status for the item'),
+      completion_note: z
+        .string()
+        .optional()
+        .describe('Note about what was accomplished'),
+    }),
+    { isAvailableForPage: (page) => page && !page.isClosed() }
+  )
+  static async updateTodoProgress({
+    params,
+    context,
+  }: {
+    params: {
+      item_identifier: string;
+      new_status: string;
+      completion_note?: string;
+    };
+    page: Page;
+    context: { fileSystem?: FileSystem };
+  }): Promise<ActionResult> {
+    const { item_identifier, new_status, completion_note } = params;
+    const fileSystem = context?.fileSystem;
+
+    if (!fileSystem) {
+      return {
+        success: false,
+        message: 'FileSystem not available for TODO update',
+        error: 'No file system available',
+      };
+    }
+
+    try {
+      const todoContent = fileSystem.getTodoContents();
+      const updatedContent = TodoManagementActions.updateTodoItemStatus(
+        todoContent,
+        item_identifier,
+        new_status,
+        completion_note
+      );
+
+      await fileSystem.writeFile('todo.md', updatedContent);
+
+      let message = `✅ Updated TODO item: "${item_identifier}" to status: ${new_status}`;
+      if (completion_note) {
+        message += `\nNote: ${completion_note}`;
+      }
+
+      // 检查是否需要移动到下一个项目
+      const nextItem = TodoManagementActions.getNextTodoItem(updatedContent);
+      if (nextItem) {
+        message += `\n\n🎯 NEXT TODO ITEM: ${nextItem.title}`;
+        message += `\nPhase: ${nextItem.phase}`;
+        message += `\nGuidance: ${nextItem.guidance}`;
+      } else {
+        message += `\n\n🎉 All TODO items completed! Ready to finalize results.`;
+      }
+
+      return {
+        success: true,
+        message,
+        includeExtractedContentOnlyOnce: true,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to update TODO: ${(error as Error).message}`,
+        error: (error as Error).message,
+      };
+    }
+  }
+
+  @action(
+    'add_dynamic_todo_item',
+    'Add a new TODO item when you discover additional work needed. Use this when you find new endpoints or content.',
+    z.object({
+      title: z.string().describe('Title of the new TODO item'),
+      phase: z
+        .enum(['discovery', 'enumeration', 'extraction', 'verification'])
+        .describe('Which phase this item belongs to'),
+      priority: z
+        .enum(['high', 'medium', 'low'])
+        .describe('Priority of this item'),
+      insert_after: z
+        .string()
+        .optional()
+        .describe('Insert after this existing item (item title)'),
+      reason: z.string().describe('Why this item needs to be added'),
+    }),
+    { isAvailableForPage: (page) => page && !page.isClosed() }
+  )
+  static async addDynamicTodoItem({
+    params,
+    context,
+  }: {
+    params: {
+      title: string;
+      phase: string;
+      priority: string;
+      insert_after?: string;
+      reason: string;
+    };
+    page: Page;
+    context: { fileSystem?: FileSystem };
+  }): Promise<ActionResult> {
+    const { title, phase, priority, insert_after, reason } = params;
+    const fileSystem = context?.fileSystem;
+
+    if (!fileSystem) {
+      return {
+        success: false,
+        message: 'FileSystem not available for TODO update',
+        error: 'No file system available',
+      };
+    }
+
+    try {
+      const todoContent = fileSystem.getTodoContents();
+      const updatedContent = TodoManagementActions.insertTodoItem(
+        todoContent,
+        { title, phase, priority, reason },
+        insert_after
+      );
+
+      await fileSystem.writeFile('todo.md', updatedContent);
+
+      const message =
+        `➕ Added new TODO item: "${title}"\n` +
+        `Phase: ${phase}\n` +
+        `Priority: ${priority}\n` +
+        `Reason: ${reason}\n\n` +
+        `Continue with your current TODO item unless this new item has higher priority.`;
+
+      return {
+        success: true,
+        message,
+        includeExtractedContentOnlyOnce: true,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to add dynamic TODO item: ${(error as Error).message}`,
+        error: (error as Error).message,
+      };
+    }
+  }
+
+  @action(
+    'analyze_todo_deviation',
+    'Analyze if you have deviated from your TODO plan and get guidance to get back on track.',
+    z.object({
+      current_activity: z
+        .string()
+        .describe('What you are currently doing or planning to do'),
+      step_number: z.number().describe('Current step number'),
+    }),
+    { isAvailableForPage: (page) => page && !page.isClosed() }
+  )
+  static async analyzeTodoDeviation({
+    params,
+    context,
+  }: {
+    params: { current_activity: string; step_number: number };
+    page: Page;
+    context: { fileSystem?: FileSystem };
+  }): Promise<ActionResult> {
+    const { current_activity, step_number } = params;
+    const fileSystem = context?.fileSystem;
+
+    if (!fileSystem) {
+      return {
+        success: false,
+        message: 'FileSystem not available for TODO analysis',
+        error: 'No file system available',
+      };
+    }
+
+    try {
+      const todoContent = fileSystem.getTodoContents();
+      const sessionId =
+        TodoManagementActions.extractSessionIdFromFileSystem(fileSystem);
+      const currentTodoAnalysis =
+        TodoManagementActions.analyzeTodoForCurrentStep(
+          todoContent,
+          step_number,
+          sessionId
+        );
+
+      if (!currentTodoAnalysis.currentItem) {
+        return {
+          success: false,
+          message:
+            '❌ MAJOR DEVIATION: No current TODO item found, but you are still taking actions!',
+          error: 'DEVIATION_NO_TODO_ITEM',
+        };
+      }
+
+      const deviationAnalysis = TodoManagementActions.analyzeActivityDeviation(
+        current_activity,
+        currentTodoAnalysis.currentItem,
+        currentTodoAnalysis.currentPhase
+      );
+
+      let message = `🔍 TODO DEVIATION ANALYSIS:\n\n`;
+      message += `Current TODO Item: ${currentTodoAnalysis.currentItem.title}\n`;
+      message += `Your Activity: ${current_activity}\n\n`;
+
+      if (deviationAnalysis.isDeviated) {
+        message += `❌ DEVIATION DETECTED!\n`;
+        message += `Severity: ${deviationAnalysis.severity}\n`;
+        message += `Reason: ${deviationAnalysis.reason}\n\n`;
+        message += `🎯 CORRECTIVE ACTION:\n${deviationAnalysis.correction}\n\n`;
+        message += `📋 You should be working on: ${currentTodoAnalysis.stepGuidance}`;
+      } else {
+        message += `✅ ON TRACK: Your activity aligns with current TODO item.\n`;
+        message += `Continue with: ${currentTodoAnalysis.stepGuidance}`;
+      }
+
+      return {
+        success: !deviationAnalysis.isDeviated,
+        message,
+        includeExtractedContentOnlyOnce: true,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to analyze TODO deviation: ${(error as Error).message}`,
+        error: (error as Error).message,
+      };
+    }
+  }
+
+  // Step-to-TODO mapping storage
+  private static stepTodoMapping: Map<
+    string,
+    {
+      sessionId: string;
+      currentTodoItem: string;
+      startStep: number;
+      stepCount: number;
+      lastUpdated: number;
+    }
+  > = new Map();
+
+  private static getSessionKey(sessionId?: string): string {
+    return sessionId || 'default';
+  }
+
+  static extractSessionIdFromFileSystem(fileSystem: any): string {
+    try {
+      // 尝试从文件系统的 baseDir 路径中提取 sessionId
+      // 通常项目路径格式为: /path/to/projects/{timestamp}/
+      const dataDir = fileSystem.dataDir || fileSystem.baseDir || '';
+      const pathParts = dataDir.split('/');
+
+      // 查找时间戳格式的目录名 (YYYY-MM-DDTHH:MM:SS.sssZ)
+      for (let i = pathParts.length - 1; i >= 0; i--) {
+        const part = pathParts[i];
+        if (
+          part &&
+          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(part)
+        ) {
+          return part;
+        }
+      }
+
+      // 如果找不到时间戳格式，使用最后一个非空的路径部分
+      for (let i = pathParts.length - 1; i >= 0; i--) {
+        if (pathParts[i] && pathParts[i] !== '') {
+          return pathParts[i];
+        }
+      }
+
+      return 'default';
+    } catch (error) {
+      return 'default';
+    }
+  }
+
+  // Enhanced TODO analysis with explicit step-to-todo mapping
+  static analyzeTodoForCurrentStep(
+    todoContent: string,
+    stepNumber: number,
+    sessionId?: string
+  ) {
+    const sessionKey = this.getSessionKey(sessionId);
+
+    // 解析所有 TODO 项目
+    const todoAnalysis = TodoManagementActions.parseTodoContent(todoContent);
+
+    // 检查是否有现有的 step-to-todo 映射
+    const existingMapping = this.stepTodoMapping.get(sessionKey);
+
+    if (existingMapping && existingMapping.currentTodoItem) {
+      // 检查当前映射的 TODO item 是否仍然有效
+      const mappedItem = todoAnalysis.allItems.find(
+        (item) => item.title === existingMapping.currentTodoItem
+      );
+
+      if (mappedItem && mappedItem.status !== 'completed') {
+        // 更新 step 计数
+        existingMapping.stepCount = stepNumber - existingMapping.startStep + 1;
+        existingMapping.lastUpdated = Date.now();
+
+        return {
+          currentPhase: mappedItem.phase,
+          currentItem: mappedItem,
+          progress: todoAnalysis.progress,
+          stepGuidance: TodoManagementActions.generateStepGuidance(
+            mappedItem,
+            stepNumber,
+            existingMapping.stepCount
+          ),
+          allItems: todoAnalysis.allItems,
+          mappingInfo: {
+            isExistingMapping: true,
+            startStep: existingMapping.startStep,
+            stepCount: existingMapping.stepCount,
+            totalStepsOnThisItem: existingMapping.stepCount,
+          },
+        };
+      } else {
+        // 当前映射的 item 已完成，需要创建新映射
+        this.stepTodoMapping.delete(sessionKey);
+      }
+    }
+
+    // 创建新的映射：找到第一个未完成的 TODO item
+    const nextItem = todoAnalysis.allItems.find(
+      (item) => item.status !== 'completed' && item.status !== 'skipped'
+    );
+
+    if (nextItem) {
+      // 创建新的 step-to-todo 映射
+      this.stepTodoMapping.set(sessionKey, {
+        sessionId: sessionKey,
+        currentTodoItem: nextItem.title,
+        startStep: stepNumber,
+        stepCount: 1,
+        lastUpdated: Date.now(),
+      });
+
+      return {
+        currentPhase: nextItem.phase,
+        currentItem: nextItem,
+        progress: todoAnalysis.progress,
+        stepGuidance: TodoManagementActions.generateStepGuidance(
+          nextItem,
+          stepNumber,
+          1
+        ),
+        allItems: todoAnalysis.allItems,
+        mappingInfo: {
+          isExistingMapping: false,
+          startStep: stepNumber,
+          stepCount: 1,
+          totalStepsOnThisItem: 1,
+        },
+      };
+    }
+
+    // 没有找到待执行的 TODO item
+    return {
+      currentPhase: '',
+      currentItem: null,
+      progress: todoAnalysis.progress,
+      stepGuidance: 'All TODO items completed!',
+      allItems: todoAnalysis.allItems,
+      mappingInfo: {
+        isExistingMapping: false,
+        startStep: stepNumber,
+        stepCount: 0,
+        totalStepsOnThisItem: 0,
+      },
+    };
+  }
+
+  static parseTodoContent(todoContent: string) {
+    const lines = todoContent.split('\n');
+    const phases = ['discovery', 'enumeration', 'extraction', 'verification'];
+    let currentPhase = '';
+    let items: any[] = [];
+    let progress = { completed: 0, total: 0 };
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+
+      // 识别阶段
+      if (
+        trimmed.startsWith('###') &&
+        phases.some((p) => trimmed.toLowerCase().includes(p))
+      ) {
+        currentPhase =
+          phases.find((p) => trimmed.toLowerCase().includes(p)) || '';
+        continue;
+      }
+
+      // 识别 TODO 项目
+      const todoMatch = trimmed.match(/^\d+\.\s*\[([x\-!\s])\]\s*(.+)$/);
+      if (todoMatch) {
+        const status = todoMatch[1];
+        const title = todoMatch[2];
+        const item = {
+          title,
+          status:
+            status === 'x'
+              ? 'completed'
+              : status === '-'
+                ? 'in_progress'
+                : status === '!'
+                  ? 'blocked'
+                  : 'pending',
+          phase: currentPhase,
+        };
+
+        items.push(item);
+        progress.total++;
+
+        if (status === 'x') {
+          progress.completed++;
+        }
+      }
+    }
+
+    return {
+      allItems: items,
+      progress,
+    };
+  }
+
+  static generateStepGuidance(
+    item: any,
+    stepNumber: number,
+    stepCount: number = 1
+  ): string {
+    const phase = item.phase;
+    const title = item.title;
+
+    const stepInfo =
+      stepCount > 1
+        ? ` (Step ${stepCount} on this TODO item)`
+        : ` (Starting this TODO item)`;
+
+    switch (phase) {
+      case 'discovery':
+        return `Navigate and explore to ${title}${stepInfo}. Focus on finding and revealing content.`;
+      case 'enumeration':
+        return `List and catalog items for ${title}${stepInfo}. Make comprehensive inventories.`;
+      case 'extraction':
+        return `Extract detailed information for ${title}${stepInfo}. Ensure all schema and response details are captured.`;
+      case 'verification':
+        return `Verify and confirm ${title}${stepInfo}. Check completeness and accuracy.`;
+      default:
+        return `Work on ${title}${stepInfo}`;
+    }
+  }
+
+  static validateActionsAgainstTodoItem(
+    actions: string[],
+    todoItem: any
+  ): { isValid: boolean; reason: string } {
+    if (!todoItem) {
+      return {
+        isValid: false,
+        reason: 'No current TODO item to validate against',
+      };
+    }
+
+    const phase = todoItem.phase;
+    const title = todoItem.title.toLowerCase();
+
+    // 基于阶段和标题的启发式验证
+    const actionStr = actions.join(' ').toLowerCase();
+
+    switch (phase) {
+      case 'discovery':
+        if (
+          actionStr.includes('extract') &&
+          !actionStr.includes('navigate') &&
+          !actionStr.includes('click')
+        ) {
+          return {
+            isValid: false,
+            reason:
+              'Discovery phase should focus on navigation and exploration, not extraction',
+          };
+        }
+        break;
+      case 'extraction':
+        if (!actionStr.includes('extract') && !title.includes('extract')) {
+          return {
+            isValid: false,
+            reason: 'Extraction phase should include extraction actions',
+          };
+        }
+        break;
+    }
+
+    return {
+      isValid: true,
+      reason: 'Actions appear to align with current TODO item',
+    };
+  }
+
+  private static updateTodoItemStatus(
+    content: string,
+    identifier: string,
+    status: string,
+    note?: string
+  ): string {
+    const lines = content.split('\n');
+    const statusMap = {
+      completed: 'x',
+      in_progress: '-',
+      pending: ' ',
+      blocked: '!',
+      skipped: 'x',
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.includes(identifier) && /^\d+\.\s*\[/.test(line.trim())) {
+        const newStatus = statusMap[status as keyof typeof statusMap] || ' ';
+        lines[i] = line.replace(/\[([x\-!\s])\]/, `[${newStatus}]`);
+
+        if (note && status === 'completed') {
+          lines.splice(i + 1, 0, `   ✓ ${note}`);
+        }
+        break;
+      }
+    }
+
+    return lines.join('\n');
+  }
+
+  private static getNextTodoItem(content: string) {
+    const lines = content.split('\n');
+    let currentPhase = '';
+    const phases = ['discovery', 'enumeration', 'extraction', 'verification'];
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+
+      if (
+        trimmed.startsWith('###') &&
+        phases.some((p) => trimmed.toLowerCase().includes(p))
+      ) {
+        currentPhase =
+          phases.find((p) => trimmed.toLowerCase().includes(p)) || '';
+        continue;
+      }
+
+      const todoMatch = trimmed.match(/^\d+\.\s*\[([ -!])\]\s*(.+)$/);
+      if (todoMatch) {
+        const status = todoMatch[1];
+        const title = todoMatch[2];
+
+        if (status !== 'x') {
+          return {
+            title,
+            phase: currentPhase,
+            guidance: TodoManagementActions.generateStepGuidance(
+              { title, phase: currentPhase },
+              1
+            ),
+          };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private static insertTodoItem(
+    content: string,
+    newItem: any,
+    insertAfter?: string
+  ): string {
+    const lines = content.split('\n');
+    let insertIndex = -1;
+    let currentPhaseIndex = -1;
+
+    // 找到对应阶段
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].toLowerCase().includes(`### ${newItem.phase}`)) {
+        currentPhaseIndex = i;
+        break;
+      }
+    }
+
+    // 如果指定了插入位置
+    if (insertAfter) {
+      for (let i = currentPhaseIndex; i < lines.length; i++) {
+        if (lines[i].includes(insertAfter)) {
+          insertIndex = i + 1;
+          break;
+        }
+      }
+    }
+
+    // 否则插入到阶段末尾
+    if (insertIndex === -1) {
+      for (let i = currentPhaseIndex + 1; i < lines.length; i++) {
+        if (lines[i].startsWith('###') || i === lines.length - 1) {
+          insertIndex = i;
+          break;
+        }
+      }
+    }
+
+    // 获取下一个序号
+    let nextNumber = 1;
+    for (const line of lines) {
+      const match = line.match(/^(\d+)\.\s*\[/);
+      if (match) {
+        nextNumber = Math.max(nextNumber, parseInt(match[1]) + 1);
+      }
+    }
+
+    const priorityPrefix = newItem.priority === 'high' ? '⚡ ' : '';
+    const newLine = `${nextNumber}. [ ] ${priorityPrefix}${newItem.title}`;
+
+    if (insertIndex === -1) {
+      lines.push(newLine);
+    } else {
+      lines.splice(insertIndex, 0, newLine);
+    }
+
+    return lines.join('\n');
+  }
+
+  private static analyzeActivityDeviation(
+    activity: string,
+    todoItem: any,
+    phase: string
+  ) {
+    const activityLower = activity.toLowerCase();
+    const titleLower = todoItem.title.toLowerCase();
+
+    // 简单的偏离检测逻辑
+    if (
+      phase === 'discovery' &&
+      activityLower.includes('extract') &&
+      !titleLower.includes('extract')
+    ) {
+      return {
+        isDeviated: true,
+        severity: 'high',
+        reason: 'Attempting to extract data during discovery phase',
+        correction:
+          'Focus on navigation and exploration first. Save extraction for the extraction phase.',
+      };
+    }
+
+    if (
+      phase === 'extraction' &&
+      !activityLower.includes('extract') &&
+      titleLower.includes('extract')
+    ) {
+      return {
+        isDeviated: true,
+        severity: 'medium',
+        reason: 'Not extracting data during extraction phase',
+        correction:
+          'You should be extracting detailed information for this endpoint.',
+      };
+    }
+
+    return {
+      isDeviated: false,
+      severity: 'none',
+      reason: 'Activity appears to align with current TODO item',
+      correction: '',
+    };
+  }
+}
+
+// Todo Context Provider - 自动为每个step提供当前TODO上下文
+export class TodoContextProvider {
+  static getCurrentTodoContext(
+    fileSystem: FileSystem,
+    stepNumber: number,
+    sessionId?: string
+  ): string {
+    try {
+      const todoContent = fileSystem.getTodoContents();
+      if (!todoContent.trim()) {
+        return `
+⚠️ **NO TODO PLAN**: You must create a detailed todo.md file first!
+
+📋 **IMMEDIATE ACTION REQUIRED**:
+1. Create todo.md with proper structure (Discovery → Enumeration → Extraction → Verification phases)
+2. Then call validate_current_todo_step to begin execution`;
+      }
+
+      // 分析当前应该执行的TODO item
+      const extractedSessionId =
+        sessionId ||
+        TodoManagementActions.extractSessionIdFromFileSystem(fileSystem);
+      const analysis = TodoManagementActions.analyzeTodoForCurrentStep(
+        todoContent,
+        stepNumber,
+        extractedSessionId
+      );
+
+      if (!analysis.currentItem) {
+        return `
+🎉 **ALL TODO ITEMS COMPLETED!**
+- Progress: ${analysis.progress.completed}/${analysis.progress.total} items completed (100%)
+- Ready to finalize results and call done action`;
+      }
+
+      return `
+📋 **CURRENT TODO FOCUS** (Step ${stepNumber}):
+
+🎯 **Current Item**: ${analysis.currentItem.title}
+📍 **Phase**: ${analysis.currentPhase}
+📊 **Status**: ${analysis.currentItem.status}
+⏱️ **Progress**: ${analysis.progress.completed}/${analysis.progress.total} items completed (${Math.round((analysis.progress.completed / analysis.progress.total) * 100)}%)
+
+💡 **Step Guidance**: ${analysis.stepGuidance}
+
+🔍 **Next Actions**: ${this.getNextActionGuidance(analysis.currentItem, analysis.currentPhase)}
+
+⚠️ **CRITICAL**: You MUST work on the current item above. Do not skip ahead!`;
+    } catch (error) {
+      return `
+❌ **TODO ANALYSIS ERROR**: ${error}
+📋 **FALLBACK ACTION**: Call validate_current_todo_step to get proper TODO guidance`;
+    }
+  }
+
+  private static analyzeTodoForCurrentStep(
+    todoContent: string,
+    stepNumber: number
+  ) {
+    const lines = todoContent.split('\n');
+    const phases = ['discovery', 'enumeration', 'extraction', 'verification'];
+    let currentPhase = '';
+    let items: any[] = [];
+    let currentItem = null;
+    let progress = { completed: 0, total: 0 };
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+
+      // 识别阶段
+      if (
+        trimmed.startsWith('###') &&
+        phases.some((p) => trimmed.toLowerCase().includes(p))
+      ) {
+        currentPhase =
+          phases.find((p) => trimmed.toLowerCase().includes(p)) || '';
+        continue;
+      }
+
+      // 识别 TODO 项目
+      const todoMatch = trimmed.match(/^\d+\.\s*\[([x\-!\s])\]\s*(.+)$/);
+      if (todoMatch) {
+        const status = todoMatch[1];
+        const title = todoMatch[2];
+        const item = {
+          title,
+          status:
+            status === 'x'
+              ? 'completed'
+              : status === '-'
+                ? 'in_progress'
+                : status === '!'
+                  ? 'blocked'
+                  : 'pending',
+          phase: currentPhase,
+        };
+
+        items.push(item);
+        progress.total++;
+
+        if (status === 'x') {
+          progress.completed++;
+        } else if (!currentItem && status !== 'x') {
+          currentItem = item;
+        }
+      }
+    }
+
+    const stepGuidance = currentItem
+      ? TodoManagementActions.generateStepGuidance(currentItem, stepNumber)
+      : 'No current TODO item found';
+
+    return {
+      currentPhase,
+      currentItem,
+      progress,
+      stepGuidance,
+      allItems: items,
+    };
+  }
+
+  private static getNextActionGuidance(item: any, phase: string): string {
+    switch (phase) {
+      case 'discovery':
+        return 'Use go_to_url, click_element_by_index, scroll actions to navigate and explore';
+      case 'enumeration':
+        return 'Document findings using write_file or replace_file_str to update TODO';
+      case 'extraction':
+        return 'Use extract_api_document_structured_data to capture detailed information';
+      case 'verification':
+        return 'Use read_file to verify completeness and accuracy';
+      default:
+        return 'Follow the TODO item requirements';
+    }
+  }
 }
 
 const customInstructions = `
+
+<critical_todo_enforcement>
+🚨 MANDATORY TODO WORKFLOW - YOU MUST FOLLOW THIS EXACTLY:
+
+📋 **AUTOMATIC TODO AWARENESS**: At the start of EVERY step, you will automatically receive a "**CURRENT TODO FOCUS**" section that tells you EXACTLY which TODO item you should be working on. This appears at the top of each step.
+
+1. **STEP START PROTOCOL** (Required for EVERY step):
+   - READ the automatically provided "**CURRENT TODO FOCUS**" section first
+   - WORK ONLY on the TODO item specified in that section
+   - NEVER ignore or deviate from the current TODO focus
+   - Optional: Call validate_current_todo_step for additional validation
+
+2. **TODO ADHERENCE RULES**:
+   - The "**CURRENT TODO FOCUS**" section shows your exact current task
+   - FOLLOW the "Step Guidance" and "Next Actions" provided
+   - NEVER take actions that don't align with your current TODO item
+   - NEVER skip ahead to future TODO items
+   - NEVER abandon your TODO plan for "interesting discoveries"
+
+3. **COMPLETION PROTOCOL**:
+   - When you complete a TODO item, IMMEDIATELY call update_todo_progress
+   - Mark the status as 'completed' with a completion note
+   - The next TODO item will be automatically highlighted in the next step
+
+4. **DEVIATION RECOVERY**:
+   - If you realize you might be off-track, call analyze_todo_deviation
+   - Follow the corrective actions provided
+   - Return to your assigned TODO item
+
+5. **TODO STATUS INDICATORS**:
+   - 📋 "**NO TODO PLAN**" → Create todo.md file immediately
+   - 🎯 "**Current Item**" → This is what you MUST work on
+   - 🎉 "**ALL TODO ITEMS COMPLETED**" → Ready to call done action
+
+6. **DYNAMIC TODO UPDATES**:
+   - New endpoints found → add_dynamic_todo_item (medium priority)
+   - Missing navigation needed → add_dynamic_todo_item (high priority)
+   - Additional verification needed → add_dynamic_todo_item (low priority)
+
+⚡ **KEY**: Look for the "**CURRENT TODO FOCUS**" section at the start of each step - it tells you exactly what to do!
+</critical_todo_enforcement>
 
 <todo_file_management>
 This section defines the rules for how the TODO.md file should be generated, updated, and maintained by the agent.
@@ -930,7 +1969,12 @@ export class BrowserUseSSEAgent {
   /**
    * Execute agent with SSE event streaming (simplified)
    */
-  async *executeWithSSE(userRequest: string, maxSteps: number = 100, sessionId?: string, sendEvent?: (event: BrowserUseEvent) => void): AsyncGenerator<BrowserUseEvent, void, unknown> {
+  async executeWithSSE(
+    userRequest: string,
+    maxSteps: number = 100,
+    sessionId?: string,
+    sendEvent?: (event: BrowserUseEvent) => void
+  ): Promise<void> {
     try {
       // Initialize controller
       this.controller = await createController({
@@ -971,11 +2015,11 @@ export class BrowserUseSSEAgent {
 
       // Start execution event
       const startEvent: BrowserUseEvent = {
-          type: 'execution_start',
-          timestamp: new Date().toISOString(),
-          session_id: sessionId || 'default',
-          message: 'Agent execution started'
-        };
+        type: 'execution_start',
+        timestamp: new Date().toISOString(),
+        session_id: sessionId || 'default',
+        message: 'Agent execution started',
+      };
       if (sendEvent) sendEvent(startEvent);
 
       // Enhanced agent config with SSE event handling
@@ -988,11 +2032,40 @@ export class BrowserUseSSEAgent {
         saveConversationPath: `projects/${sessionId}/conversations`,
         fileSystemPath: `projects/${sessionId}`,
         onStepStart: this._createOnStepStartHandler(sessionId, sendEvent),
-        onStepEnd: this._createOnStepEndHandler(sessionId, sendEvent)
+        onStepEnd: this._createOnStepEndHandler(sessionId, sendEvent),
       };
 
       const request = `
 ${userRequest}
+
+# 🚨 CRITICAL TODO EXECUTION PROTOCOL:
+
+📋 **AUTOMATIC TODO GUIDANCE**: You will receive a "**CURRENT TODO FOCUS**" section at the start of EVERY step that shows:
+- 🎯 **Current Item**: Exactly which TODO item you should work on
+- 📍 **Phase**: Which phase you're in (Discovery/Enumeration/Extraction/Verification)
+- 💡 **Step Guidance**: What you should accomplish in this step
+- 🔍 **Next Actions**: Specific actions you should take
+
+⚠️ **MANDATORY FIRST STEP**: Before any other actions, you MUST:
+1. Create a detailed todo.md file following the <todo_file_management> format
+2. The system will automatically guide you to the first TODO item
+
+⚠️ **EVERY SUBSEQUENT STEP** you MUST:
+1. READ the "**CURRENT TODO FOCUS**" section provided automatically
+2. Work ONLY on the current TODO item specified
+3. Follow the "Step Guidance" and "Next Actions" exactly
+4. Call update_todo_progress when you complete an item
+
+⚠️ **AUTOMATIC FAILURE CONDITIONS**:
+- Ignoring the "**CURRENT TODO FOCUS**" section → IMMEDIATE STOP
+- Working on wrong TODO items → IMMEDIATE STOP
+- Not updating TODO progress when items are completed → IMMEDIATE STOP
+
+🎯 **YOUR SUCCESS CRITERIA**:
+- 100% adherence to "**CURRENT TODO FOCUS**" guidance
+- Sequential completion of all TODO items as directed
+- Dynamic updates when new content discovered
+- Clear completion notes for each item
 
 # Important Rules:
 - This is "multi-step" task, you need to create a detailed plan with "todo.md" file before you start the task. Reference the <todo_file_management> section for the format of the "todo.md" file.
@@ -1074,9 +2147,11 @@ Extract all Tasks-related API endpoint documentation content from the HubSpot CR
         session_id: sessionId || 'default',
         data: {
           stepsExecuted: history.length,
-          finalPage: finalPageInfo
+          finalPage: finalPageInfo,
         },
-        message: this.cancelled ? 'Agent execution cancelled' : 'Agent execution completed successfully'
+        message: this.cancelled
+          ? 'Agent execution cancelled'
+          : 'Agent execution completed successfully',
       };
       if (sendEvent) sendEvent(completeEvent);
     } catch (error) {
@@ -1085,7 +2160,7 @@ Extract all Tasks-related API endpoint documentation content from the HubSpot CR
         timestamp: new Date().toISOString(),
         session_id: sessionId || 'default',
         message: (error as Error).message,
-        error: (error as Error).message
+        error: (error as Error).message,
       };
       if (sendEvent) sendEvent(errorEvent);
     } finally {
@@ -1096,7 +2171,10 @@ Extract all Tasks-related API endpoint documentation content from the HubSpot CR
   /**
    * Create onStepStart handler
    */
-  private _createOnStepStartHandler(sessionId?: string, sendEvent?: (event: BrowserUseEvent) => void) {
+  private _createOnStepStartHandler(
+    sessionId?: string,
+    sendEvent?: (event: BrowserUseEvent) => void
+  ) {
     return async (agent: Agent) => {
       try {
         // Get current page state from browser session
@@ -1109,23 +2187,61 @@ Extract all Tasks-related API endpoint documentation content from the HubSpot CR
         const history = agent.getHistory();
         const stepNumber = agent.getCurrentStep();
 
+        // 🎯 Inject current TODO context into agent's memory
+        let todoContextMessage = '';
+        try {
+          const fileSystem = (agent as any).fileSystem;
+          if (fileSystem) {
+            const sessionId =
+              TodoManagementActions.extractSessionIdFromFileSystem(fileSystem);
+            const todoContext = TodoContextProvider.getCurrentTodoContext(
+              fileSystem,
+              stepNumber + 1,
+              sessionId
+            );
+            todoContextMessage = todoContext;
+
+            // Send TODO context as an event for monitoring
+            const todoEvent: BrowserUseEvent = {
+              type: 'todo_context',
+              message: 'Current TODO context provided to LLM',
+              timestamp: new Date().toISOString(),
+              session_id: sessionId || 'default',
+              data: {
+                step: stepNumber + 1,
+                todoContextPreview:
+                  todoContext.length > 200
+                    ? todoContext.substring(0, 200) + '...'
+                    : todoContext,
+              },
+            };
+            if (sendEvent) sendEvent(todoEvent);
+
+            console.log(`📋 TODO Context injected for step ${stepNumber + 1}`);
+          }
+        } catch (todoError) {
+          console.warn('Failed to inject TODO context:', todoError);
+          todoContextMessage = `❌ **TODO CONTEXT ERROR**: ${todoError}\n📋 **FALLBACK**: Call validate_current_todo_step to get proper guidance`;
+        }
+
         // Extract history data using safe method
         const historyData = this._extractSafeHistoryData(history);
 
-        // Create step event data matching Python format
+        // Create step event data matching Python format with TODO context
         const stepData = {
           step: stepNumber,
           url: currentUrl,
+          todoContext: todoContextMessage,
           ...historyData,
           timestamp: new Date().toISOString(),
         };
 
         const event: BrowserUseEvent = {
           type: 'step_start',
-          message: `Starting step ${stepNumber}`,
+          message: `Starting step ${stepNumber} with TODO context`,
           timestamp: new Date().toISOString(),
           session_id: sessionId || 'default',
-          data: stepData
+          data: stepData,
         };
         if (sendEvent) sendEvent(event);
       } catch (error) {
@@ -1135,7 +2251,7 @@ Extract all Tasks-related API endpoint documentation content from the HubSpot CR
           message: `Error in step start hook: ${error}`,
           timestamp: new Date().toISOString(),
           session_id: sessionId || 'default',
-          error: String(error)
+          error: String(error),
         };
         if (sendEvent) sendEvent(errorEvent);
       }
@@ -1145,7 +2261,10 @@ Extract all Tasks-related API endpoint documentation content from the HubSpot CR
   /**
    * Create onStepEnd handler
    */
-  private _createOnStepEndHandler(sessionId?: string, sendEvent?: (event: BrowserUseEvent) => void) {
+  private _createOnStepEndHandler(
+    sessionId?: string,
+    sendEvent?: (event: BrowserUseEvent) => void
+  ) {
     return async (agent: Agent) => {
       try {
         // Get current page state from browser session
@@ -1174,7 +2293,7 @@ Extract all Tasks-related API endpoint documentation content from the HubSpot CR
           message: `Completed step ${stepNumber}`,
           timestamp: new Date().toISOString(),
           session_id: sessionId || 'default',
-          data: stepData
+          data: stepData,
         };
         if (sendEvent) sendEvent(event);
       } catch (error) {
@@ -1184,7 +2303,7 @@ Extract all Tasks-related API endpoint documentation content from the HubSpot CR
           message: `Error in step end hook: ${error}`,
           timestamp: new Date().toISOString(),
           session_id: sessionId || 'default',
-          error: String(error)
+          error: String(error),
         };
         if (sendEvent) sendEvent(errorEvent);
       }
@@ -1233,10 +2352,11 @@ Extract all Tasks-related API endpoint documentation content from the HubSpot CR
 
         // Extract thoughts from various possible locations
         // Check result.metadata.thoughts, result.longTermMemory, or action reasoning
-        const thoughts = step.result?.metadata?.thoughts ||
-                        step.result?.longTermMemory ||
-                        (typeof step.action === 'object' && step.action?.reasoning) ||
-                        null;
+        const thoughts =
+          step.result?.metadata?.thoughts ||
+          step.result?.longTermMemory ||
+          (typeof step.action === 'object' && step.action?.reasoning) ||
+          null;
         if (thoughts && typeof thoughts === 'string') {
           model_thoughts.push(thoughts);
         }
@@ -1268,10 +2388,22 @@ Extract all Tasks-related API endpoint documentation content from the HubSpot CR
       // Return the last item for most fields (matching Python behavior)
       // and all URLs
       return {
-        model_thoughts: model_thoughts.length > 0 ? model_thoughts[model_thoughts.length - 1] : null,
-        model_outputs: model_outputs.length > 0 ? model_outputs[model_outputs.length - 1] : null,
-        model_actions: model_actions.length > 0 ? model_actions[model_actions.length - 1] : null,
-        extracted_content: extracted_contents.length > 0 ? extracted_contents[extracted_contents.length - 1] : null,
+        model_thoughts:
+          model_thoughts.length > 0
+            ? model_thoughts[model_thoughts.length - 1]
+            : null,
+        model_outputs:
+          model_outputs.length > 0
+            ? model_outputs[model_outputs.length - 1]
+            : null,
+        model_actions:
+          model_actions.length > 0
+            ? model_actions[model_actions.length - 1]
+            : null,
+        extracted_content:
+          extracted_contents.length > 0
+            ? extracted_contents[extracted_contents.length - 1]
+            : null,
         urls: Array.from(new Set(urls)), // Remove duplicates
       };
     } catch (error) {
@@ -1294,7 +2426,7 @@ Extract all Tasks-related API endpoint documentation content from the HubSpot CR
       sessionId: this.sessionId,
       cancelled: this.cancelled,
       isRunning: !!this.controller,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
   }
 }
@@ -1304,31 +2436,36 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
   const timestamp = new Date().toISOString();
   const request = {
-  hubspot: {
-    url: 'https://developers.hubspot.com/docs/reference/api/crm/objects/contacts',
-    text: `Extract the API documentation content for the endpoints: read contact, create contact, and update contact from the page https://developers.hubspot.com/docs/reference/api/crm/objects/contacts. You must extract all available details required for OpenAPI Spec generation, including endpoints, HTTP methods, baseApiUrl, auth requirements, request params, request body schema, response codes, and error responses.`,
-  },
-  adyen: {
-    url: 'https://docs.adyen.com/api-explorer/transfers/4/overview',
-    text: `I would like to generate the spec for "Transfers" related API from Adyen https://docs.adyen.com/api-explorer/transfers/4/overview`,
-  },
-  jumpseller: {
-    url: 'https://jumpseller.com/support/api/#tag/Products',
-    text: `I would like to generate the spec for "Products" related API from Jumpseller website https://jumpseller.com/support/api/#tag/Products`,
-  },
-  zuho: {
-    url: 'https://www.zoho.com/crm/developer/docs/api/v8/delete-tag.html',
-    text: `Extract the entire original API documentation content for the 'Delete Tag' API from the page https://www.zoho.com/crm/developer/docs/api/v8/delete-tag.html. Extract all available details required for OpenAPI Spec generation, including endpoints, HTTP methods, versioning, baseApiUrl, auth requirements, request parameters, request body schema, response codes, bodies, and error responses. Preserve exact wording from the source.`,
-  },
-}[(process.env.API_NAME as string) ?? 'hubspot']!;
+    hubspot: {
+      url: 'https://developers.hubspot.com/docs/reference/api/crm/objects/contacts',
+      text: `Extract the API documentation content for the endpoints: read contact, create contact, and update contact from the page https://developers.hubspot.com/docs/reference/api/crm/objects/contacts. You must extract all available details required for OpenAPI Spec generation, including endpoints, HTTP methods, baseApiUrl, auth requirements, request params, request body schema, response codes, and error responses.`,
+    },
+    adyen: {
+      url: 'https://docs.adyen.com/api-explorer/transfers/4/overview',
+      text: `I would like to generate the spec for "Transfers" related API from Adyen https://docs.adyen.com/api-explorer/transfers/4/overview`,
+    },
+    jumpseller: {
+      url: 'https://jumpseller.com/support/api/#tag/Products',
+      text: `I would like to generate the spec for "Products" related API from Jumpseller website https://jumpseller.com/support/api/#tag/Products`,
+    },
+    zuho: {
+      url: 'https://www.zoho.com/crm/developer/docs/api/v8/delete-tag.html',
+      text: `Extract the entire original API documentation content for the 'Delete Tag' API from the page https://www.zoho.com/crm/developer/docs/api/v8/delete-tag.html. Extract all available details required for OpenAPI Spec generation, including endpoints, HTTP methods, versioning, baseApiUrl, auth requirements, request parameters, request body schema, response codes, bodies, and error responses. Preserve exact wording from the source.`,
+    },
+  }[(process.env.API_NAME as string) ?? 'hubspot']!;
 
-  const generator = browserUseAgent.executeWithSSE(request.text, 100, timestamp);
-  // Consume the async generator
+  // Execute the agent task
   (async () => {
     try {
-      for await (const event of generator) {
-        console.log('Event:', event);
-      }
+      await browserUseAgent.executeWithSSE(
+        request.text,
+        100,
+        timestamp,
+        (event) => {
+          // console.log('Event:', event);
+        }
+      );
+      console.log('Agent execution completed successfully');
     } catch (error) {
       console.error('Error:', error);
     }

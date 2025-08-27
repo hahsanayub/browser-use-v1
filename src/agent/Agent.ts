@@ -403,7 +403,7 @@ export class Agent {
         this.state.n_steps++;
         this.state.step_start_time = Date.now();
 
-        this.logger.debug(`Starting step ${this.state.n_steps}`, { objective });
+        this.logger.debug(`Starting step ${this.state.n_steps}`); // { objective }
 
         try {
           // Get current page view & signature
