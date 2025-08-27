@@ -1,27 +1,57 @@
-import { BrowserUseSSEAgent, type BrowserUseEvent } from './browserUseAgent';
+import { BrowserUseSSEAgent } from './browserUseAgent';
 import { randomUUID } from 'crypto';
 
+
+export interface BrowserUseEvent {
+  type: string;
+  session_id: string;
+  timestamp?: string;
+  step?: number;
+  data?: any;
+  message?: string;
+  error?: string;
+  url?: string;
+  history?: any[];
+  screenshot?: string;
+}
+
 export class BrowserUseService {
-  private sseSender?: (eventType: string, data: any) => void;
-  private activeSessions = new Map<string, BrowserUseSSEAgent>();
+  // Unified session storage containing agent instances, metadata and dedicated SSE sender
+  private sessions = new Map<string, {
+    agent: BrowserUseSSEAgent;
+    createdAt: Date;
+    status: 'active' | 'completed' | 'cancelled' | 'error';
+    sseSender?: (eventType: string, data: any) => void;
+  }>();
   private heartbeatInterval?: NodeJS.Timeout;
   private heartbeatIntervalMs: number = 20000;
   private isHeartbeatActive: boolean = false;
 
   /**
-   * Set SSE sender function for real-time event streaming
+   * Set SSE sender function for a specific session
    */
-  setSseSender(sender: (eventType: string, data: any) => void): void {
-    this.sseSender = sender;
-    this.startHeartbeat();
+  setSseSender(sessionId: string, sender: (eventType: string, data: any) => void): void {
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      session.sseSender = sender;
+      this.startHeartbeat();
+    }
   }
 
   /**
-   * Clear SSE sender function
+   * Clear SSE sender function for a specific session
    */
-  clearSseSender(): void {
-    this.sseSender = undefined;
-    this.stopHeartbeat();
+  clearSseSender(sessionId: string): void {
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      session.sseSender = undefined;
+    }
+
+    // Stop heartbeat if no active SSE connections exist
+    const hasActiveSenders = Array.from(this.sessions.values()).some(s => s.sseSender);
+    if (!hasActiveSenders) {
+      this.stopHeartbeat();
+    }
   }
 
   /**
@@ -53,13 +83,37 @@ export class BrowserUseService {
   }
 
   /**
-   * Send heartbeat event
+   * Send heartbeat event to all active sessions
+   * Check if agents are cancelled and remove cancelled sessions
    */
   private sendHeartbeat(): void {
-    if (this.sseSender) {
-      this.sendEvent('', {
-        message: `ping - ${new Date().toISOString()}`
-      });
+    const heartbeatData = {
+      message: `ping - ${new Date().toISOString()}`
+    };
+
+    // Create array to track sessions to remove
+    const sessionsToRemove: string[] = [];
+
+    for (const [sessionId, session] of this.sessions.entries()) {
+      // Check if agent is cancelled
+      const agentStatus = session.agent.getStatus();
+      if (agentStatus && agentStatus.cancelled) {
+        // Mark session for removal
+        sessionsToRemove.push(sessionId);
+        console.log(`Session ${sessionId} agent is cancelled, marking for removal`);
+        continue;
+      }
+
+      // Send heartbeat to active sessions with SSE sender
+      if (session.sseSender) {
+        this.sendEventToSession(sessionId, '', heartbeatData);
+      }
+    }
+
+    // Remove cancelled sessions
+    for (const sessionId of sessionsToRemove) {
+      this.removeSession(sessionId);
+      console.log(`Removed cancelled session: ${sessionId}`);
     }
   }
 
@@ -81,11 +135,13 @@ export class BrowserUseService {
   }
 
   /**
-   * Send event through SSE if sender is available
+   * Send event to a specific session through SSE if sender is available
+   * 向指定会话发送 SSE 事件
    */
-  private sendEvent(eventType: string, data: any): void {
-    if (this.sseSender) {
-      this.sseSender(eventType, data);
+  private sendEventToSession(sessionId: string, eventType: string, data: any): void {
+    const session = this.sessions.get(sessionId);
+    if (session?.sseSender) {
+      session.sseSender(eventType, data);
     }
   }
 
@@ -100,23 +156,29 @@ export class BrowserUseService {
     console.log('Session ID:', finalSessionId);
     console.log('Max Steps:', maxSteps);
 
-    // Send initial connection event
-    this.sendEvent('connection', {
-      message: 'SSE connection established',
-      sessionId: finalSessionId,
-      timestamp: new Date().toISOString()
-    });
-
     try {
-      // Create and store agent instance
+      // Create agent instance
       const agent = new BrowserUseSSEAgent(finalSessionId);
-      this.activeSessions.set(finalSessionId, agent);
+
+      // Register session with metadata
+      this.sessions.set(finalSessionId, {
+        agent,
+        createdAt: new Date(),
+        status: 'active'
+      });
+
+      // Send initial connection event (now that session exists)
+      this.sendEventToSession(finalSessionId, 'connection', {
+        message: 'SSE connection established',
+        sessionId: finalSessionId,
+        timestamp: new Date().toISOString()
+      });
 
       // Start execution in background
       this.executeWithSseEvents(agent, userRequest, maxSteps, finalSessionId)
         .catch(error => {
           console.error('Error in SSE execution:', error);
-          this.sendEvent('execution_error', {
+          this.sendEventToSession(finalSessionId, 'execution_error', {
             message: `Execution error: ${error}`,
             sessionId: finalSessionId,
             error: error instanceof Error ? error.message : String(error),
@@ -124,14 +186,17 @@ export class BrowserUseService {
           });
         })
         .finally(() => {
-          // Clean up session
-          this.activeSessions.delete(finalSessionId);
+          // Mark session as completed if still exists
+          const session = this.sessions.get(finalSessionId);
+          if (session && session.status === 'active') {
+            session.status = 'completed';
+          }
         });
 
       return finalSessionId;
     } catch (error) {
       console.error('Error starting SSE execution:', error);
-      this.sendEvent('start_error', {
+      this.sendEventToSession(finalSessionId, 'start_error', {
         message: `Failed to start execution: ${error}`,
         sessionId: finalSessionId,
         error: error instanceof Error ? error.message : String(error),
@@ -155,7 +220,7 @@ export class BrowserUseService {
     try {
       // Use the unified sendEvent function with correct signature
       const sendEvent = (event: any) => {
-        this.sendEvent(event.type, {
+        this.sendEventToSession(sessionId, event.type, {
           ...event,
           sessionId,
           timestamp: new Date().toISOString()
@@ -172,9 +237,9 @@ export class BrowserUseService {
         }
       }
 
-      // 如果正常完成但没有收到 agent_complete 事件，发送 session_complete 事件
+      // If completed normally but no agent_complete event received, send session_complete event
       if (!executionCompleted) {
-        this.sendEvent('session_complete', {
+        this.sendEventToSession(sessionId, 'session_complete', {
           message: 'Session completed successfully',
           sessionId,
           timestamp: new Date().toISOString()
@@ -184,8 +249,14 @@ export class BrowserUseService {
     } catch (error) {
       console.error('Error in executeWithSseEvents:', error);
 
-      // 发送执行错误事件
-      this.sendEvent('execution_error', {
+      // Update session status to error
+      const session = this.sessions.get(sessionId);
+      if (session) {
+        session.status = 'error';
+      }
+
+      // Send execution error event
+      this.sendEventToSession(sessionId, 'execution_error', {
         message: `Execution error: ${error}`,
         sessionId,
         error: error instanceof Error ? error.message : String(error),
@@ -193,12 +264,17 @@ export class BrowserUseService {
       });
 
     } finally {
-      // 清理会话
-      this.activeSessions.delete(sessionId);
+      // Update session status (if still active)
+      const session = this.sessions.get(sessionId);
+      if (session && session.status === 'active') {
+        if (!executionCompleted) {
+          session.status = 'completed';
+        }
+      }
 
-      // 注意：不在这里调用 clearSseSender()，让路由层控制连接关闭
-      // 这样可以确保最后的事件能够正确发送
-      console.log(`Session ${sessionId} execution finished, cleaned up from active sessions`);
+      // Note: Don't call clearSseSender() here, let the route layer control connection closure
+      // This ensures the final events can be sent correctly
+      console.log(`Session ${sessionId} execution finished, final status: ${session?.status}`);
     }
   }
 
@@ -206,7 +282,7 @@ export class BrowserUseService {
    * Get service status
    */
   getStatus(): any {
-    const activeSessions = BrowserUseSSEAgent.getActiveSessions();
+    const activeSessions = this.getActiveSessions();
 
     return {
       success: true,
@@ -217,7 +293,7 @@ export class BrowserUseService {
         heartbeat: {
           active: this.isHeartbeatActive,
           intervalMs: this.heartbeatIntervalMs,
-          hasSSEConnection: !!this.sseSender
+          hasSSEConnection: Array.from(this.sessions.values()).some(s => s.sseSender)
         },
         timestamp: Date.now()
       },
@@ -227,30 +303,29 @@ export class BrowserUseService {
   }
 
   /**
-   * Cancel a session
+   * Cancel a specific session/**
+   * Cancel execution of a single session
    */
-  cancelSession(sessionId: string): boolean {
-    const cancelled = BrowserUseSSEAgent.cancelSession(sessionId);
+  async cancelSession(sessionId: string): Promise<boolean> {
+    const session = this.sessions.get(sessionId);
 
-    if (cancelled) {
-      // Remove from local tracking
-      this.activeSessions.delete(sessionId);
+    if (session && session.status === 'active') {
+      // Cancel agent execution
+      await session.agent.cancel();
 
-      this.sendEvent('session_cancelled', {
+      // Update status to cancelled
+      session.status = 'cancelled';
+
+      this.sendEventToSession(sessionId, 'session_cancelled', {
         message: `Session ${sessionId} cancelled successfully`,
         sessionId,
         timestamp: new Date().toISOString()
       });
+
+      return true;
     }
 
-    return cancelled;
-  }
-
-  /**
-   * Get active sessions
-   */
-  getActiveSessions(): Array<{ sessionId: string; status: any }> {
-    return BrowserUseSSEAgent.getActiveSessions();
+    return false;
   }
 
   /**
@@ -260,31 +335,58 @@ export class BrowserUseService {
     return {
       active: this.isHeartbeatActive,
       intervalMs: this.heartbeatIntervalMs,
-      hasSSEConnection: !!this.sseSender
+      hasSSEConnection: Array.from(this.sessions.values()).some(s => s.sseSender)
     };
   }
 
   /**
-   * Cleanup service resources
+   * Get a specific session by ID
+   * 获取指定 ID 的会话
    */
-  cleanup(): void {
-    console.log('Cleaning up BrowserUseService...');
+  getSession(sessionId: string): BrowserUseSSEAgent | undefined {
+    const session = this.sessions.get(sessionId);
+    return session?.agent;
+  }
 
-    // Stop heartbeat
-    this.stopHeartbeat();
+  /**
+   * Remove a session from registry
+   * 从注册表中移除会话（物理删除）
+   */
+  removeSession(sessionId: string): boolean {
+    return this.sessions.delete(sessionId);
+  }
 
-    // Clear SSE sender
-    this.clearSseSender();
+  /**
+   * Get all sessions with their status
+   * 获取所有会话及其状态
+   */
+  getAllSessions(): Array<{ sessionId: string; status: string; createdAt: Date }> {
+    return Array.from(this.sessions.entries()).map(([sessionId, session]) => ({
+      sessionId,
+      status: session.status,
+      createdAt: session.createdAt
+    }));
+  }
 
-    // Cancel all active sessions
-    for (const sessionId of this.activeSessions.keys()) {
-      this.cancelSession(sessionId);
+  /**
+   * Get active sessions with detailed status
+   * 获取活跃会话及详细状态
+   */
+  getActiveSessions(): Array<{ sessionId: string; status: any }> {
+    const sessionList: Array<{ sessionId: string; status: any }> = [];
+    for (const [sessionId, session] of Array.from(this.sessions.entries())) {
+      sessionList.push({
+        sessionId,
+        status: {
+          sessionId,
+          isActive: session.status === 'active',
+          status: session.status,
+          createdAt: session.createdAt.toISOString(),
+          agentStatus: session.agent.getStatus ? session.agent.getStatus() : null
+        }
+      });
     }
-
-    // Clear active sessions map
-    this.activeSessions.clear();
-
-    console.log('BrowserUseService cleanup completed');
+    return sessionList;
   }
 
 }

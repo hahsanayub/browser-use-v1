@@ -10,19 +10,19 @@ router.post('/sse', async (req, res) => {
   let sessionId: string | null = null;
   let connectionClosed = false;
 
-  // 安全关闭连接的函数
+  // Function to safely close connection
   const closeConnection = () => {
     if (!connectionClosed && !res.destroyed) {
       connectionClosed = true;
       try {
-        // 发送连接关闭事件
+        // Send connection close event
         res.write(`event: connection_close\n`);
         res.write(`data: ${JSON.stringify({ message: 'Connection closed', timestamp: new Date().toISOString() })}\n\n`);
-        // 正确结束 SSE 连接
+        // Properly end SSE connection
         res.end();
       } catch (error) {
         console.warn('Error closing SSE connection:', error);
-        // 强制结束连接
+        // Force close connection
         res.destroy();
       }
     }
@@ -48,9 +48,9 @@ router.post('/sse', async (req, res) => {
           res.write(`event: ${eventType}\n`);
           res.write(`data: ${JSON.stringify(data)}\n\n`);
 
-          // 检查是否是完成或错误事件，如果是则关闭连接
+          // Check if it's a completion or error event, close connection if so
           if (['agent_complete', 'session_complete', 'execution_error', 'error', 'cancelled'].includes(eventType)) {
-            setTimeout(() => closeConnection(), 100); // 延迟关闭，确保事件发送完成
+            setTimeout(() => closeConnection(), 100); // Delayed close to ensure event is sent
           }
         } catch (error) {
           console.error('Error sending SSE event:', error);
@@ -59,52 +59,45 @@ router.post('/sse', async (req, res) => {
       }
     };
 
-    // Set SSE sender in service
-    browserUseService.setSseSender(sendEvent);
-
-    // Start execution
+    // Start execution first to get sessionId
     sessionId = await browserUseService.startSseExecution(user_request, maxSteps, session_id);
+    
+    // Set SSE sender for this specific session
+    browserUseService.setSseSender(sessionId, sendEvent);
 
     // Handle client disconnect
     req.on('close', () => {
       console.log('Browser-use SSE: Client disconnected');
       connectionClosed = true;
-      browserUseService.clearSseSender();
       if (sessionId) {
-        browserUseService.cancelSession(sessionId);
+        browserUseService.clearSseSender(sessionId);
+        browserUseService.cancelSession(sessionId).catch(error => {
+          console.error('Error cancelling session on close:', error);
+        });
       }
     });
 
     req.on('error', (error) => {
       console.error('Browser-use SSE: Connection error:', error);
       closeConnection();
-      browserUseService.clearSseSender();
       if (sessionId) {
-        browserUseService.cancelSession(sessionId);
+        browserUseService.clearSseSender(sessionId);
+        browserUseService.cancelSession(sessionId).catch(cancelError => {
+          console.error('Error cancelling session on error:', cancelError);
+        });
       }
     });
-
-    // 设置超时保护，防止连接无限期保持
-    // const timeout = setTimeout(() => {
-    //   console.log('SSE connection timeout, closing...');
-    //   closeConnection();
-    //   if (sessionId) {
-    //     browserUseService.cancelSession(sessionId);
-    //   }
-    // }, 300000); // 5分钟超时
-
-    // 清理超时定时器
-    // req.on('close', () => clearTimeout(timeout));
-    // req.on('error', () => clearTimeout(timeout));
 
   } catch (error) {
     console.error('Error in SSE endpoint:', error);
 
-    // 清理资源
+    // Clean up resources
     if (sessionId) {
-      browserUseService.cancelSession(sessionId);
+      browserUseService.clearSseSender(sessionId);
+      browserUseService.cancelSession(sessionId).catch(cancelError => {
+        console.error('Error cancelling session in catch block:', cancelError);
+      });
     }
-    browserUseService.clearSseSender();
 
     if (!res.headersSent) {
       res.status(500).json({
@@ -114,7 +107,7 @@ router.post('/sse', async (req, res) => {
         timestamp: new Date().toISOString(),
       });
     } else {
-      // 如果已经发送了 SSE 头，发送错误事件并关闭连接
+      // If SSE headers already sent, send error event and close connection
       try {
         res.write(`event: error\n`);
         res.write(`data: ${JSON.stringify({
@@ -148,7 +141,7 @@ router.get('/status', (req, res) => {
 });
 
 // Cancel session endpoint
-router.post('/cancel', (req, res) => {
+router.post('/cancel', async (req, res) => {
   try {
     const { sessionId } = req.body;
 
@@ -160,7 +153,7 @@ router.post('/cancel', (req, res) => {
       });
     }
 
-    const cancelled = browserUseService.cancelSession(sessionId);
+    const cancelled = await browserUseService.cancelSession(sessionId);
 
     if (cancelled) {
       res.json({
