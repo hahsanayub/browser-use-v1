@@ -94,7 +94,7 @@ This section defines the rules for how the TODO.md file should be generated, upd
 - Always preserve the overall structure of the file when updating.
 
 **Example**
-This is just an example of the file strucure, never copy this this as your todo.md content directly.
+This is just an example of the file strucure, never copy this as your todo.md content directly.
 \`\`\`md
 # Plan for extracting Tasks-related API documentation
 
@@ -146,6 +146,7 @@ You are controlling a browser to extract complete information from an API docume
 6. **IMPORTANT** Process indivisual endpoint at once, when the page contains multiple endpoints, please keep navivating to the sub endpoint.
 7. Ignore **deprecated** endpoints, endpoint pages with "strikethrough" line. Skip those pages, indicate this in the todo.md file in your plan.
 8. Folllow the **Detailed Info Discovery Instructions** below to browse the page to identify and discover API Spec content.
+9. Use "extract_structured_data" tool to do API content extraction, and deliver the results.
 
 ## IMPORTANT INTERACTION RULES:
 - NEVER click on elements with "+", "-", "▼", "▲" symbols in "Response samples"/"Requeset samples" sections
@@ -167,7 +168,7 @@ CRITICAL: Before proceeding with any other actions on a new page (including thos
   - Floating ads or tooltips
 
 - **What to do:** If an overlay is detected, your **immediate and only action for the current step must be to click the button or icon to dismiss it.**
-  - Look for common dismissal elements like: “Accept”, “Close”, “X”, “No thanks”, “Got it”, or “Dismiss”.
+  - Look for common dismissal elements like: "Accept”, "Close”, "X”, "No thanks”, "Got it”, or "Dismiss”.
   - Icons that look like X, × (close) or checkmarks are also valid targets.
 
 - **Important Constraints:**
@@ -202,7 +203,7 @@ Within each endpoint section:
 - Do not consider/explore "example" as the request body type
 - You must firstly locate and click the elements under section where its field has description info to extract content, then check other example/samples area.
 - Look for headings or tabs labeled:
-  - “Request”, “Request Body“, "Request Payload", "Request Schema" or similar!
+  - "Request”, "Request Body", "Request Payload", "Request Schema" or similar!
 - Identify all clickable elements, for example item with arrow indicator symbols like: ▼, +, or arrow indicators!
 - **Important** If the elements are already expanded/visible, DO NOT click the element to collapse it.
 - Avoid duplicate clicks on already active tabs.
@@ -218,13 +219,15 @@ Within each endpoint section:
 - You must always locate and interact the expandable elements under section where the fields have description info.
 - If there are elements with label like below pattern examples, you must firstly click them just once to show the Response Schema Definition entries. For example:
    - Http Status Buttons under Responses section like: 200, 404, 500,
-- You can Click "Show more", "Show children" to get more info visible.
 - Look for headings or tabs labeled:
-  - "Response", "Response Body“, "Response Schema" or similar.
+  - "Response", "Response Body", "Response Schema" or similar.
 - Scroll to the "Responses" section of the endpoint.
 - If the elements are already expanded/visible, DO NOT click the element to collapse it.
 - Be careful to avoid duplicate clicks on the same element with multiple Indexes.
 
+
+**CRITICAL RULE: You MUST FIRST CLICK on tabs labeled 'Schema', 'Request Schema', or 'Response Schema' to reveal their content.**
+**NEVER call \`extract_structured_data\` on an API endpoint section IF a 'Schema' tab is visible but not active.**Your immediate next action must be to \`click\` the schema tab. Only after the schema content is visible can you proceed with extraction in a subsequent step. This is a mandatory prerequisite, not an optional step.
 ---
 
 #### 5️⃣ Sections You Should Ignore To Expand
@@ -262,14 +265,16 @@ Within each endpoint section:
 <api_document_page_extraction_rules>
 CRITICAL: API Document Information Extraction Rules
 
-**extract_api_document_structured_data Query Guidelines for API Documentation:**
+**extract_structured_data Query Guidelines for API Documentation:**
 
 ### For API Endpoint Page Content Extraction
-1. When calling \`extract_api_document_structured_data\` for indivisual API documentation pages, you should bring below intent and combine it to the \`query\` with what endpoint (page) you think it needs to extract to the current browser state page you'r focusing on:
+1. When calling \`extract_structured_data\` for indivisual API documentation pages, you should bring below intent and combine it to the \`query\` with what endpoint (page) you think it needs to extract the current browser page(endpoint) you'r focusing on:
+\`\`\`md
+Extract raw api document content for "Get users" endpoint, including:
+  1. HTTP method, path, baseApiUrl, endpoint description
+  2. Request content type, query/path parameters, request headers, request body schema, including field descriptions, types, and required/optional properties.
+  3. Detailed response schemas for each HTTP status code, including field descriptions, types, and required/optional properties.
 \`\`\`
-Extract raw api document content for "Get users" endpoint, including: HTTP method, path, baseApiUrl, endpoint description, parameters (name, type, required/optional, description), request content type, query parameters, request headers, request body schema, detailed response schemas for each HTTP status code, including field descriptions, types, and required/optional properties. Preserve exact formatting and content. Do not fabricate data for API endpoint path, parameter name, type etc. Do not miss response/request fields.
-\`\`\`
-**Important**: Do not fabricate data for API endpoint path, parameter name, type etc.
 </api_document_page_extraction_rules>
 
 `;
@@ -314,15 +319,23 @@ export class BrowserUseSSEAgent {
             azureDeployment: 'oai-ai4m-rnd-eastus-001-gpt-4-0125-Preview-001',
             apiVersion: '2025-03-01-preview',
             apiKey: process.env.AZURE_OPENAI_API_KEY,
+
+            // provider: 'google',
+            // model: 'gemini-2.5-flash',
+            // baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+            // apiKey: process.env.GOOGLE_API_KEY,
+            temperature: 0.1,
+            frequencyPenalty: 0.2,
             timeout: 60000,
             maxTokens: 16384,
           },
           browser: {
-            headless: true,
+            headless: process.env.HEADLESS === 'true' || false,
             browserType: 'chromium',
-            viewport: { width: 1440, height: 900 },
+            viewport: { width: 1440, height: 1080 },
             timeout: 45000,
             args: [],
+            viewportExpansion: 2000,
           },
           logging: {
             level: 'debug',
@@ -348,7 +361,6 @@ export class BrowserUseSSEAgent {
         maxSteps: maxSteps,
         actionTimeout: 15000,
         continueOnFailure: true,
-        useThinking: true,
         customInstructions: customInstructions,
         saveConversationPath: `projects/${sessionId}/conversations`,
         fileSystemPath: `projects/${sessionId}`,
@@ -362,10 +374,11 @@ ${userRequest}
 # Important Rules:
 - This is "multi-step" task, you need to create a detailed plan with "todo.md" file before you start the task. Reference the <todo_file_management> section for the format of the "todo.md" file.
 - Dynamically update the "todo.md" file with the new steps you need to take.
+- Ignore **deprecated** endpoints, or endpoint pages with "strikethrough" line. Skip those pages, endpoint pages with "deprecated" text. Indicate this in the todo.md file in your plan as "skipped" with \`[x]\` flag as default.
 - Reference the <additional_todo_definition_rules> for the additional rules to organize tasks into logical phases for API document content extraction task.
 - Follow the <additional_todo_management_rules> to explore/navigate the page content and extract the API document content.
-- **Prioritize Interaction over Visibility**: Before checking for visible content, you MUST first inspect elements for clear interactive roles or attributes. If an element has a WAI-ARIA role like role='option', role='tab', role='radio', or a state attribute like aria-expanded='false', you must prioritize **clicking** it. This action is necessary to ensure the corresponding view is fully loaded and active. This rule **overrides** the general rule of extracting data just because some content appears to be visible.
-- When you think content can be extracted and before calling extract_structured_data, if there are elements like 200, 400, 500 and so on, please click them first(Regardless of whether the information for 200, 400, 500, etc., is already displayed, please use the history to determine this and make sure to click it once.). Then, consider if there is any "default" related information (if so, be sure to click the "default" element), and then call extract_structured_data.
+- **Prioritize Interaction over Visibility**: Before checking for visible content, you MUST first inspect elements for clear interactive roles or attributes. If an element has a WAI-ARIA role like role='option', role='tab', role='radio', role='presentation', or a state attribute like aria-expanded='false', you must prioritize **clicking** it. This action is necessary to ensure the corresponding view is fully loaded and active. This rule **overrides** the general rule of extracting data just because some content appears to be visible.
+- When you think content can be extracted and before calling extract_structured_data, if there are buttons like 200, 201, 400, 500 and so on, please click them first(Regardless of whether the information for 200, 201, 400, 500, etc., is already displayed, please use the history to determine this and make sure to click it once.). Then, consider if there is any "default" related information (if so, be sure to click the "default" element), and then call extract_structured_data.
 
 <additional_todo_management_rules>
 CRITICAL Rules to organize tasks into logical phases:
@@ -661,4 +674,40 @@ Extract all Tasks-related API endpoint documentation content from the HubSpot CR
       timestamp: Date.now()
     };
   }
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const browserUseAgent = new BrowserUseSSEAgent();
+
+  const timestamp = new Date().toISOString();
+  const request = {
+  hubspot: {
+    url: 'https://developers.hubspot.com/docs/reference/api/crm/objects/tickets',
+    text: `Extract the entire original API documentation content for the List Tickets API from this page: https://developers.hubspot.com/docs/reference/api/crm/objects/tickets. You must extract all available details required for OpenAPI Spec, including endpoints, HTTP methods, versioning, baseApiUrl, auth requirements, request parameters, request body schema, response codes, bodies, and error responses. Preserve exact wording from the source.`,
+  },
+  adyen: {
+    url: 'https://docs.adyen.com/api-explorer/transfers/4/overview',
+    text: `I would like to generate the spec for "Transfers" related API from Adyen https://docs.adyen.com/api-explorer/transfers/4/overview`,
+  },
+  jumpseller: {
+    url: 'https://jumpseller.com/support/api/#tag/Products',
+    text: `I would like to generate the spec for "Products" related API from Jumpseller website https://jumpseller.com/support/api/#tag/Products`,
+  },
+  zuho: {
+    url: 'https://www.zoho.com/crm/developer/docs/api/v8/delete-tag.html',
+    text: `Extract the entire original API documentation content for the 'Delete Tag' API from the page https://www.zoho.com/crm/developer/docs/api/v8/delete-tag.html. Extract all available details required for OpenAPI Spec generation, including endpoints, HTTP methods, versioning, baseApiUrl, auth requirements, request parameters, request body schema, response codes, bodies, and error responses. Preserve exact wording from the source.`,
+  },
+}[(process.env.API_NAME as string) ?? 'hubspot']!;
+
+  const generator = browserUseAgent.executeWithSSE(request.text, 100, timestamp);
+  // Consume the async generator
+  (async () => {
+    try {
+      for await (const event of generator) {
+        console.log('Event:', event);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  })();
 }
