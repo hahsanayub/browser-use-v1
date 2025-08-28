@@ -394,7 +394,9 @@ export async function generatePageContextPrompt(
           const stepNumber = stepInfo ? stepInfo.stepNumber + 1 : 1;
           const intelligentTodoContext = TodoContextProvider.getCurrentTodoContext(
             fileSystem,
-            stepNumber
+            stepNumber,
+            undefined, // sessionId not available here
+            pageView.url
           );
           todoContents = intelligentTodoContext;
         } catch (error) {

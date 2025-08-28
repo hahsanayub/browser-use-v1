@@ -121,6 +121,60 @@ export class ExtractDataActions {
           throw new Error(`Couldn't extract page content: ${error}`);
         }
 
+        // 🔍 Check for duplicate endpoint extraction before processing
+        if (context.fileSystem && endpoint_name) {
+          try {
+            const projectDir = context.fileSystem.getDir();
+            const existingFiles = await fs.readdir(projectDir);
+            const apiDocContentFiles = existingFiles.filter(
+              (filename: string) =>
+                filename.startsWith('api_doc_content_') &&
+                filename.endsWith('.md')
+            );
+
+            // Check if endpoint has already been extracted
+            for (const filename of apiDocContentFiles) {
+              try {
+                const filePath = path.join(projectDir, filename);
+                const existingContent = await fs.readFile(filePath, 'utf-8');
+
+                // Check for same endpoint name and URL
+                const currentUrl = p.url();
+                if (
+                  existingContent.includes(`"endpoint": "${endpoint_name}"`) &&
+                  existingContent.includes(`Page Link: ${currentUrl}`)
+                ) {
+                  console.log(
+                    `⚠️ Duplicate endpoint detected: "${endpoint_name}" at ${currentUrl}`
+                  );
+                  console.log(`🔄 Already extracted in file: ${filename}`);
+
+                  await ExtractDataActions.sendTraceEvent({
+                    type: 'duplicate_endpoint_skipped',
+                    endpoint_name,
+                    url: currentUrl,
+                    existing_file: filename,
+                    timestamp: new Date().toISOString(),
+                  });
+
+                  return {
+                    success: false,
+                    message: `Endpoint "${endpoint_name}" has already been extracted. Found in ${filename}. Skipping duplicate extraction to avoid redundancy.`,
+                    error: 'DUPLICATE_ENDPOINT',
+                  };
+                }
+              } catch (readError) {
+                console.warn(
+                  `Failed to read ${filename} for duplicate check:`,
+                  readError
+                );
+              }
+            }
+          } catch (error) {
+            console.warn('Failed to perform duplicate endpoint check:', error);
+          }
+        }
+
         // Calculate page index based on api_doc_content_ files in the project directory
         let pageIndex = 1;
         if (context.fileSystem) {
@@ -1553,13 +1607,12 @@ export class TodoManagementActions {
   }
 }
 
-// Todo Context Provider - 自动为每个step提供当前TODO上下文
-// 可以被PromptManager等其他模块使用
 export class TodoContextProvider {
   static getCurrentTodoContext(
     fileSystem: FileSystem,
     stepNumber: number,
-    sessionId?: string
+    sessionId?: string,
+    currentUrl?: string
   ): string {
     try {
       const todoContent = fileSystem.getTodoContents();
@@ -1568,7 +1621,7 @@ export class TodoContextProvider {
 ⚠️ **NO TODO PLAN**: You must create a detailed todo.md file first!
 
 📋 **IMMEDIATE ACTION REQUIRED**:
-1. Create todo.md with proper structure (Discovery → Enumeration → Extraction → Verification phases)
+1. Create todo.md with proper structure (Discovery → Enumeration & Extraction → Verification phases)
 2. Then call validate_current_todo_step to begin execution`;
       }
 
@@ -1589,6 +1642,15 @@ export class TodoContextProvider {
 - Ready to finalize results and call done action`;
       }
 
+      // 🔥 智能检测TODO进度更新
+      const progressUpdateReminder = this.detectMissingProgressUpdate(
+        fileSystem,
+        analysis,
+        stepNumber,
+        extractedSessionId,
+        currentUrl
+      );
+
       return `
 📋 **CURRENT TODO FOCUS** (Step ${stepNumber}):
 
@@ -1600,6 +1662,8 @@ export class TodoContextProvider {
 💡 **Step Guidance**: ${analysis.stepGuidance}
 
 🔍 **Next Actions**: ${this.getNextActionGuidance(analysis.currentItem, analysis.currentPhase)}
+
+${progressUpdateReminder}
 
 ⚠️ **CRITICAL**: You MUST work on the current item above. Do not skip ahead!`;
     } catch (error) {
@@ -1689,6 +1753,388 @@ export class TodoContextProvider {
         return 'Follow the TODO item requirements';
     }
   }
+
+  /**
+   * 🎯 方案2: 基于URL的导航成功检测
+   * 检测当前URL是否匹配TODO目标，判断导航是否成功
+   */
+  static detectNavigationSuccess(
+    currentUrl: string,
+    todoItem: any
+  ): {
+    isSuccess: boolean;
+    confidence: number;
+    reason: string;
+  } {
+    try {
+      if (!currentUrl || !todoItem?.title) {
+        return {
+          isSuccess: false,
+          confidence: 0,
+          reason: 'Missing URL or TODO item',
+        };
+      }
+
+      const title = todoItem.title.toLowerCase();
+      const url = currentUrl.toLowerCase();
+
+      // HubSpot 导航检测
+      if (title.includes('hubspot') && title.includes('navigate')) {
+        if (
+          url.includes('hubspot.com/docs/reference/api/crm/objects/contacts')
+        ) {
+          return {
+            isSuccess: true,
+            confidence: 0.95,
+            reason:
+              'Successfully navigated to HubSpot Contacts API documentation page',
+          };
+        }
+        if (url.includes('hubspot.com')) {
+          return {
+            isSuccess: true,
+            confidence: 0.7,
+            reason: 'Navigated to HubSpot domain, may need further navigation',
+          };
+        }
+      }
+
+      // Adyen 导航检测
+      if (title.includes('adyen') && title.includes('navigate')) {
+        if (url.includes('docs.adyen.com/api-explorer/transfers')) {
+          return {
+            isSuccess: true,
+            confidence: 0.95,
+            reason: 'Successfully navigated to Adyen Transfers API page',
+          };
+        }
+        if (url.includes('adyen.com')) {
+          return {
+            isSuccess: true,
+            confidence: 0.7,
+            reason: 'Navigated to Adyen domain, may need further navigation',
+          };
+        }
+      }
+
+      // Jumpseller 导航检测
+      if (title.includes('jumpseller') && title.includes('navigate')) {
+        if (
+          url.includes('jumpseller.com/support/api') &&
+          url.includes('products')
+        ) {
+          return {
+            isSuccess: true,
+            confidence: 0.95,
+            reason: 'Successfully navigated to Jumpseller Products API page',
+          };
+        }
+        if (url.includes('jumpseller.com')) {
+          return {
+            isSuccess: true,
+            confidence: 0.7,
+            reason:
+              'Navigated to Jumpseller domain, may need further navigation',
+          };
+        }
+      }
+
+      // Zoho 导航检测
+      if (title.includes('zoho') && title.includes('navigate')) {
+        if (url.includes('zoho.com/crm/developer/docs/api')) {
+          return {
+            isSuccess: true,
+            confidence: 0.95,
+            reason: 'Successfully navigated to Zoho CRM API documentation page',
+          };
+        }
+        if (url.includes('zoho.com')) {
+          return {
+            isSuccess: true,
+            confidence: 0.7,
+            reason: 'Navigated to Zoho domain, may need further navigation',
+          };
+        }
+      }
+
+      // 通用导航检测模式
+      if (title.includes('navigate') && title.includes('api')) {
+        // 检查是否包含API文档相关关键词
+        const apiKeywords = [
+          'api',
+          'docs',
+          'documentation',
+          'reference',
+          'developer',
+        ];
+        const hasApiKeywords = apiKeywords.some((keyword) =>
+          url.includes(keyword)
+        );
+
+        if (hasApiKeywords) {
+          return {
+            isSuccess: true,
+            confidence: 0.8,
+            reason: 'Navigated to a page with API documentation indicators',
+          };
+        }
+      }
+
+      return {
+        isSuccess: false,
+        confidence: 0,
+        reason: 'No navigation success patterns matched',
+      };
+    } catch (error) {
+      console.warn('Navigation success detection failed:', error);
+      return {
+        isSuccess: false,
+        confidence: 0,
+        reason: `Detection error: ${error}`,
+      };
+    }
+  }
+
+  /**
+   * 🔍 方案1: 增强的工作证据分析（导航阶段 + API提取检测）
+   * 检测文件系统中的工作进展证据，结合URL检测
+   */
+  static analyzeWorkEvidence(
+    fileSystem: FileSystem,
+    currentItem: any,
+    currentUrl?: string
+  ): {
+    hasEvidence: boolean;
+    evidenceType: string;
+    confidence: number;
+    details: string[];
+    actionSuggestion?: string;
+  } {
+    const evidence = {
+      hasEvidence: false,
+      evidenceType: '',
+      confidence: 0,
+      details: [] as string[],
+      actionSuggestion: undefined as string | undefined,
+    };
+
+    try {
+      console.log('🔍 Analyzing work evidence...');
+
+      // 获取文件系统描述
+      let description = '';
+      try {
+        description = fileSystem.describe() || '';
+        console.log(
+          '📂 FileSystem description:',
+          description.substring(0, 200) + '...'
+        );
+      } catch (error) {
+        console.warn('⚠️ Failed to get file system description:', error);
+        return evidence;
+      }
+
+      // 🎯 **优先级1: API文档提取证据** (最高置信度)
+      if (description.includes('api_doc_content_')) {
+        evidence.hasEvidence = true;
+        evidence.evidenceType = 'API Documentation Extracted';
+        evidence.confidence = 0.95;
+
+        // 计算API文档文件数量
+        const apiDocMatches = description.match(/api_doc_content_\w+\.md/g);
+        const fileCount = apiDocMatches ? apiDocMatches.length : 1;
+        evidence.details.push(
+          `Found ${fileCount} API document files in filesystem`
+        );
+        evidence.actionSuggestion = 'update_todo_progress';
+
+        console.log('✅ API Documentation detected!', {
+          fileCount,
+          confidence: evidence.confidence,
+        });
+        return evidence;
+      }
+
+      // 🎯 **优先级2: 导航成功证据** (结合URL检测)
+      if (currentUrl && currentItem) {
+        const navigationResult = this.detectNavigationSuccess(
+          currentUrl,
+          currentItem
+        );
+
+        if (navigationResult.isSuccess && navigationResult.confidence >= 0.7) {
+          evidence.hasEvidence = true;
+          evidence.evidenceType = 'Navigation Success';
+          evidence.confidence = navigationResult.confidence;
+          evidence.details.push(navigationResult.reason);
+          evidence.details.push(`Current URL: ${currentUrl}`);
+
+          // 根据置信度决定是否建议更新
+          if (navigationResult.confidence >= 0.9) {
+            evidence.actionSuggestion = 'update_todo_progress';
+          }
+
+          console.log('🎯 Navigation success detected!', navigationResult);
+          return evidence;
+        }
+      }
+
+      // 🎯 **优先级3: 多截图证据** (表明深度工作)
+      const screenshotMatches = description.match(/step_\d+\.png/g);
+      if (screenshotMatches && screenshotMatches.length >= 5) {
+        evidence.hasEvidence = true;
+        evidence.evidenceType = 'Extensive Navigation Activity';
+        evidence.confidence = 0.6;
+        evidence.details.push(
+          `Found ${screenshotMatches.length} screenshots indicating thorough exploration`
+        );
+
+        console.log('📸 Extensive screenshot activity detected');
+      }
+
+      // 🎯 **优先级4: 对话文件证据** (表明活跃工作)
+      const conversationMatches = description.match(/conversation_\d+\.txt/g);
+      if (conversationMatches && conversationMatches.length >= 3) {
+        evidence.hasEvidence = true;
+        evidence.evidenceType =
+          evidence.evidenceType || 'Active Conversation Work';
+        evidence.confidence = Math.max(evidence.confidence, 0.5);
+        evidence.details.push(
+          `Found ${conversationMatches.length} conversation files indicating sustained work`
+        );
+
+        console.log('💬 Active conversation work detected');
+      }
+
+      // 🎯 **优先级5: 单一截图证据** (基础活动)
+      if (
+        !evidence.hasEvidence &&
+        (description.includes('screenshot') || description.includes('.png'))
+      ) {
+        evidence.hasEvidence = true;
+        evidence.evidenceType = 'Basic Navigation Activity';
+        evidence.confidence = 0.3;
+        evidence.details.push(
+          'Found screenshot files indicating basic navigation activity'
+        );
+        console.log('📷 Basic screenshot evidence detected');
+      }
+
+      console.log('🔍 Work evidence analysis result:', evidence);
+    } catch (error) {
+      console.warn('⚠️ Work evidence analysis failed:', error);
+    }
+
+    return evidence;
+  }
+
+  /**
+   * 🚨 智能TODO进度更新检测 (方案1+方案2组合)
+   * 整合导航检测和文件证据分析，生成智能提醒
+   */
+  static detectMissingProgressUpdate(
+    fileSystem: FileSystem,
+    analysis: any,
+    stepNumber: number,
+    sessionId: string,
+    currentUrl?: string
+  ): string {
+    try {
+      console.log(
+        `🔍 TODO Detection: Step ${stepNumber}, Session ${sessionId}`
+      );
+
+      // 检测工作证据 (组合方案1+方案2)
+      const workEvidence = this.analyzeWorkEvidence(
+        fileSystem,
+        analysis.currentItem,
+        currentUrl
+      );
+
+      console.log('📊 Work Evidence:', workEvidence);
+
+      // 🚨 **强制更新场景**: API文档提取完成
+      if (
+        workEvidence.hasEvidence &&
+        workEvidence.evidenceType.includes('API Documentation') &&
+        workEvidence.confidence >= 0.9
+      ) {
+        return `
+
+🚨 **MANDATORY PROGRESS UPDATE DETECTED** 🚨
+
+✅ **Strong Evidence of API Documentation Work**:
+- Type: ${workEvidence.evidenceType}
+- Confidence: ${Math.round(workEvidence.confidence * 100)}%
+- Details: ${workEvidence.details.join(', ')}
+
+⚡ **IMMEDIATE ACTION REQUIRED**:
+You MUST call update_todo_progress in this step with:
+- item_identifier: "${analysis.currentItem.title}"
+- new_status: "completed"
+- completion_note: "API documentation extraction completed"
+
+🔥 **ZERO TOLERANCE**: Failure to update progress is a critical system violation!`;
+      }
+
+      // 🎯 **高优先级提醒**: 导航成功，建议更新
+      if (
+        workEvidence.hasEvidence &&
+        workEvidence.evidenceType.includes('Navigation Success') &&
+        workEvidence.confidence >= 0.9
+      ) {
+        return `
+
+🎯 **NAVIGATION SUCCESS DETECTED** 🎯
+
+✅ **Successful Navigation Evidence**:
+- Type: ${workEvidence.evidenceType}
+- Confidence: ${Math.round(workEvidence.confidence * 100)}%
+- Details: ${workEvidence.details.join(', ')}
+
+💡 **RECOMMENDED ACTION**:
+Consider calling update_todo_progress with:
+- item_identifier: "${analysis.currentItem.title}"
+- new_status: "completed"
+- completion_note: "Successfully navigated to target page"
+
+🔄 **Next**: Proceed to the next TODO item or continue current objectives`;
+      }
+
+      // 📋 **中等优先级提醒**: 有工作证据，考虑更新
+      if (workEvidence.hasEvidence && workEvidence.confidence >= 0.6) {
+        return `
+
+💡 **PROGRESS CONSIDERATION**:
+- Detected: ${workEvidence.evidenceType}
+- Confidence: ${Math.round(workEvidence.confidence * 100)}%
+- Details: ${workEvidence.details.join(', ')}
+
+🤔 **Consider**: updating progress if meaningful work completed on "${analysis.currentItem.title}"
+📝 **Optional**: call update_todo_progress if current item has advanced significantly`;
+      }
+
+      // 📊 **基础状态显示**: 显示检测活跃状态
+      const statusMessage = workEvidence.hasEvidence
+        ? `Evidence found but low confidence (${Math.round(workEvidence.confidence * 100)}%)`
+        : 'No significant work evidence detected yet';
+
+      return `
+
+🔍 **TODO DETECTION ACTIVE** (Step ${stepNumber}):
+- Monitoring: File system + URL navigation patterns
+- Current Status: ${statusMessage}
+- Ready to detect: API documentation extraction, navigation success
+- Target Item: "${analysis.currentItem.title}"`;
+    } catch (error) {
+      console.warn('⚠️ Progress update detection failed:', error);
+      return `
+
+❌ **TODO DETECTION ERROR**: ${error}
+📋 **Note**: Smart detection is active but encountered an issue
+🔄 **Fallback**: Continue with current TODO item "${analysis.currentItem?.title || 'unknown'}"`;
+    }
+  }
 }
 
 const customInstructions = `
@@ -1768,24 +2214,17 @@ Extract all Tasks-related API endpoint documentation content from the HubSpot CR
 
 ### Discovery
 1. [x] Navigate to HubSpot CRM API documentation home page
-2. [ ] Locate "Tasks" section
-3. [ ] Expand to reveal all endpoints
+2. [x] Locate "Tasks" section
+3. [x] Expand to reveal all endpoints
 
-### Enumeration
-1. [ ] List all Tasks-related endpoints
-
-### Extraction
-1. [ ] Archive a batch of tasks by ID
-2. [ ] Create a batch of tasks
+### Enumeration & Extraction
+1. [x] Archive a batch of tasks by ID
+2. [-] Create a batch of tasks
 3. [ ] Create a task
 4. [ ] Update a task by ID
 
 ### Verification
 1. [ ] Confirm all listed endpoints are extracted
-
-## Result
-- Navigation complete.
-- Enumeration in progress.
 \`\`\`
 
 </todo_file_management>
@@ -2043,7 +2482,7 @@ ${userRequest}
 
 📋 **AUTOMATIC TODO GUIDANCE**: You will receive a "**CURRENT TODO FOCUS**" section at the start of EVERY step that shows:
 - 🎯 **Current Item**: Exactly which TODO item you should work on
-- 📍 **Phase**: Which phase you're in (Discovery/Enumeration/Extraction/Verification)
+- 📍 **Phase**: Which phase you're in (Discovery, Enumeration&Extraction,Verification)
 - 💡 **Step Guidance**: What you should accomplish in this step
 - 🔍 **Next Actions**: Specific actions you should take
 
@@ -2081,8 +2520,7 @@ ${userRequest}
 CRITICAL Rules to organize tasks into logical phases:
 - Organize tasks into the following logical phases. The todo.md should be structured with headings that reflect these phases.
   - **Discovery**: The first phase for navigation, locating the relevant API documentation sections, and revealing all the endpoints.
-  - **Enumeration**: The phase for listing all relevant items. Create a single, comprehensive checklist. List every individual endpoint you need to process as a **numbered** checkbox item (e.g., \`1. [ ] Endpoint Name\`).
-  - **Extraction**: The execution phase. Work through the checklist created during the Enumeration phase. As soon as you have extracted data for an endpoint, mark its corresponding checkbox from \`[ ]\` to \`[x]\` in that same list.
+  - **Enumeration & Extraction**: The phase for listing and processing all relevant items. Create a single, comprehensive checklist, listing every individual endpoint you need to process as a **numbered** checkbox item (e.g., \`1. [ ] Endpoint Name\`). Then, work through this checklist, and as soon as you have extracted data for an endpoint, mark its corresponding checkbox from \`[ ]\` to \`[x]\`.
   - **Verification**: The final phase. After all items in the checklist are marked as complete, confirm that all work has been done correctly.
 
 **Example**
@@ -2097,16 +2535,10 @@ Extract all Tasks-related API endpoint documentation content from the HubSpot CR
 
 ### Discovery
 1. [x] Navigate to HubSpot CRM API documentation home page
-2. [ ] Locate "Tasks" section
-3. [ ] Expand to reveal all endpoints
+2. [x] Locate "Tasks" section
+3. [x] Expand to reveal all endpoints
 
-### Enumeration
-1. [x] Archive a batch of tasks by ID
-2. [-] Create a batch of tasks
-3. [ ] Create a task
-4. [ ] Update a task by ID
-
-### Extraction
+### Enumeration & Extraction
 1. [x] Archive a batch of tasks by ID
 2. [-] Create a batch of tasks
 3. [ ] Create a task
@@ -2114,10 +2546,6 @@ Extract all Tasks-related API endpoint documentation content from the HubSpot CR
 
 ### Verification
 1. [ ] Confirm all listed endpoints are extracted
-
-## Result
-- Navigation complete.
-- Enumeration in progress.
 \`\`\`
 
 </additional_todo_management_rules>
@@ -2196,7 +2624,8 @@ Extract all Tasks-related API endpoint documentation content from the HubSpot CR
             const todoContext = TodoContextProvider.getCurrentTodoContext(
               fileSystem,
               stepNumber + 1,
-              sessionId
+              sessionId,
+              currentUrl
             );
             todoContextMessage = todoContext;
 
