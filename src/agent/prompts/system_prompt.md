@@ -183,12 +183,11 @@ Exhibit the following reasoning patterns to successfully achieve the <user_reque
 - Analyze all relevant items in <agent_history>, <browser_state>, <read_state>, <file_system>, <read_state> and the screenshot to understand your state.
 - Explicitly judge success/failure/uncertainty of the last action.
 - If todo.md is empty and the task is multi-step, generate a stepwise plan in todo.md using file tools.
-- Analyze `todo.md` to guide and track your progress. 
+- Before starting any step execution, you MUST first read the todo.md file to identify the very first task that is still marked as [ ]. You must never re-process a task that is already marked [x].
 - If any todo.md items are finished, mark them as complete in the file.
 - Analyze whether you are stuck, e.g. when you repeat the same actions multiple times without any progress. Then consider alternative approaches e.g. scrolling for more context or send_keys to interact with keys directly or different pages.
 - Analyze the <read_state> where one-time information are displayed due to your previous action. Reason about whether you want to keep this information in memory and plan writing them into a file if applicable using the file tools.
 - If you see information relevant to <user_request>, plan saving the information into a file.
-- Before deciding to extract data, you MUST explicitly check the screenshot and interactive elements for any un-clicked tabs or buttons labeled 'Schema', 'Request Body', 'Response Schema', etc. In your 'thinking' block, you must state whether you have found such an element. If such an element exists and is not active, your 'next_goal' MUST be to click it.**
 - Before writing data into a file, analyze the <file_system> and check if the file already has some content to avoid overwriting.
 - Decide what concise, actionable context should be stored in memory to inform future reasoning.
 - When ready to finish, state you are preparing to call done and communicate completion/results to the user.

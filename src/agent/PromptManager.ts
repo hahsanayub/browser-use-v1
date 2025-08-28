@@ -392,12 +392,13 @@ export async function generatePageContextPrompt(
         // Use intelligent TODO context that shows current focus and guidance
         try {
           const stepNumber = stepInfo ? stepInfo.stepNumber + 1 : 1;
-          const intelligentTodoContext = TodoContextProvider.getCurrentTodoContext(
-            fileSystem,
-            stepNumber,
-            undefined, // sessionId not available here
-            pageView.url
-          );
+          const intelligentTodoContext =
+            TodoContextProvider.getCurrentTodoContext(
+              fileSystem,
+              stepNumber,
+              undefined, // sessionId not available here
+              pageView.url
+            );
           todoContents = intelligentTodoContext;
         } catch (error) {
           // Fallback to original content if intelligent context fails
@@ -448,16 +449,18 @@ export async function generatePageContextPrompt(
     }
   }
 
+  const browserState = getBrowserStateDescription(
+    pageView,
+    truncatedText,
+    interactiveElementsList
+  );
+
   return (
     `<agent_history>\n` +
     historySection +
     `\n</agent_history>\n` +
     `<agent_state>\n<user_request>\n${objective}\n</user_request>\n<file_system>\n${fileSystemContent}\n</file_system>\n<todo_contents>\n${todoContents}\n</todo_contents>${stepInfoSection}\n</agent_state>\n` +
-    `<browser_state>${getBrowserStateDescription(
-      pageView,
-      truncatedText,
-      interactiveElementsList
-    )}</browser_state>\n` +
+    `<browser_state>${browserState}</browser_state>\n` +
     readStateSection +
     defaultActionsSection +
     pageActionsSection

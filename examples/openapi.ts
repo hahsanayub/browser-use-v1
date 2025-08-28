@@ -318,7 +318,7 @@ CRITICAL Rules to organize tasks into logical phases:
   - **Verification**: The final phase. After all items in the checklist are marked as complete, confirm that all work has been done correctly.
 
 **Example**
-This is just an example of the file strucure, never copy this this as your todo.md content directly.
+This is just an example of the file strucure, never copy this as your todo.md content directly.
 \`\`\`md
 # Plan for extracting Tasks-related API documentation
 
