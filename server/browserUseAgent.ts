@@ -18,7 +18,7 @@ import { FileSystem } from '../src/services/file-system';
 import type { BrowserUseEvent } from './browserUseService';
 import TurndownService from 'turndown';
 import * as path from 'path';
-import { promises as fs } from 'fs';
+import { promises as fs, readFileSync } from 'fs';
 
 // Helper function for Promise.race with proper timeout cleanup
 function withTimeout<T>(
@@ -506,7 +506,7 @@ Explain the content of the page and that the requested information is not availa
   private static readExtractionPrompt(): string {
     try {
       const promptPath = path.join(__dirname, 'prompt', 'extraction_prompt.md');
-      return require('fs').readFileSync(promptPath, 'utf-8');
+      return readFileSync(promptPath, 'utf-8');
     } catch (error) {
       // Fallback prompt if file not found
       return `You convert websites into structured information. Extract information from this webpage based on the query. Focus only on content relevant to the query. If
@@ -1554,6 +1554,7 @@ export class TodoManagementActions {
 }
 
 // Todo Context Provider - 自动为每个step提供当前TODO上下文
+// 可以被PromptManager等其他模块使用
 export class TodoContextProvider {
   static getCurrentTodoContext(
     fileSystem: FileSystem,
@@ -1738,7 +1739,7 @@ This section defines the rules for how the TODO.md file should be generated, upd
 
 **Rules**
 - Always begin with a **title** (e.g., "Plan for extracting X API documentation").
-- Must include a **## Goal** section that restates the user’s request in natural language.
+- Must include a **## Goal** section that restates the user's request in natural language.
 - Must include a **## Steps** (or **## Tasks**) section with a numbered checklist of actions.
   - Each task is a Markdown checkbox:
     - \`[ ]\` = incomplete
@@ -1830,7 +1831,7 @@ CRITICAL: Before proceeding with any other actions on a new page (including thos
   - Floating ads or tooltips
 
 - **What to do:** If an overlay is detected, your **immediate and only action for the current step must be to click the button or icon to dismiss it.**
-  - Look for common dismissal elements like: "Accept”, "Close”, "X”, "No thanks”, "Got it”, or "Dismiss”.
+  - Look for common dismissal elements like: "Accept", "Close", "X", "No thanks", "Got it", or "Dismiss".
   - Icons that look like X, × (close) or checkmarks are also valid targets.
 
 - **Important Constraints:**
@@ -1865,7 +1866,7 @@ Within each endpoint section:
 - Do not consider/explore "example" as the request body type
 - You must firstly locate and click the elements under section where its field has description info to extract content, then check other example/samples area.
 - Look for headings or tabs labeled:
-  - "Request”, "Request Body", "Request Payload", "Request Schema" or similar!
+  - "Request", "Request Body", "Request Payload", "Request Schema" or similar!
 - Identify all clickable elements, for example item with arrow indicator symbols like: ▼, +, or arrow indicators!
 - **Important** If the elements are already expanded/visible, DO NOT click the element to collapse it.
 - Avoid duplicate clicks on already active tabs.
@@ -2192,8 +2193,6 @@ Extract all Tasks-related API endpoint documentation content from the HubSpot CR
         try {
           const fileSystem = (agent as any).fileSystem;
           if (fileSystem) {
-            const sessionId =
-              TodoManagementActions.extractSessionIdFromFileSystem(fileSystem);
             const todoContext = TodoContextProvider.getCurrentTodoContext(
               fileSystem,
               stepNumber + 1,
@@ -2201,10 +2200,10 @@ Extract all Tasks-related API endpoint documentation content from the HubSpot CR
             );
             todoContextMessage = todoContext;
 
-            // Send TODO context as an event for monitoring
+            // ❌ 只发送了事件，但没有注入到LLM消息中！
             const todoEvent: BrowserUseEvent = {
               type: 'todo_context',
-              message: 'Current TODO context provided to LLM',
+              message: 'Current TODO context provided to LLM', // 误导性的消息！
               timestamp: new Date().toISOString(),
               session_id: sessionId || 'default',
               data: {

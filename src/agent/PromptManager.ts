@@ -22,6 +22,8 @@ import {
   convertLegacyHistory,
 } from './AgentHistory';
 import type { ActionRegistry } from '../controller/registry';
+// Import TODO context provider for intelligent todo content generation
+import { TodoContextProvider } from '../../server/browserUseAgent';
 
 /**
  * Dynamically load system prompts from markdown files based on configuration.
@@ -384,10 +386,22 @@ export async function generatePageContextPrompt(
       fileSystemContent =
         description || 'File system available but no files found';
 
-      // Get todo.md contents if available
+      // Get todo.md contents if available - use intelligent TODO context
       const todoContent = fileSystem.getTodoContents();
       if (todoContent && todoContent.trim()) {
-        todoContents = todoContent;
+        // Use intelligent TODO context that shows current focus and guidance
+        try {
+          const stepNumber = stepInfo ? stepInfo.stepNumber + 1 : 1;
+          const intelligentTodoContext = TodoContextProvider.getCurrentTodoContext(
+            fileSystem,
+            stepNumber
+          );
+          todoContents = intelligentTodoContext;
+        } catch (error) {
+          // Fallback to original content if intelligent context fails
+          console.warn('Failed to generate intelligent TODO context:', error);
+          todoContents = todoContent;
+        }
       }
     } catch {
       fileSystemContent = 'File system available but error reading contents';
