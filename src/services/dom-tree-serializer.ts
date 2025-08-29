@@ -1006,21 +1006,15 @@ export class DOMTreeSerializer {
       // Add text only if it doesn't have a highlighted parent
       if (!this.hasParentWithHighlightIndex(textNode)) {
         const parent = textNode.parent as DOMElementNode;
-        // More lenient check for text inclusion - include text from visible elements
-        // even if they're not considered "top" elements, to capture API descriptions
         if (
           parent &&
-          parent.isVisible &&
+          // TODO: this is a hack to include text from hidden elements
+          // parent.isVisible &&
           (parent.isTopElement ||
             parent.isInViewport ||
-            // Include text from elements that might contain API descriptions
-            (textNode.text && textNode.text.trim().length > 10))
+            textNode.text?.trim().length > 0)
         ) {
-          // Only add meaningful text (not just whitespace)
-          const trimmedText = textNode.text.trim();
-          if (trimmedText.length > 0) {
-            formattedText.push(`${depthStr}${trimmedText}`);
-          }
+          formattedText.push(`${depthStr}${textNode.text}`);
         }
       }
     }
