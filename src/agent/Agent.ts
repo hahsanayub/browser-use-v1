@@ -750,14 +750,18 @@ export class Agent {
         createAgentThoughtSchema(dynamicActionSchema);
 
       const response = await this.llmClient.generateResponse(messages, {
+        responseFormat: {
+          type: 'zod_schema',
+          schema: AgentThoughtSchemaForStep, // Use structured output like Python's output_format
+        },
         temperature: 0.1, // Low temperature for more consistent responses
         maxTokens: 16384,
       });
 
       responseContent = response.content;
 
-      // Parse and validate response using the dynamic schema
-      thoughtData = JsonParser.parse(response.content);
+      // Parse the already-validated response (like Python's response.completion)
+      thoughtData = JSON.parse(response.content);
 
       // Normalize action format from LLM response to Zod expected format
       if (
@@ -768,9 +772,8 @@ export class Agent {
         thoughtData.action = this.normalizeActionFormat(thoughtData.action);
       }
 
-      let thought = AgentThoughtSchemaForStep.parse(
-        thoughtData
-      ) as AgentThought;
+      // The response is already validated by the LLM client, but we still parse it for type safety
+      let thought = thoughtData as AgentThought;
 
       // Cut the number of actions to max_actions_per_step if needed
       if (thought.action.length > this.config.maxActionsPerStep!) {

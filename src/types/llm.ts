@@ -2,6 +2,8 @@
  * LLM-related type definitions
  */
 
+import { z } from 'zod';
+
 /** Image content for multimodal messages */
 export interface LLMImageContent {
   /** Type indicator */
@@ -72,6 +74,11 @@ export type LLMResponseFormat =
       schema: JSONSchema;
       name?: string;
       strict?: boolean;
+    }
+  | {
+      type: 'zod_schema';
+      schema: z.ZodTypeAny;
+      name?: string;
     };
 
 export interface LLMRequestOptions {

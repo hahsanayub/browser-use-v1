@@ -9,6 +9,7 @@ import type {
   LLMClientConfig,
   LLMContentPart,
 } from '../types/llm';
+import { z } from 'zod';
 import { getLogger } from '../services/logging';
 
 /**

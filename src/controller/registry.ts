@@ -123,7 +123,8 @@ export class ActionRegistry {
   /**
    * Build a dynamic Zod union schema representing available actions for a page.
    * Each variant is an object keyed by action name and mapping to its param schema.
-   * Example: z.union([ z.object({ click: z.object({selector:z.string()}) }), ... ])
+   * This matches Python's structure: { actionName: { ...params } }
+   * Example: z.union([ z.object({ scroll: z.object({down:z.boolean(), num_pages:z.number()}) }), ... ])
    */
   buildDynamicActionSchemaForPage(page?: Page): z.ZodUnion<any> {
     const variants: z.ZodTypeAny[] = [];
@@ -144,14 +145,15 @@ export class ActionRegistry {
         }
       }
 
-      // Expect normalized shape: { action: '<name>', ...params }
-      const variant = z
-        .object({ action: z.literal(a.name) })
-        .and(a.paramSchema) as z.ZodTypeAny;
+      // Python-style nested structure: { actionName: { ...params } }
+      // This avoids allOf in JSON Schema and matches Python's Pydantic structure
+      const variant = z.object({
+        [a.name]: a.paramSchema
+      }) as z.ZodTypeAny;
       variants.push(variant);
     }
     if (variants.length === 0) {
-      const fallback = z.object({ action: z.string() });
+      const fallback = z.object({ _placeholder: z.string() });
       return z.union([fallback, fallback]) as unknown as z.ZodUnion<any>;
     }
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment

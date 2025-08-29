@@ -964,9 +964,9 @@ export class DOMTreeSerializer {
             isNew = !allSeenElementXpaths.has(elementNode.xpath);
           } else if (previousSelectorMap) {
             // Fallback: use previous step comparison (original logic)
-            const elementExistedBefore = Object.values(previousSelectorMap).some(
-              (prevElement) => prevElement.xpath === elementNode.xpath
-            );
+            const elementExistedBefore = Object.values(
+              previousSelectorMap
+            ).some((prevElement) => prevElement.xpath === elementNode.xpath);
             isNew = !elementExistedBefore;
           }
         }
@@ -1165,7 +1165,7 @@ export class ViewportDOMService {
     this.collectInteractiveElements(elementTree);
 
     // Accumulate all seen element xpaths for cross-step new element detection
-    Object.values(this.previousSelectorMap).forEach(element => {
+    Object.values(this.previousSelectorMap).forEach((element) => {
       if (element.xpath) {
         this.allSeenElementXpaths.add(element.xpath);
       }
@@ -1173,7 +1173,7 @@ export class ViewportDOMService {
 
     this.domLogger.debug('Updated selector map', {
       currentElements: Object.keys(this.previousSelectorMap).length,
-      totalSeenElements: this.allSeenElementXpaths.size
+      totalSeenElements: this.allSeenElementXpaths.size,
     });
   }
 
