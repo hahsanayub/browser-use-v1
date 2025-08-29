@@ -29,6 +29,11 @@ export interface DOMElementNode extends DOMBaseNode {
   shadowRoot: boolean;
   highlightIndex: number | null;
   viewportInfo: ViewportInfo | null;
+  /**
+   * Indicates if this element is new compared to the previous state.
+   * Used to display "*[index]" instead of "[index]" for new clickable elements.
+   */
+  isNew?: boolean;
 }
 
 export type SelectorMap = Record<number, DOMElementNode>;

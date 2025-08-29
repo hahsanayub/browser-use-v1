@@ -12,7 +12,6 @@ import type {
   DOMSelectorMap,
   TimingInfo,
   DOMRect,
-  NodeType,
   DOMElementNode,
   DOMBaseNode,
   DOMTextNode,
@@ -26,6 +25,25 @@ const DISABLED_ELEMENTS = new Set([
   'link',
   'title',
 ]);
+
+/**
+ * Default attributes to include in serialization - matches Python version exactly
+ */
+export const DEFAULT_INCLUDE_ATTRIBUTES = [
+  'title',
+  'type',
+  'checked',
+  'name',
+  'role',
+  'value',
+  'placeholder',
+  'data-date-format',
+  'alt',
+  'aria-label',
+  'aria-expanded',
+  'data-state',
+  'aria-checked',
+];
 
 export interface SimplifiedDOMOptions {
   /** Maximum total length of the elements string */
@@ -654,7 +672,8 @@ export class DOMTreeSerializer {
   /**
    * Get scroll info text for an element
    */
-  private static getScrollInfoText(node: EnhancedDOMTreeNode): string {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private static getScrollInfoText(_node: EnhancedDOMTreeNode): string {
     // This would need to be implemented based on the actual scroll info requirements
     return '';
   }
@@ -725,9 +744,9 @@ export class DOMTreeSerializer {
         }
       }
 
-      for (const key of keysToRemove) {
+      Array.from(keysToRemove).forEach((key) => {
         delete attributesToInclude[key];
-      }
+      });
     }
 
     // Remove attributes that duplicate accessibility data
@@ -753,16 +772,6 @@ export class DOMTreeSerializer {
     }
 
     return '';
-  }
-
-  /**
-   * Cap text length with ellipsis
-   */
-  private static capTextLength(text: string, maxLength: number): string {
-    if (text.length > maxLength) {
-      return text.substring(0, maxLength) + '...';
-    }
-    return text;
   }
 
   // ========== SIMPLIFIED SERIALIZATION METHODS (ViewportDOMService compatibility) ==========
@@ -813,36 +822,7 @@ export class DOMTreeSerializer {
     options: SimplifiedDOMOptions = {
       maxTotalLength: 40000,
     },
-    includeAttributes: string[] = [
-      'title',
-      'type',
-      'checked',
-      'name',
-      'role',
-      'value',
-      'placeholder',
-      'data-date-format',
-      'alt',
-      'aria-label',
-      'aria-expanded',
-      'data-state',
-      'aria-checked',
-      'checked',
-      'selected',
-      'expanded',
-      'pressed',
-      'disabled',
-      'valuenow',
-      'keyshortcuts',
-      'haspopup',
-      'multiselectable',
-      'required',
-      'valuetext',
-      'level',
-      'busy',
-      'live',
-      'ax_name',
-    ],
+    includeAttributes: string[] = DEFAULT_INCLUDE_ATTRIBUTES,
     previousSelectorMap?: Record<number, DOMElementNode>
   ): string {
     const logger = getLogger();
@@ -878,7 +858,67 @@ export class DOMTreeSerializer {
   }
 
   /**
+   * Get all text content from an element until the next clickable element
+   * This matches the Python version's get_all_text_till_next_clickable_element method
+   */
+  static getAllTextTillNextClickableElement(
+    element: DOMElementNode,
+    maxDepth: number = -1
+  ): string {
+    const textParts: string[] = [];
+
+    function collectText(node: DOMBaseNode, currentDepth: number): void {
+      if (maxDepth !== -1 && currentDepth > maxDepth) {
+        return;
+      }
+
+      // Skip this branch if we hit a highlighted element (except for the current node)
+      if (
+        node.type !== 'TEXT_NODE' &&
+        node !== element &&
+        (node as DOMElementNode).highlightIndex !== null
+      ) {
+        return;
+      }
+
+      if (node.type === 'TEXT_NODE') {
+        const textNode = node as DOMTextNode;
+        if (textNode.text && textNode.text.trim()) {
+          textParts.push(textNode.text);
+        }
+      } else if (node.type !== 'TEXT_NODE') {
+        const elementNode = node as DOMElementNode;
+        for (const child of elementNode.children) {
+          collectText(child, currentDepth + 1);
+        }
+      }
+    }
+
+    collectText(element, 0);
+    return textParts.join('\n').trim();
+  }
+
+  /**
+   * Check if a text node has a parent with highlight_index
+   * This matches the Python version's has_parent_with_highlight_index method
+   */
+  private static hasParentWithHighlightIndex(textNode: DOMTextNode): boolean {
+    let current = textNode.parent;
+    while (current) {
+      if (current.type !== 'TEXT_NODE') {
+        const elementNode = current as DOMElementNode;
+        if (elementNode.highlightIndex !== null) {
+          return true;
+        }
+      }
+      current = current.parent;
+    }
+    return false;
+  }
+
+  /**
    * Serialize DOM tree to string format for simplified mode
+   * Completely rewritten to match Python version's clickable_elements_to_string logic
    */
   private static serializeTreeSimplified(
     node: DOMBaseNode | null,
@@ -897,79 +937,57 @@ export class DOMTreeSerializer {
     if (node.type !== 'TEXT_NODE') {
       const elementNode = node as DOMElementNode;
 
-      // Check if this is a scrollable element
-      const isScrollable = (elementNode as any).isScrollable || false;
-      const shouldShowScrollInfo =
-        (elementNode as any).shouldShowScrollInfo || false;
-      const isInteractive = elementNode.highlightIndex !== null;
-
-      // Show element if interactive, scrollable, or iframe
-      if (
-        isInteractive ||
-        isScrollable ||
-        elementNode.tagName.toUpperCase() === 'IFRAME'
-      ) {
+      // Process elements with highlight_index (interactive elements) - matches Python logic
+      if (elementNode.highlightIndex !== null) {
         nextDepth += 1;
 
-        // Build attributes string
+        // Get element's complete text content (KEY: this matches Python's get_all_text_till_next_clickable_element)
+        const text = this.getAllTextTillNextClickableElement(elementNode);
+
+        // Build attributes string (pass text for deduplication logic)
         const attributesStr = this.buildAttributesStringSimplified(
           elementNode,
-          includeAttributes
+          includeAttributes,
+          text
         );
 
-        // Check if this element is new (implement proper new element detection)
-        let isNew = false;
-        if (
-          isInteractive &&
-          elementNode.highlightIndex &&
-          previousSelectorMap
-        ) {
-          // Find if element with same attributes exists in previous state
-          const previousElements = Object.values(previousSelectorMap);
-          isNew = !previousElements.some(
-            (prevElement) =>
-              prevElement.tagName === elementNode.tagName &&
-              prevElement.xpath === elementNode.xpath &&
-              JSON.stringify(prevElement.attributes) ===
-                JSON.stringify(elementNode.attributes)
+        // Check if this element is new (matches Python version exactly)
+        let isNew = elementNode.isNew || false;
+
+        // If we have a previous selector map, check if this element is new
+        if (previousSelectorMap && !isNew) {
+          // Use xpath as unique identifier for comparison since it's stable across DOM changes
+          const currentXpath = elementNode.xpath;
+          const elementExistedBefore = Object.values(previousSelectorMap).some(
+            (prevElement) => prevElement.xpath === currentXpath
           );
+          isNew = !elementExistedBefore;
         }
 
-        // Build the line based on element type
-        let line = '';
-        if (shouldShowScrollInfo && !isInteractive) {
-          // Scrollable container but not clickable
-          line = `${depthStr}|SCROLL|<${elementNode.tagName}`;
-        } else if (isInteractive) {
-          // Interactive (and possibly scrollable)
-          const newPrefix = isNew ? '*' : '';
-          const scrollPrefix = shouldShowScrollInfo ? '|SCROLL+' : '[';
-          line = `${depthStr}${newPrefix}${scrollPrefix}${elementNode.highlightIndex}]<${elementNode.tagName}`;
-        } else if (elementNode.tagName.toUpperCase() === 'IFRAME') {
-          // Iframe element (not interactive)
-          line = `${depthStr}|IFRAME|<${elementNode.tagName}`;
-        } else {
-          line = `${depthStr}<${elementNode.tagName}`;
-        }
+        // Build the line (matches Python format exactly)
+        let line = `${depthStr}${isNew ? '*' : ''}[${elementNode.highlightIndex}]<${elementNode.tagName}`;
 
         if (attributesStr) {
           line += ` ${attributesStr}`;
         }
 
-        line += ' />';
-
-        // Add scroll information if needed
-        if (shouldShowScrollInfo) {
-          const scrollInfoText = this.getScrollInfoTextSimplified(elementNode);
-          if (scrollInfoText) {
-            line += ` (${scrollInfoText})`;
+        if (text && text.trim()) {
+          const cleanText = text.trim();
+          // Add space before >text only if there were NO attributes added before
+          if (!attributesStr) {
+            line += ' ';
           }
+          line += `>${cleanText}`;
+        } else if (!attributesStr) {
+          // Add space before /> only if neither attributes NOR text were added
+          line += ' ';
         }
 
+        line += ' />';
         formattedText.push(line);
       }
 
-      // Process children
+      // Process children regardless (matches Python logic)
       for (const child of elementNode.children) {
         const childText = this.serializeTreeSimplified(
           child,
@@ -982,16 +1000,28 @@ export class DOMTreeSerializer {
         }
       }
     } else {
-      // Handle text nodes
+      // Handle text nodes - matches Python logic exactly
       const textNode = node as DOMTextNode;
-      if (
-        textNode.isVisible &&
-        textNode.text &&
-        textNode.text.trim() &&
-        textNode.text.trim().length > 1
-      ) {
-        const cleanText = textNode.text.trim();
-        formattedText.push(`${depthStr}${cleanText}`);
+
+      // Add text only if it doesn't have a highlighted parent
+      if (!this.hasParentWithHighlightIndex(textNode)) {
+        const parent = textNode.parent as DOMElementNode;
+        // More lenient check for text inclusion - include text from visible elements
+        // even if they're not considered "top" elements, to capture API descriptions
+        if (
+          parent &&
+          parent.isVisible &&
+          (parent.isTopElement ||
+            parent.isInViewport ||
+            // Include text from elements that might contain API descriptions
+            (textNode.text && textNode.text.trim().length > 10))
+        ) {
+          // Only add meaningful text (not just whitespace)
+          const trimmedText = textNode.text.trim();
+          if (trimmedText.length > 0) {
+            formattedText.push(`${depthStr}${trimmedText}`);
+          }
+        }
       }
     }
 
@@ -999,49 +1029,95 @@ export class DOMTreeSerializer {
   }
 
   /**
-   * Build attributes string for an element (simplified version)
+   * Build attributes string for an element - matches Python version exactly
+   * This includes the complex attribute deduplication and optimization logic
    */
   private static buildAttributesStringSimplified(
     element: DOMElementNode,
-    includeAttributes: string[]
+    includeAttributes: string[],
+    text: string = ''
   ): string {
-    const attrs: string[] = [];
-
-    for (const attr of includeAttributes) {
-      const value = element.attributes[attr];
+    // First, get all attributes that exist and have non-empty values
+    const attributesToInclude: Record<string, string> = {};
+    for (const key of includeAttributes) {
+      const value = element.attributes[key];
       if (value && value.trim() !== '') {
-        const truncatedValue = this.truncateTextSimplified(value.trim(), 50);
-        attrs.push(`${attr}="${truncatedValue}"`);
+        attributesToInclude[key] = value.trim();
       }
     }
 
-    return attrs.join(' ');
+    // If value of any of the attributes is the same as ANY other value attribute
+    // only include the one that appears first in include_attributes
+    // WARNING: heavy vibes, but it seems good enough for saving tokens (it kicks in hard when it's long text)
+
+    // Pre-compute ordered keys that exist in both lists (faster than repeated lookups)
+    const orderedKeys = includeAttributes.filter(
+      (key) => key in attributesToInclude
+    );
+
+    if (orderedKeys.length > 1) {
+      // Only process if we have multiple attributes
+      const keysToRemove = new Set<string>(); // Use set for O(1) lookups
+      const seenValues: Record<string, string> = {}; // value -> first_key_with_this_value
+
+      for (const key of orderedKeys) {
+        const value = attributesToInclude[key];
+        if (value.length > 5) {
+          // to not remove false, true, etc
+          if (value in seenValues) {
+            // This value was already seen with an earlier key, so remove this key
+            keysToRemove.add(key);
+          } else {
+            // First time seeing this value, record it
+            seenValues[value] = key;
+          }
+        }
+      }
+
+      // Remove duplicate keys
+      Array.from(keysToRemove).forEach((key) => {
+        delete attributesToInclude[key];
+      });
+    }
+
+    // Easy LLM optimizations
+    // if tag == role attribute, don't include it
+    if (
+      element.tagName.toLowerCase() ===
+      attributesToInclude['role']?.toLowerCase()
+    ) {
+      delete attributesToInclude['role'];
+    }
+
+    // Remove attributes that duplicate the node's text content
+    const attrsToRemoveIfTextMatches = ['aria-label', 'placeholder', 'title'];
+    for (const attr of attrsToRemoveIfTextMatches) {
+      if (
+        attributesToInclude[attr] &&
+        attributesToInclude[attr].toLowerCase() === text.trim().toLowerCase()
+      ) {
+        delete attributesToInclude[attr];
+      }
+    }
+
+    if (Object.keys(attributesToInclude).length === 0) {
+      return '';
+    }
+
+    // Format as key1='value1' key2='value2' (with proper length capping)
+    return Object.entries(attributesToInclude)
+      .map(([key, value]) => `${key}=${this.capTextLength(value, 15)}`)
+      .join(' ');
   }
 
   /**
-   * Get scroll info text for an element (simplified version)
+   * Cap text length - matches Python version's cap_text_length function
    */
-  private static getScrollInfoTextSimplified(element: DOMElementNode): string {
-    const scrollInfo = (element as any).scrollInfo;
-    if (!scrollInfo) {
-      return element.tagName.toLowerCase() === 'iframe' ? 'scroll' : '';
+  private static capTextLength(text: string, maxLength: number): string {
+    if (text.length <= maxLength) {
+      return `'${text}'`;
     }
-
-    // Return simple scroll info for now
-    return 'scroll';
-  }
-
-  /**
-   * Truncate text with ellipsis (simplified version)
-   */
-  private static truncateTextSimplified(
-    text: string,
-    maxLength: number
-  ): string {
-    if (text.length > maxLength) {
-      return text.substring(0, maxLength) + '...';
-    }
-    return text;
+    return `'${text.substring(0, maxLength)}...'`;
   }
 }
 
@@ -1061,36 +1137,7 @@ export class ViewportDOMService {
     options: SimplifiedDOMOptions = {
       maxTotalLength: 40000,
     },
-    includeAttributes: string[] = [
-      'title',
-      'type',
-      'checked',
-      'name',
-      'role',
-      'value',
-      'placeholder',
-      'data-date-format',
-      'alt',
-      'aria-label',
-      'aria-expanded',
-      'data-state',
-      'aria-checked',
-      'checked',
-      'selected',
-      'expanded',
-      'pressed',
-      'disabled',
-      'valuenow',
-      'keyshortcuts',
-      'haspopup',
-      'multiselectable',
-      'required',
-      'valuetext',
-      'level',
-      'busy',
-      'live',
-      'ax_name',
-    ]
+    includeAttributes: string[] = DEFAULT_INCLUDE_ATTRIBUTES
   ): string {
     const result = DOMTreeSerializer.clickableElementsToStringViewportAware(
       elementTree,
@@ -1115,9 +1162,15 @@ export class ViewportDOMService {
 
   /**
    * Recursively collect interactive elements for comparison
+   * Use xpath as key instead of highlightIndex for stable comparison
    */
   private collectInteractiveElements(node: DOMElementNode): void {
-    if (node.highlightIndex !== null && this.previousSelectorMap) {
+    if (
+      node.highlightIndex !== null &&
+      this.previousSelectorMap &&
+      node.xpath
+    ) {
+      // Use a stable key based on xpath instead of dynamic highlightIndex
       this.previousSelectorMap[node.highlightIndex] = node;
     }
 

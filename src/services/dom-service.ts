@@ -20,7 +20,10 @@ import type {
 } from '../types/dom';
 import type { BrowserConfig } from '../config/schema';
 import { getLogger } from './logging';
-import { DOMTreeSerializer } from './dom-tree-serializer';
+import {
+  DOMTreeSerializer,
+  DEFAULT_INCLUDE_ATTRIBUTES,
+} from './dom-tree-serializer';
 import { DOMTreeAdapter } from './dom-tree-adapter';
 
 /**
@@ -244,7 +247,8 @@ export class DOMService {
     const tabsInfo: TabsInfo[] = [];
     const pages = browserContext.pages();
 
-    for (const [pageIndex, currentPage] of pages.entries()) {
+    for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
+      const currentPage = pages[pageIndex];
       const url = currentPage.url();
 
       // Skip JS execution for chrome:// pages and new tab pages
@@ -783,6 +787,7 @@ export class DOMService {
       shadowRoot: nodeData.shadowRoot || false,
       parent: null,
       viewportInfo,
+      isNew: false, // Initialize as false, will be set to true during new element detection
     };
 
     const childrenIds = nodeData.children || [];
@@ -852,8 +857,14 @@ export class DOMService {
     // Build parent-child relationships after all nodes are parsed
     for (const [id, childrenIds] of Object.entries(nodeChildrenMap)) {
       const node = nodeMap[id];
-      if (!node || node.type === 'TEXT_NODE') {
+      if (!node) {
         continue;
+      }
+
+      // CRITICAL FIX: Handle both element nodes and text nodes as potential parents
+      // Only element nodes can have children, but we need to process their children (including text nodes)
+      if (node.type === 'TEXT_NODE') {
+        continue; // Text nodes can't have children, so skip them as parents
       }
 
       const elementNode = node as DOMElementNode;
@@ -863,6 +874,7 @@ export class DOMService {
         }
 
         const childNode = nodeMap[childId.toString()];
+        // CRITICAL FIX: Set parent for ALL child nodes (including text nodes)
         childNode.parent = elementNode;
         elementNode.children.push(childNode);
       }
@@ -887,41 +899,7 @@ export class DOMService {
   async getEnhancedClickableElementsString(
     page: Page,
     options: DOMProcessingOptions = {},
-    includeAttributes: string[] = [
-      'title',
-      'type',
-      'checked',
-      'name',
-      'role',
-      'value',
-      'placeholder',
-      'data-date-format',
-      'alt',
-      'aria-label',
-      'aria-expanded',
-      'data-state',
-      'aria-checked',
-      // Accessibility properties from ax_node (ordered by importance for automation)
-      'checked',
-      'selected',
-      'expanded',
-      'pressed',
-      'disabled',
-      // 'invalid',
-      'valuenow',
-      'keyshortcuts',
-      'haspopup',
-      'multiselectable',
-      // Less commonly needed (uncomment if required):
-      // 'readonly',
-      'required',
-      'valuetext',
-      'level',
-      'busy',
-      'live',
-      // Accessibility name (contains text content for StaticText elements)
-      'ax_name',
-    ]
+    includeAttributes: string[] = DEFAULT_INCLUDE_ATTRIBUTES
   ): Promise<{ html: string; timing: any }> {
     try {
       // Get DOM result from buildDomTree.js
