@@ -831,7 +831,7 @@ export class DOMTreeSerializer {
     });
 
     // Generate tree-structured string similar
-    const result = this.serializeTreeSimplified(
+    const result = this.serializeTreeToString(
       elementTree,
       includeAttributes,
       0,
@@ -920,7 +920,7 @@ export class DOMTreeSerializer {
    * Serialize DOM tree to string format for simplified mode
    * Completely rewritten to match Python version's clickable_elements_to_string logic
    */
-  private static serializeTreeSimplified(
+  private static serializeTreeToString(
     node: DOMBaseNode | null,
     includeAttributes: string[],
     depth: number = 0,
@@ -989,7 +989,7 @@ export class DOMTreeSerializer {
 
       // Process children regardless (matches Python logic)
       for (const child of elementNode.children) {
-        const childText = this.serializeTreeSimplified(
+        const childText = this.serializeTreeToString(
           child,
           includeAttributes,
           nextDepth,
