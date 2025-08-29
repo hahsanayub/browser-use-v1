@@ -48,9 +48,9 @@ class ScrollActions {
     'scroll',
     'Scroll the page by specified number of pages (set down=true to scroll down, down=false to scroll up, num_pages=number of pages to scroll like 0.5 for half page, 1.0 for one page, etc.). Optional index parameter to scroll within a specific element or its scroll container (works well for dropdowns and custom UI components).',
     z.object({
-      down: z.boolean().default(true),
-      num_pages: z.number().positive().default(1),
-      index: z.number().int().min(0).optional(),
+      down: z.boolean(),
+      num_pages: z.number(),
+      index: z.number().int().nullable().optional(),
     }),
     { isAvailableForPage: (page) => page && !page.isClosed() }
   )
@@ -59,7 +59,7 @@ class ScrollActions {
     page,
     context,
   }: {
-    params: { down: boolean; num_pages: number; index?: number };
+    params: { down: boolean; num_pages: number; index?: number | null };
     page: Page;
     context?: { browserSession?: BrowserSession };
   }): Promise<ActionResult> {
@@ -97,7 +97,7 @@ class ScrollActions {
       let scrollTarget = 'the page';
 
       // Element-specific scrolling if index is provided
-      if (typeof params.index === 'number') {
+      if (typeof params.index === 'number' && params.index !== null) {
         try {
           const session = context?.browserSession;
           if (!session) {
@@ -428,11 +428,9 @@ class ScrollActions {
 class WaitActions {
   @action(
     'wait',
-    'Wait for time/selector/navigation',
+    'Wait for x seconds default 3 (max 10 seconds). This can be used to wait until the page is fully loaded.',
     z.object({
-      type: z.enum(['time', 'element', 'navigation']).default('time'),
-      value: z.union([z.number(), z.string()]),
-      timeout: z.number().min(100).max(60000).default(5000),
+      seconds: z.number().int().min(1).max(10).default(3),
     }),
     {
       isAvailableForPage: (page) => page && !page.isClosed(),
@@ -443,23 +441,13 @@ class WaitActions {
     page,
   }: {
     params: {
-      type: 'time' | 'element' | 'navigation';
-      value: number | string;
-      timeout?: number;
+      seconds: number;
     };
     page: Page;
   }): Promise<ActionResult> {
     return withHealthCheck(page, async (p) => {
-      if (params.type === 'time') {
-        await p.waitForTimeout(params.value as number);
-      } else if (params.type === 'element') {
-        await p.waitForSelector(params.value as string, {
-          timeout: params.timeout,
-        });
-      } else {
-        await p.waitForURL(params.value as string, { timeout: params.timeout });
-      }
-      return { success: true, message: `Waited for ${params.type}` };
+      await p.waitForTimeout(params.seconds * 1000); // Convert seconds to milliseconds
+      return { success: true, message: `Waited for ${params.seconds} seconds` };
     });
   }
 }
@@ -468,28 +456,22 @@ class WaitActions {
 class DoneActions {
   @action(
     'done',
-    'Mark the task as completed - provide a summary of results for the user. Set success=true if task completed successfully, false otherwise. Text should be your response to the user summarizing results. Include files you would like to display to the user in files_to_display.',
+    'Complete task - provide a summary of results for the user. Set success=True if task completed successfully, false otherwise. Text should be your response to the user summarizing results. Include files you would like to display to the user in files_to_display.',
     z.object({
-      success: z
-        .boolean()
-        .describe('Whether the task was completed successfully'),
-      text: z.string().describe('Summary of results for the user'),
-      files_to_display: z
-        .array(z.string())
-        .optional()
-        .default([])
-        .describe('Files to display to the user'),
+      text: z.string(),
+      success: z.boolean(),
+      files_to_display: z.array(z.string()).nullable().optional(),
     })
   )
   static async done({
     params,
   }: {
-    params: { success: boolean; text: string; files_to_display?: string[] };
+    params: { text: string; success: boolean; files_to_display?: string[] | null };
   }): Promise<ActionResult> {
     return {
       success: params.success,
       message: params.text,
-      attachments: params.files_to_display,
+      attachments: params.files_to_display || undefined,
     };
   }
 }
@@ -498,7 +480,7 @@ class IndexActions {
   @action(
     'click_element_by_index',
     'Click an interactive element by index shown on the page overlay',
-    z.object({ index: z.number().int().min(0) }),
+    z.object({ index: z.number().int() }),
     { isAvailableForPage: (page) => page && !page.isClosed() }
   )
   static async clickByIndex({
@@ -533,7 +515,7 @@ class IndexActions {
   @action(
     'input_text',
     'Focus an interactive element by index and type the provided text',
-    z.object({ index: z.number().int().min(0), text: z.string() }),
+    z.object({ index: z.number().int(), text: z.string() }),
     { isAvailableForPage: (page) => page && !page.isClosed() }
   )
   static async inputText({
@@ -558,8 +540,8 @@ class IndexActions {
 class NavActions {
   @action(
     'go_to_url',
-    'Navigate to URL (optionally in new tab with new_tab=true)',
-    z.object({ url: z.string().url(), new_tab: z.boolean().optional() }),
+    'Navigate to URL, set new_tab=True to open in new tab, False to navigate in current tab',
+    z.object({ url: z.string(), new_tab: z.boolean() }),
     { isAvailableForPage: (page) => page && !page.isClosed() }
   )
   static async goToUrl({
@@ -567,7 +549,7 @@ class NavActions {
     page: _page, // eslint-disable-line @typescript-eslint/no-unused-vars
     context,
   }: {
-    params: { url: string; new_tab?: boolean };
+    params: { url: string; new_tab: boolean };
     page: Page;
     context: {
       browserContext?: AgentBrowserContext;
@@ -575,7 +557,7 @@ class NavActions {
     };
   }): Promise<ActionResult> {
     return executeWithBrowserSession(context, async (session) => {
-      await session.navigate(params.url, params.new_tab || false);
+      await session.navigate(params.url, params.new_tab);
       const message = params.new_tab
         ? `Opened new tab with ${params.url}`
         : `Navigated to ${params.url}`;
@@ -587,27 +569,22 @@ class NavActions {
 class KeysActions {
   @action(
     'send_keys',
-    'Send special keys via page.keyboard.press (e.g., Enter, Escape, Control+V)',
-    z.object({ keys: z.union([z.string(), z.array(z.string())]) }),
+    'Send strings of special keys to use Playwright page.keyboard.press - examples include Escape, Backspace, Insert, PageDown, Delete, Enter, or Shortcuts such as `Control+o`, `Control+Shift+T`',
+    z.object({ keys: z.string() }),
     { isAvailableForPage: (page) => page && !page.isClosed() }
   )
   static async sendKeys({
     params,
     page,
   }: {
-    params: { keys: string | string[] };
+    params: { keys: string };
     page: Page;
   }): Promise<ActionResult> {
     return withHealthCheck(page, async (p) => {
-      const pressOne = async (key: string) => p.keyboard.press(key);
-      if (Array.isArray(params.keys)) {
-        for (const k of params.keys) await pressOne(k);
-      } else {
-        await pressOne(params.keys);
-      }
+      await p.keyboard.press(params.keys);
       return {
         success: true,
-        message: `Sent keys: ${JSON.stringify(params.keys)}`,
+        message: `Sent keys: ${params.keys}`,
       };
     });
   }
@@ -825,26 +802,16 @@ ${content}`;
 class FileSystemActions {
   @action(
     'read_file',
-    'Read content from a file in the agent filesystem',
+    'Read file_name from file system',
     z.object({
-      filename: z
-        .string()
-        .min(1)
-        .describe('Full filename with extension (e.g., todo.md, results.txt)'),
-      external: z
-        .boolean()
-        .optional()
-        .default(false)
-        .describe(
-          'Whether this is an external file path (not in agent filesystem)'
-        ),
+      file_name: z.string(),
     })
   )
   static async readFile({
     params,
     context,
   }: {
-    params: { filename: string; external?: boolean };
+    params: { file_name: string };
     page: Page;
     context: { fileSystem?: FileSystem };
   }): Promise<ActionResult> {
@@ -859,8 +826,8 @@ class FileSystemActions {
 
     try {
       const result = await fileSystem.readFile(
-        params.filename,
-        params.external || false
+        params.file_name,
+        false  // Always use internal filesystem for Python compatibility
       );
       return {
         success: true,
@@ -877,20 +844,20 @@ class FileSystemActions {
 
   @action(
     'write_file',
-    'Write content to a file in the agent filesystem',
+    'Write or append content to file_name in file system. Allowed extensions are .md, .txt, .json, .csv, .pdf. For .pdf files, write the content in markdown format and it will automatically be converted to a properly formatted PDF document.',
     z.object({
-      filename: z
-        .string()
-        .min(1)
-        .describe('Full filename with extension (e.g., todo.md, results.txt)'),
-      content: z.string().describe('Content to write to the file'),
+      file_name: z.string(),
+      content: z.string(),
+      append: z.boolean(),
+      trailing_newline: z.boolean(),
+      leading_newline: z.boolean(),
     })
   )
   static async writeFile({
     params,
     context,
   }: {
-    params: { filename: string; content: string };
+    params: { file_name: string; content: string; append: boolean; trailing_newline: boolean; leading_newline: boolean };
     page: Page;
     context: { fileSystem?: FileSystem };
   }): Promise<ActionResult> {
@@ -904,9 +871,19 @@ class FileSystemActions {
     }
 
     try {
+      // Handle newline additions
+      let content = params.content;
+      if (params.leading_newline && !content.startsWith('\n')) {
+        content = '\n' + content;
+      }
+      if (params.trailing_newline && !content.endsWith('\n')) {
+        content = content + '\n';
+      }
+
       const result = await fileSystem.writeFile(
-        params.filename,
-        params.content
+        params.file_name,
+        content,
+        params.append
       );
       return {
         success: true,
@@ -923,21 +900,18 @@ class FileSystemActions {
 
   @action(
     'replace_file_str',
-    'Replace all occurrences of a string in a file with another string',
+    'Replace old_str with new_str in file_name. old_str must exactly match the string to replace in original text. Recommended tool to mark completed items in todo.md or change specific contents in a file.',
     z.object({
-      filename: z
-        .string()
-        .min(1)
-        .describe('Full filename with extension (e.g., todo.md, results.txt)'),
-      old_str: z.string().min(1).describe('String to replace'),
-      new_str: z.string().describe('Replacement string'),
+      file_name: z.string(),
+      old_str: z.string(),
+      new_str: z.string(),
     })
   )
   static async replaceFileStr({
     params,
     context,
   }: {
-    params: { filename: string; old_str: string; new_str: string };
+    params: { file_name: string; old_str: string; new_str: string };
     page: Page;
     context: { fileSystem?: FileSystem };
   }): Promise<ActionResult> {
@@ -952,7 +926,7 @@ class FileSystemActions {
 
     try {
       const result = await fileSystem.replaceFileStr(
-        params.filename,
+        params.file_name,
         params.old_str,
         params.new_str
       );

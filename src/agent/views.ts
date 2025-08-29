@@ -78,17 +78,20 @@ export type Action = z.infer<typeof ActionSchema>;
 export function createAgentThoughtSchema(dynamicActionSchema: z.ZodTypeAny) {
   return z.object({
     /** Optional chain-of-thought or structured thinking block */
-    thinking: z.string().optional(),
+    thinking: z.string().nullable().optional(),
 
     /** One-sentence evaluation of previous goal */
     evaluation_previous_goal: z
       .string()
+      .nullable()
       .optional()
       .describe('Evaluation of the previous step goal'),
 
     /** Short memory for progress tracking */
     memory: z
       .string()
+      .nullable()
+      .optional()
       .describe(
         '1-3 sentences of memory of this step and overall progress to guide future steps'
       ),
@@ -96,6 +99,7 @@ export function createAgentThoughtSchema(dynamicActionSchema: z.ZodTypeAny) {
     /** Next immediate goal */
     next_goal: z
       .string()
+      .nullable()
       .optional()
       .describe('Next immediate goal to achieve in one sentence'),
 

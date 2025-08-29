@@ -642,23 +642,14 @@ export class Agent {
         if (typeof actionParams === 'object' && actionParams !== null) {
           const normalizedParams = { ...actionParams };
 
-          // Handle parameter name mappings for specific actions
-          if (actionName === 'write_file' && normalizedParams.file_name) {
-            normalizedParams.filename = normalizedParams.file_name;
-            delete normalizedParams.file_name;
-          }
-          if (actionName === 'append_file' && normalizedParams.file_name) {
-            normalizedParams.filename = normalizedParams.file_name;
-            delete normalizedParams.file_name;
-          }
-          if (actionName === 'read_file' && normalizedParams.file_name) {
-            normalizedParams.filename = normalizedParams.file_name;
-            delete normalizedParams.file_name;
-          }
-          if (actionName === 'replace_file_str' && normalizedParams.file_name) {
-            normalizedParams.filename = normalizedParams.file_name;
-            delete normalizedParams.file_name;
-          }
+          // Handle LLM parameter name variations for file operations
+          // Convert 'filename' to 'file_name' for Python compatibility
+          // if (['write_file', 'read_file', 'replace_file_str'].includes(actionName)) {
+          //   if (normalizedParams.filename && !normalizedParams.file_name) {
+          //     normalizedParams.file_name = normalizedParams.filename;
+          //     delete normalizedParams.filename;
+          //   }
+          // }
 
           return {
             action: actionName,

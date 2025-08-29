@@ -259,7 +259,7 @@ export class FileSystem {
   /**
    * Write content to file using file-specific write method
    */
-  async writeFile(fullFilename: string, content: string): Promise<string> {
+  async writeFile(fullFilename: string, content: string, append: boolean = false): Promise<string> {
     if (!this.isValidFilename(fullFilename)) {
       return INVALID_FILENAME_ERROR_MESSAGE;
     }
@@ -281,9 +281,14 @@ export class FileSystem {
         this.files.set(fullFilename, fileObj);
       }
 
-      // Use file-specific write method
-      await fileObj.write(content, this.dataDir);
-      return `Data written to file ${fullFilename} successfully.`;
+      // Use file-specific write or append method based on append parameter
+      if (append) {
+        await fileObj.append(content, this.dataDir);
+        return `Data appended to file ${fullFilename} successfully.`;
+      } else {
+        await fileObj.write(content, this.dataDir);
+        return `Data written to file ${fullFilename} successfully.`;
+      }
     } catch (error) {
       if (error instanceof FileSystemError) {
         return error.message;

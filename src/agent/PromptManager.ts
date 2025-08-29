@@ -423,15 +423,6 @@ export async function generatePageContextPrompt(
     ? `<page_specific_actions>\n${pageSpecificActions}\n</page_specific_actions>\n`
     : '';
 
-  // Add default page actions section if actionRegistry is provided
-  let defaultActionsSection = '';
-  if (actionRegistry) {
-    const defaultActionsDescription = actionRegistry.getPromptDescription();
-    if (defaultActionsDescription.trim()) {
-      defaultActionsSection = `<page_actions>\n${defaultActionsDescription}\n</page_actions>\n`;
-    }
-  }
-
   return (
     `<agent_history>\n` +
     historySection +
@@ -443,7 +434,6 @@ export async function generatePageContextPrompt(
       interactiveElementsList
     )}</browser_state>\n` +
     readStateSection +
-    defaultActionsSection +
     pageActionsSection
   );
 }
