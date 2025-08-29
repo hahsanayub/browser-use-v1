@@ -16,8 +16,8 @@ import { action } from '../src/controller/decorators';
 
 const request = {
   hubspot: {
-    url: 'https://developers.hubspot.com/docs/reference/api/crm/objects/tickets',
-    text: `Extract the entire original API documentation content for the List Tickets API from this page: https://developers.hubspot.com/docs/reference/api/crm/objects/tickets. You must extract all available details required for OpenAPI Spec, including endpoints, HTTP methods, versioning, baseApiUrl, auth requirements, request parameters, request body schema, response codes, bodies, and error responses. Preserve exact wording from the source.`,
+    url: 'https://developers.hubspot.com/docs/reference/api/crm/objects/contacts',
+    text: `Extract the entire original API documentation content for the List Contacts API from this page: https://developers.hubspot.com/docs/reference/api/crm/objects/contacts. You must extract all available details required for OpenAPI Spec, including endpoints, HTTP methods, versioning, baseApiUrl, auth requirements, request parameters, request body schema, response codes, bodies, and error responses. Preserve exact wording from the source.`,
   },
   adyen: {
     url: 'https://docs.adyen.com/api-explorer/transfers/4/overview',
@@ -263,17 +263,16 @@ Within each endpoint section:
 
 **This is a mandatory protocol before any data extraction.**
 
-- **Principle:** You are not finished exploring a request or response until ALL nested elements are fully visible. The presence of any expandable element means your view is incomplete.
+- **Principle:** You are not finished exploring a request or response until ALL nested elements are fully visible. Your view is considered incomplete as long as there are newly appeared expandable elements.
 
 - **Action Loop:**
-  1. After revealing a primary section (e.g., by clicking a "200" status code or a "Request Body" tab), you MUST immediately scan its content for any further expandable elements.
-  2. These elements are often buttons indicated by symbols like \`+\`, \`▼\`, \`▶\`, text labels like "expand", "show children", or HTML attributes like \`aria-expanded="false"\`. The case you encountered, \`[41]<button aria-label="expand product" />\`, is a perfect example.
-  3. **If one or more such elements exist, your IMMEDIATE and ONLY \`next_goal\` is to \`click\` one of them.** Do not proceed to extraction.
-  4. After the click, the page state will update. You must **repeat this scanning process (Step 1-3)** because expanding one object may reveal new, deeper nested expandable objects.
-  5. Continue this click-and-scan loop until a scan of the current endpoint's section reveals **NO MORE** expandable elements.
+ 1. After revealing a primary section (e.g., by clicking a "200" status code or a "Request Body" tab), you MUST immediately scan its content for any further expandable elements.
+ 2. **CRITICAL FOCUS:** Your primary targets for expansion are **newly appeared elements**, which are explicitly marked with an asterisk, like \`*[45]<button .../>\`. These elements take precedence over any other interactive item.
+ 3. **If one or more *new* expandable elements (marked with \`*[]\`) exist, your IMMEDIATE and ONLY \`next_goal\` is to \`click\` one of them.** Do not proceed to extraction. Ignore expandable elements that are not new (i.e., those without an asterisk).
+ 4. After the click, the page state will update. You must **repeat this scanning process (Steps 1-3)** because expanding one object may reveal new, deeper nested expandable objects (which will again be marked with \`*[]\`).
+ 5. Continue this click-and-scan loop until a scan of the current endpoint's section reveals **NO MORE** newly appeared (\`*[]\`) expandable elements.
 
-- **Extraction Condition:** The action \`extract_api_document_structured_data\` may ONLY be called on an endpoint's section after you have confirmed that this Iterative Expansion Protocol is complete and the schema is in a fully expanded state.
-
+- **Extraction Condition:** The action \`extract_api_document_structured_data\` may ONLY be called on an endpoint's section after you have confirmed that this Iterative Expansion Protocol is complete and the schema is in a fully expanded state (i.e., no more new expandable elements marked with \`*[]\` are visible).
 ---
 
 </api_document_content_page_explore_guidelines>
@@ -397,7 +396,7 @@ async function main() {
 
     const agentConfig: AgentConfig = {
       useVision: true,
-      maxSteps: 25,
+      maxSteps: 100,
       actionTimeout: 15000,
       continueOnFailure: true,
       customInstructions,

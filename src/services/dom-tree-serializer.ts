@@ -823,7 +823,8 @@ export class DOMTreeSerializer {
       maxTotalLength: 40000,
     },
     includeAttributes: string[] = DEFAULT_INCLUDE_ATTRIBUTES,
-    previousSelectorMap?: Record<number, DOMElementNode>
+    previousSelectorMap?: Record<number, DOMElementNode>,
+    allSeenElementXpaths?: Set<string>
   ): string {
     const logger = getLogger();
     logger.debug('Simplified DOM processing', {
@@ -835,7 +836,8 @@ export class DOMTreeSerializer {
       elementTree,
       includeAttributes,
       0,
-      previousSelectorMap
+      previousSelectorMap,
+      allSeenElementXpaths
     );
 
     // Apply length limiting if needed
@@ -924,7 +926,8 @@ export class DOMTreeSerializer {
     node: DOMBaseNode | null,
     includeAttributes: string[],
     depth: number = 0,
-    previousSelectorMap?: Record<number, DOMElementNode>
+    previousSelectorMap?: Record<number, DOMElementNode>,
+    allSeenElementXpaths?: Set<string>
   ): string {
     if (!node) {
       return '';
@@ -951,17 +954,21 @@ export class DOMTreeSerializer {
           text
         );
 
-        // Check if this element is new (matches Python version exactly)
+        // Check if this element is new (improved cross-step detection)
         let isNew = elementNode.isNew || false;
 
-        // If we have a previous selector map, check if this element is new
-        if (previousSelectorMap && !isNew) {
-          // Use xpath as unique identifier for comparison since it's stable across DOM changes
-          const currentXpath = elementNode.xpath;
-          const elementExistedBefore = Object.values(previousSelectorMap).some(
-            (prevElement) => prevElement.xpath === currentXpath
-          );
-          isNew = !elementExistedBefore;
+        // Use accumulated history for more accurate new element detection
+        if (!isNew && elementNode.xpath) {
+          if (allSeenElementXpaths && allSeenElementXpaths.size > 0) {
+            // Primary check: use accumulated history across all steps
+            isNew = !allSeenElementXpaths.has(elementNode.xpath);
+          } else if (previousSelectorMap) {
+            // Fallback: use previous step comparison (original logic)
+            const elementExistedBefore = Object.values(previousSelectorMap).some(
+              (prevElement) => prevElement.xpath === elementNode.xpath
+            );
+            isNew = !elementExistedBefore;
+          }
         }
 
         // Build the line (matches Python format exactly)
@@ -993,7 +1000,8 @@ export class DOMTreeSerializer {
           child,
           includeAttributes,
           nextDepth,
-          previousSelectorMap
+          previousSelectorMap,
+          allSeenElementXpaths
         );
         if (childText) {
           formattedText.push(childText);
@@ -1122,6 +1130,7 @@ export class DOMTreeSerializer {
 export class ViewportDOMService {
   private domLogger = getLogger();
   private previousSelectorMap?: Record<number, DOMElementNode>;
+  private allSeenElementXpaths: Set<string> = new Set(); // Track all seen elements across all steps
 
   /**
    * Generate simplified clickable elements string consistent
@@ -1137,7 +1146,8 @@ export class ViewportDOMService {
       elementTree,
       options,
       includeAttributes,
-      this.previousSelectorMap
+      this.previousSelectorMap,
+      this.allSeenElementXpaths
     );
 
     // Update the previous selector map for next comparison
@@ -1148,10 +1158,23 @@ export class ViewportDOMService {
 
   /**
    * Update the previous selector map with current interactive elements
+   * and accumulate all seen elements for accurate new element detection
    */
   private updatePreviousSelectorMap(elementTree: DOMElementNode): void {
     this.previousSelectorMap = {};
     this.collectInteractiveElements(elementTree);
+
+    // Accumulate all seen element xpaths for cross-step new element detection
+    Object.values(this.previousSelectorMap).forEach(element => {
+      if (element.xpath) {
+        this.allSeenElementXpaths.add(element.xpath);
+      }
+    });
+
+    this.domLogger.debug('Updated selector map', {
+      currentElements: Object.keys(this.previousSelectorMap).length,
+      totalSeenElements: this.allSeenElementXpaths.size
+    });
   }
 
   /**
@@ -1173,6 +1196,16 @@ export class ViewportDOMService {
         this.collectInteractiveElements(child as DOMElementNode);
       }
     }
+  }
+
+  /**
+   * Reset the element history - useful when navigating to a new page
+   * or when you want to start fresh element tracking
+   */
+  resetElementHistory(): void {
+    this.allSeenElementXpaths.clear();
+    this.previousSelectorMap = undefined;
+    this.domLogger.debug('Element history reset');
   }
 }
 
