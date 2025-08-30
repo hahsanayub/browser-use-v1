@@ -16,8 +16,8 @@ import { action } from '../src/controller/decorators';
 
 const request = {
   hubspot: {
-    url: 'https://developers.hubspot.com/docs/reference/api/crm/objects/contacts#post-%2Fcrm%2Fv3%2Fobjects%2Fcontacts%2Fsearch',
-    text: `Extract the entire original API documentation content for the "post /crm/v3/objects/contacts/search" API from this page: https://developers.hubspot.com/docs/reference/api/crm/objects/contacts#post-%2Fcrm%2Fv3%2Fobjects%2Fcontacts%2Fsearch. You must extract all available details required for OpenAPI Spec, including endpoints, HTTP methods, versioning, baseApiUrl, auth requirements, request parameters, request body schema, response codes, bodies, and error responses. Preserve exact wording from the source.`,
+    url: 'https://developers.hubspot.com/docs/api-reference/crm-contacts-v3/basic/get-crm-v3-objects-contacts',
+    text: `Extract the entire original API documentation content for the "GET /crm/v3/objects/contacts" API from this page: https://developers.hubspot.com/docs/api-reference/crm-contacts-v3/basic/get-crm-v3-objects-contacts. You must extract all available details required for OpenAPI Spec, including endpoints, HTTP methods, versioning, baseApiUrl, auth requirements, request parameters, request body schema, response codes, bodies, and error responses. Preserve exact wording from the source.`,
   },
   adyen: {
     url: 'https://docs.adyen.com/api-explorer/transfers/4/overview',
@@ -367,19 +367,19 @@ async function main() {
   const controller = await createController({
     config: {
       llm: {
-        provider: 'azure',
-        model: 'gpt-5',
-        azureEndpoint: 'https://oai-ai4m-rnd-eastus-001.openai.azure.com',
-        azureDeployment: 'oai-ai4m-rnd-eastus-001-gpt-4-0125-Preview-001',
-        apiVersion: '2025-03-01-preview',
-        apiKey: process.env.AZURE_OPENAI_API_KEY,
+        // provider: 'azure',
+        // model: 'gpt-5',
+        // azureEndpoint: 'https://oai-ai4m-rnd-eastus-001.openai.azure.com',
+        // azureDeployment: 'oai-ai4m-rnd-eastus-001-gpt-4-0125-Preview-001',
+        // apiVersion: '2025-03-01-preview',
+        // apiKey: process.env.AZURE_OPENAI_API_KEY,
 
-        // provider: 'google',
-        // model: 'gemini-2.0-flash',
-        // baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-        // apiKey: process.env.GOOGLE_API_KEY,
-        temperature: 0.1,
-        frequencyPenalty: 0.2,
+        provider: 'google',
+        model: 'gemini-2.5-flash',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        apiKey: process.env.GOOGLE_API_KEY,
+        temperature: 0.3,
+        frequencyPenalty: 0.7,
         timeout: 60000,
         maxTokens: 16384,
       },
