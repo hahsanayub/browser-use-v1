@@ -11,7 +11,6 @@ import TurndownService from 'turndown';
 import type { BaseLLMClient } from '../llm/base-client';
 import { FileSystem } from '../services/file-system';
 import { Agent } from '../agent';
-import { DOMNode } from '../types/dom';
 
 // Helper function for Promise.race with proper timeout cleanup
 function withTimeout<T>(
@@ -421,6 +420,79 @@ class ScrollActions {
     }`;
 
     await page.evaluate(SMART_SCROLL_JS, pixels);
+  }
+
+  @action(
+    'scroll_to_text',
+    'Scroll to a text in the current page',
+    z.object({
+      text: z.string().min(1).describe('The text to scroll to'),
+    }),
+    { isAvailableForPage: (page) => page && !page.isClosed() }
+  )
+  static async scrollToText({
+    params,
+    page,
+  }: {
+    params: { text: string };
+    page: Page;
+  }): Promise<ActionResult> {
+    return withHealthCheck(page, async (p) => {
+      try {
+        // Try different locator strategies (same as Python version)
+        const locators = [
+          p.getByText(params.text, { exact: false }),
+          p.locator(`text=${params.text}`),
+          p.locator(`//*[contains(text(), '${params.text}')]`),
+        ];
+
+        for (const locator of locators) {
+          try {
+            const count = await locator.count();
+            if (count === 0) {
+              continue;
+            }
+
+            const element = locator.first();
+            const isVisible = await element.isVisible();
+            const bbox = await element.boundingBox();
+
+            if (
+              isVisible &&
+              bbox !== null &&
+              bbox.width > 0 &&
+              bbox.height > 0
+            ) {
+              await element.scrollIntoViewIfNeeded();
+              await p.waitForTimeout(500); // Wait for scroll to complete
+
+              const message = `🔍  Scrolled to text: ${params.text}`;
+              console.log(message);
+
+              return {
+                success: true,
+                message,
+              };
+            }
+          } catch (error) {
+            console.debug(`Locator attempt failed: ${error}`);
+            continue;
+          }
+        }
+
+        const message = `Text '${params.text}' not found or not visible on page`;
+        console.log(message);
+
+        return {
+          success: false,
+          message,
+        };
+      } catch (error) {
+        const message = `Failed to scroll to text '${params.text}': ${(error as Error).message}`;
+        console.error(message);
+        throw new Error(message);
+      }
+    });
   }
 }
 

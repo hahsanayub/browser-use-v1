@@ -110,14 +110,13 @@ async function main() {
       maxSteps: 10,
       actionTimeout: 15000,
       continueOnFailure: true,
-      customInstructions:
-        'Use the search input to search with keywords. Click the first real search result (not an ad). Wait for the new page to fully load, then get the content of the page.',
+      customInstructions: '',
       saveConversationPath: `logs/${timestamp}/conversations`,
       fileSystemPath: `logs/${timestamp}`,
     };
 
     const history = await controller.run(
-      "On Wikipedia, search for 'TDD' and open the first non-ad result. After navigation, wait for content to load, summarize the content, and finish.",
+      "navigation to https://en.wikipedia.org/wiki/Test-driven_development, wait for content to load, scroll down to the text 'Refactor as needed while ensuring all tests continue to pass', summarize the content, and finish.",
       agentConfig
     );
 
