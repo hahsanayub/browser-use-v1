@@ -439,7 +439,7 @@ class ScrollActions {
   }): Promise<ActionResult> {
     return withHealthCheck(page, async (p) => {
       try {
-        // Try different locator strategies (same as Python version)
+        // Try different locator strategies
         const locators = [
           p.getByText(params.text, { exact: false }),
           p.locator(`text=${params.text}`),
@@ -638,6 +638,163 @@ class NavActions {
         ? `Opened new tab with ${params.url}`
         : `Navigated to ${params.url}`;
       return { success: true, message };
+    });
+  }
+
+  @action('go_back', 'Go back', z.object({}), {
+    isAvailableForPage: (page) => page && !page.isClosed(),
+  })
+  static async goBack({ page }: { page: Page }): Promise<ActionResult> {
+    return withHealthCheck(page, async (p) => {
+      await p.goBack();
+      const message = '🔙  Navigated back';
+      console.log(message);
+      return { success: true, message };
+    });
+  }
+
+  @action(
+    'search_google',
+    'Search the query in Google, the query should be a search query like humans search in Google, concrete and not vague or super long.',
+    z.object({ query: z.string().min(1) }),
+    { isAvailableForPage: (page) => page && !page.isClosed() }
+  )
+  static async searchGoogle({
+    params,
+    context,
+  }: {
+    params: { query: string };
+    context?: { browserSession?: BrowserSession };
+  }): Promise<ActionResult> {
+    return executeWithBrowserSession(context, async (session) => {
+      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(params.query)}&udm=14`;
+      const currentPage = await session.getCurrentPage();
+
+      if (
+        currentPage.url().trim().replace(/\/$/, '') === 'https://www.google.com'
+      ) {
+        // Navigate in current tab if already on Google
+        await session.navigate(searchUrl);
+      } else {
+        // Create new tab
+        await session.navigate(searchUrl, true);
+      }
+
+      const message = `🔍  Searched for "${params.query}" in Google`;
+      console.log(message);
+      return { success: true, message };
+    });
+  }
+
+  @action('switch_tab', 'Switch tab', z.object({ page_id: z.number().int() }), {
+    isAvailableForPage: (page) => page && !page.isClosed(),
+  })
+  static async switchTab({
+    params,
+    context,
+  }: {
+    params: { page_id: number };
+    context?: { browserSession?: BrowserSession };
+  }): Promise<ActionResult> {
+    return executeWithBrowserSession(context, async (session) => {
+      const page = await session.switchTab(params.page_id);
+
+      try {
+        await page.waitForLoadState('domcontentloaded', { timeout: 5000 });
+        // Wait for onfocus/onblur animations/ajax to settle
+      } catch {
+        // Ignore timeout errors
+      }
+
+      const message = `🔄  Switched to tab #${params.page_id} with url ${page.url()}`;
+      console.log(message);
+      return { success: true, message };
+    });
+  }
+
+  @action(
+    'close_tab',
+    'Close an existing tab',
+    z.object({ page_id: z.number().int() }),
+    { isAvailableForPage: (page) => page && !page.isClosed() }
+  )
+  static async closeTab({
+    params,
+    context,
+  }: {
+    params: { page_id: number };
+    context?: { browserSession?: BrowserSession };
+  }): Promise<ActionResult> {
+    return executeWithBrowserSession(context, async (session) => {
+      // Get current page info before closing
+      const currentPage = await session.getCurrentPage();
+      const url = currentPage.url();
+
+      await session.closeTab(params.page_id);
+
+      // Get new current page after closing
+      const newPage = await session.getCurrentPage();
+      const newPageUrl = newPage.url();
+
+      const message = `❌  Closed tab #${params.page_id} with ${url}, now focused on new tab with url ${newPageUrl}`;
+      console.log(message);
+      return { success: true, message };
+    });
+  }
+}
+
+class UploadActions {
+  @action(
+    'upload_file',
+    'Upload file to interactive element with file path',
+    z.object({
+      index: z.number().int(),
+      path: z.string(),
+    }),
+    { isAvailableForPage: (page) => page && !page.isClosed() }
+  )
+  static async uploadFile({
+    params,
+    context,
+  }: {
+    params: { index: number; path: string };
+    context?: { browserSession?: BrowserSession };
+  }): Promise<ActionResult> {
+    return executeWithBrowserSession(context, async (session) => {
+      // Check if file exists
+      try {
+        await fs.access(params.path);
+      } catch {
+        throw new Error(`File ${params.path} does not exist`);
+      }
+
+      // Get the element by index
+      const summary = await session.getStateSummary(false);
+      const elementNode = summary.selectorMap.get(params.index);
+
+      if (!elementNode) {
+        throw new Error(
+          `Element index ${params.index} does not exist - retry or use alternative actions`
+        );
+      }
+
+      const page = await session.getCurrentPage();
+
+      // Find file input element
+      const fileInput = page
+        .locator(`xpath=${elementNode.xpath}`)
+        .locator('input[type="file"]')
+        .first();
+
+      try {
+        await fileInput.setInputFiles(params.path);
+        const message = `📁 Successfully uploaded file to index ${params.index}`;
+        console.log(message);
+        return { success: true, message };
+      } catch (error) {
+        const message = `Failed to upload file to index ${params.index}: ${(error as Error).message}`;
+        throw new Error(message);
+      }
     });
   }
 }
@@ -1023,6 +1180,355 @@ class FileSystemActions {
   }
 }
 
+class DropdownActions {
+  @action(
+    'get_dropdown_options',
+    'Get all options from a native dropdown or ARIA menu',
+    z.object({ index: z.number().int() }),
+    { isAvailableForPage: (page) => page && !page.isClosed() }
+  )
+  static async getDropdownOptions({
+    params,
+    context,
+  }: {
+    params: { index: number };
+    context?: { browserSession?: BrowserSession };
+  }): Promise<ActionResult> {
+    return executeWithBrowserSession(context, async (session) => {
+      const page = await session.getCurrentPage();
+      const summary = await session.getStateSummary(false);
+      const elementNode = summary.selectorMap.get(params.index);
+
+      if (!elementNode) {
+        throw new Error(
+          `Element index ${params.index} does not exist - retry or use alternative actions`
+        );
+      }
+
+      try {
+        // Frame-aware approach
+        const allOptions: string[] = [];
+        let frameIndex = 0;
+
+        for (const frame of page.frames()) {
+          try {
+            // First check if it's a native select element
+            const options = await frame.evaluate((xpath) => {
+              const element = document.evaluate(
+                xpath,
+                document,
+                null,
+                XPathResult.FIRST_ORDERED_NODE_TYPE,
+                null
+              ).singleNodeValue as HTMLElement | null;
+
+              if (!element) return null;
+
+              // Check if it's a native select element
+              if (element.tagName.toLowerCase() === 'select') {
+                const selectElement = element as HTMLSelectElement;
+                return {
+                  type: 'select',
+                  options: Array.from(selectElement.options).map((opt) => ({
+                    text: opt.text, // do not trim, because we are doing exact match in select_dropdown_option
+                    value: opt.value,
+                    index: opt.index,
+                  })),
+                  id: element.id,
+                  name: selectElement.name,
+                };
+              }
+
+              // Check if it's an ARIA menu
+              if (
+                element.getAttribute('role') === 'menu' ||
+                element.getAttribute('role') === 'listbox' ||
+                element.getAttribute('role') === 'combobox'
+              ) {
+                // Find all menu items
+                const menuItems = element.querySelectorAll(
+                  '[role="menuitem"], [role="option"]'
+                );
+                const options: Array<{
+                  text: string;
+                  value: string;
+                  index: number;
+                }> = [];
+
+                menuItems.forEach((item, idx) => {
+                  // Get the text content of the menu item
+                  const text = item.textContent?.trim();
+                  if (text) {
+                    options.push({
+                      text: text,
+                      value: text, // For ARIA menus, use text as value
+                      index: idx,
+                    });
+                  }
+                });
+
+                return {
+                  type: 'aria',
+                  options: options,
+                  id: element.id || '',
+                  name: element.getAttribute('aria-label') || '',
+                };
+              }
+
+              return null;
+            }, elementNode.xpath);
+
+            if (options) {
+              console.debug(
+                `Found ${options.type} dropdown in frame ${frameIndex}`
+              );
+              console.debug(`Element ID: ${options.id}, Name: ${options.name}`);
+
+              const formattedOptions: string[] = [];
+              for (const opt of options.options) {
+                // encoding ensures AI uses the exact string in select_dropdown_option
+                const encodedText = JSON.stringify(opt.text);
+                formattedOptions.push(`${opt.index}: text=${encodedText}`);
+              }
+
+              allOptions.push(...formattedOptions);
+            }
+          } catch (frameError) {
+            console.debug(
+              `Frame ${frameIndex} evaluation failed: ${frameError}`
+            );
+          }
+
+          frameIndex++;
+        }
+
+        if (allOptions.length > 0) {
+          const message =
+            allOptions.join('\n') +
+            '\nUse the exact text string in select_dropdown_option';
+          console.log(message);
+          return { success: true, message };
+        } else {
+          const message = 'No options found in any frame for dropdown';
+          console.log(message);
+          return { success: false, message };
+        }
+      } catch (error) {
+        const message = `Error getting options: ${(error as Error).message}`;
+        console.error(`Failed to get dropdown options: ${message}`);
+        return { success: false, message };
+      }
+    });
+  }
+
+  @action(
+    'select_dropdown_option',
+    'Select dropdown option or ARIA menu item for interactive element index by the text of the option you want to select',
+    z.object({
+      index: z.number().int(),
+      text: z.string(),
+    }),
+    { isAvailableForPage: (page) => page && !page.isClosed() }
+  )
+  static async selectDropdownOption({
+    params,
+    context,
+  }: {
+    params: { index: number; text: string };
+    context?: { browserSession?: BrowserSession };
+  }): Promise<ActionResult> {
+    return executeWithBrowserSession(context, async (session) => {
+      const page = await session.getCurrentPage();
+      const summary = await session.getStateSummary(false);
+      const elementNode = summary.selectorMap.get(params.index);
+
+      if (!elementNode) {
+        throw new Error(
+          `Element index ${params.index} does not exist - retry or use alternative actions`
+        );
+      }
+
+      console.debug(
+        `Attempting to select '${params.text}' using xpath: ${elementNode.xpath}`
+      );
+
+      try {
+        let frameIndex = 0;
+        for (const frame of page.frames()) {
+          try {
+            console.debug(`Trying frame ${frameIndex} URL: ${frame.url()}`);
+
+            // First check what type of element we're dealing with
+            const elementInfo = await frame.evaluate((xpath) => {
+              try {
+                const element = document.evaluate(
+                  xpath,
+                  document,
+                  null,
+                  XPathResult.FIRST_ORDERED_NODE_TYPE,
+                  null
+                ).singleNodeValue as HTMLElement | null;
+
+                if (!element) return null;
+
+                const tagName = element.tagName.toLowerCase();
+                const role = element.getAttribute('role');
+
+                // Check if it's a native select
+                if (tagName === 'select') {
+                  const selectElement = element as HTMLSelectElement;
+                  return {
+                    type: 'select',
+                    found: true,
+                    id: element.id,
+                    name: selectElement.name,
+                    tagName: element.tagName,
+                    optionCount: selectElement.options.length,
+                    currentValue: selectElement.value,
+                    availableOptions: Array.from(selectElement.options).map(
+                      (o) => o.text.trim()
+                    ),
+                  };
+                }
+
+                // Check if it's an ARIA menu or similar
+                if (
+                  role === 'menu' ||
+                  role === 'listbox' ||
+                  role === 'combobox'
+                ) {
+                  const menuItems = element.querySelectorAll(
+                    '[role="menuitem"], [role="option"]'
+                  );
+                  return {
+                    type: 'aria',
+                    found: true,
+                    id: element.id || '',
+                    role: role,
+                    tagName: element.tagName,
+                    itemCount: menuItems.length,
+                    availableOptions: Array.from(menuItems).map((item) =>
+                      (item.textContent || '').trim()
+                    ),
+                  };
+                }
+
+                return {
+                  error: `Element is neither a select nor an ARIA menu (tag: ${tagName}, role: ${role})`,
+                  found: false,
+                };
+              } catch (e) {
+                return { error: (e as Error).toString(), found: false };
+              }
+            }, elementNode.xpath);
+
+            if (elementInfo && elementInfo.found) {
+              console.debug(
+                `Found ${elementInfo.type} element in frame ${frameIndex}:`,
+                elementInfo
+              );
+
+              if (elementInfo.type === 'select') {
+                // Handle native select element
+                const selectedOptionValues = await frame
+                  .locator(`xpath=${elementNode.xpath}`)
+                  .first()
+                  .selectOption({ label: params.text }, { timeout: 1000 });
+
+                const message = `selected option ${params.text} with value ${selectedOptionValues}`;
+                console.log(message + ` in frame ${frameIndex}`);
+
+                return { success: true, message };
+              } else if (elementInfo.type === 'aria') {
+                // Handle ARIA menu
+                const result = await frame.evaluate(
+                  (evaluateParams) => {
+                    const { xpath, targetText } = evaluateParams;
+                    try {
+                      const element = document.evaluate(
+                        xpath,
+                        document,
+                        null,
+                        XPathResult.FIRST_ORDERED_NODE_TYPE,
+                        null
+                      ).singleNodeValue as HTMLElement | null;
+
+                      if (!element)
+                        return { success: false, error: 'Element not found' };
+
+                      // Find all menu items
+                      const menuItems = element.querySelectorAll(
+                        '[role="menuitem"], [role="option"]'
+                      );
+
+                      for (const item of menuItems) {
+                        const itemText = (item.textContent || '').trim();
+                        if (itemText === targetText) {
+                          // Simulate click on the menu item
+                          (item as HTMLElement).click();
+
+                          // Also try dispatching a click event in case the click handler needs it
+                          const clickEvent = new MouseEvent('click', {
+                            view: window,
+                            bubbles: true,
+                            cancelable: true,
+                          });
+                          item.dispatchEvent(clickEvent);
+
+                          return {
+                            success: true,
+                            message: `Clicked menu item: ${targetText}`,
+                          };
+                        }
+                      }
+
+                      return {
+                        success: false,
+                        error: `Menu item with text '${targetText}' not found`,
+                      };
+                    } catch (e) {
+                      return { success: false, error: (e as Error).toString() };
+                    }
+                  },
+                  { xpath: elementNode.xpath, targetText: params.text }
+                );
+
+                if (result.success) {
+                  const message =
+                    result.message || `Selected ARIA menu item: ${params.text}`;
+                  console.log(message + ` in frame ${frameIndex}`);
+                  return { success: true, message };
+                } else {
+                  console.error(
+                    `Failed to select ARIA menu item: ${result.error}`
+                  );
+                  continue;
+                }
+              }
+            } else if (elementInfo) {
+              console.error(`Frame ${frameIndex} error: ${elementInfo.error}`);
+              continue;
+            }
+          } catch (frameError) {
+            console.error(`Frame ${frameIndex} attempt failed: ${frameError}`);
+            console.error(`Frame URL: ${frame.url()}`);
+          }
+
+          frameIndex++;
+        }
+
+        const message = `Could not select option '${params.text}' in any frame`;
+        console.log(message);
+        return { success: false, message };
+      } catch (error) {
+        const message = `Selection failed: ${(error as Error).message}`;
+        console.error(message);
+        throw new Error(message);
+      }
+    });
+  }
+}
+
 // Ensure classes are referenced to avoid tree-shaking and "unused" warnings
 export default [
   ScrollActions,
@@ -1030,7 +1536,9 @@ export default [
   DoneActions,
   IndexActions,
   NavActions,
+  UploadActions,
   KeysActions,
   ExtractDataActions,
   FileSystemActions,
+  DropdownActions,
 ];
