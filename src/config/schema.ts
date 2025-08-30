@@ -41,7 +41,7 @@ export const BrowserConfigSchema = z.object({
   keepAlive: z.boolean().default(false),
   profileDirectory: z.string().default('Default'),
 
-  // DOM processing configuration (aligned with Python version)
+  // DOM processing configuration
   viewportExpansion: z.number().min(-1).max(2000).default(500),
   highlightElements: z.boolean().default(true),
   includeHiddenElements: z.boolean().default(false),
@@ -123,7 +123,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     customExtensions: [],
     keepAlive: false,
     profileDirectory: 'Default',
-    // DOM processing configuration (aligned with Python version)
+    // DOM processing configuration
     viewportExpansion: 500,
     highlightElements: true,
     includeHiddenElements: false,

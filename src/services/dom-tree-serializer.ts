@@ -27,7 +27,7 @@ const DISABLED_ELEMENTS = new Set([
 ]);
 
 /**
- * Default attributes to include in serialization - matches Python version exactly
+ * Default attributes to include in serialization
  */
 export const DEFAULT_INCLUDE_ATTRIBUTES = [
   'title',
@@ -861,7 +861,6 @@ export class DOMTreeSerializer {
 
   /**
    * Get all text content from an element until the next clickable element
-   * This matches the Python version's get_all_text_till_next_clickable_element method
    */
   static getAllTextTillNextClickableElement(
     element: DOMElementNode,
@@ -902,7 +901,6 @@ export class DOMTreeSerializer {
 
   /**
    * Check if a text node has a parent with highlight_index
-   * This matches the Python version's has_parent_with_highlight_index method
    */
   private static hasParentWithHighlightIndex(textNode: DOMTextNode): boolean {
     let current = textNode.parent;
@@ -920,7 +918,6 @@ export class DOMTreeSerializer {
 
   /**
    * Serialize DOM tree to string format for simplified mode
-   * Completely rewritten to match Python version's clickable_elements_to_string logic
    */
   private static serializeTreeToString(
     node: DOMBaseNode | null,
@@ -940,11 +937,11 @@ export class DOMTreeSerializer {
     if (node.type !== 'TEXT_NODE') {
       const elementNode = node as DOMElementNode;
 
-      // Process elements with highlight_index (interactive elements) - matches Python logic
+      // Process elements with highlight_index
       if (elementNode.highlightIndex !== null) {
         nextDepth += 1;
 
-        // Get element's complete text content (KEY: this matches Python's get_all_text_till_next_clickable_element)
+        // Get element's complete text content
         const text = this.getAllTextTillNextClickableElement(elementNode);
 
         // Build attributes string (pass text for deduplication logic)
@@ -971,7 +968,7 @@ export class DOMTreeSerializer {
           }
         }
 
-        // Build the line (matches Python format exactly)
+        // Build the line
         let line = `${depthStr}${isNew ? '*' : ''}[${elementNode.highlightIndex}]<${elementNode.tagName}`;
 
         if (attributesStr) {
@@ -994,7 +991,7 @@ export class DOMTreeSerializer {
         formattedText.push(line);
       }
 
-      // Process children regardless (matches Python logic)
+      // Process children regardless
       for (const child of elementNode.children) {
         const childText = this.serializeTreeToString(
           child,
@@ -1008,7 +1005,7 @@ export class DOMTreeSerializer {
         }
       }
     } else {
-      // Handle text nodes - matches Python logic exactly
+      // Handle text nodes
       const textNode = node as DOMTextNode;
 
       // Add text only if it doesn't have a highlighted parent
@@ -1031,7 +1028,7 @@ export class DOMTreeSerializer {
   }
 
   /**
-   * Build attributes string for an element - matches Python version exactly
+   * Build attributes string for an element
    * This includes the complex attribute deduplication and optimization logic
    */
   private static buildAttributesStringSimplified(
@@ -1113,7 +1110,7 @@ export class DOMTreeSerializer {
   }
 
   /**
-   * Cap text length - matches Python version's cap_text_length function
+   * Cap text length
    */
   private static capTextLength(text: string, maxLength: number): string {
     if (text.length <= maxLength) {

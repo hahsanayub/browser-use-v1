@@ -1,6 +1,5 @@
 /**
  * Utilities for creating optimized schemas for LLM usage.
- * This mirrors the Python SchemaOptimizer implementation.
  */
 
 export class SchemaOptimizer {

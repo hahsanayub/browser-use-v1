@@ -2,7 +2,7 @@
   args = {
     doHighlightElements: true,
     focusHighlightIndex: -1,
-    viewportExpansion: 500, // Aligned with Python version default
+    viewportExpansion: 500,
     debugMode: false,
   }
 ) => {

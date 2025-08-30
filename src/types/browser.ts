@@ -84,7 +84,7 @@ export interface BrowserSessionConfig {
   /** Whether to use viewport-only screenshots by default for better performance */
   defaultViewportScreenshots?: boolean;
 
-  // DOM processing configuration (aligned with Python version)
+  // DOM processing configuration
   /** Viewport expansion in pixels (-1 for all elements) */
   viewportExpansion?: number;
   /** Whether to highlight interactive elements */

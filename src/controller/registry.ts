@@ -123,7 +123,7 @@ export class ActionRegistry {
   /**
    * Build a dynamic Zod union schema representing available actions for a page.
    * Each variant is an object keyed by action name and mapping to its param schema.
-   * This matches Python's structure: { actionName: { ...params } }
+   *
    * Example: z.union([ z.object({ scroll: z.object({down:z.boolean(), num_pages:z.number()}) }), ... ])
    */
   buildDynamicActionSchemaForPage(page?: Page): z.ZodUnion<any> {
@@ -145,8 +145,6 @@ export class ActionRegistry {
         }
       }
 
-      // Python-style nested structure: { actionName: { ...params } }
-      // This avoids allOf in JSON Schema and matches Python's Pydantic structure
       const variant = z.object({
         [a.name]: a.paramSchema,
       }) as z.ZodTypeAny;

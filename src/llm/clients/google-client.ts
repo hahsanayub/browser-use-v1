@@ -169,23 +169,23 @@ export class GoogleClient extends BaseLLMClient {
         // Handle JSON schema (existing functionality)
         let processedSchema = options.responseFormat.schema;
 
-        // Apply optimization (like Python's SchemaOptimizer.create_optimized_json_schema)
+        // Apply optimization
         const optimizedSchema =
           SchemaOptimizer.createOptimizedJsonSchema(processedSchema);
 
-        // Apply Gemini-specific fixes (like Python's _fix_gemini_schema)
+        // Apply Gemini-specific fixes
         const geminiSchema = this.fixGeminiSchema(optimizedSchema);
         config.responseSchema = geminiSchema;
       } else if (hasZodSchema(options.responseFormat)) {
-        // Handle Zod schema (Python-like approach)
-        // Convert Zod schema to JSON schema (like Python's model_json_schema())
+        // Handle Zod schema
+        // Convert Zod schema to JSON schema
         const jsonSchema = zodToJsonSchema(options.responseFormat.schema);
 
-        // Apply optimization (like Python's SchemaOptimizer.create_optimized_json_schema)
+        // Apply optimization
         const optimizedSchema =
           SchemaOptimizer.createOptimizedJsonSchema(jsonSchema);
 
-        // Apply Gemini-specific fixes (like Python's _fix_gemini_schema)
+        // Apply Gemini-specific fixes
         const geminiSchema = this.fixGeminiSchema(optimizedSchema);
         config.responseSchema = geminiSchema;
       }
@@ -227,7 +227,7 @@ export class GoogleClient extends BaseLLMClient {
               hasZodSchema(options.responseFormat)
             ) {
               try {
-                // Validate and transform using Zod schema (like Python's Pydantic validation)
+                // Validate and transform using Zod schema
                 const validatedContent =
                   options.responseFormat.schema.parse(parsedContent);
                 parsedContent = validatedContent;
@@ -361,7 +361,6 @@ export class GoogleClient extends BaseLLMClient {
 
   /**
    * Fix Gemini schema to be compatible with Google's requirements.
-   * This mirrors the Python implementation's _fix_gemini_schema method.
    */
   private fixGeminiSchema(schema: Record<string, any>): Record<string, any> {
     // Handle $defs and $ref resolution

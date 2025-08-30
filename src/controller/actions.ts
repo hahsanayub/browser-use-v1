@@ -829,10 +829,7 @@ class FileSystemActions {
     }
 
     try {
-      const result = await fileSystem.readFile(
-        params.file_name,
-        false // Always use internal filesystem for Python compatibility
-      );
+      const result = await fileSystem.readFile(params.file_name, false);
       return {
         success: true,
         message: result,

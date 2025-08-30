@@ -195,7 +195,7 @@ export class OpenAIClient extends BaseLLMClient {
               hasZodSchema(requestOptions.responseFormat)
             ) {
               try {
-                // Validate and transform using Zod schema (like Python's Pydantic validation)
+                // Validate and transform using Zod schema
                 const validatedContent =
                   requestOptions.responseFormat.schema.parse(parsedContent);
                 parsedContent = validatedContent;

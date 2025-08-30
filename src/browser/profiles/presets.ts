@@ -21,7 +21,7 @@ export const DEFAULT_PRESET: BrowserConfig = {
   customExtensions: [],
   keepAlive: false,
   profileDirectory: 'Default',
-  // DOM processing configuration (aligned with Python version)
+  // DOM processing configuration
   viewportExpansion: 500,
   highlightElements: true,
   includeHiddenElements: false,

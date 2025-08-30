@@ -643,7 +643,6 @@ export class Agent {
           const normalizedParams = { ...actionParams };
 
           // Handle LLM parameter name variations for file operations
-          // Convert 'filename' to 'file_name' for Python compatibility
           // if (['write_file', 'read_file', 'replace_file_str'].includes(actionName)) {
           //   if (normalizedParams.filename && !normalizedParams.file_name) {
           //     normalizedParams.file_name = normalizedParams.filename;
@@ -743,7 +742,7 @@ export class Agent {
       const response = await this.llmClient.generateResponse(messages, {
         responseFormat: {
           type: 'zod_schema',
-          schema: AgentThoughtSchemaForStep, // Use structured output like Python's output_format
+          schema: AgentThoughtSchemaForStep, // Use structured output
         },
         temperature: 0.1, // Low temperature for more consistent responses
         maxTokens: 16384,
@@ -751,7 +750,7 @@ export class Agent {
 
       responseContent = response.content;
 
-      // Parse the already-validated response (like Python's response.completion)
+      // Parse the already-validated response
       thoughtData = JSON.parse(response.content);
 
       // Normalize action format from LLM response to Zod expected format

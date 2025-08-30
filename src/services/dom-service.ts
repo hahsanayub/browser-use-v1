@@ -426,7 +426,7 @@ export class DOMService {
           script: this.buildDomTreeScript,
           args: {
             doHighlightElements: options.markInteractive ?? true,
-            viewportExpansion: options.viewportExpansion ?? 500, // Default to Python version value
+            viewportExpansion: options.viewportExpansion ?? 500,
             debugMode: false,
             ...options,
           },
@@ -442,7 +442,7 @@ export class DOMService {
             script: this.buildDomTreeScript!,
             args: {
               doHighlightElements: options.markInteractive ?? true,
-              viewportExpansion: options.viewportExpansion ?? 500, // Default to Python version value
+              viewportExpansion: options.viewportExpansion ?? 500,
               debugMode: false,
               ...options,
             },
