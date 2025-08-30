@@ -744,8 +744,6 @@ export class Agent {
           type: 'zod_schema',
           schema: AgentThoughtSchemaForStep, // Use structured output
         },
-        temperature: 0.1, // Low temperature for more consistent responses
-        maxTokens: 16384,
       });
 
       responseContent = response.content;
