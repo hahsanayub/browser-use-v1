@@ -16,8 +16,8 @@ import { action } from '../src/controller/decorators';
 
 const request = {
   hubspot: {
-    url: 'https://developers.hubspot.com/docs/reference/api/crm/objects/contacts',
-    text: `Extract the entire original API documentation content for the List Contacts API from this page: https://developers.hubspot.com/docs/reference/api/crm/objects/contacts. You must extract all available details required for OpenAPI Spec, including endpoints, HTTP methods, versioning, baseApiUrl, auth requirements, request parameters, request body schema, response codes, bodies, and error responses. Preserve exact wording from the source.`,
+    url: 'https://developers.hubspot.com/docs/reference/api/crm/objects/contacts#post-%2Fcrm%2Fv3%2Fobjects%2Fcontacts%2Fsearch',
+    text: `Extract the entire original API documentation content for the "post /crm/v3/objects/contacts/search" API from this page: https://developers.hubspot.com/docs/reference/api/crm/objects/contacts#post-%2Fcrm%2Fv3%2Fobjects%2Fcontacts%2Fsearch. You must extract all available details required for OpenAPI Spec, including endpoints, HTTP methods, versioning, baseApiUrl, auth requirements, request parameters, request body schema, response codes, bodies, and error responses. Preserve exact wording from the source.`,
   },
   adyen: {
     url: 'https://docs.adyen.com/api-explorer/transfers/4/overview',
@@ -306,7 +306,16 @@ ${request.text}
 - Reference the <additional_todo_definition_rules> for the additional rules to organize tasks into logical phases for API document content extraction task.
 - Follow the <additional_todo_management_rules> to explore/navigate the page content and extract the API document content.
 - **Prioritize Interaction over Visibility**: Before checking for visible content, you MUST first inspect elements for clear interactive roles or attributes. If an element has a WAI-ARIA role like role='option', role='tab', role='radio', role='presentation', or a state attribute like aria-expanded='false', you must prioritize **clicking** it. This action is necessary to ensure the corresponding view is fully loaded and active. This rule **overrides** the general rule of extracting data just because some content appears to be visible.
+- Before calling extract_structured_data, please ensure that text content, such as parameters and responses, is completely visible in the screenshot. If not, you may need to scroll the page to find the relevant hidden information, which might require you to click a "show more" or similar button.
 - When you think content can be extracted and before calling extract_structured_data, if there are buttons like 200, 201, 400, 500 and so on, please click them first(Regardless of whether the information for 200, 201, 400, 500, etc., is already displayed, please use the history to determine this and make sure to click it once.). Then, consider if there is any "default" related information (if so, be sure to click the "default" element), and then call extract_structured_data.
+
+### Content Completeness Rule
+
+Before performing any data extraction, you must ensure that all potentially hidden or collapsed content is fully expanded and visible. This includes, but is not limited to:
+1.  **Interactive Elements**: Prioritize clicking on interactive elements like "show more", "expand", "view all" buttons, as well as API response code tabs like **200**, **401**, **500**, etc.
+2.  **Scrolling**: If clicking doesn't make the content fully visible, you'll need to scroll the page to find and display the hidden information.
+
+You can only call \`extract_structured_data\` after confirming that all relevant content has been fully displayed and is visible. This rule is a crucial step to ensure the completeness and accuracy of your data extraction.
 
 <additional_todo_management_rules>
 CRITICAL Rules to organize tasks into logical phases:
@@ -366,7 +375,7 @@ async function main() {
         apiKey: process.env.AZURE_OPENAI_API_KEY,
 
         // provider: 'google',
-        // model: 'gemini-2.5-flash',
+        // model: 'gemini-2.0-flash',
         // baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
         // apiKey: process.env.GOOGLE_API_KEY,
         temperature: 0.1,
