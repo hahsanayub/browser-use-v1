@@ -518,8 +518,19 @@ class WaitActions {
     page: Page;
   }): Promise<ActionResult> {
     return withHealthCheck(page, async (p) => {
-      await p.waitForTimeout(params.seconds * 1000); // Convert seconds to milliseconds
-      return { success: true, message: `Waited for ${params.seconds} seconds` };
+      // reduce by 3 seconds to account for LLM call time
+      // Cap wait time at maximum 10 seconds
+      const actualSeconds = Math.min(Math.max(params.seconds - 3, 0), 10);
+
+      const message = `🕒  Waiting for ${actualSeconds + 3} seconds`;
+      console.log(message);
+
+      await p.waitForTimeout(actualSeconds * 1000); // Convert seconds to milliseconds
+
+      return {
+        success: true,
+        message,
+      };
     });
   }
 }
@@ -568,22 +579,135 @@ class IndexActions {
     page: Page;
     context?: { browserSession?: BrowserSession };
   }): Promise<ActionResult> {
-    // const domState = context?.browserSession?.domState;
-    // let node: DOMNode | undefined;
-    // let text: string | null | undefined;
-    // if (domState) {
-    //   node = Object.values(domState.map).find(
-    //     (i) => i.xpath === domState.selectorMap[params.index].slice(7)
-    //   );
-    //   if (node) {
-    //     text = context.browserSession?.getAllChildrenText(node, 2);
-    //   }
-    // }
     return executeWithBrowserSession(context, async (session) => {
+      const summary = await session.getStateSummary(false);
+      const elementNode = summary.selectorMap.get(params.index);
+
+      if (!elementNode) {
+        throw new Error(
+          `Element index ${params.index} does not exist - retry or use alternative actions`
+        );
+      }
+
+      // Check if element is a file input
+      const page = await session.getCurrentPage();
+      const isFileInput = await page.evaluate((xpath) => {
+        const element = document.evaluate(
+          xpath,
+          document,
+          null,
+          XPathResult.FIRST_ORDERED_NODE_TYPE,
+          null
+        ).singleNodeValue as HTMLElement | null;
+
+        if (!element) return false;
+
+        // Check if it's directly a file input or contains one
+        if (
+          element.tagName.toLowerCase() === 'input' &&
+          (element as HTMLInputElement).type === 'file'
+        ) {
+          return true;
+        }
+
+        // Check if it contains a file input
+        const fileInput = element.querySelector('input[type="file"]');
+        return fileInput !== null;
+      }, elementNode.xpath);
+
+      if (isFileInput) {
+        const message = `Index ${params.index} - has an element which opens file upload dialog. To upload files please use a specific function to upload files`;
+        console.log(message);
+        return {
+          success: false,
+          message,
+        };
+      }
+
+      // Get initial tab count before clicking
+      const initialPages = page.context().pages().length;
+
+      // Track downloaded files before click
+      const initialDownloadCount = session.getDownloadedFiles().length;
+
+      // Click the element
       await session.clickByIndex(params.index);
+
+      // Check for downloads (wait a bit for download to start)
+      await page.waitForTimeout(300);
+      const downloadedFiles = session.getDownloadedFiles();
+      const newDownloads = downloadedFiles.slice(initialDownloadCount);
+
+      let message: string;
+      let emoji: string;
+
+      if (newDownloads.length > 0) {
+        // Download detected
+        emoji = '💾';
+        const downloadPath = newDownloads[0]; // Get the first new download
+        message = `Downloaded file to ${downloadPath}`;
+      } else {
+        // Normal click
+        emoji = '🖱️';
+        // Get element text for better feedback
+        const elementText = await page.evaluate((xpath) => {
+          const element = document.evaluate(
+            xpath,
+            document,
+            null,
+            XPathResult.FIRST_ORDERED_NODE_TYPE,
+            null
+          ).singleNodeValue as HTMLElement | null;
+
+          if (!element) return '';
+
+          // Get text content, limiting depth
+          const getText = (el: Element, maxDepth: number): string => {
+            if (maxDepth <= 0) return '';
+
+            let text = '';
+            for (const child of el.childNodes) {
+              if (child.nodeType === Node.TEXT_NODE) {
+                text += child.textContent?.trim() || '';
+              } else if (child.nodeType === Node.ELEMENT_NODE && maxDepth > 0) {
+                // Stop at other clickable elements
+                const childEl = child as Element;
+                if (
+                  !['button', 'a', 'input'].includes(
+                    childEl.tagName.toLowerCase()
+                  )
+                ) {
+                  text += ' ' + getText(childEl, maxDepth - 1);
+                }
+              }
+            }
+            return text.trim();
+          };
+
+          return getText(element, 2).substring(0, 100); // Limit text length
+        }, elementNode.xpath);
+
+        message = `Clicked button with index ${params.index}${elementText ? ': ' + elementText : ''}`;
+      }
+
+      console.log(`${emoji} ${message}`);
+      console.debug(`Element xpath: ${elementNode.xpath}`);
+
+      // Check if new tab was opened
+      const currentPages = page.context().pages().length;
+      if (currentPages > initialPages) {
+        const newTabMsg = 'New tab opened - switching to it';
+        message += ` - ${newTabMsg}`;
+        emoji = '🔗';
+        console.log(`${emoji} ${newTabMsg}`);
+
+        // Switch to the new tab (last tab)
+        await session.switchTab(currentPages - 1);
+      }
+
       return {
         success: true,
-        message: `Clicked element with index ${params.index}`,
+        message,
       };
     });
   }
