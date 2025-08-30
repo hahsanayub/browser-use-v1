@@ -11,6 +11,12 @@ import TurndownService from 'turndown';
 import type { BaseLLMClient } from '../llm/base-client';
 import { FileSystem } from '../services/file-system';
 import { Agent } from '../agent';
+import {
+  BrowserError,
+  NetworkError,
+  isNetworkError,
+  getNetworkErrorMessage,
+} from '../types/errors';
 
 // Helper function for Promise.race with proper timeout cleanup
 function withTimeout<T>(
@@ -757,11 +763,39 @@ class NavActions {
     };
   }): Promise<ActionResult> {
     return executeWithBrowserSession(context, async (session) => {
-      await session.navigate(params.url, params.new_tab);
-      const message = params.new_tab
-        ? `Opened new tab with ${params.url}`
-        : `Navigated to ${params.url}`;
-      return { success: true, message };
+      try {
+        await session.navigate(params.url, params.new_tab);
+        const message = params.new_tab
+          ? `🔗 Opened new tab with url ${params.url}`
+          : `🔗 Navigated to ${params.url}`;
+        console.log(message);
+        return { success: true, message };
+      } catch (error) {
+        const errorMessage = (error as Error).message;
+
+        // Check for network-related errors
+        if (isNetworkError(errorMessage)) {
+          const friendlyMessage = getNetworkErrorMessage(
+            errorMessage,
+            params.url
+          );
+          console.warn(`Site unavailable: ${friendlyMessage}`);
+          throw new NetworkError(friendlyMessage, params.url);
+        }
+
+        // Check for URL not allowed error (security)
+        if (
+          errorMessage.includes('URLNotAllowedError') ||
+          errorMessage.includes('not allowed')
+        ) {
+          throw error; // Re-throw security errors as-is
+        }
+
+        // Other browser errors
+        throw new BrowserError(
+          `Failed to navigate to ${params.url}: ${errorMessage}`
+        );
+      }
     });
   }
 

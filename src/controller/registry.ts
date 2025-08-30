@@ -41,6 +41,14 @@ export class ActionRegistry {
     return this.actions.get(name);
   }
 
+  has(name: string): boolean {
+    return this.actions.has(name);
+  }
+
+  unregister(name: string): boolean {
+    return this.actions.delete(name);
+  }
+
   list(): RegisteredAction[] {
     return Array.from(this.actions.values());
   }

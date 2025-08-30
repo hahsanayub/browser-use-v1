@@ -23,6 +23,10 @@ import { registry } from './singleton';
 import { z } from 'zod';
 // ensure builtin actions are registered
 import './actions';
+import {
+  useStructuredOutputAction,
+  resetToDefaultDoneAction,
+} from './structured-done';
 
 /**
  * Deep merge utility function for configuration objects
@@ -60,6 +64,10 @@ export interface ControllerConfig {
   autoInitializeBrowser?: boolean;
   /** Whether to setup signal handlers for graceful shutdown */
   setupSignalHandlers?: boolean;
+  /** Optional output model for structured done action */
+  outputModel?: z.ZodTypeAny;
+  /** Whether to display files in done text (for structured output) */
+  displayFilesInDoneText?: boolean;
 }
 
 /**
@@ -74,9 +82,15 @@ export class Controller {
   private llmClient: BaseLLMClient | null = null;
   private logger;
   private isInitialized = false;
+  private outputModel?: z.ZodTypeAny;
+  private displayFilesInDoneText: boolean = true;
 
-  private controllerConfig: Required<Omit<ControllerConfig, 'config'>> & {
+  private controllerConfig: Required<
+    Omit<ControllerConfig, 'config' | 'outputModel' | 'displayFilesInDoneText'>
+  > & {
     config?: Partial<AppConfigInput>;
+    outputModel?: z.ZodTypeAny;
+    displayFilesInDoneText?: boolean;
   };
 
   constructor(controllerConfig: ControllerConfig = {}) {
@@ -90,6 +104,11 @@ export class Controller {
       setupSignalHandlers: true,
       ...controllerConfig,
     };
+
+    // Store output model if provided
+    this.outputModel = controllerConfig.outputModel;
+    this.displayFilesInDoneText =
+      controllerConfig.displayFilesInDoneText ?? true;
   }
 
   /**
@@ -134,6 +153,14 @@ export class Controller {
       // Mark initialized before initializing the browser so that dependent
       // methods that assert initialization can proceed.
       this.isInitialized = true;
+
+      // Set up structured output if configured
+      if (this.outputModel) {
+        useStructuredOutputAction(
+          this.outputModel,
+          this.displayFilesInDoneText
+        );
+      }
 
       // Auto-initialize browser if requested
       if (this.controllerConfig.autoInitializeBrowser) {
@@ -547,12 +574,40 @@ export class Controller {
   }
 
   /**
+   * Use structured output action with a specific model
+   * This allows dynamic switching of output models
+   */
+  useStructuredOutput<T extends z.ZodTypeAny>(
+    outputModel: T,
+    displayFilesInDoneText?: boolean
+  ): void {
+    this.outputModel = outputModel;
+    if (displayFilesInDoneText !== undefined) {
+      this.displayFilesInDoneText = displayFilesInDoneText;
+    }
+    useStructuredOutputAction(outputModel, this.displayFilesInDoneText);
+  }
+
+  /**
+   * Reset to default done action (non-structured)
+   */
+  resetToDefaultDone(): void {
+    this.outputModel = undefined;
+    resetToDefaultDoneAction();
+  }
+
+  /**
    * Cleanup all resources
    */
   async cleanup(): Promise<void> {
     this.logger?.info('Starting cleanup');
 
     try {
+      // Reset to default done action if using structured output
+      if (this.outputModel) {
+        resetToDefaultDoneAction();
+      }
+
       // Stop agent if running
       if (this.agent?.getIsRunning()) {
         this.agent.stop();
