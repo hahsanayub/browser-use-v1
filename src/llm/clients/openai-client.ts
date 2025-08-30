@@ -3,6 +3,8 @@
  */
 
 import OpenAI from 'openai';
+import { z } from 'zod';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import { BaseLLMClient } from '../base-client';
 import type {
   LLMMessage,
@@ -10,8 +12,22 @@ import type {
   LLMRequestOptions,
   LLMClientConfig,
 } from '../../types/llm';
+import { SchemaOptimizer } from '../schema-optimizer';
 
 type OpenAIMessage = OpenAI.Chat.Completions.ChatCompletionMessageParam;
+
+// Type guards for response format
+function hasJsonSchema(
+  format: any
+): format is { type: 'json_schema'; schema: Record<string, any> } {
+  return format && format.type === 'json_schema';
+}
+
+function hasZodSchema(
+  format: any
+): format is { type: 'zod_schema'; schema: z.ZodTypeAny } {
+  return format && format.type === 'zod_schema';
+}
 
 /**
  * OpenAI LLM client implementation using official OpenAI SDK
@@ -89,18 +105,45 @@ export class OpenAIClient extends BaseLLMClient {
         };
       }
 
-      // Structured output mapping
+      // Structured output mapping and schema processing
+      let processedSchema: Record<string, any> | null = null;
+      let schemaName: string | null = null;
+      let hasStructuredOutput = false;
+
       if (requestOptions.responseFormat) {
         if (requestOptions.responseFormat.type === 'json_object') {
           requestParams.response_format = { type: 'json_object' };
-        } else if (requestOptions.responseFormat.type === 'json_schema') {
+        } else if (hasJsonSchema(requestOptions.responseFormat)) {
+          // Handle JSON schema (existing functionality)
           const { schema, name, strict } = requestOptions.responseFormat;
+          processedSchema = SchemaOptimizer.createOptimizedJsonSchema(schema);
+          schemaName = name || 'ResponseSchema';
+          hasStructuredOutput = true;
+
           requestParams.response_format = {
             type: 'json_schema',
             json_schema: {
-              name: name || 'ResponseSchema',
-              schema,
+              name: schemaName,
+              schema: processedSchema,
               strict: strict !== false,
+            },
+          };
+        } else if (hasZodSchema(requestOptions.responseFormat)) {
+          // Handle Zod schema - convert once and reuse
+          const jsonSchema = zodToJsonSchema(
+            requestOptions.responseFormat.schema
+          );
+          processedSchema =
+            SchemaOptimizer.createOptimizedJsonSchema(jsonSchema);
+          schemaName = requestOptions.responseFormat.name || 'ZodSchema';
+          hasStructuredOutput = true;
+
+          requestParams.response_format = {
+            type: 'json_schema',
+            json_schema: {
+              name: schemaName,
+              schema: processedSchema,
+              strict: true, // Always strict for Zod schemas
             },
           };
         }
@@ -108,12 +151,13 @@ export class OpenAIClient extends BaseLLMClient {
 
       // Optionally add schema to system prompt for certain models to improve adherence
       if (
-        requestOptions.responseFormat?.type === 'json_schema' &&
+        hasStructuredOutput &&
+        processedSchema &&
         requestOptions.addSchemaToSystemPrompt &&
         openAIMessages.length > 0 &&
         openAIMessages[0].role === 'system'
       ) {
-        const schemaText = `\n<json_schema>\n${JSON.stringify(requestOptions.responseFormat.schema)}\n</json_schema>`;
+        const schemaText = `\n<json_schema>\n${JSON.stringify(processedSchema)}\n</json_schema>`;
         if (typeof openAIMessages[0].content === 'string') {
           openAIMessages[0].content = `${openAIMessages[0].content}${schemaText}`;
         }
@@ -134,8 +178,52 @@ export class OpenAIClient extends BaseLLMClient {
 
       const choice = openAIResponse.choices[0];
       const usage = openAIResponse.usage;
+
+      let content = choice.message.content || '';
+      let parsedContent = null;
+
+      // Handle structured output parsing and validation (reuse hasStructuredOutput from above)
+      if (hasStructuredOutput) {
+        // For structured output, try to parse JSON
+        try {
+          if (content) {
+            parsedContent = JSON.parse(content);
+
+            // If using Zod schema, validate the parsed content
+            if (
+              requestOptions.responseFormat &&
+              hasZodSchema(requestOptions.responseFormat)
+            ) {
+              try {
+                // Validate and transform using Zod schema (like Python's Pydantic validation)
+                const validatedContent =
+                  requestOptions.responseFormat.schema.parse(parsedContent);
+                parsedContent = validatedContent;
+                content = JSON.stringify(validatedContent);
+              } catch (zodError) {
+                this.logger.warn(
+                  'Zod validation failed, using raw parsed content',
+                  {
+                    error: zodError,
+                    parsedContent,
+                  }
+                );
+                content = JSON.stringify(parsedContent);
+              }
+            } else {
+              content = JSON.stringify(parsedContent);
+            }
+          }
+        } catch (error) {
+          this.logger.warn('Failed to parse structured JSON response', {
+            error,
+          });
+          content = choice.message.content || '';
+        }
+      }
+
       const llmResponse: LLMResponse = {
-        content: choice.message.content || '',
+        content,
         usage: usage
           ? {
               promptTokens: usage.prompt_tokens,
@@ -155,6 +243,7 @@ export class OpenAIClient extends BaseLLMClient {
         metadata: {
           finishReason: choice.finish_reason,
           requestTime,
+          ...(parsedContent && { parsedContent }),
         },
       };
 

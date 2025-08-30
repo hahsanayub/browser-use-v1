@@ -148,7 +148,7 @@ export class ActionRegistry {
       // Python-style nested structure: { actionName: { ...params } }
       // This avoids allOf in JSON Schema and matches Python's Pydantic structure
       const variant = z.object({
-        [a.name]: a.paramSchema
+        [a.name]: a.paramSchema,
       }) as z.ZodTypeAny;
       variants.push(variant);
     }

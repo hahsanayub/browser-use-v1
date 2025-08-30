@@ -466,7 +466,11 @@ class DoneActions {
   static async done({
     params,
   }: {
-    params: { text: string; success: boolean; files_to_display?: string[] | null };
+    params: {
+      text: string;
+      success: boolean;
+      files_to_display?: string[] | null;
+    };
   }): Promise<ActionResult> {
     return {
       success: params.success,
@@ -827,7 +831,7 @@ class FileSystemActions {
     try {
       const result = await fileSystem.readFile(
         params.file_name,
-        false  // Always use internal filesystem for Python compatibility
+        false // Always use internal filesystem for Python compatibility
       );
       return {
         success: true,
@@ -857,7 +861,13 @@ class FileSystemActions {
     params,
     context,
   }: {
-    params: { file_name: string; content: string; append: boolean; trailing_newline: boolean; leading_newline: boolean };
+    params: {
+      file_name: string;
+      content: string;
+      append: boolean;
+      trailing_newline: boolean;
+      leading_newline: boolean;
+    };
     page: Page;
     context: { fileSystem?: FileSystem };
   }): Promise<ActionResult> {

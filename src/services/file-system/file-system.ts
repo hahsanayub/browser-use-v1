@@ -259,7 +259,11 @@ export class FileSystem {
   /**
    * Write content to file using file-specific write method
    */
-  async writeFile(fullFilename: string, content: string, append: boolean = false): Promise<string> {
+  async writeFile(
+    fullFilename: string,
+    content: string,
+    append: boolean = false
+  ): Promise<string> {
     if (!this.isValidFilename(fullFilename)) {
       return INVALID_FILENAME_ERROR_MESSAGE;
     }

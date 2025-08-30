@@ -95,11 +95,7 @@ export class SchemaOptimizer {
 
           // Skip unsupported fields for LLM APIs (especially Google Gemini)
           else if (
-            [
-              'exclusiveMinimum',
-              'exclusiveMaximum',
-              '$schema',
-            ].includes(key)
+            ['exclusiveMinimum', 'exclusiveMaximum', '$schema'].includes(key)
           ) {
             // Skip these fields as they're not supported by Google Gemini API
             continue;
