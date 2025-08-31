@@ -71,17 +71,17 @@ async function main() {
   const controller = await createController({
     config: {
       llm: {
-        // provider: 'google',
-        // model: 'gemini-2.0-flash',
-        // baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-        // apiKey: process.env.GOOGLE_API_KEY,
+        provider: 'google',
+        model: 'gemini-2.0-flash',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        apiKey: process.env.GOOGLE_API_KEY,
 
-        provider: 'azure',
-        model: 'gpt-5',
-        azureEndpoint: 'https://oai-ai4m-rnd-eastus-001.openai.azure.com',
-        azureDeployment: 'oai-ai4m-rnd-eastus-001-gpt-4-0125-Preview-001',
-        apiVersion: '2025-03-01-preview',
-        apiKey: process.env.AZURE_OPENAI_API_KEY,
+        // provider: 'azure',
+        // model: 'gpt-5',
+        // azureEndpoint: 'https://oai-ai4m-rnd-eastus-001.openai.azure.com',
+        // azureDeployment: 'oai-ai4m-rnd-eastus-001-gpt-4-0125-Preview-001',
+        // apiVersion: '2025-03-01-preview',
+        // apiKey: process.env.AZURE_OPENAI_API_KEY,
 
         timeout: 60000,
         maxTokens: 16384,

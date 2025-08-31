@@ -969,7 +969,6 @@ export class DOMService {
 
   /**
    * Get cross-origin iframes using advanced DOM service
-   * Integrates Python version's iframe filtering capabilities
    */
   async getCrossOriginIframes(page: Page): Promise<any[]> {
     try {
@@ -1001,7 +1000,10 @@ export class DOMService {
     try {
       return this.advancedDOMService.collectPerformanceMetrics(page);
     } catch (error) {
-      this.logger.error('Failed to collect DOM performance metrics', error as Error);
+      this.logger.error(
+        'Failed to collect DOM performance metrics',
+        error as Error
+      );
       return null;
     }
   }

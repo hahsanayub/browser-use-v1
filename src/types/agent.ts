@@ -25,6 +25,16 @@ export interface AgentHistory {
   };
   /** Timestamp when the action was executed */
   timestamp: number;
+  /** Browser state including screenshot */
+  state?: {
+    screenshot?: string; // Base64 encoded screenshot
+  };
+  /** Model output including current state and goals */
+  model_output?: {
+    current_state?: {
+      next_goal?: string;
+    };
+  };
 }
 
 export interface ActionResult {
@@ -88,6 +98,17 @@ export interface AgentConfig {
   saveConversationPathEncoding?: BufferEncoding | string;
   /** Directory path for agent file system (default: current working directory) */
   fileSystemPath?: string;
+
+  /** Generate GIF from agent history. Can be boolean or output path */
+  generateGif?: boolean | string;
+  /** Whether to show goals in GIF overlays */
+  showGoals?: boolean;
+  /** Whether to show task frame in GIF */
+  showTask?: boolean;
+  /** Whether to show logo in GIF */
+  showLogo?: boolean;
+  /** Duration per frame in milliseconds */
+  gifDuration?: number;
 }
 
 export interface AgentState {

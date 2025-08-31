@@ -1,13 +1,15 @@
 /**
- * Action Registry - Node.js Implementation  
- * Port of Python version's domain-restricted action system
+ * Action Registry - Node.js Implementation
  *
  * This module provides secure action registration and execution
  * with domain restrictions and page filtering capabilities.
  */
 
 import type { Page, BrowserContext } from 'playwright';
-import { matchUrlWithDomainPattern, isNewTabPage } from '../utils/domain-matcher';
+import {
+  matchUrlWithDomainPattern,
+  isNewTabPage,
+} from '../utils/domain-matcher';
 import { getLogger } from '../services/logging';
 
 let logger: ReturnType<typeof getLogger>;
@@ -72,17 +74,16 @@ export class ActionRegistry {
 
   /**
    * Register an action with domain restrictions and page filtering
-   * Equivalent to Python's @registry.action decorator
-   * 
+   *
    * @param name - Action name
    * @param description - Action description
    * @param handler - Action handler function
    * @param options - Action options including domain restrictions
    */
   registerAction(
-    name: string, 
-    description: string, 
-    handler: Function, 
+    name: string,
+    description: string,
+    handler: Function,
     options: ActionOptions = {}
   ): void {
     // Skip registration if action is in exclude list
@@ -93,7 +94,9 @@ export class ActionRegistry {
 
     // Handle aliases: domains and allowedDomains are the same parameter
     if (options.allowedDomains && options.domains) {
-      throw new Error("Cannot specify both 'domains' and 'allowedDomains' - they are aliases for the same parameter");
+      throw new Error(
+        "Cannot specify both 'domains' and 'allowedDomains' - they are aliases for the same parameter"
+      );
     }
 
     const finalDomains = options.allowedDomains || options.domains;
@@ -111,38 +114,46 @@ export class ActionRegistry {
     };
 
     this.actions.set(name, action);
-    
-    const domainInfo = finalDomains ? `[${finalDomains.join(', ')}]` : '[no domain restrictions]';
+
+    const domainInfo = finalDomains
+      ? `[${finalDomains.join(', ')}]`
+      : '[no domain restrictions]';
     logger.debug(`Registered action: ${name} ${domainInfo}`);
   }
 
   /**
-   * Action decorator that mimics Python's @registry.action decorator
-   * 
+   * Action decorator that mimics action decorator
+   *
    * Usage:
    * @actionRegistry.action('Action description', { domains: ['https://example.com'] })
    * async function myAction(params: MyParams) { ... }
    */
   action(description: string, options: ActionOptions = {}) {
-    return (target: any, propertyKey: string, descriptor: PropertyDescriptor) => {
+    return (
+      target: any,
+      propertyKey: string,
+      descriptor: PropertyDescriptor
+    ) => {
       const originalMethod = descriptor.value;
-      
+
       // Register the action
       this.registerAction(propertyKey, description, originalMethod, options);
-      
+
       return descriptor;
     };
   }
 
   /**
    * Check if an action is available for a specific page
-   * Equivalent to Python's domain and page filter checking
-   * 
+   *
    * @param actionName - Name of the action
    * @param page - Page to check against (optional)
    * @returns ActionAvailabilityResult - Availability info
    */
-  async isActionAvailable(actionName: string, page?: Page): Promise<ActionAvailabilityResult> {
+  async isActionAvailable(
+    actionName: string,
+    page?: Page
+  ): Promise<ActionAvailabilityResult> {
     const action = this.actions.get(actionName);
     if (!action) {
       return { available: false, reason: 'Action not found' };
@@ -150,10 +161,13 @@ export class ActionRegistry {
 
     // If no page provided, only allow actions with no restrictions
     if (!page) {
-      const hasRestrictions = action.options.domains || action.options.pageFilter;
+      const hasRestrictions =
+        action.options.domains || action.options.pageFilter;
       return {
         available: !hasRestrictions,
-        reason: hasRestrictions ? 'Action has restrictions but no page provided' : undefined,
+        reason: hasRestrictions
+          ? 'Action has restrictions but no page provided'
+          : undefined,
       };
     }
 
@@ -173,7 +187,10 @@ export class ActionRegistry {
       try {
         pageFilterMatch = await action.options.pageFilter(page);
       } catch (error) {
-        logger.error(`Error in page filter for action ${actionName}:`, error as Error);
+        logger.error(
+          `Error in page filter for action ${actionName}:`,
+          error as Error
+        );
         pageFilterMatch = false;
       }
     }
@@ -237,8 +254,8 @@ export class ActionRegistry {
    * @returns Promise<any> - Action result
    */
   async executeAction(
-    actionName: string, 
-    params: any, 
+    actionName: string,
+    params: any,
     context: {
       page?: Page;
       browserContext?: BrowserContext;
@@ -252,9 +269,14 @@ export class ActionRegistry {
 
     // Check if action is available for the current page
     if (context.page) {
-      const availability = await this.isActionAvailable(actionName, context.page);
+      const availability = await this.isActionAvailable(
+        actionName,
+        context.page
+      );
       if (!availability.available) {
-        throw new Error(`Action '${actionName}' not available: ${availability.reason}`);
+        throw new Error(
+          `Action '${actionName}' not available: ${availability.reason}`
+        );
       }
     }
 
@@ -272,21 +294,20 @@ export class ActionRegistry {
 
   /**
    * Get prompt description for available actions
-   * Similar to Python's get_prompt_description
-   * 
+   *
    * @param page - Page to filter actions for
    * @returns string - Description of available actions
    */
   async getPromptDescription(page?: Page): Promise<string> {
     const availableActions = await this.getAvailableActions(page);
-    
+
     if (availableActions.length === 0) {
       return 'No actions available for the current page.';
     }
 
-    const descriptions = availableActions.map(action => {
-      const domainInfo = action.options.domains 
-        ? ` (domains: ${action.options.domains.join(', ')})` 
+    const descriptions = availableActions.map((action) => {
+      const domainInfo = action.options.domains
+        ? ` (domains: ${action.options.domains.join(', ')})`
         : '';
       return `${action.name}: ${action.description}${domainInfo}`;
     });
@@ -295,7 +316,7 @@ export class ActionRegistry {
   }
 
   /**
-   * Match domains against URL - equivalent to Python's _match_domains
+   * Match domains against URL
    * @param domains - Domain patterns to match
    * @param url - URL to check
    * @returns boolean - True if URL matches any domain pattern
@@ -309,7 +330,7 @@ export class ActionRegistry {
       return true; // Allow new tab pages
     }
 
-    return domains.some(pattern => 
+    return domains.some((pattern) =>
       matchUrlWithDomainPattern(url, pattern, true)
     );
   }
@@ -359,10 +380,11 @@ export class ActionRegistry {
    * @returns RegisteredAction[] - Actions restricted to the domain
    */
   getActionsByDomain(domainPattern: string): RegisteredAction[] {
-    return Array.from(this.actions.values()).filter(action => 
-      action.options.domains?.some(domain => 
-        matchUrlWithDomainPattern('https://example.com', domain, false) === 
-        matchUrlWithDomainPattern('https://example.com', domainPattern, false)
+    return Array.from(this.actions.values()).filter((action) =>
+      action.options.domains?.some(
+        (domain) =>
+          matchUrlWithDomainPattern('https://example.com', domain, false) ===
+          matchUrlWithDomainPattern('https://example.com', domainPattern, false)
       )
     );
   }
@@ -379,14 +401,15 @@ export class ActionRegistry {
         issues.push({
           type: 'warning',
           actionName: action.name,
-          message: 'Action has no domain restrictions and can be used on any page',
+          message:
+            'Action has no domain restrictions and can be used on any page',
         });
       } else {
         // Check for overly broad patterns
-        const broadPatterns = action.options.domains.filter(domain => 
+        const broadPatterns = action.options.domains.filter((domain) =>
           ['*', '*.*', '*.com', '*.org', '*.net'].includes(domain.toLowerCase())
         );
-        
+
         if (broadPatterns.length > 0) {
           issues.push({
             type: 'warning',

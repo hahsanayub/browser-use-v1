@@ -1,6 +1,5 @@
 /**
  * Advanced DOM Service - Node.js Implementation
- * Port of Python version's comprehensive DOM processing and optimization system
  *
  * This module provides enhanced DOM processing capabilities that improve
  * performance, stability, and accuracy for browser automation.
@@ -54,18 +53,17 @@ interface DOMPerformanceMetrics {
 
 /**
  * Advanced DOM Service
- * Provides comprehensive DOM processing enhancements from Python version
  */
 export class AdvancedDOMService {
   private xpathCache = new Map<Element, string>();
   private performanceMetrics: DOMPerformanceMetrics;
   private adDomainPatterns: RegExp[];
   private context: BrowserContext | null = null;
-  
-  // Known ad and tracking domains (from Python version)
+
+  // Known ad and tracking domains
   private readonly AD_DOMAINS = [
     'doubleclick.net',
-    'adroll.com', 
+    'adroll.com',
     'googletagmanager.com',
     'googlesyndication.com',
     'amazon-adsystem.com',
@@ -85,10 +83,10 @@ export class AdvancedDOMService {
   constructor(context?: BrowserContext) {
     this.context = context || null;
     this.performanceMetrics = this.initializeMetrics();
-    this.adDomainPatterns = this.AD_DOMAINS.map(domain => 
-      new RegExp(domain.replace(/\./g, '\\.'), 'i')
+    this.adDomainPatterns = this.AD_DOMAINS.map(
+      (domain) => new RegExp(domain.replace(/\./g, '\\.'), 'i')
     );
-    
+
     // Initialize logger if not already done
     if (!logger) {
       logger = getLogger();
@@ -97,47 +95,50 @@ export class AdvancedDOMService {
 
   /**
    * Get cross-origin iframes with intelligent filtering
-   * Equivalent to Python's get_cross_origin_iframes()
    *
    * @param page - The page to analyze
    * @returns Promise<FrameInfo[]> - Array of cross-origin frame information
    */
   async getCrossOriginIframes(page: Page): Promise<FrameInfo[]> {
     const startTime = performance.now();
-    
+
     try {
       logger.debug('🔍 Starting cross-origin iframe analysis...');
-      
+
       // Get all frames on the page
       const frames = page.frames();
       const mainOrigin = this.getOriginFromUrl(page.url());
-      
+
       // Get hidden iframe URLs to filter out ads and trackers
       const hiddenFrameUrls = await this.getHiddenFrameUrls(page);
-      
+
       const crossOriginFrames: FrameInfo[] = [];
-      
+
       for (const frame of frames) {
         const frameUrl = frame.url();
-        
+
         // Skip empty or data URLs
-        if (!frameUrl || frameUrl.startsWith('data:') || frameUrl === 'about:blank') {
+        if (
+          !frameUrl ||
+          frameUrl.startsWith('data:') ||
+          frameUrl === 'about:blank'
+        ) {
           continue;
         }
-        
+
         const frameOrigin = this.getOriginFromUrl(frameUrl);
-        
+
         // Skip same-origin frames
         if (frameOrigin === mainOrigin) {
           continue;
         }
-        
+
         // Check if frame is hidden (likely ad or tracker)
         const isHidden = hiddenFrameUrls.includes(frameUrl);
-        
+
         // Check if frame URL matches ad patterns
         const isAd = this.isAdUrl(frameUrl);
-        
+
         const frameInfo: FrameInfo = {
           url: frameUrl,
           name: frame.name() || undefined,
@@ -145,31 +146,37 @@ export class AdvancedDOMService {
           isVisible: !isHidden,
           isAd: isAd,
         };
-        
-        // Only include visible, non-ad frames (similar to Python filtering)
+
+        // Only include visible, non-ad frames
         if (!isHidden && !isAd) {
           crossOriginFrames.push(frameInfo);
         }
-        
-        logger.debug(`📱 Frame analyzed: ${frameUrl.slice(0, 50)}... (visible: ${!isHidden}, ad: ${isAd})`);
+
+        logger.debug(
+          `📱 Frame analyzed: ${frameUrl.slice(0, 50)}... (visible: ${!isHidden}, ad: ${isAd})`
+        );
       }
-      
+
       const processingTime = performance.now() - startTime;
       this.performanceMetrics.timingMetrics.adFilteringTime += processingTime;
-      
-      logger.info(`✅ Cross-origin iframe analysis completed: found ${crossOriginFrames.length} valid frames (${processingTime.toFixed(2)}ms)`);
-      
+
+      logger.info(
+        `✅ Cross-origin iframe analysis completed: found ${crossOriginFrames.length} valid frames (${processingTime.toFixed(2)}ms)`
+      );
+
       return crossOriginFrames;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`❌ Failed to analyze cross-origin iframes: ${errorMessage}`);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      logger.error(
+        `❌ Failed to analyze cross-origin iframes: ${errorMessage}`
+      );
       return [];
     }
   }
 
   /**
    * Get cached XPath for an element or compute and cache it
-   * Equivalent to Python's XPath caching system in buildDomTree.js
    *
    * @param element - The DOM element
    * @returns string - XPath string
@@ -180,56 +187,59 @@ export class AdvancedDOMService {
       this.performanceMetrics.timingMetrics.xpathCacheHits++;
       return this.xpathCache.get(element)!;
     }
-    
+
     // Compute XPath if not cached
     const xpath = this.computeXPath(element);
     this.xpathCache.set(element, xpath);
     this.performanceMetrics.timingMetrics.xpathCacheMisses++;
     this.performanceMetrics.memoryMetrics.cacheSize = this.xpathCache.size;
-    
+
     return xpath;
   }
 
   /**
    * Filter ad and tracking elements from DOM
-   * Equivalent to Python's ad filtering logic
    *
    * @param page - The page to process
    * @returns Promise<number> - Number of elements filtered
    */
   async filterAdsAndTrackers(page: Page): Promise<number> {
     const startTime = performance.now();
-    
+
     try {
       logger.debug('🚫 Starting ad and tracker filtering...');
-      
+
       const filteredCount = await page.evaluate((adPatterns: string[]) => {
         let filtered = 0;
-        const adRegexes = adPatterns.map(pattern => new RegExp(pattern, 'i'));
-        
+        const adRegexes = adPatterns.map((pattern) => new RegExp(pattern, 'i'));
+
         // Find elements with ad-related attributes
         const elements = document.querySelectorAll('*');
-        
-        elements.forEach(element => {
+
+        elements.forEach((element) => {
           // Check src, href, and data attributes for ad URLs
           const src = element.getAttribute('src');
           const href = element.getAttribute('href');
           const dataSrc = element.getAttribute('data-src');
           const id = element.getAttribute('id');
           const className = element.getAttribute('class');
-          
+
           const urlsToCheck = [src, href, dataSrc].filter(Boolean) as string[];
-          
+
           // Check if any URL matches ad patterns
-          const isAdElement = urlsToCheck.some(url => 
-            adRegexes.some(regex => regex.test(url))
+          const isAdElement = urlsToCheck.some((url) =>
+            adRegexes.some((regex) => regex.test(url))
           );
-          
+
           // Check for common ad class names and IDs
-          const hasAdIdentifiers = [id, className].some(attr => 
-            attr && /\b(ad|advertisement|banner|sponsor|promo|popup|modal|overlay|tracking|analytics)\b/i.test(attr)
+          const hasAdIdentifiers = [id, className].some(
+            (attr) =>
+              attr &&
+              /\b(ad|advertisement|banner|sponsor|promo|popup|modal|overlay|tracking|analytics)\b/i.test(
+                attr
+              )
           );
-          
+
           if (isAdElement || hasAdIdentifiers) {
             // Mark element as hidden instead of removing to avoid layout shifts
             (element as HTMLElement).style.display = 'none';
@@ -238,19 +248,22 @@ export class AdvancedDOMService {
             filtered++;
           }
         });
-        
+
         return filtered;
       }, this.AD_DOMAINS);
-      
+
       const processingTime = performance.now() - startTime;
       this.performanceMetrics.timingMetrics.adFilteringTime += processingTime;
       this.performanceMetrics.nodeMetrics.filteredNodes += filteredCount;
-      
-      logger.info(`✅ Ad filtering completed: filtered ${filteredCount} elements (${processingTime.toFixed(2)}ms)`);
-      
+
+      logger.info(
+        `✅ Ad filtering completed: filtered ${filteredCount} elements (${processingTime.toFixed(2)}ms)`
+      );
+
       return filteredCount;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       logger.error(`❌ Failed to filter ads and trackers: ${errorMessage}`);
       return 0;
     }
@@ -258,31 +271,41 @@ export class AdvancedDOMService {
 
   /**
    * Collect performance metrics from DOM processing
-   * Equivalent to Python's performance metrics collection
    *
    * @param page - The page being processed
    * @param additionalMetrics - Additional metrics to merge
    * @returns DOMPerformanceMetrics - Current performance metrics
    */
-  collectPerformanceMetrics(page: Page, additionalMetrics?: Partial<DOMPerformanceMetrics>): DOMPerformanceMetrics {
+  collectPerformanceMetrics(
+    page: Page,
+    additionalMetrics?: Partial<DOMPerformanceMetrics>
+  ): DOMPerformanceMetrics {
     try {
       // Update cache-related metrics
       this.performanceMetrics.memoryMetrics.cacheSize = this.xpathCache.size;
-      
+
       // Calculate cache hit ratio
-      const totalCacheRequests = this.performanceMetrics.timingMetrics.xpathCacheHits + 
-                                this.performanceMetrics.timingMetrics.xpathCacheMisses;
-      
+      const totalCacheRequests =
+        this.performanceMetrics.timingMetrics.xpathCacheHits +
+        this.performanceMetrics.timingMetrics.xpathCacheMisses;
+
       if (totalCacheRequests > 0) {
-        const hitRatio = this.performanceMetrics.timingMetrics.xpathCacheHits / totalCacheRequests;
-        logger.debug(`📊 XPath cache hit ratio: ${(hitRatio * 100).toFixed(1)}%`);
+        const hitRatio =
+          this.performanceMetrics.timingMetrics.xpathCacheHits /
+          totalCacheRequests;
+        logger.debug(
+          `📊 XPath cache hit ratio: ${(hitRatio * 100).toFixed(1)}%`
+        );
       }
-      
+
       // Merge additional metrics if provided
       if (additionalMetrics) {
-        this.performanceMetrics = this.mergeMetrics(this.performanceMetrics, additionalMetrics);
+        this.performanceMetrics = this.mergeMetrics(
+          this.performanceMetrics,
+          additionalMetrics
+        );
       }
-      
+
       // Log summary in debug mode
       logger.debug('📈 DOM Performance Metrics', {
         totalNodes: this.performanceMetrics.nodeMetrics.totalNodes,
@@ -293,10 +316,11 @@ export class AdvancedDOMService {
         cacheHits: this.performanceMetrics.timingMetrics.xpathCacheHits,
         cacheMisses: this.performanceMetrics.timingMetrics.xpathCacheMisses,
       });
-      
+
       return { ...this.performanceMetrics };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       logger.error(`❌ Failed to collect performance metrics: ${errorMessage}`);
       return this.performanceMetrics;
     }
@@ -309,7 +333,7 @@ export class AdvancedDOMService {
     const cacheSize = this.xpathCache.size;
     this.xpathCache.clear();
     this.performanceMetrics.memoryMetrics.cacheSize = 0;
-    
+
     logger.debug(`🧹 XPath cache cleared (was ${cacheSize} entries)`);
   }
 
@@ -364,28 +388,29 @@ export class AdvancedDOMService {
       return await page.evaluate(() => {
         const iframes = document.querySelectorAll('iframe');
         const hiddenUrls: string[] = [];
-        
-        iframes.forEach(iframe => {
+
+        iframes.forEach((iframe) => {
           const style = window.getComputedStyle(iframe);
           const rect = iframe.getBoundingClientRect();
-          
+
           // Check if iframe is hidden
-          const isHidden = style.display === 'none' || 
-                          style.visibility === 'hidden' ||
-                          style.opacity === '0' ||
-                          rect.width === 0 || 
-                          rect.height === 0;
-          
+          const isHidden =
+            style.display === 'none' ||
+            style.visibility === 'hidden' ||
+            style.opacity === '0' ||
+            rect.width === 0 ||
+            rect.height === 0;
+
           if (isHidden && iframe.src) {
             hiddenUrls.push(iframe.src);
           }
         });
-        
+
         return hiddenUrls;
       });
     } catch (error) {
-      logger.debug('Failed to get hidden iframe URLs', { 
-        error: (error as Error).message 
+      logger.debug('Failed to get hidden iframe URLs', {
+        error: (error as Error).message,
       });
       return [];
     }
@@ -407,7 +432,7 @@ export class AdvancedDOMService {
    * Check if URL matches ad patterns
    */
   private isAdUrl(url: string): boolean {
-    return this.adDomainPatterns.some(pattern => pattern.test(url));
+    return this.adDomainPatterns.some((pattern) => pattern.test(url));
   }
 
   /**
@@ -416,31 +441,35 @@ export class AdvancedDOMService {
   private computeXPath(element: Element): string {
     const segments: string[] = [];
     let currentElement: Element | null = element;
-    
+
     while (currentElement && currentElement.nodeType === Node.ELEMENT_NODE) {
       let segment = currentElement.nodeName.toLowerCase();
-      
+
       if (currentElement.parentElement) {
-        const siblings = Array.from(currentElement.parentElement.children)
-          .filter(sibling => sibling.nodeName === currentElement!.nodeName);
-        
+        const siblings = Array.from(
+          currentElement.parentElement.children
+        ).filter((sibling) => sibling.nodeName === currentElement!.nodeName);
+
         if (siblings.length > 1) {
           const index = siblings.indexOf(currentElement) + 1;
           segment += `[${index}]`;
         }
       }
-      
+
       segments.unshift(segment);
       currentElement = currentElement.parentElement;
     }
-    
+
     return '/' + segments.join('/');
   }
 
   /**
    * Merge performance metrics
    */
-  private mergeMetrics(base: DOMPerformanceMetrics, additional: Partial<DOMPerformanceMetrics>): DOMPerformanceMetrics {
+  private mergeMetrics(
+    base: DOMPerformanceMetrics,
+    additional: Partial<DOMPerformanceMetrics>
+  ): DOMPerformanceMetrics {
     return {
       nodeMetrics: {
         ...base.nodeMetrics,
@@ -482,8 +511,8 @@ export class AdvancedDOMUtils {
       /segment\.com/i,
       /mixpanel\.com/i,
     ];
-    
-    return adPatterns.some(pattern => pattern.test(url));
+
+    return adPatterns.some((pattern) => pattern.test(url));
   }
 
   /**
@@ -496,17 +525,21 @@ export class AdvancedDOMUtils {
     const className = element.getAttribute('class');
     const src = element.getAttribute('src');
     const href = element.getAttribute('href');
-    
+
     // Check for common ad identifiers
-    const hasAdIdentifiers = [id, className].some(attr => 
-      attr && /\b(ad|advertisement|banner|sponsor|promo|popup|modal|overlay)\b/i.test(attr)
+    const hasAdIdentifiers = [id, className].some(
+      (attr) =>
+        attr &&
+        /\b(ad|advertisement|banner|sponsor|promo|popup|modal|overlay)\b/i.test(
+          attr
+        )
     );
-    
+
     // Check for ad URLs
-    const hasAdUrls = [src, href].some(url => 
-      url && AdvancedDOMUtils.isAdUrl(url)
+    const hasAdUrls = [src, href].some(
+      (url) => url && AdvancedDOMUtils.isAdUrl(url)
     );
-    
+
     return hasAdIdentifiers || hasAdUrls;
   }
 
@@ -520,7 +553,7 @@ export class AdvancedDOMUtils {
     if (element.id) {
       return `#${element.id}`;
     }
-    
+
     // Try unique class combination
     if (element.className) {
       const classes = element.className.split(' ').filter(Boolean);
@@ -532,22 +565,22 @@ export class AdvancedDOMUtils {
         }
       }
     }
-    
+
     // Fallback to tag with position
     const tagName = element.tagName.toLowerCase();
     const parent = element.parentElement;
-    
+
     if (parent) {
       const siblings = Array.from(parent.children).filter(
-        sibling => sibling.tagName === element.tagName
+        (sibling) => sibling.tagName === element.tagName
       );
-      
+
       if (siblings.length > 1) {
         const index = siblings.indexOf(element) + 1;
         return `${tagName}:nth-of-type(${index})`;
       }
     }
-    
+
     return tagName;
   }
 }

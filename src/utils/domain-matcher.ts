@@ -1,13 +1,13 @@
 /**
  * Domain Matching Utilities - Node.js Implementation
- * Port of Python version's secure domain pattern matching system
  *
  * This module provides SECURITY CRITICAL domain matching functionality
  * that restricts Actions to specific domains for security purposes.
  */
 
 import { URL } from 'url';
-import { minimatch } from 'minimatch';
+// @ts-ignore
+import minimatch from 'minimatch';
 import { getLogger } from '../services/logging';
 
 let logger: ReturnType<typeof getLogger>;
@@ -27,34 +27,40 @@ function initLogger() {
  * @returns boolean - True if it's a new tab page
  */
 export function isNewTabPage(url: string): boolean {
-  return url === 'about:blank' || 
-         url === 'chrome://new-tab-page/' || 
-         url === 'chrome://new-tab-page';
+  return (
+    url === 'about:blank' ||
+    url === 'chrome://new-tab-page/' ||
+    url === 'chrome://new-tab-page'
+  );
 }
 
 /**
  * Check if a URL matches a domain pattern. SECURITY CRITICAL.
- * 
+ *
  * Supports optional glob patterns and schemes:
  * - *.example.com will match sub.example.com and example.com
  * - *google.com will match google.com, agoogle.com, and www.google.com
  * - http*://example.com will match http://example.com, https://example.com
  * - chrome-extension://* will match chrome-extension://aaaaaaaaaaaa and chrome-extension://bbbbbbbbbbbbb
- * 
+ *
  * When no scheme is specified, https is used by default for security.
  * For example, 'example.com' will match 'https://example.com' but not 'http://example.com'.
- * 
+ *
  * Note: New tab pages (about:blank, chrome://new-tab-page) must be handled at the callsite, not inside this function.
- * 
+ *
  * @param url - The URL to check
  * @param domainPattern - Domain pattern to match against
  * @param logWarnings - Whether to log warnings about unsafe patterns
  * @returns boolean - True if the URL matches the pattern, False otherwise
  */
-export function matchUrlWithDomainPattern(url: string, domainPattern: string, logWarnings: boolean = false): boolean {
+export function matchUrlWithDomainPattern(
+  url: string,
+  domainPattern: string,
+  logWarnings: boolean = false
+): boolean {
   try {
     initLogger();
-    
+
     // Note: new tab pages should be handled at the callsite, not here
     if (isNewTabPage(url)) {
       return false;
@@ -81,7 +87,7 @@ export function matchUrlWithDomainPattern(url: string, domainPattern: string, lo
     // Handle pattern with scheme
     let patternScheme: string;
     let patternDomain: string;
-    
+
     if (domainPattern.includes('://')) {
       [patternScheme, patternDomain] = domainPattern.split('://', 2);
     } else {
@@ -110,12 +116,17 @@ export function matchUrlWithDomainPattern(url: string, domainPattern: string, lo
       if (logWarnings) {
         console.log(`DEBUG: Processing glob pattern: ${patternDomain}`);
       }
-      
+
       // Check for unsafe glob patterns
       // First, check for patterns like *.*.domain which are unsafe
-      if ((patternDomain.match(/\*\./g) || []).length > 1 || (patternDomain.match(/\.\*/g) || []).length > 1) {
+      if (
+        (patternDomain.match(/\*\./g) || []).length > 1 ||
+        (patternDomain.match(/\.\*/g) || []).length > 1
+      ) {
         if (logWarnings) {
-          logger.error(`⛔️ Multiple wildcards in pattern=[${domainPattern}] are not supported`);
+          logger.error(
+            `⛔️ Multiple wildcards in pattern=[${domainPattern}] are not supported`
+          );
         }
         return false; // Don't match unsafe patterns
       }
@@ -123,7 +134,9 @@ export function matchUrlWithDomainPattern(url: string, domainPattern: string, lo
       // Check for wildcards in TLD part (example.*)
       if (patternDomain.endsWith('.*')) {
         if (logWarnings) {
-          logger.error(`⛔️ Wildcard TLDs like in pattern=[${domainPattern}] are not supported for security`);
+          logger.error(
+            `⛔️ Wildcard TLDs like in pattern=[${domainPattern}] are not supported for security`
+          );
         }
         return false; // Don't match unsafe patterns
       }
@@ -132,7 +145,9 @@ export function matchUrlWithDomainPattern(url: string, domainPattern: string, lo
       const bareDomain = patternDomain.replace(/\*\./g, '');
       if (bareDomain.includes('*')) {
         if (logWarnings) {
-          logger.error(`⛔️ Only *.domain style patterns are supported, ignoring pattern=[${domainPattern}]`);
+          logger.error(
+            `⛔️ Only *.domain style patterns are supported, ignoring pattern=[${domainPattern}]`
+          );
         }
         return false; // Don't match unsafe patterns
       }
@@ -156,7 +171,9 @@ export function matchUrlWithDomainPattern(url: string, domainPattern: string, lo
 
       // Normal case: match domain against pattern
       if (logWarnings) {
-        console.log(`DEBUG: matching domain="${domain}" against pattern="${patternDomain}"`);
+        console.log(
+          `DEBUG: matching domain="${domain}" against pattern="${patternDomain}"`
+        );
       }
       const matchResult = minimatch(domain, patternDomain);
       if (logWarnings) {
@@ -171,7 +188,9 @@ export function matchUrlWithDomainPattern(url: string, domainPattern: string, lo
   } catch (error) {
     initLogger();
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error(`⛔️ Error matching URL ${url} with pattern ${domainPattern}: ${errorMessage}`);
+    logger.error(
+      `⛔️ Error matching URL ${url} with pattern ${domainPattern}: ${errorMessage}`
+    );
     return false;
   }
 }
@@ -184,16 +203,16 @@ export function matchUrlWithDomainPattern(url: string, domainPattern: string, lo
  * @returns boolean - True if at least one URL matches any pattern
  */
 export function matchUrlsWithDomainPatterns(
-  urls: string[], 
-  domainPatterns: string[], 
+  urls: string[],
+  domainPatterns: string[],
   logWarnings: boolean = false
 ): boolean {
   if (!domainPatterns || domainPatterns.length === 0) {
     return true; // No restrictions
   }
-  
-  return urls.some(url => 
-    domainPatterns.some(pattern => 
+
+  return urls.some((url) =>
+    domainPatterns.some((pattern) =>
       matchUrlWithDomainPattern(url, pattern, logWarnings)
     )
   );
@@ -207,16 +226,16 @@ export function matchUrlsWithDomainPatterns(
  * @returns string[] - URLs that match at least one pattern
  */
 export function filterUrlsByDomainPatterns(
-  urls: string[], 
-  domainPatterns: string[], 
+  urls: string[],
+  domainPatterns: string[],
   logWarnings: boolean = false
 ): string[] {
   if (!domainPatterns || domainPatterns.length === 0) {
     return urls; // No restrictions
   }
-  
-  return urls.filter(url => 
-    domainPatterns.some(pattern => 
+
+  return urls.filter((url) =>
+    domainPatterns.some((pattern) =>
       matchUrlWithDomainPattern(url, pattern, logWarnings)
     )
   );
@@ -233,41 +252,53 @@ export interface DomainPatternValidationResult {
   errors: string[];
 }
 
-export function validateDomainPatterns(domainPatterns: string[]): DomainPatternValidationResult {
+export function validateDomainPatterns(
+  domainPatterns: string[]
+): DomainPatternValidationResult {
   const result: DomainPatternValidationResult = {
     isValid: true,
     warnings: [],
-    errors: []
+    errors: [],
   };
 
   for (const pattern of domainPatterns) {
     // Check for multiple wildcards
     if ((pattern.match(/\*\./g) || []).length > 1) {
-      result.errors.push(`Multiple wildcards in pattern '${pattern}' are not supported for security`);
+      result.errors.push(
+        `Multiple wildcards in pattern '${pattern}' are not supported for security`
+      );
       result.isValid = false;
     }
 
     // Check for wildcard TLDs
     if (pattern.endsWith('.*')) {
-      result.errors.push(`Wildcard TLD in pattern '${pattern}' is not supported for security`);
+      result.errors.push(
+        `Wildcard TLD in pattern '${pattern}' is not supported for security`
+      );
       result.isValid = false;
     }
 
     // Check for embedded wildcards
     const bareDomain = pattern.replace(/\*\./g, '');
     if (bareDomain.includes('*')) {
-      result.errors.push(`Only *.domain style patterns are supported, pattern '${pattern}' has embedded wildcards`);
+      result.errors.push(
+        `Only *.domain style patterns are supported, pattern '${pattern}' has embedded wildcards`
+      );
       result.isValid = false;
     }
 
     // Warn about overly broad patterns
     if (pattern === '*' || pattern === '*.*') {
-      result.warnings.push(`Pattern '${pattern}' is very broad and may pose security risks`);
+      result.warnings.push(
+        `Pattern '${pattern}' is very broad and may pose security risks`
+      );
     }
 
     // Check for non-HTTPS schemes
     if (pattern.startsWith('http://')) {
-      result.warnings.push(`Pattern '${pattern}' uses HTTP instead of HTTPS, which is less secure`);
+      result.warnings.push(
+        `Pattern '${pattern}' uses HTTP instead of HTTPS, which is less secure`
+      );
     }
   }
 
@@ -301,7 +332,9 @@ export function areDomainsOverlyPermissive(domainPatterns: string[]): boolean {
 
   // Check for overly broad patterns
   const broadPatterns = ['*', '*.*', '*.com', '*.org', '*.net'];
-  return domainPatterns.some(pattern => broadPatterns.includes(pattern.toLowerCase()));
+  return domainPatterns.some((pattern) =>
+    broadPatterns.includes(pattern.toLowerCase())
+  );
 }
 
 /**
@@ -310,17 +343,18 @@ export function areDomainsOverlyPermissive(domainPatterns: string[]): boolean {
  * @param currentPatterns - Current domain patterns
  * @returns string[] - Suggested more specific patterns
  */
-export function suggestSpecificDomainPatterns(urls: string[], currentPatterns: string[]): string[] {
-  const domains = urls
-    .map(extractDomain)
-    .filter(Boolean) as string[];
-  
+export function suggestSpecificDomainPatterns(
+  urls: string[],
+  currentPatterns: string[]
+): string[] {
+  const domains = urls.map(extractDomain).filter(Boolean) as string[];
+
   const uniqueDomains = [...new Set(domains)];
-  
+
   // If current patterns are overly broad, suggest specific domains
   if (areDomainsOverlyPermissive(currentPatterns)) {
-    return uniqueDomains.map(domain => `https://${domain}`);
+    return uniqueDomains.map((domain) => `https://${domain}`);
   }
-  
+
   return [];
 }

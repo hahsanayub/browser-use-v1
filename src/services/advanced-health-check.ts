@@ -1,6 +1,5 @@
 /**
  * Advanced Health Check Service - Node.js Implementation
- * Port of Python version's comprehensive page health check and recovery system
  *
  * This module provides robust browser and page health monitoring capabilities
  * that are critical for reliable automation in production environments.
@@ -38,7 +37,7 @@ export class AdvancedHealthCheckService {
 
   constructor(context?: BrowserContext) {
     this.context = context || null;
-    
+
     // Initialize logger if not already done
     if (!logger) {
       logger = getLogger();
@@ -47,7 +46,6 @@ export class AdvancedHealthCheckService {
 
   /**
    * Check if a page is responsive by trying to evaluate simple JavaScript
-   * Equivalent to Python's _is_page_responsive
    *
    * @param page - The page to check
    * @param timeout - Timeout in milliseconds (default 5000ms)
@@ -88,14 +86,12 @@ export class AdvancedHealthCheckService {
 
   /**
    * Check if browser process is still alive
-   * Equivalent to Python's browser process monitoring using psutil
    *
    * @returns Promise<boolean> - True if browser process is alive
    */
   async isBrowserProcessAlive(): Promise<boolean> {
     try {
       // In Node.js, we can check browser connection status
-      // This is simpler than Python's psutil approach but effective
       if (this.context && !this.context.browser()?.isConnected()) {
         logger.error(
           '❌ Browser connection lost - browser process may have crashed'
@@ -120,7 +116,6 @@ export class AdvancedHealthCheckService {
 
   /**
    * Force close a page using CDP (Chrome DevTools Protocol)
-   * Equivalent to Python's _force_close_page_via_cdp
    *
    * @param page - The page to close
    * @returns Promise<boolean> - True if successfully closed
@@ -161,7 +156,6 @@ export class AdvancedHealthCheckService {
 
   /**
    * Try to reopen a URL with timeout
-   * Equivalent to Python's _try_reopen_url
    *
    * @param url - The URL to reopen
    * @param timeoutMs - Navigation timeout in milliseconds
@@ -226,7 +220,6 @@ export class AdvancedHealthCheckService {
 
   /**
    * Create a blank fallback page when recovery fails
-   * Equivalent to Python's _create_blank_fallback_page
    *
    * @param originalUrl - The original URL that failed
    * @returns Promise<Page | null> - Blank page if successful
@@ -268,7 +261,6 @@ export class AdvancedHealthCheckService {
 
   /**
    * Recover from an unresponsive page by closing and reopening it
-   * Equivalent to Python's _recover_unresponsive_page
    *
    * @param page - The unresponsive page
    * @param callingMethod - Name of the method that triggered recovery
@@ -376,7 +368,6 @@ export class AdvancedHealthCheckService {
 
 /**
  * Decorator function to ensure browser/page health before method execution
- * Equivalent to Python's @require_healthy_browser decorator
  *
  * @param options - Configuration options
  */
