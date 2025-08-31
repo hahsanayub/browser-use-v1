@@ -152,7 +152,7 @@ export function matchUrlWithDomainPattern(
         return false; // Don't match unsafe patterns
       }
 
-      // Special handling so that *.google.com also matches bare google.com
+      // Special handling for *.domain patterns
       if (patternDomain.startsWith('*.')) {
         if (logWarnings) {
           console.log(`DEBUG: Processing *.domain pattern`);
@@ -161,12 +161,8 @@ export function matchUrlWithDomainPattern(
         if (logWarnings) {
           console.log(`DEBUG: parentDomain=${parentDomain}, domain=${domain}`);
         }
-        if (domain === parentDomain) {
-          if (logWarnings) {
-            console.log(`DEBUG: Matched parent domain exactly`);
-          }
-          return true;
-        }
+        // *.google.com should NOT match google.com, only subdomains like docs.google.com
+        // This ensures security by not allowing overly broad matches
       }
 
       // Normal case: match domain against pattern
@@ -262,6 +258,25 @@ export function validateDomainPatterns(
   };
 
   for (const pattern of domainPatterns) {
+    // Check for overly permissive patterns
+    if (pattern === '*' || pattern === '*.*') {
+      result.errors.push(`Overly permissive pattern: ${pattern}`);
+      result.isValid = false;
+      continue;
+    }
+
+    // Check for overly broad TLD patterns
+    if (
+      pattern === '*.com' ||
+      pattern === '*.org' ||
+      pattern === '*.net' ||
+      pattern === '*.io'
+    ) {
+      result.errors.push(`Overly broad pattern: ${pattern}`);
+      result.isValid = false;
+      continue;
+    }
+
     // Check for multiple wildcards
     if ((pattern.match(/\*\./g) || []).length > 1) {
       result.errors.push(
@@ -287,18 +302,10 @@ export function validateDomainPatterns(
       result.isValid = false;
     }
 
-    // Warn about overly broad patterns
-    if (pattern === '*' || pattern === '*.*') {
-      result.warnings.push(
-        `Pattern '${pattern}' is very broad and may pose security risks`
-      );
-    }
-
     // Check for non-HTTPS schemes
     if (pattern.startsWith('http://')) {
-      result.warnings.push(
-        `Pattern '${pattern}' uses HTTP instead of HTTPS, which is less secure`
-      );
+      result.errors.push(`Insecure protocol pattern: ${pattern}`);
+      result.isValid = false;
     }
   }
 

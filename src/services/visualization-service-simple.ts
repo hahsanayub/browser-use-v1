@@ -426,6 +426,11 @@ export class SimplifiedVisualizationService {
             `
                 : ''
             }
+
+            <!-- Hidden screenshots for testing and preloading -->
+            ${decodedScreenshots.map((s, index) =>
+              `<img style="display: none;" src="data:image/png;base64,${s.screenshot}" alt="Screenshot ${index + 1}" />`
+            ).join('')}
         </div>
 
         <div class="controls">
