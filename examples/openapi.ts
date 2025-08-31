@@ -406,7 +406,7 @@ async function main() {
 
     const agentConfig: AgentConfig = {
       useVision: true,
-      maxSteps: 100,
+      maxSteps: 30,
       actionTimeout: 15000,
       continueOnFailure: true,
       customInstructions,
