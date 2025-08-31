@@ -42,7 +42,6 @@ export function createStructuredDoneAction<T extends z.ZodTypeAny>(
     params: z.infer<typeof StructuredOutputSchema>;
     context: { fileSystem?: FileSystem };
   }): Promise<ActionResult> => {
-    // Convert data to JSON string for consistency with Python version
     const outputData = params.data;
     const outputJson = JSON.stringify(outputData, null, 2);
 
@@ -134,7 +133,6 @@ export function createStructuredDoneAction<T extends z.ZodTypeAny>(
 
 /**
  * Helper function to use structured output in Controller
- * This matches the Python version's use_structured_output_action method
  */
 export function useStructuredOutputAction<T extends z.ZodTypeAny>(
   outputModel: T,

@@ -17,6 +17,7 @@ import {
   isNetworkError,
   getNetworkErrorMessage,
 } from '../types/errors';
+import GoogleSheetsActions from './google-sheets-actions';
 
 // Helper function for Promise.race with proper timeout cleanup
 function withTimeout<T>(
@@ -1699,4 +1700,5 @@ export default [
   ExtractDataActions,
   FileSystemActions,
   DropdownActions,
+  GoogleSheetsActions,
 ];
