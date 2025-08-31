@@ -25,6 +25,7 @@ import {
   DEFAULT_INCLUDE_ATTRIBUTES,
 } from './dom-tree-serializer';
 import { DOMTreeAdapter } from './dom-tree-adapter';
+import { AdvancedDOMService } from './advanced-dom-service';
 
 /**
  * DOM Service class for processing and analyzing web page content
@@ -34,6 +35,7 @@ export class DOMService {
   private cache: Map<string, { view: PageView; timestamp: number }> = new Map();
   private cacheTimeout: number = 5000; // 5 seconds cache timeout
   private buildDomTreeScript: string | null = null;
+  private advancedDOMService: AdvancedDOMService;
   private static computeStringHash(input: string): string {
     // Simple 32-bit hash
     let hash = 0;
@@ -45,7 +47,9 @@ export class DOMService {
     return (hash >>> 0).toString(16);
   }
 
-  constructor() {}
+  constructor(context?: BrowserContext) {
+    this.advancedDOMService = new AdvancedDOMService(context);
+  }
 
   /**
    * Create DOMProcessingOptions from BrowserConfig
@@ -961,5 +965,58 @@ export class DOMService {
   setCacheTimeout(timeout: number): void {
     this.cacheTimeout = timeout;
     this.logger.debug('DOM cache timeout updated', { timeout });
+  }
+
+  /**
+   * Get cross-origin iframes using advanced DOM service
+   * Integrates Python version's iframe filtering capabilities
+   */
+  async getCrossOriginIframes(page: Page): Promise<any[]> {
+    try {
+      return await this.advancedDOMService.getCrossOriginIframes(page);
+    } catch (error) {
+      this.logger.error('Failed to get cross-origin iframes', error as Error);
+      return [];
+    }
+  }
+
+  /**
+   * Filter ads and trackers from the page
+   * Uses advanced DOM service for intelligent filtering
+   */
+  async filterAdsAndTrackers(page: Page): Promise<number> {
+    try {
+      return await this.advancedDOMService.filterAdsAndTrackers(page);
+    } catch (error) {
+      this.logger.error('Failed to filter ads and trackers', error as Error);
+      return 0;
+    }
+  }
+
+  /**
+   * Get performance metrics from DOM processing
+   * Provides detailed insights into DOM operations
+   */
+  getDOMPerformanceMetrics(page: Page): any {
+    try {
+      return this.advancedDOMService.collectPerformanceMetrics(page);
+    } catch (error) {
+      this.logger.error('Failed to collect DOM performance metrics', error as Error);
+      return null;
+    }
+  }
+
+  /**
+   * Clear advanced DOM caches
+   */
+  clearAdvancedDOMCache(): void {
+    this.advancedDOMService.clearXPathCache();
+  }
+
+  /**
+   * Update browser context in advanced DOM service
+   */
+  updateAdvancedDOMContext(context: BrowserContext): void {
+    this.advancedDOMService.updateContext(context);
   }
 }

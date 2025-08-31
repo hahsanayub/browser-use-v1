@@ -16,7 +16,7 @@
 import type { Page, BrowserContext } from 'playwright';
 import { getLogger } from './logging';
 
-const logger = getLogger();
+let logger: ReturnType<typeof getLogger>;
 
 /**
  * Interface for browser process information
@@ -38,6 +38,11 @@ export class AdvancedHealthCheckService {
 
   constructor(context?: BrowserContext) {
     this.context = context || null;
+    
+    // Initialize logger if not already done
+    if (!logger) {
+      logger = getLogger();
+    }
   }
 
   /**
@@ -479,5 +484,7 @@ export function requireHealthyBrowser(
   };
 }
 
-// Export singleton instance for convenience
-export const advancedHealthCheck = new AdvancedHealthCheckService();
+// Export factory function for convenience
+export const createAdvancedHealthCheck = (context?: BrowserContext) => {
+  return new AdvancedHealthCheckService(context);
+};
