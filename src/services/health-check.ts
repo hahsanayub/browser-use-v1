@@ -1,5 +1,10 @@
 import type { Page } from 'playwright';
 import { getLogger } from './logging';
+import {
+  AdvancedHealthCheckService,
+  requireHealthyBrowser,
+  type RequireHealthyBrowserOptions,
+} from './advanced-health-check';
 
 /**
  * Ensure the given page is responsive. If not, attempt recovery by closing and reopening.
@@ -119,5 +124,62 @@ function safeGetUrl(page: Page): string | null {
     return u;
   } catch {
     return null;
+  }
+}
+
+// Export enhanced health check functionality
+export {
+  AdvancedHealthCheckService,
+  requireHealthyBrowser,
+  type RequireHealthyBrowserOptions,
+};
+
+/**
+ * Unified Health Check API
+ * Provides both simple and advanced health check capabilities
+ */
+export class UnifiedHealthCheck {
+  private advancedService: AdvancedHealthCheckService;
+
+  constructor(context?: any) {
+    this.advancedService = new AdvancedHealthCheckService(context);
+  }
+
+  /**
+   * Simple health check - uses original lightweight implementation
+   */
+  async simpleCheck(page: Page): Promise<{ page: Page; recovered: boolean }> {
+    return await ensureHealthyPage(page);
+  }
+
+  /**
+   * Advanced health check - uses enterprise-grade implementation
+   */
+  async advancedCheck(page: Page, timeout?: number): Promise<boolean> {
+    return await this.advancedService.isPageResponsive(page, timeout);
+  }
+
+  /**
+   * Auto-recovery - chooses appropriate recovery method based on context
+   */
+  async autoRecover(
+    page: Page,
+    callingMethod: string = 'autoRecover'
+  ): Promise<Page | null> {
+    // Try simple recovery first
+    try {
+      const result = await ensureHealthyPage(page);
+      if (result.recovered) {
+        return result.page;
+      }
+    } catch {
+      // Fallback to advanced recovery
+    }
+
+    // Use advanced recovery for complex cases
+    return await this.advancedService.recoverUnresponsivePage(
+      page,
+      callingMethod
+    );
   }
 }
