@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import type { Page } from 'playwright';
 import type { ActionResult } from '../types/agent';
+import { matchUrlWithDomainPattern, isNewTabPage, validateDomainPatterns } from '../utils/domain-matcher';
+import { getLogger } from '../services/logging';
 
 export interface RegisteredAction {
   name: string;
@@ -25,15 +27,29 @@ export interface RegisteredAction {
 }
 
 /**
- * Simple in-memory registry for actions
+ * Enhanced in-memory registry for actions with domain security
  */
 export class ActionRegistry {
   private actions: Map<string, RegisteredAction> = new Map();
+  private logger = getLogger();
 
   register(action: RegisteredAction): void {
-    // if (this.actions.has(action.name)) {
-    //   throw new Error(`Action already registered: ${action.name}`);
-    // }
+    // Validate domain patterns for security
+    if (action.domains) {
+      const validation = validateDomainPatterns(action.domains);
+      if (!validation.isValid) {
+        this.logger.error(`Invalid domain patterns for action ${action.name}:`, validation.errors);
+        throw new Error(`Invalid domain patterns for action ${action.name}: ${validation.errors.join(', ')}`);
+      }
+      if (validation.warnings.length > 0) {
+        this.logger.warn(`Domain pattern warnings for action ${action.name}:`, validation.warnings);
+      }
+    }
+
+    // Log registration with domain info
+    const domainInfo = action.domains ? `[${action.domains.join(', ')}]` : '[no domain restrictions]';
+    this.logger.debug(`Registering action: ${action.name} ${domainInfo}`);
+    
     this.actions.set(action.name, action);
   }
 
@@ -59,8 +75,9 @@ export class ActionRegistry {
   }
 
   /**
-   * Match a list of domain glob patterns against a URL
-   * @param domains Domain patterns that can include wildcards (* symbol)
+   * Match a list of domain patterns against a URL with enhanced security
+   * Equivalent to Python's _match_domains with security improvements
+   * @param domains Domain patterns that can include wildcards 
    * @param url The URL to match against
    * @returns True if the URL's domain matches any pattern, False otherwise
    */
@@ -68,35 +85,18 @@ export class ActionRegistry {
     domains: string[] | undefined,
     url: string
   ): boolean {
-    if (!domains || !url) {
-      return true;
+    if (!domains || domains.length === 0) {
+      return true; // No restrictions
+    }
+    
+    if (!url || isNewTabPage(url)) {
+      return true; // Allow new tab pages
     }
 
-    try {
-      const urlObj = new URL(url);
-      const hostname = urlObj.hostname;
-
-      for (const domainPattern of domains) {
-        // Handle wildcard patterns
-        if (domainPattern.includes('*')) {
-          const regexPattern = domainPattern
-            .replace(/\./g, '\\.')
-            .replace(/\*/g, '.*');
-          const regex = new RegExp(`^${regexPattern}$`, 'i');
-          if (regex.test(hostname)) {
-            return true;
-          }
-        } else {
-          // Exact match
-          if (hostname.toLowerCase() === domainPattern.toLowerCase()) {
-            return true;
-          }
-        }
-      }
-      return false;
-    } catch {
-      return false;
-    }
+    // Use the secure domain matching function from utils
+    return domains.some(pattern => 
+      matchUrlWithDomainPattern(url, pattern, true) // Enable warnings for debugging
+    );
   }
 
   /**

@@ -36,6 +36,7 @@ class GoogleSheetsActions {
     'Google Sheets: Get the contents of the entire sheet',
     z.object({}),
     {
+      domains: ['https://docs.google.com'],
       isAvailableForPage: (page) =>
         page && !page.isClosed() && isGoogleSheetsPage(page),
     }
@@ -87,6 +88,7 @@ class GoogleSheetsActions {
         .describe('Cell reference like A1 or range like A1:B2'),
     }),
     {
+      domains: ['https://docs.google.com'],
       isAvailableForPage: (page) =>
         page && !page.isClosed() && isGoogleSheetsPage(page),
     }
@@ -155,6 +157,7 @@ class GoogleSheetsActions {
         .describe('Cell reference like A1 or range like A1:B2'),
     }),
     {
+      domains: ['https://docs.google.com'],
       isAvailableForPage: (page) =>
         page && !page.isClosed() && isGoogleSheetsPage(page),
     }
@@ -217,6 +220,7 @@ class GoogleSheetsActions {
         .describe('New content in TSV (Tab-Separated Values) format'),
     }),
     {
+      domains: ['https://docs.google.com'],
       isAvailableForPage: (page) =>
         page && !page.isClosed() && isGoogleSheetsPage(page),
     }
@@ -284,6 +288,7 @@ class GoogleSheetsActions {
         .describe('Cell reference like A1 or range like A1:B2'),
     }),
     {
+      domains: ['https://docs.google.com'],
       isAvailableForPage: (page) =>
         page && !page.isClosed() && isGoogleSheetsPage(page),
     }
@@ -336,6 +341,7 @@ class GoogleSheetsActions {
         .describe('Text to type into the currently selected cell'),
     }),
     {
+      domains: ['https://docs.google.com'],
       isAvailableForPage: (page) =>
         page && !page.isClosed() && isGoogleSheetsPage(page),
     }

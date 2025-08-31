@@ -816,7 +816,10 @@ class NavActions {
     'search_google',
     'Search the query in Google, the query should be a search query like humans search in Google, concrete and not vague or super long.',
     z.object({ query: z.string().min(1) }),
-    { isAvailableForPage: (page) => page && !page.isClosed() }
+    { 
+      domains: ['*.google.com', 'https://www.google.com'],
+      isAvailableForPage: (page) => page && !page.isClosed() 
+    }
   )
   static async searchGoogle({
     params,
