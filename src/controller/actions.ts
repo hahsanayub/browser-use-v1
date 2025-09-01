@@ -622,6 +622,8 @@ class IndexActions {
         return fileInput !== null;
       }, elementNode.xpath);
 
+      // [page.evaluate end]
+
       if (isFileInput) {
         const message = `Index ${params.index} - has an element which opens file upload dialog. To upload files please use a specific function to upload files`;
         console.log(message);
@@ -655,50 +657,55 @@ class IndexActions {
         message = `Downloaded file to ${downloadPath}`;
       } else {
         // Normal click
+        // emoji = '🖱️';
+        // // Get element text for better feedback
+        // const elementText = await page.evaluate((xpath) => {
+        //   const element = document.evaluate(
+        //     xpath,
+        //     document,
+        //     null,
+        //     XPathResult.FIRST_ORDERED_NODE_TYPE,
+        //     null
+        //   ).singleNodeValue as HTMLElement | null;
+
+        //   if (!element) return '';
+
+        //   // Get text content, limiting depth
+        //   const getText = (el: Element, maxDepth: number): string => {
+        //     if (maxDepth <= 0) return '';
+
+        //     let text = '';
+        //     for (const child of el.childNodes) {
+        //       if (child.nodeType === Node.TEXT_NODE) {
+        //         text += child.textContent?.trim() || '';
+        //       } else if (child.nodeType === Node.ELEMENT_NODE && maxDepth > 0) {
+        //         // Stop at other clickable elements
+        //         const childEl = child as Element;
+        //         if (
+        //           !['button', 'a', 'input'].includes(
+        //             childEl.tagName.toLowerCase()
+        //           )
+        //         ) {
+        //           text += ' ' + getText(childEl, maxDepth - 1);
+        //         }
+        //       }
+        //     }
+        //     return text.trim();
+        //   };
+
+        //   return getText(element, 2).substring(0, 100); // Limit text length
+        // }, elementNode.xpath);
+
+        // message = `Clicked button with index ${params.index}${elementText ? ': ' + elementText : ''}`;
+
+        // TODO: revert this
         emoji = '🖱️';
-        // Get element text for better feedback
-        const elementText = await page.evaluate((xpath) => {
-          const element = document.evaluate(
-            xpath,
-            document,
-            null,
-            XPathResult.FIRST_ORDERED_NODE_TYPE,
-            null
-          ).singleNodeValue as HTMLElement | null;
-
-          if (!element) return '';
-
-          // Get text content, limiting depth
-          const getText = (el: Element, maxDepth: number): string => {
-            if (maxDepth <= 0) return '';
-
-            let text = '';
-            for (const child of el.childNodes) {
-              if (child.nodeType === Node.TEXT_NODE) {
-                text += child.textContent?.trim() || '';
-              } else if (child.nodeType === Node.ELEMENT_NODE && maxDepth > 0) {
-                // Stop at other clickable elements
-                const childEl = child as Element;
-                if (
-                  !['button', 'a', 'input'].includes(
-                    childEl.tagName.toLowerCase()
-                  )
-                ) {
-                  text += ' ' + getText(childEl, maxDepth - 1);
-                }
-              }
-            }
-            return text.trim();
-          };
-
-          return getText(element, 2).substring(0, 100); // Limit text length
-        }, elementNode.xpath);
-
-        message = `Clicked button with index ${params.index}${elementText ? ': ' + elementText : ''}`;
+        await session.clickByIndex(params.index);
+        message = `Clicked element with index ${params.index}`;
       }
 
-      console.log(`${emoji} ${message}`);
-      console.debug(`Element xpath: ${elementNode.xpath}`);
+      // console.log(`${emoji} ${message}`);
+      // console.debug(`Element xpath: ${elementNode.xpath}`);
 
       // Check if new tab was opened
       const currentPages = page.context().pages().length;
