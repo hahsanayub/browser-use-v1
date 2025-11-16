@@ -2,6 +2,21 @@ import { z, type ZodTypeAny } from 'zod';
 import type { Page } from '../../browser/types.js';
 import { match_url_with_domain_pattern } from '../../utils.js';
 
+const getPageUrl = (page: Page | null | undefined) => {
+	if (!page) {
+		return '';
+	}
+	const candidate = (page as any).url;
+	if (typeof candidate === 'function') {
+		try {
+			return candidate.call(page);
+		} catch {
+			return '';
+		}
+	}
+	return candidate ?? '';
+};
+
 export type ActionHandler = (...args: any[]) => Promise<unknown> | unknown;
 
 type BrowserSession = unknown;
@@ -86,6 +101,14 @@ export class ActionRegistry {
 		this.actions.set(action.name, action);
 	}
 
+	get(name: string) {
+		return this.actions.get(name) ?? null;
+	}
+
+	getAll() {
+		return Array.from(this.actions.values());
+	}
+
 	get actionEntries() {
 		return Array.from(this.actions.values());
 	}
@@ -103,9 +126,9 @@ export class ActionRegistry {
 				return false;
 			}
 
+			const pageUrl = getPageUrl(page);
 			const domainAllowed =
-				!action.domains ||
-				action.domains.some((pattern) => match_url_with_domain_pattern(page.url(), pattern));
+				!action.domains || action.domains.some((pattern) => match_url_with_domain_pattern(pageUrl, pattern));
 			const pageAllowed = action.pageFilter ? action.pageFilter(page) : true;
 			return domainAllowed && pageAllowed;
 		});
