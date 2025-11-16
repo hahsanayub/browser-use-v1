@@ -73,6 +73,8 @@ export const observeDebug = (options: ObserveOptions = {}) => {
 	return createNoopDecorator();
 };
 
+export const observe_debug = observeDebug;
+
 export const isLmnrAvailable = () => lmnrAvailable;
 export const isDebugMode = () => isDebugModeEnv();
 

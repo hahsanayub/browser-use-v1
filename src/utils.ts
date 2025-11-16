@@ -1,4 +1,5 @@
 import { execSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -420,3 +421,18 @@ export const _log_pretty_url = (value: string, max_len: number | null = 22) => {
 
 export const log_pretty_path = _log_pretty_path;
 export const log_pretty_url = _log_pretty_url;
+
+export const uuid7str = () => {
+	const timestamp = Buffer.alloc(6);
+	const now = Date.now();
+	timestamp.writeUIntBE(now, 0, 6);
+
+	const random = crypto.randomBytes(10);
+	const bytes = Buffer.concat([timestamp, random]);
+
+	bytes[6] = (bytes[6] & 0x0f) | 0x70;
+	bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+	const hex = bytes.toString('hex');
+	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+};

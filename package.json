@@ -41,6 +41,7 @@
   "license": "MIT",
   "dependencies": {
     "@google/genai": "^1.16.0",
+    "adm-zip": "^0.5.16",
     "axios": "^1.7.7",
     "canvas": "^3.2.0",
     "dotenv": "^16.4.5",
@@ -51,6 +52,7 @@
     "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
     "@types/minimatch": "^6.0.0",
     "@types/node": "^24.2.0",
     "@types/turndown": "^5.0.5",
