@@ -18,3 +18,4 @@ export * from './filesystem/file-system.js';
 export * from './agent/views.js';
 export * from './telemetry/views.js';
 export * from './telemetry/service.js';
+export * from './llm/messages.js';
