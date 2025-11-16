@@ -434,3 +434,5 @@ export class FileSystem {
 		return fsInstance;
 	}
 }
+
+export type { FileSystemState };

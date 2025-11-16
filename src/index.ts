@@ -13,4 +13,8 @@ export * from './dom/history-tree-processor/service.js';
 export * from './controller/views.js';
 export * from './controller/registry/views.js';
 export * from './controller/registry/service.js';
+export * from './controller/service.js';
 export * from './filesystem/file-system.js';
+export * from './agent/views.js';
+export * from './telemetry/views.js';
+export * from './telemetry/service.js';
