@@ -104,7 +104,8 @@ export class ActionRegistry {
 			}
 
 			const domainAllowed =
-				!action.domains || action.domains.some((pattern) => match_url_with_domain_pattern(page.url, pattern));
+				!action.domains ||
+				action.domains.some((pattern) => match_url_with_domain_pattern(page.url(), pattern));
 			const pageAllowed = action.pageFilter ? action.pageFilter(page) : true;
 			return domainAllowed && pageAllowed;
 		});

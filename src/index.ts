@@ -12,3 +12,4 @@ export * from './dom/history-tree-processor/service.js';
 
 export * from './controller/views.js';
 export * from './controller/registry/views.js';
+export * from './filesystem/file-system.js';
