@@ -19,3 +19,7 @@ export * from './agent/views.js';
 export * from './telemetry/views.js';
 export * from './telemetry/service.js';
 export * from './llm/messages.js';
+export * from './llm/views.js';
+export * from './llm/base.js';
+export * from './llm/exceptions.js';
+export * from './tokens/views.js';
