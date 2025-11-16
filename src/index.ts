@@ -22,4 +22,5 @@ export * from './llm/messages.js';
 export * from './llm/views.js';
 export * from './llm/base.js';
 export * from './llm/exceptions.js';
+export * from './llm/schema.js';
 export * from './tokens/views.js';
