@@ -73,6 +73,22 @@ export class ActionModel {
 		return this.data;
 	}
 
+	model_dump(options?: { exclude_none?: boolean }) {
+		const clone = JSON.parse(JSON.stringify(this.data));
+		if (options?.exclude_none) {
+			for (const [key, value] of Object.entries(clone)) {
+				if (value === null || value === undefined) {
+					delete clone[key];
+				}
+			}
+		}
+		return clone;
+	}
+
+	model_dump_json(options?: { exclude_none?: boolean }) {
+		return JSON.stringify(this.model_dump(options));
+	}
+
 	get_index(): number | null {
 		for (const value of Object.values(this.data)) {
 			if (value && typeof value === 'object' && 'index' in value) {

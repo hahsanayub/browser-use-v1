@@ -24,3 +24,7 @@ export * from './llm/base.js';
 export * from './llm/exceptions.js';
 export * from './llm/schema.js';
 export * from './tokens/views.js';
+export * from './agent/message-manager/views.js';
+export * from './agent/prompts.js';
+export * from './agent/message-manager/service.js';
+export * from './agent/message-manager/utils.js';

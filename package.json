@@ -45,6 +45,8 @@
     "axios": "^1.7.7",
     "canvas": "^3.2.0",
     "dotenv": "^16.4.5",
+    "eventemitter3": "^5.0.1",
+    "gif-encoder-2": "^1.0.5",
     "openai": "^5.13.1",
     "pdf-parse": "^2.4.5",
     "pdfkit": "^0.17.2",

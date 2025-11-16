@@ -60,4 +60,12 @@ export class MessageManagerState {
 	tool_id = 1;
 	agent_history_items: HistoryItem[] = [new HistoryItem(0, null, null, null, null, null, 'Agent initialized')];
 	read_state_description = '';
+
+	get historyMessages() {
+		return this.history.get_messages();
+	}
+
+	get_messages() {
+		return this.history.get_messages();
+	}
 }
