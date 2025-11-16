@@ -1,0 +1,84 @@
+import { createRequire } from 'node:module';
+import { config as loadEnv } from 'dotenv';
+import { createLogger } from './logging-config.js';
+
+loadEnv();
+
+const require = createRequire(import.meta.url);
+const logger = createLogger('browser_use.observability');
+
+type SpanType = 'DEFAULT' | 'LLM' | 'TOOL';
+
+export interface ObserveOptions {
+	name?: string | null;
+	ignoreInput?: boolean;
+	ignoreOutput?: boolean;
+	metadata?: Record<string, unknown> | null;
+	spanType?: SpanType;
+	[key: string]: unknown;
+}
+
+type AnyFunc = (...args: any[]) => any;
+type Decorator<T extends AnyFunc> = (fn: T) => T;
+
+let lmnrObserve: ((options: ObserveOptions) => Decorator<AnyFunc>) | null = null;
+let lmnrAvailable = false;
+
+try {
+	const lmnr = require('lmnr');
+	if (typeof lmnr?.observe === 'function') {
+		lmnrObserve = (options: ObserveOptions) => lmnr.observe(options);
+		lmnrAvailable = true;
+		if (process.env.BROWSER_USE_VERBOSE_OBSERVABILITY?.toLowerCase() === 'true') {
+			logger.info('Lmnr is available for observability');
+		}
+	}
+} catch (error) {
+	lmnrObserve = null;
+	lmnrAvailable = false;
+	if (process.env.BROWSER_USE_VERBOSE_OBSERVABILITY?.toLowerCase() === 'true') {
+		logger.info(`Lmnr is not available for observability (${(error as Error).message})`);
+	}
+}
+
+const isDebugModeEnv = () => process.env.LMNR_LOGGING_LEVEL?.toLowerCase() === 'debug';
+
+const createNoopDecorator =
+	<T extends AnyFunc>() =>
+	(fn: T): T =>
+		fn;
+
+const normalizeOptions = (options: ObserveOptions = {}): ObserveOptions => ({
+	name: options.name ?? null,
+	ignoreInput: options.ignoreInput ?? false,
+	ignoreOutput: options.ignoreOutput ?? false,
+	metadata: options.metadata ?? null,
+	spanType: options.spanType ?? 'DEFAULT',
+	...options,
+});
+
+export const observe = (options: ObserveOptions = {}) => {
+	const normalized = normalizeOptions(options);
+	if (lmnrAvailable && lmnrObserve) {
+		return lmnrObserve(normalized);
+	}
+	return createNoopDecorator();
+};
+
+export const observeDebug = (options: ObserveOptions = {}) => {
+	const normalized = normalizeOptions(options);
+	if (lmnrAvailable && lmnrObserve && isDebugModeEnv()) {
+		return lmnrObserve(normalized);
+	}
+	return createNoopDecorator();
+};
+
+export const isLmnrAvailable = () => lmnrAvailable;
+export const isDebugMode = () => isDebugModeEnv();
+
+export const getObservabilityStatus = () => ({
+	lmnrAvailable,
+	debugMode: isDebugModeEnv(),
+	observeActive: lmnrAvailable,
+	observeDebugActive: lmnrAvailable && isDebugModeEnv(),
+});
