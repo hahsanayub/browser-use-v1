@@ -188,6 +188,8 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 	screenshot_service: ScreenshotService | null = null;
 	agent_directory: string;
 	private _current_screenshot_path: string | null = null;
+	has_downloads_path = false;
+	private _last_known_downloads: string[] = [];
 	step_start_time = 0;
 	_external_pause_event: { resolve: (() => void) | null; promise: Promise<void> } = {
 		resolve: null,
@@ -328,6 +330,11 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 		this._set_browser_use_version_and_source(source);
 
 		this.browser_session = browser_session ?? null;
+		this.has_downloads_path = Boolean(this.browser_session?.browser_profile?.downloads_path);
+		if (this.has_downloads_path) {
+			this._last_known_downloads = [];
+			this.logger.info('📁 Initialized download tracking for agent');
+		}
 
 		this._message_manager = new MessageManager(
 			task,
@@ -864,8 +871,53 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 		/* placeholder for page-specific actions */
 	}
 
-	private async _check_and_update_downloads(_context: string) {
-		/* placeholder for download tracking */
+	private async _check_and_update_downloads(context = '') {
+		if (!this.has_downloads_path || !this.browser_session) {
+			return;
+		}
+
+		try {
+			const current_downloads = Array.isArray(this.browser_session.downloaded_files)
+				? [...this.browser_session.downloaded_files]
+				: [];
+			const changed =
+				current_downloads.length !== this._last_known_downloads.length ||
+				current_downloads.some((value, index) => value !== this._last_known_downloads[index]);
+			if (changed) {
+				this._update_available_file_paths(current_downloads);
+				this._last_known_downloads = current_downloads;
+				if (context) {
+					this.logger.debug(`📁 ${context}: Updated available files`);
+				}
+			}
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			const errorContext = context ? ` ${context}` : '';
+			this.logger.debug(`📁 Failed to check for downloads${errorContext}: ${message}`);
+		}
+	}
+
+	private _update_available_file_paths(downloads: string[]) {
+		if (!this.has_downloads_path) {
+			return;
+		}
+
+		const existing = this.available_file_paths ? [...this.available_file_paths] : [];
+		const known = new Set(existing);
+		const new_files = downloads.filter((pathValue) => !known.has(pathValue));
+
+		if (new_files.length) {
+			const updated = existing.concat(new_files);
+			this.available_file_paths = updated;
+			this.logger.info(
+				`📁 Added ${new_files.length} downloaded files to available_file_paths (total: ${updated.length} files)`,
+			);
+			for (const file_path of new_files) {
+				this.logger.info(`📄 New file available: ${file_path}`);
+			}
+		} else {
+			this.logger.info(`📁 No new downloads detected (tracking ${existing.length} files)`);
+		}
 	}
 
 	private _log_step_context(current_page: Page | null, browser_state_summary: BrowserStateSummary | null) {

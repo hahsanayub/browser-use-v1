@@ -43,6 +43,7 @@ export class BrowserSession {
 	private _tabs: TabInfo[] = [];
 	private currentTabIndex = 0;
 	private historyStack: string[] = [];
+	downloaded_files: string[] = [];
 
 	constructor(init: BrowserSessionInit = {}) {
 		this.browser_profile = init.browser_profile ?? new BrowserProfile(init.profile ?? {});
