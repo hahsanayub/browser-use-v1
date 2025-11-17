@@ -199,7 +199,7 @@ export class DomService {
 		const tag = node_data.tagName ?? 'div';
 		const xpath = node_data.xpath ?? '';
 		const attributes = node_data.attributes ?? {};
-		const element = new DOMElementNode(node_data.isVisible ?? false, null, tag, xpath, attributes, []);
+	const element = new DOMElementNode(node_data.isVisible ?? false, null, tag, xpath, attributes, []);
 
 		element.is_interactive = Boolean(node_data.isInteractive);
 		element.is_top_element = Boolean(node_data.isTopElement);
