@@ -9,6 +9,7 @@ import {
 	DoneActionSchema,
 	ExtractStructuredDataActionSchema,
 	DropdownOptionsActionSchema,
+	SelectDropdownActionSchema,
 	GoToUrlActionSchema,
 	InputTextActionSchema,
 	NoParamsActionSchema,
@@ -22,6 +23,9 @@ import {
 	UploadFileActionSchema,
 	WriteFileActionSchema,
 	SendKeysActionSchema,
+	SheetsRangeActionSchema,
+	SheetsUpdateActionSchema,
+	SheetsInputActionSchema,
 } from './views.js';
 import { Registry } from './registry/service.js';
 import TurndownService from 'turndown';
@@ -607,6 +611,90 @@ ${content}`;
 					include_extracted_content_only_once: true,
 					long_term_memory: `Found dropdown options for index ${params.index}.`,
 				});
+			});
+
+		type SelectAction = z.infer<typeof SelectDropdownActionSchema>;
+		this.registry
+			.action('Select dropdown option or ARIA menu item by text', { param_model: SelectDropdownActionSchema })
+			(async (params: SelectAction, { browser_session }) => {
+				const page: Page | null = await browser_session.get_current_page();
+				const domElement = await browser_session.get_dom_element_by_index(params.index);
+				if (!domElement?.xpath) {
+					throw new BrowserError('DOM element does not include an XPath selector.');
+				}
+				if (!page) {
+					throw new BrowserError('No active page for selection.');
+				}
+
+				for (const frame of page.frames ?? []) {
+					try {
+						const typeInfo = await frame.evaluate(
+							(xpath) => {
+								const element = document.evaluate(
+									xpath,
+									document,
+									null,
+									XPathResult.FIRST_ORDERED_NODE_TYPE,
+									null,
+								).singleNodeValue as HTMLElement | null;
+								if (!element) return { found: false };
+								const tagName = element.tagName?.toLowerCase();
+								const role = element.getAttribute?.('role');
+								if (tagName === 'select') return { found: true, type: 'select' };
+								if (role && ['menu', 'listbox', 'combobox'].includes(role)) return { found: true, type: 'aria' };
+								return { found: false };
+							},
+							domElement.xpath,
+						);
+
+						if (!typeInfo?.found) continue;
+
+						if (typeInfo.type === 'select') {
+							await frame.locator(domElement.xpath).first().select_option({ label: params.text });
+							const msg = `Selected option ${params.text}`;
+							return new ActionResult({
+								extracted_content: msg,
+								include_in_memory: true,
+								long_term_memory: msg,
+							});
+						}
+
+						const clicked = await frame.evaluate(
+							({ xpath, text }) => {
+								const root = document.evaluate(
+									xpath,
+									document,
+									null,
+									XPathResult.FIRST_ORDERED_NODE_TYPE,
+									null,
+								).singleNodeValue as HTMLElement | null;
+								if (!root) return false;
+								const nodes = root.querySelectorAll('[role="menuitem"],[role="option"]');
+								for (const node of Array.from(nodes)) {
+									if (node.textContent?.trim() === text) {
+										(node as HTMLElement).click();
+										return true;
+									}
+								}
+								return false;
+							},
+							{ xpath: domElement.xpath, text: params.text },
+						);
+
+						if (clicked) {
+							const msg = `Selected menu item ${params.text}`;
+							return new ActionResult({
+								extracted_content: msg,
+								include_in_memory: true,
+								long_term_memory: msg,
+							});
+						}
+					} catch (error) {
+						continue;
+					}
+				}
+
+				throw new BrowserError(`Could not select option '${params.text}' for index ${params.index}`);
 			});
 	}
 

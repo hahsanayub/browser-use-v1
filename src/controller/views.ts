@@ -109,6 +109,12 @@ export const DropdownOptionsActionSchema = z.object({
 });
 export type DropdownOptionsAction = z.infer<typeof DropdownOptionsActionSchema>;
 
+export const SelectDropdownActionSchema = z.object({
+	index: z.number().int(),
+	text: z.string(),
+});
+export type SelectDropdownAction = z.infer<typeof SelectDropdownActionSchema>;
+
 export const SheetsRangeActionSchema = z.object({
 	cell_or_range: z.string(),
 });
