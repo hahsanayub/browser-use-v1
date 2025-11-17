@@ -383,12 +383,46 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 	}
 
 	private _initFileSystem(file_system_path: string | null) {
+		if (this.state.file_system_state && file_system_path) {
+			throw new Error(
+				'Cannot provide both file_system_state (from agent state) and file_system_path. Restore from state or create new file system, not both.',
+			);
+		}
+
+		if (this.state.file_system_state) {
+			try {
+				this.file_system = AgentFileSystem.from_state_sync(this.state.file_system_state);
+				this._file_system_path = this.state.file_system_state.base_dir;
+				this.logger.info(`💾 File system restored from state to: ${this._file_system_path}`);
+				const timestamp = Date.now();
+				this.agent_directory = path.join(os.tmpdir(), `browser_use_agent_${this.id}_${timestamp}`);
+				ensureDir(this.agent_directory);
+				return this.file_system;
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				this.logger.error(`💾 Failed to restore file system from state: ${message}`);
+				throw error;
+			}
+		}
+
 		const baseDir = file_system_path ?? path.join(Agent.DEFAULT_AGENT_DATA_DIR, this.task_id);
 		ensureDir(baseDir);
-		this.file_system = new AgentFileSystem(baseDir);
+
+		try {
+			this.file_system = new AgentFileSystem(baseDir);
+			this._file_system_path = baseDir;
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			this.logger.error(`💾 Failed to initialize file system: ${message}`);
+			throw error;
+		}
+
 		const timestamp = Date.now();
 		this.agent_directory = path.join(os.tmpdir(), `browser_use_agent_${this.id}_${timestamp}`);
 		ensureDir(this.agent_directory);
+
+		this.state.file_system_state = this.file_system.get_state();
+		this.logger.info(`💾 File system path: ${this._file_system_path}`);
 		return this.file_system;
 	}
 
@@ -1065,8 +1099,10 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 	}
 
 	save_file_system_state() {
-		if (this.file_system) {
-			this.state.file_system_state = this.file_system.get_state();
+		if (!this.file_system) {
+			this.logger.error('💾 File system is not set up. Cannot save state.');
+			throw new Error('File system is not set up. Cannot save state.');
 		}
+		this.state.file_system_state = this.file_system.get_state();
 	}
 }

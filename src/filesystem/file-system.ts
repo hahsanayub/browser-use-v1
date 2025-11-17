@@ -3,6 +3,7 @@ import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import PDFDocument from 'pdfkit';
 import { createRequire } from 'node:module';
+import { spawnSync } from 'node:child_process';
 
 type PdfParseFn = (
 	dataBuffer: Buffer,
@@ -53,14 +54,28 @@ abstract class BaseFile {
 		await fsp.writeFile(path.join(dir, this.fullName), this.content, 'utf-8');
 	}
 
+	syncToDiskSync(dir: string) {
+		fsSync.writeFileSync(path.join(dir, this.fullName), this.content, 'utf-8');
+	}
+
 	async write(content: string, dir: string) {
 		this.writeFileContent(content);
 		await this.syncToDisk(dir);
 	}
 
+	writeSync(content: string, dir: string) {
+		this.writeFileContent(content);
+		this.syncToDiskSync(dir);
+	}
+
 	async append(content: string, dir: string) {
 		this.appendFileContent(content);
 		await this.syncToDisk(dir);
+	}
+
+	appendSync(content: string, dir: string) {
+		this.appendFileContent(content);
+		this.syncToDiskSync(dir);
 	}
 
 	toJSON() {
@@ -108,6 +123,31 @@ class PdfFile extends BaseFile {
 			stream.on('finish', resolve);
 			stream.on('error', reject);
 		});
+	}
+
+	override syncToDiskSync(dir: string) {
+		const filePath = path.join(dir, this.fullName);
+		const script = `
+const { createWriteStream } = require('fs');
+const PDFDocument = require(${JSON.stringify(require.resolve('pdfkit'))});
+const filePath = ${JSON.stringify(filePath)};
+const content = ${JSON.stringify(this.content ?? '')};
+const doc = new PDFDocument({ autoFirstPage: true });
+const stream = createWriteStream(filePath);
+doc.pipe(stream);
+doc.fontSize(12).text(content || '', { width: 500, align: 'left' });
+doc.end();
+stream.on('finish', () => process.exit(0));
+stream.on('error', (err) => {
+	console.error(err);
+	process.exit(1);
+});
+`;
+		const result = spawnSync(process.execPath, ['-e', script], { stdio: ['ignore', 'ignore', 'pipe'] });
+		if (result.status !== 0) {
+			const errorMsg = result.stderr?.toString() || `Could not write to file '${this.fullName}'.`;
+			throw new FileSystemError(`Error: ${errorMsg.trim()}`);
+		}
 	}
 }
 
@@ -417,7 +457,7 @@ export class FileSystem {
 		await fsp.rm(this.dataDir, { recursive: true, force: true });
 	}
 
-	static async from_state(state: FileSystemState) {
+	static from_state_sync(state: FileSystemState) {
 		const fsInstance = new FileSystem(state.base_dir, false);
 		fsInstance.extractedContentCount = state.extracted_content_count;
 
@@ -428,10 +468,18 @@ export class FileSystem {
 			}
 			const file = new FileCtor(fileState.data.name, fileState.data.content);
 			fsInstance.files.set(filename, file);
-			await file.write(fileState.data.content, fsInstance.dataDir);
+			try {
+				file.writeSync(fileState.data.content, fsInstance.dataDir);
+			} catch (error) {
+				throw new FileSystemError(`Error restoring file '${filename}': ${(error as Error).message}`);
+			}
 		}
 
 		return fsInstance;
+	}
+
+	static async from_state(state: FileSystemState) {
+		return FileSystem.from_state_sync(state);
 	}
 }
 
