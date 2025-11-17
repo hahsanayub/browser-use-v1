@@ -7,15 +7,25 @@ import {
 	ClickElementActionSchema,
 	CloseTabActionSchema,
 	DoneActionSchema,
+	ExtractStructuredDataActionSchema,
+	DropdownOptionsActionSchema,
 	GoToUrlActionSchema,
 	InputTextActionSchema,
 	NoParamsActionSchema,
+	ReadFileActionSchema,
+	ReplaceFileStrActionSchema,
+	ScrollActionSchema,
+	ScrollToTextActionSchema,
 	SearchGoogleActionSchema,
 	StructuredOutputActionSchema,
 	SwitchTabActionSchema,
 	UploadFileActionSchema,
+	WriteFileActionSchema,
+	SendKeysActionSchema,
 } from './views.js';
 import { Registry } from './registry/service.js';
+import TurndownService from 'turndown';
+import { UserMessage } from '../llm/messages.js';
 
 type BrowserSession = any;
 type Page = any;
@@ -70,6 +80,12 @@ export class Controller<Context = unknown> {
 		this.registerNavigationActions();
 		this.registerElementActions();
 		this.registerTabActions();
+		this.registerContentActions();
+		this.registerScrollActions();
+		this.registerFileSystemActions();
+		this.registerKeyboardActions();
+		this.registerDropdownActions();
+		this.registerSheetsActions();
 	}
 
 	private registerNavigationActions() {
@@ -278,6 +294,441 @@ export class Controller<Context = unknown> {
 				});
 			},
 		);
+	}
+
+	private registerContentActions() {
+		type ExtractStructuredAction = z.infer<typeof ExtractStructuredDataActionSchema>;
+		this.registry
+			.action(
+				'Extract structured, semantic data from the current webpage based on a textual query.',
+				{
+					param_model: ExtractStructuredDataActionSchema,
+				},
+			)(async (params: ExtractStructuredAction, { page, page_extraction_llm, file_system }) => {
+				if (!page) {
+					throw new BrowserError('No active page available for extraction.');
+				}
+				if (!page_extraction_llm) {
+					throw new BrowserError('page_extraction_llm is not configured.');
+				}
+				const fsInstance = file_system ?? new FileSystem(process.cwd(), false);
+				const html = await page.content?.();
+				if (!html) {
+					throw new BrowserError('Unable to extract page content.');
+				}
+
+				const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+				let rawHtml = html;
+				if (!params.extract_links) {
+					rawHtml = rawHtml.replace(/<a\b[^>]*>/gi, '').replace(/<\/a>/gi, '');
+				}
+				let content = turndown.turndown(rawHtml);
+				content = content.replace(/\n+/g, '\n');
+				const maxChars = 30000;
+				if (content.length > maxChars) {
+					const head = content.slice(0, maxChars / 2);
+					const tail = content.slice(-maxChars / 2);
+					content = `${head}\n... left out the middle because it was too long ...\n${tail}`;
+				}
+
+				const prompt = `You convert websites into structured information. Extract information from this webpage based on the query. Focus only on content relevant to the query. If 
+1. The query is vague
+2. Does not make sense for the page
+3. Some/all of the information is not available
+
+Explain the content of the page and that the requested information is not available in the page. Respond in JSON format.
+Query: ${params.query}
+Website:
+${content}`;
+
+				const response = await page_extraction_llm.ainvoke([new UserMessage(prompt)]);
+				const completion = response?.completion ?? '';
+				const extracted_content = `Page Link: ${page.url}\nQuery: ${params.query}\nExtracted Content:\n${completion}`;
+
+				let includeOnce = false;
+				let memory = extracted_content;
+				const MAX_MEMORY_SIZE = 600;
+				if (extracted_content.length > MAX_MEMORY_SIZE) {
+					const lines = extracted_content.split('\n');
+					let display = '';
+					let count = 0;
+					for (const line of lines) {
+						if (display.length + line.length > MAX_MEMORY_SIZE) break;
+						display += `${line}\n`;
+						count += 1;
+					}
+					const saveResult = await fsInstance.save_extracted_content(extracted_content);
+					memory = `Extracted content from ${page.url}\n<query>${params.query}\n</query>\n<extracted_content>\n${display}${lines.length - count} more lines...\n</extracted_content>\n<file_system>${saveResult}</file_system>`;
+					includeOnce = true;
+				}
+
+				return new ActionResult({
+					extracted_content,
+					include_extracted_content_only_once: includeOnce,
+					long_term_memory: memory,
+				});
+			});
+	}
+
+	private registerScrollActions() {
+		type ScrollAction = z.infer<typeof ScrollActionSchema>;
+		this.registry
+			.action(
+				'Scroll the page by specified number of pages (down=True scrolls down, down=False scrolls up).',
+				{ param_model: ScrollActionSchema },
+			)(async (params: ScrollAction, { browser_session }) => {
+				const page: Page | null = await browser_session.get_current_page();
+				if (!page || !page.evaluate) {
+					throw new BrowserError('Unable to access current page for scrolling.');
+				}
+
+				const deltaPages = Math.max(Math.min(params.num_pages, 5), -5);
+				const direction = params.down ? 1 : -1;
+				const scrollBy = direction * deltaPages * 0.8;
+
+				await page.evaluate(
+					({ amount }) => {
+						const distance = amount * window.innerHeight;
+						window.scrollBy({ top: distance, behavior: 'smooth' });
+					},
+					{ amount: scrollBy },
+				);
+
+				const msg = `📜 Scrolled ${params.down ? 'down' : 'up'} ${Math.abs(deltaPages)} page(s)`;
+				return new ActionResult({
+					extracted_content: msg,
+					include_in_memory: true,
+					long_term_memory: msg,
+				});
+			});
+		type ScrollToTextAction = z.infer<typeof ScrollToTextActionSchema>;
+		this.registry
+			.action('Scroll to a text in the current page', { param_model: ScrollToTextActionSchema })
+			(async (params: ScrollToTextAction, { browser_session }) => {
+				const page: Page | null = await browser_session.get_current_page();
+				if (!page?.evaluate) {
+					throw new BrowserError('Unable to access page for scrolling.');
+				}
+
+				const success = await page.evaluate(
+					({ text }) => {
+						const iterator = document.createNodeIterator(document.body, NodeFilter.SHOW_ELEMENT);
+						let node: Node | null;
+						while ((node = iterator.nextNode())) {
+							const el = node as HTMLElement;
+							if (!el || !el.textContent) continue;
+							if (el.textContent.toLowerCase().includes(text.toLowerCase())) {
+								el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+								return true;
+							}
+						}
+						return false;
+					},
+					{ text: params.text },
+				);
+
+				if (!success) {
+					throw new BrowserError(`Text '${params.text}' not found on page`);
+				}
+
+				const msg = `🔍  Scrolled to text: ${params.text}`;
+				return new ActionResult({
+					extracted_content: msg,
+					include_in_memory: true,
+					long_term_memory: msg,
+				});
+			});
+	}
+
+	private registerFileSystemActions() {
+		type ReadFileAction = z.infer<typeof ReadFileActionSchema>;
+		this.registry
+			.action('Read file_name from file system', { param_model: ReadFileActionSchema })
+			(async (params: ReadFileAction, { file_system, available_file_paths }) => {
+				const fsInstance = file_system ?? new FileSystem(process.cwd(), false);
+				const allowed = Array.isArray(available_file_paths) && available_file_paths.includes(params.file_name);
+				const result = await fsInstance.read_file(params.file_name, allowed);
+				const MAX_MEMORY_SIZE = 1000;
+				let memory = result;
+				if (result.length > MAX_MEMORY_SIZE) {
+					const lines = result.split('\n');
+					let preview = '';
+					let used = 0;
+					for (const line of lines) {
+						if (preview.length + line.length > MAX_MEMORY_SIZE) break;
+						preview += `${line}\n`;
+						used += 1;
+					}
+					const remaining = lines.length - used;
+					memory = remaining > 0 ? `${preview}${remaining} more lines...` : preview;
+				}
+				return new ActionResult({
+					extracted_content: result,
+					include_in_memory: true,
+					long_term_memory: memory,
+					include_extracted_content_only_once: true,
+				});
+			});
+
+		type WriteFileAction = z.infer<typeof WriteFileActionSchema>;
+		this.registry
+			.action('Write content to file', { param_model: WriteFileActionSchema })
+			(async (params: WriteFileAction, { file_system }) => {
+				const fsInstance = file_system ?? new FileSystem(process.cwd(), false);
+				let content = params.content;
+				const trailing = params.trailing_newline ?? true;
+				const leading = params.leading_newline ?? false;
+				if (trailing) {
+					content = `${content}\n`;
+				}
+				if (leading) {
+					content = `\n${content}`;
+				}
+				const append = params.append ?? false;
+				const result = append
+					? await fsInstance.append_file(params.file_name, content)
+					: await fsInstance.write_file(params.file_name, content);
+				const msg = `📝  ${result}`;
+				return new ActionResult({
+					extracted_content: result,
+					include_in_memory: true,
+					long_term_memory: result,
+				});
+			});
+
+		type ReplaceAction = z.infer<typeof ReplaceFileStrActionSchema>;
+		this.registry
+			.action('Replace text within an existing file', { param_model: ReplaceFileStrActionSchema })
+			(async (params: ReplaceAction, { file_system }) => {
+				const fsInstance = file_system ?? new FileSystem(process.cwd(), false);
+				const result = await fsInstance.replace_file_str(params.file_name, params.old_str, params.new_str);
+				return new ActionResult({
+					extracted_content: result,
+					include_in_memory: true,
+					long_term_memory: result,
+				});
+			});
+	}
+
+	private registerKeyboardActions() {
+		type SendKeysAction = z.infer<typeof SendKeysActionSchema>;
+		this.registry.action('Send keys to the active page', { param_model: SendKeysActionSchema })(
+			async (params: SendKeysAction, { browser_session }) => {
+				const page: Page | null = await browser_session.get_current_page();
+				const keyboard = page?.keyboard;
+				if (!keyboard) {
+					throw new BrowserError('Keyboard input is not available on the current page.');
+				}
+				try {
+					await keyboard.press(params.keys);
+				} catch (error) {
+					if (error instanceof Error && error.message.includes('Unknown key')) {
+						for (const char of params.keys) {
+							await keyboard.press(char);
+						}
+					} else {
+						throw error;
+					}
+				}
+				const msg = `⌨️  Sent keys: ${params.keys}`;
+				return new ActionResult({
+					extracted_content: msg,
+					include_in_memory: true,
+					long_term_memory: msg,
+				});
+			},
+		);
+	}
+
+	private registerDropdownActions() {
+		type DropdownAction = z.infer<typeof DropdownOptionsActionSchema>;
+		this.registry
+			.action('Get all options from a native dropdown or ARIA menu', { param_model: DropdownOptionsActionSchema })
+			(async (params: DropdownAction, { browser_session }) => {
+				const page: Page | null = await browser_session.get_current_page();
+				const domElement = await browser_session.get_dom_element_by_index(params.index);
+				if (!domElement) {
+					throw new BrowserError(`Element index ${params.index} does not exist.`);
+				}
+				if (!page?.evaluate) {
+					throw new BrowserError('Unable to evaluate dropdown options on current page.');
+				}
+				if (!domElement.xpath) {
+					throw new BrowserError('DOM element does not include an XPath selector.');
+				}
+
+				const payload = await page.evaluate(
+					({ xpath }) => {
+						const element = document.evaluate(
+							xpath,
+							document,
+							null,
+							XPathResult.FIRST_ORDERED_NODE_TYPE,
+							null,
+						).singleNodeValue as HTMLElement | null;
+						if (!element) return null;
+						if (element.tagName?.toLowerCase() === 'select') {
+							const options = Array.from((element as HTMLSelectElement).options).map((opt, index) => ({
+								text: opt.text,
+								value: opt.value,
+								index,
+							}));
+							return { type: 'select', options };
+						}
+						const ariaRoles = new Set(['menu', 'listbox', 'combobox']);
+						const role = element.getAttribute('role');
+						if (role && ariaRoles.has(role)) {
+							const nodes = element.querySelectorAll('[role="menuitem"],[role="option"]');
+							const options = Array.from(nodes).map((node, index) => ({
+								text: node.textContent?.trim() ?? '',
+								value: node.textContent?.trim() ?? '',
+								index,
+							}));
+							return { type: 'aria', options };
+						}
+						return null;
+					},
+					{ xpath: domElement.xpath },
+				);
+
+				if (!payload || !payload.options?.length) {
+					throw new BrowserError('No options found for the specified dropdown.');
+				}
+
+				const formatted = payload.options.map(
+					(opt: any) => `${opt.index}: text=${JSON.stringify(opt.text ?? '')}`,
+				);
+				formatted.push('Use the exact text string in select_dropdown_option');
+
+				const message = formatted.join('\n');
+				return new ActionResult({
+					extracted_content: message,
+					include_in_memory: true,
+					include_extracted_content_only_once: true,
+					long_term_memory: `Found dropdown options for index ${params.index}.`,
+				});
+			});
+	}
+
+	private registerSheetsActions() {
+		this.registry
+			.action('Google Sheets: Get the contents of the entire sheet', {
+				domains: ['https://docs.google.com'],
+			})(async (_params, { browser_session }) => {
+				const page: Page | null = await browser_session.get_current_page();
+				await page?.keyboard?.press('Enter');
+				await page?.keyboard?.press('Escape');
+				await page?.keyboard?.press('ControlOrMeta+A');
+				await page?.keyboard?.press('ControlOrMeta+C');
+				const content = await page?.evaluate?.(() => navigator.clipboard.readText());
+				return new ActionResult({
+					extracted_content: content ?? '',
+					include_in_memory: true,
+					long_term_memory: 'Retrieved sheet contents',
+					include_extracted_content_only_once: true,
+				});
+			});
+
+		type SheetsRange = z.infer<typeof SheetsRangeActionSchema>;
+		this.registry
+			.action('Google Sheets: Get the contents of a cell or range of cells', {
+				domains: ['https://docs.google.com'],
+				param_model: SheetsRangeActionSchema,
+			})(async (params: SheetsRange, { browser_session }) => {
+				const page: Page | null = await browser_session.get_current_page();
+				await this.gotoSheetsRange(page, params.cell_or_range);
+				await page?.keyboard?.press('ControlOrMeta+C');
+				await new Promise((resolve) => setTimeout(resolve, 100));
+				const content = await page?.evaluate?.(() => navigator.clipboard.readText());
+				return new ActionResult({
+					extracted_content: content ?? '',
+					include_in_memory: true,
+					long_term_memory: `Retrieved contents from ${params.cell_or_range}`,
+					include_extracted_content_only_once: true,
+				});
+			});
+
+		type SheetsUpdate = z.infer<typeof SheetsUpdateActionSchema>;
+		this.registry
+			.action('Google Sheets: Update the content of a cell or range of cells', {
+				domains: ['https://docs.google.com'],
+				param_model: SheetsUpdateActionSchema,
+			})(async (params: SheetsUpdate, { browser_session }) => {
+				const page: Page | null = await browser_session.get_current_page();
+				await this.gotoSheetsRange(page, params.cell_or_range);
+				await page?.evaluate?.(
+					(value) => {
+						const clipboardData = new DataTransfer();
+						clipboardData.setData('text/plain', value);
+						document.activeElement?.dispatchEvent(new ClipboardEvent('paste', { clipboardData }));
+					},
+					params.value,
+				);
+				return new ActionResult({
+					extracted_content: `Updated cells: ${params.cell_or_range} = ${params.value}`,
+					long_term_memory: `Updated cells ${params.cell_or_range} with ${params.value}`,
+				});
+			});
+
+		this.registry
+			.action('Google Sheets: Clear whatever cells are currently selected', {
+				domains: ['https://docs.google.com'],
+				param_model: SheetsRangeActionSchema,
+			})(async (params: SheetsRange, { browser_session }) => {
+				const page: Page | null = await browser_session.get_current_page();
+				await this.gotoSheetsRange(page, params.cell_or_range);
+				await page?.keyboard?.press('Backspace');
+				return new ActionResult({
+					extracted_content: `Cleared cells: ${params.cell_or_range}`,
+					long_term_memory: `Cleared cells ${params.cell_or_range}`,
+				});
+			});
+
+		this.registry
+			.action('Google Sheets: Select a specific cell or range of cells', {
+				domains: ['https://docs.google.com'],
+				param_model: SheetsRangeActionSchema,
+			})(async (params: SheetsRange, { browser_session }) => {
+				const page: Page | null = await browser_session.get_current_page();
+				await this.gotoSheetsRange(page, params.cell_or_range);
+				return new ActionResult({
+					extracted_content: `Selected cells: ${params.cell_or_range}`,
+					long_term_memory: `Selected cells ${params.cell_or_range}`,
+				});
+			});
+
+		this.registry
+			.action(
+				'Google Sheets: Fallback method to type text into the currently selected cell',
+				{ domains: ['https://docs.google.com'], param_model: SheetsInputActionSchema },
+			)(async (params: z.infer<typeof SheetsInputActionSchema>, { browser_session }) => {
+				const page: Page | null = await browser_session.get_current_page();
+				await page?.keyboard?.type(params.text, { delay: 100 });
+				await page?.keyboard?.press('Enter');
+				await page?.keyboard?.press('ArrowUp');
+				return new ActionResult({
+					extracted_content: `Inputted text ${params.text}`,
+					long_term_memory: `Inputted text '${params.text}' into cell`,
+				});
+			});
+	}
+
+	private async gotoSheetsRange(page: Page | null, cell_or_range: string) {
+		if (!page?.keyboard) {
+			throw new BrowserError('No keyboard available for Google Sheets actions.');
+		}
+		await page.keyboard.press('Enter');
+		await page.keyboard.press('Escape');
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		await page.keyboard.press('Home');
+		await page.keyboard.press('ArrowUp');
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		await page.keyboard.press('Control+G');
+		await new Promise((resolve) => setTimeout(resolve, 200));
+		await page.keyboard.type(cell_or_range, { delay: 50 });
+		await page.keyboard.press('Enter');
+		await new Promise((resolve) => setTimeout(resolve, 200));
+		await page.keyboard.press('Escape');
 	}
 
 	private registerDoneAction(outputModel: z.ZodTypeAny | null) {

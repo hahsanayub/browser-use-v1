@@ -72,5 +72,58 @@ export const ExtractPageContentActionSchema = z.object({
 });
 export type ExtractPageContentAction = z.infer<typeof ExtractPageContentActionSchema>;
 
+export const ExtractStructuredDataActionSchema = z.object({
+	query: z.string(),
+	extract_links: z.boolean().default(false),
+});
+export type ExtractStructuredDataAction = z.infer<typeof ExtractStructuredDataActionSchema>;
+
+export const ReadFileActionSchema = z.object({
+	file_name: z.string(),
+});
+export type ReadFileAction = z.infer<typeof ReadFileActionSchema>;
+
+export const WriteFileActionSchema = z.object({
+	file_name: z.string(),
+	content: z.string(),
+	append: z.boolean().optional(),
+	trailing_newline: z.boolean().optional(),
+	leading_newline: z.boolean().optional(),
+});
+export type WriteFileAction = z.infer<typeof WriteFileActionSchema>;
+
+export const ReplaceFileStrActionSchema = z.object({
+	file_name: z.string(),
+	old_str: z.string(),
+	new_str: z.string(),
+});
+export type ReplaceFileStrAction = z.infer<typeof ReplaceFileStrActionSchema>;
+
+export const ScrollToTextActionSchema = z.object({
+	text: z.string(),
+});
+export type ScrollToTextAction = z.infer<typeof ScrollToTextActionSchema>;
+
+export const DropdownOptionsActionSchema = z.object({
+	index: z.number().int(),
+});
+export type DropdownOptionsAction = z.infer<typeof DropdownOptionsActionSchema>;
+
+export const SheetsRangeActionSchema = z.object({
+	cell_or_range: z.string(),
+});
+export type SheetsRangeAction = z.infer<typeof SheetsRangeActionSchema>;
+
+export const SheetsUpdateActionSchema = z.object({
+	cell_or_range: z.string(),
+	value: z.string(),
+});
+export type SheetsUpdateAction = z.infer<typeof SheetsUpdateActionSchema>;
+
+export const SheetsInputActionSchema = z.object({
+	text: z.string(),
+});
+export type SheetsInputAction = z.infer<typeof SheetsInputActionSchema>;
+
 export const NoParamsActionSchema = z.object({}).passthrough();
 export type NoParamsAction = z.infer<typeof NoParamsActionSchema>;
