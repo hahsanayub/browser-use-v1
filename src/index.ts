@@ -9,6 +9,8 @@ export * from './browser/index.js';
 export * from './dom/views.js';
 export * from './dom/history-tree-processor/view.js';
 export * from './dom/history-tree-processor/service.js';
+export * from './dom/service.js';
+export * from './dom/clickable-element-processor/service.js';
 
 export * from './controller/views.js';
 export * from './controller/registry/views.js';
