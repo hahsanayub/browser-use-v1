@@ -6,7 +6,7 @@ import { config as loadEnv } from 'dotenv';
 import { createLogger } from '../logging-config.js';
 import { CONFIG } from '../config.js';
 import { EventBus } from '../event-bus.js';
-import { uuid7str, time_execution_sync, time_execution_async, SignalHandler } from '../utils.js';
+import { uuid7str, time_execution_sync, time_execution_async, SignalHandler, get_browser_use_version } from '../utils.js';
 import type { Controller } from '../controller/service.js';
 import { Controller as DefaultController } from '../controller/service.js';
 import type { FileSystem } from '../filesystem/file-system.js';
@@ -40,6 +40,8 @@ import {
 } from './cloud-events.js';
 import { create_history_gif } from './gif.js';
 import { ScreenshotService } from '../screenshots/service.js';
+import { ProductTelemetry, productTelemetry } from '../telemetry/service.js';
+import { AgentTelemetryEvent } from '../telemetry/views.js';
 
 loadEnv();
 
@@ -180,7 +182,7 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 	register_done_callback: AgentConstructorParams<Context, AgentStructuredOutput>['register_done_callback'];
 	register_external_agent_status_raise_error_callback: AgentConstructorParams<Context, AgentStructuredOutput>['register_external_agent_status_raise_error_callback'];
 	context: Context | null;
-	telemetry: any = null;
+	telemetry: ProductTelemetry;
 	eventbus: EventBus;
 	enable_cloud_sync: boolean;
 	cloud_sync: any = null;
@@ -190,6 +192,8 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 	private _current_screenshot_path: string | null = null;
 	has_downloads_path = false;
 	private _last_known_downloads: string[] = [];
+	version = 'unknown';
+	source = 'unknown';
 	step_start_time = 0;
 	_external_pause_event: { resolve: (() => void) | null; promise: Promise<void> } = {
 		resolve: null,
@@ -312,6 +316,7 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 			register_usage: () => {},
 			get_usage_summary: async () => null,
 			log_usage_summary: async () => {},
+			get_usage_tokens_for_model: () => ({ prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }),
 		};
 		if (typeof this.token_cost_service.register_llm === 'function') {
 			this.token_cost_service.register_llm(llm);
@@ -322,6 +327,7 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 
 		this.state = params.injected_agent_state || new AgentState();
 		this.history = new AgentHistoryList([], null);
+		this.telemetry = productTelemetry;
 
 		this._file_system_path = file_system_path;
 		this.file_system = this._initFileSystem(file_system_path);
@@ -409,8 +415,27 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 		return this._message_manager;
 	}
 
-	private _set_browser_use_version_and_source(_sourceOverride: string | null) {
-		/* Placeholder for future implementation */
+	private _set_browser_use_version_and_source(sourceOverride: string | null) {
+		const version = get_browser_use_version();
+		let source = 'npm';
+
+		try {
+			const projectRoot = process.cwd();
+			const repoIndicators = ['.git', 'README.md', 'docs', 'examples'];
+			if (repoIndicators.every((indicator) => fs.existsSync(path.join(projectRoot, indicator)))) {
+				source = 'git';
+			}
+		} catch (error) {
+			this.logger.debug(`Error determining browser-use source: ${(error as Error).message}`);
+			source = 'unknown';
+		}
+
+		if (sourceOverride) {
+			source = sourceOverride;
+		}
+
+		this.version = version;
+		this.source = source;
 	}
 
 	private _setup_action_models() {
@@ -430,6 +455,7 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 			resume_callback: this.resume.bind(this),
 			custom_exit_callback: () => {
 				this._log_agent_event(max_steps, 'SIGINT: Cancelled by user');
+				this.telemetry?.flush?.();
 				this._force_exit_telemetry_logged = true;
 			},
 			exit_on_second_int: true,
@@ -560,6 +586,12 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 					this._log_agent_event(max_steps, agent_run_error);
 				} catch (logError) {
 					this.logger.error(`Failed to log telemetry event: ${String(logError)}`);
+				} finally {
+					try {
+						this.telemetry?.flush?.();
+					} catch (flushError) {
+						this.logger.error(`Failed to flush telemetry client: ${String(flushError)}`);
+					}
 				}
 			} else {
 				this.logger.info('Telemetry for force exit (SIGINT) already logged.');
@@ -944,8 +976,73 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 		this.logger.info(`📍 Step ${this.state.n_steps}: Ran ${action_count} actions in ${step_duration.toFixed(2)}s: ${status_str}`);
 	}
 
-	private _log_agent_event(_max_steps: number, _agent_run_error: string | null) {
-		/* placeholder for telemetry event */
+	private _log_agent_event(max_steps: number, agent_run_error: string | null) {
+		if (!this.telemetry) {
+			return;
+		}
+
+		const token_summary =
+			this.token_cost_service?.get_usage_tokens_for_model?.(this.llm.model) ?? {
+				prompt_tokens: 0,
+				completion_tokens: 0,
+				total_tokens: 0,
+			};
+
+		const action_history_data = this.history.history.map((historyItem) => {
+			if (!historyItem.model_output) {
+				return null;
+			}
+			return historyItem.model_output.action.map((action) => {
+				if (typeof (action as any)?.model_dump === 'function') {
+					return (action as any).model_dump({ exclude_unset: true });
+				}
+				return action;
+			});
+		});
+
+		const final_result = this.history.final_result();
+		const final_result_str = final_result != null ? JSON.stringify(final_result) : null;
+
+		let cdpHost: string | null = null;
+		const cdpUrl = (this.browser_session as any)?.cdp_url;
+		if (typeof cdpUrl === 'string' && cdpUrl) {
+			try {
+				const parsed = new URL(cdpUrl);
+				cdpHost = parsed.hostname || cdpUrl;
+			} catch {
+				cdpHost = cdpUrl;
+			}
+		}
+
+		const plannerModel =
+			(this.settings as any)?.planner_llm && typeof (this.settings as any).planner_llm === 'object'
+				? (this.settings as any).planner_llm.model ?? null
+				: null;
+
+		this.telemetry.capture(
+			new AgentTelemetryEvent({
+				task: this.task,
+				model: this.llm.model,
+				model_provider: (this.llm as any).provider ?? 'unknown',
+				planner_llm: plannerModel,
+				max_steps: max_steps,
+				max_actions_per_step: this.settings.max_actions_per_step,
+				use_vision: this.settings.use_vision,
+				use_validation: this.settings.validate_output,
+				version: this.version,
+				source: this.source,
+				cdp_url: cdpHost,
+				action_errors: this.history.errors(),
+				action_history: action_history_data,
+				urls_visited: this.history.urls(),
+				steps: this.state.n_steps,
+				total_input_tokens: token_summary.prompt_tokens ?? 0,
+				total_duration_seconds: this.history.total_duration_seconds(),
+				success: this.history.is_successful(),
+				final_result_response: final_result_str,
+				error_message: agent_run_error,
+			}),
+		);
 	}
 
 	private async _make_history_item(
