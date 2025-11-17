@@ -2,3 +2,7 @@ export * from './profile.js';
 export * from './types.js';
 export * from './views.js';
 export * from './utils.js';
+export * from './browser.js';
+export * from './context.js';
+export * from './session.js';
+export * from './extensions.js';
