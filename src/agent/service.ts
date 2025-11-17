@@ -39,6 +39,7 @@ import {
 	UpdateAgentTaskEvent,
 } from './cloud-events.js';
 import { create_history_gif } from './gif.js';
+import { ScreenshotService } from '../screenshots/service.js';
 
 loadEnv();
 
@@ -184,7 +185,9 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 	enable_cloud_sync: boolean;
 	cloud_sync: any = null;
 	file_system: FileSystem | null = null;
+	screenshot_service: ScreenshotService | null = null;
 	agent_directory: string;
+	private _current_screenshot_path: string | null = null;
 	step_start_time = 0;
 	_external_pause_event: { resolve: (() => void) | null; promise: Promise<void> } = {
 		resolve: null,
@@ -320,6 +323,7 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 
 		this._file_system_path = file_system_path;
 		this.file_system = this._initFileSystem(file_system_path);
+		this._setScreenshotService();
 		this._setup_action_models();
 		this._set_browser_use_version_and_source(source);
 
@@ -373,6 +377,17 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 		this.agent_directory = path.join(os.tmpdir(), `browser_use_agent_${this.id}_${timestamp}`);
 		ensureDir(this.agent_directory);
 		return this.file_system;
+	}
+
+	private _setScreenshotService() {
+		try {
+			this.screenshot_service = new ScreenshotService(this.agent_directory);
+			this.logger.info(`📸 Screenshot service initialized in: ${path.join(this.agent_directory, 'screenshots')}`);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			this.logger.error(`📸 Failed to initialize screenshot service: ${message}`);
+			throw error;
+		}
 	}
 
 	get logger() {
@@ -609,6 +624,7 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 		await this._check_and_update_downloads(`Step ${this.state.n_steps}: after getting browser state`);
 
 		this._log_step_context(current_page, browser_state_summary);
+		await this._storeScreenshotForStep(browser_state_summary);
 		await this._raise_if_stopped_or_paused();
 
 		this.logger.debug(`📝 Step ${this.state.n_steps}: Updating action models...`);
@@ -630,6 +646,27 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 
 		await this._handle_final_step(step_info);
 		return browser_state_summary;
+	}
+
+	private async _storeScreenshotForStep(browser_state_summary: BrowserStateSummary) {
+		this._current_screenshot_path = null;
+		if (!this.screenshot_service || !browser_state_summary?.screenshot) {
+			return;
+		}
+
+		try {
+			this._current_screenshot_path = await this.screenshot_service.store_screenshot(
+				browser_state_summary.screenshot,
+				this.state.n_steps,
+			);
+			this.logger.debug(
+				`📸 Step ${this.state.n_steps}: Stored screenshot at ${this._current_screenshot_path}`,
+			);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			this.logger.error(`📸 Failed to store screenshot for step ${this.state.n_steps}: ${message}`);
+			this._current_screenshot_path = null;
+		}
 	}
 
 	@observe_debug({ ignore_input: true, name: 'get_next_action' })
@@ -873,7 +910,7 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 			browser_state_summary.title,
 			browser_state_summary.tabs,
 			interacted_elements,
-			browser_state_summary.screenshot ?? null,
+			this._current_screenshot_path,
 		);
 		this.history.add_item(new AgentHistory(model_output, result, state, metadata));
 	}
