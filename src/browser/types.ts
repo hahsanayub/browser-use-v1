@@ -4,6 +4,7 @@ import type {
 	ElementHandle as PlaywrightElementHandle,
 	FrameLocator as PlaywrightFrameLocator,
 	Page as PlaywrightPage,
+	Locator as PlaywrightLocator,
 } from 'playwright';
 import type { BrowserContextOptions, LaunchOptions } from 'playwright-core';
 
@@ -12,6 +13,7 @@ export type BrowserContext = PlaywrightBrowserContext;
 export type Page = PlaywrightPage;
 export type ElementHandle<T = unknown> = PlaywrightElementHandle<T>;
 export type FrameLocator = PlaywrightFrameLocator;
+export type Locator = PlaywrightLocator;
 
 export type PlaywrightModule = typeof import('playwright');
 

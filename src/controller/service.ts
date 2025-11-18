@@ -119,8 +119,8 @@ export class Controller<Context = unknown> {
 			(async (params: GoToUrlAction, { browser_session }) => {
 				try {
 					if (params.new_tab) {
-						const page = await browser_session.create_new_tab(params.url);
-						const tabIdx = browser_session.tabs.indexOf(page);
+						await browser_session.create_new_tab(params.url);
+						const tabIdx = browser_session.active_tab_index;
 						const msg = `🔗  Opened new tab #${tabIdx} with url ${params.url}`;
 						return new ActionResult({
 							extracted_content: msg,
@@ -287,9 +287,9 @@ export class Controller<Context = unknown> {
 				await browser_session.switch_to_tab(params.page_id);
 				const page: Page | null = await browser_session.get_current_page();
 				const url = page?.url ?? '';
-				await page?.close();
+				await page?.close?.();
 				const newPage = await browser_session.get_current_page();
-				const newIndex = browser_session.tabs.indexOf(newPage);
+				const newIndex = browser_session.active_tab_index;
 				const msg = `❌  Closed tab #${params.page_id} with ${url}, now focused on tab #${newIndex} with url ${newPage?.url ?? ''}`;
 				return new ActionResult({
 					extracted_content: msg,
