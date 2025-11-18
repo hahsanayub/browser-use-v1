@@ -59,6 +59,7 @@ export class BrowserSession {
 	private ownsBrowserResources = true;
 	private _autoDownloadPdfs = true;
 	private tabPages = new Map<number, Page | null>();
+	private currentPageLoadingStatus: string | null = null;
 
 	constructor(init: BrowserSessionInit = {}) {
 		this.browser_profile = init.browser_profile ?? new BrowserProfile(init.profile ?? {});
@@ -162,6 +163,7 @@ export class BrowserSession {
 			await this.start();
 		}
 		const page = await this.get_current_page();
+		this.cachedBrowserState = null;
 		let domState: DOMState;
 
 		if (!page) {
@@ -186,17 +188,61 @@ export class BrowserSession {
 			}
 		}
 
+		let pageInfo = null;
+		let pixelsAbove = 0;
+		let pixelsBelow = 0;
+		let pixelsLeft = 0;
+		let pixelsRight = 0;
+		if (page) {
+			try {
+				const metrics = await page.evaluate(() => {
+					const doc = document.documentElement;
+					const body = document.body;
+					const width = Math.max(doc?.scrollWidth ?? 0, body?.scrollWidth ?? 0, doc?.clientWidth ?? 0);
+					const height = Math.max(doc?.scrollHeight ?? 0, body?.scrollHeight ?? 0, doc?.clientHeight ?? 0);
+					return {
+						viewportWidth: window.innerWidth,
+						viewportHeight: window.innerHeight,
+						scrollX: window.scrollX,
+						scrollY: window.scrollY,
+						pageWidth: width,
+						pageHeight: height,
+					};
+				});
+				pixelsAbove = Math.max(metrics.scrollY ?? 0, 0);
+				const viewportHeight = metrics.viewportHeight ?? 0;
+				const viewportWidth = metrics.viewportWidth ?? 0;
+				pixelsBelow = Math.max((metrics.pageHeight ?? 0) - (metrics.scrollY + viewportHeight), 0);
+				pixelsLeft = Math.max(metrics.scrollX ?? 0, 0);
+				pixelsRight = Math.max((metrics.pageWidth ?? 0) - (metrics.scrollX + viewportWidth), 0);
+				pageInfo = {
+					viewport_width: viewportWidth,
+					viewport_height: viewportHeight,
+					page_width: metrics.pageWidth ?? viewportWidth,
+					page_height: metrics.pageHeight ?? viewportHeight,
+					scroll_x: metrics.scrollX ?? 0,
+					scroll_y: metrics.scrollY ?? 0,
+					pixels_above: pixelsAbove,
+					pixels_below: pixelsBelow,
+					pixels_left: pixelsLeft,
+					pixels_right: pixelsRight,
+				};
+			} catch (error) {
+				this.logger.debug(`Failed to compute page metrics: ${(error as Error).message}`);
+			}
+		}
+
 		const summary = new BrowserStateSummary(domState, {
 			url: this.currentUrl,
 			title: this.currentTitle || this.currentUrl,
 			tabs: this._buildTabs(),
 			screenshot,
-			page_info: null,
-			pixels_above: 0,
-			pixels_below: 0,
-			browser_errors: [],
+			page_info: pageInfo,
+			pixels_above: pixelsAbove,
+			pixels_below: pixelsBelow,
+			browser_errors: this.currentPageLoadingStatus ? [this.currentPageLoadingStatus] : [],
 			is_pdf_viewer: Boolean(this.currentUrl?.toLowerCase().endsWith('.pdf')),
-			loading_status: null,
+			loading_status: this.currentPageLoadingStatus,
 		});
 		this.cachedBrowserState = summary;
 		return summary;
@@ -220,7 +266,7 @@ export class BrowserSession {
 	}
 
 	update_current_page(page: Page | null, title?: string | null, url?: string | null) {
-		this.agent_current_page = page;
+		this._setActivePage(page);
 		this.human_current_page = this.human_current_page ?? page;
 		if (url) {
 			this.currentUrl = normalize_url(url);
@@ -293,6 +339,7 @@ export class BrowserSession {
 		}
 		this.tabPages.set(newTab.page_id, page);
 		this._setActivePage(page);
+		this.currentPageLoadingStatus = null;
 		if (!this.human_current_page) {
 			this.human_current_page = page;
 		}
@@ -359,6 +406,7 @@ export class BrowserSession {
 		const tab = this._tabs[this.currentTabIndex] ?? null;
 		const current = tab ? this.tabPages.get(tab.page_id) ?? null : null;
 		this._setActivePage(current);
+		this.currentPageLoadingStatus = null;
 		this.cachedBrowserState = null;
 		if (this._tabs.length) {
 			const tab = this._tabs[this.currentTabIndex];
@@ -367,6 +415,7 @@ export class BrowserSession {
 		} else {
 			this.currentUrl = 'about:blank';
 			this.currentTitle = 'about:blank';
+			this._setActivePage(null);
 		}
 	}
 
