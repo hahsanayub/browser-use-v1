@@ -31,11 +31,15 @@ const formatMessage = (level: LogLevel, name: string, message: string) => {
 	return `${paddedLevel} [${name}] ${message}`;
 };
 
-class Logger {
-	constructor(private readonly name: string) {}
+export class Logger {
+	constructor(private readonly name: string) { }
 
 	private shouldLog(level: LogLevel) {
 		return LEVEL_PRIORITY[level] >= LEVEL_PRIORITY[globalLevel];
+	}
+
+	public get level(): LogLevel {
+		return globalLevel;
 	}
 
 	private emit(level: LogLevel, message: string, ...args: unknown[]) {

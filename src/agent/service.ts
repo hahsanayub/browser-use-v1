@@ -281,7 +281,9 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 		this.register_new_step_callback = register_new_step_callback;
 		this.register_done_callback = register_done_callback;
 		this.register_external_agent_status_raise_error_callback = register_external_agent_status_raise_error_callback;
-		this.context = context;
+		this.register_external_agent_status_raise_error_callback = register_external_agent_status_raise_error_callback;
+		this.context = context as Context | null;
+		this.agent_directory = Agent.DEFAULT_AGENT_DATA_DIR;
 
 		this.settings = {
 			use_vision,
@@ -312,10 +314,10 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 		};
 
 		this.token_cost_service = {
-			register_llm: () => {},
-			register_usage: () => {},
+			register_llm: () => { },
+			register_usage: () => { },
 			get_usage_summary: async () => null,
-			log_usage_summary: async () => {},
+			log_usage_summary: async () => { },
 			get_usage_tokens_for_model: () => ({ prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }),
 		};
 		if (typeof this.token_cost_service.register_llm === 'function') {
@@ -368,7 +370,7 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 		if (this.enable_cloud_sync || cloud_sync) {
 			this.cloud_sync = cloud_sync ?? null;
 			if (this.cloud_sync) {
-				this.eventbus.on('*', this.cloud_sync.handle_event?.bind(this.cloud_sync) ?? (() => {}));
+				this.eventbus.on('*', this.cloud_sync.handle_event?.bind(this.cloud_sync) ?? (() => { }));
 			}
 		}
 
@@ -500,8 +502,7 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 			this._log_agent_run();
 
 			this.logger.debug(
-				`🔧 Agent setup: Task ID ${this.task_id.slice(-4)}, Session ID ${this.session_id.slice(-4)}, Browser Session ID ${
-					this.browser_session?.id?.slice?.(-4) ?? 'None'
+				`🔧 Agent setup: Task ID ${this.task_id.slice(-4)}, Session ID ${this.session_id.slice(-4)}, Browser Session ID ${this.browser_session?.id?.slice?.(-4) ?? 'None'
 				}`,
 			);
 
@@ -509,10 +510,10 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 			this._task_start_time = this._session_start_time;
 
 			this.logger.debug('📡 Dispatching CreateAgentSessionEvent...');
-			this.eventbus.dispatch(CreateAgentSessionEvent.from_agent(this as any));
+			this.eventbus.dispatch(CreateAgentSessionEvent.fromAgent(this as any));
 
 			this.logger.debug('📡 Dispatching CreateAgentTaskEvent...');
-			this.eventbus.dispatch(CreateAgentTaskEvent.from_agent(this as any));
+			this.eventbus.dispatch(CreateAgentTaskEvent.fromAgent(this as any));
 
 			if (this.initial_actions?.length) {
 				this.logger.debug(`⚡ Executing ${this.initial_actions.length} initial actions...`);
@@ -631,7 +632,7 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 				this.logger.info('Telemetry for force exit (SIGINT) already logged.');
 			}
 
-			this.eventbus.dispatch(UpdateAgentTaskEvent.from_agent(this as any));
+			this.eventbus.dispatch(UpdateAgentTaskEvent.fromAgent(this as any));
 
 			if (this.settings.generate_gif) {
 				let output_path = 'agent_history.gif';
@@ -640,7 +641,7 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 				}
 				await create_history_gif(this.task, this.history, { output_path });
 				if (fs.existsSync(output_path)) {
-					const output_event = await CreateAgentOutputFileEvent.from_agent_and_file(this as any, output_path);
+					const output_event = await CreateAgentOutputFileEvent.fromAgentAndFile(this as any, output_path);
 					this.eventbus.dispatch(output_event);
 				}
 			}
@@ -793,10 +794,37 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 	}
 
 	async multi_act(
-		_actions: Array<Record<string, Record<string, unknown>>>,
-		_options: { check_for_new_elements?: boolean } = {},
+		actions: Array<Record<string, Record<string, unknown>>>,
+		options: { check_for_new_elements?: boolean } = {},
 	) {
-		return [];
+		const results: ActionResult[] = [];
+
+		for (const action of actions) {
+			const actionName = Object.keys(action)[0];
+			const actionParams = action[actionName];
+
+			try {
+				const actResult = await this.controller.registry.execute_action(
+					actionName,
+					actionParams,
+					{
+						browser_session: this.browser_session,
+						page_extraction_llm: this.settings.page_extraction_llm,
+						sensitive_data: this.sensitive_data,
+						available_file_paths: this.available_file_paths,
+						file_system: this.file_system,
+						context: this.context,
+					},
+				);
+				results.push(actResult);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				this.logger.error(`❌ Action ${actionName} failed: ${message}`);
+				results.push(new ActionResult({ error: message }));
+			}
+		}
+
+		return results;
 	}
 
 	async wait_until_resumed() {
@@ -900,7 +928,7 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 			const actions_data = this.state.last_model_output.action.map((action) =>
 				typeof (action as any)?.model_dump === 'function' ? (action as any).model_dump() : action,
 			);
-			const step_event = CreateAgentStepEvent.from_agent_step(
+			const step_event = CreateAgentStepEvent.fromAgentStep(
 				this as any,
 				this.state.last_model_output,
 				this.state.last_result,

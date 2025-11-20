@@ -29,7 +29,7 @@ export interface ExecuteActionContext<Context> {
 	sensitive_data?: SensitiveDataMap | null;
 }
 
-export type ActionHandler<Params = any, Context = unknown> = (
+export type RegistryActionHandler<Params = any, Context = unknown> = (
 	params: Params,
 	ctx: ExecuteActionContext<Context> & {
 		page?: Page | null;
@@ -57,7 +57,7 @@ export class Registry<Context = unknown> {
 		const domains = options.allowed_domains ?? options.domains ?? null;
 		const pageFilter = options.page_filter ?? null;
 
-		return <Params = any>(handler: ActionHandler<Params, Context>) => {
+		return <Params = any>(handler: RegistryActionHandler<Params, Context>) => {
 			if (this.excludeActions.has(handler.name)) {
 				return handler;
 			}
@@ -83,7 +83,7 @@ export class Registry<Context = unknown> {
 					file_system = null,
 					sensitive_data = null,
 					available_file_paths = null,
-					context = null,
+					context = null as unknown as Context,
 				}: ExecuteActionContext<Context> = {},
 			) => {
 				const action = this.registry.get(action_name);
@@ -103,7 +103,7 @@ export class Registry<Context = unknown> {
 					currentUrl = browser_session.agent_current_page.url;
 				} else if (browser_session?.get_current_page) {
 					const currentPage = await browser_session.get_current_page();
-					currentUrl = currentPage?.url ?? null;
+					currentUrl = currentPage?.url() ?? null;
 				}
 
 				if (sensitive_data) {

@@ -165,7 +165,7 @@ export class MessageManager {
 			sensitive_data: this.sensitiveDataDescription,
 			available_file_paths,
 			screenshots,
-			vision_detail_level: this.vision_detail_level,
+			vision_detail_level: this.visionDetailLevel,
 		});
 		const message = prompt.get_user_message(use_vision);
 		this.setMessageWithType(message, 'state');

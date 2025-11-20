@@ -162,6 +162,7 @@ export class CreateAgentOutputFileEvent extends BaseEvent {
 		user_id?: string;
 		device_id?: string | null;
 		task_id: string;
+		id?: string;
 		file_name: string;
 		file_content?: string | null;
 		content_type?: string | null;
@@ -220,6 +221,7 @@ export class CreateAgentStepEvent extends BaseEvent {
 		user_id?: string;
 		device_id?: string | null;
 		agent_task_id: string;
+		id?: string;
 		step: number;
 		evaluation_previous_goal: string;
 		memory: string;
@@ -300,6 +302,7 @@ export class CreateAgentTaskEvent extends BaseEvent {
 		user_id?: string;
 		device_id?: string | null;
 		agent_session_id: string;
+		id?: string;
 		llm_model: string;
 		task: string;
 		stopped?: boolean;
@@ -384,6 +387,7 @@ export class CreateAgentSessionEvent extends BaseEvent {
 		user_id?: string;
 		device_id?: string | null;
 		browser_session_id: string;
+		id?: string;
 		browser_state?: Record<string, unknown>;
 		browser_session_live_url?: string;
 		browser_session_cdp_url?: string;
