@@ -92,54 +92,68 @@ export class BrowserSession {
 	}
 
 	private async _waitForStableNetwork(page: Page) {
-		const pending = new Set<any>();
+		const pendingRequests = new Set<any>();
 		let lastActivity = Date.now() / 1000;
-
 		const relevantResourceTypes = new Set(['document', 'stylesheet', 'image', 'font', 'script', 'iframe']);
-		const ignoredTypes = new Set(['websocket', 'media', 'eventsource', 'manifest', 'other']);
-		const ignoredUrlPatterns = ['analytics', 'tracking', 'telemetry', 'beacon', 'metrics', 'doubleclick', 'adsystem', 'adserver', 'advertising'];
+		const ignoredResourceTypes = new Set(['websocket', 'media', 'eventsource', 'manifest', 'other']);
+		const ignoredUrlPatterns = ['analytics', 'tracking', 'telemetry', 'beacon', 'metrics', 'doubleclick', 'adsystem', 'adserver', 'advertising', 'livechat', 'zendesk'];
 
 		const onRequest = (request: any) => {
-			if (!relevantResourceTypes.has(request.resourceType())) return;
-			if (ignoredTypes.has(request.resourceType())) return;
-			const url = request.url().toLowerCase();
-			if (ignoredUrlPatterns.some((pattern) => url.includes(pattern))) return;
-			if (url.startsWith('data:') || url.startsWith('blob:')) return;
-			pending.add(request);
+			const resourceType = request.resourceType?.() ?? request.resourceType;
+			if (!resourceType || !relevantResourceTypes.has(resourceType)) {
+				return;
+			}
+			if (ignoredResourceTypes.has(resourceType)) {
+				return;
+			}
+			const url = request.url?.().toLowerCase?.() ?? request.url?.toLowerCase?.() ?? '';
+			if (ignoredUrlPatterns.some((pattern) => url.includes(pattern))) {
+				return;
+			}
+			if (url.startsWith('data:') || url.startsWith('blob:')) {
+				return;
+			}
+
+			pendingRequests.add(request);
 			lastActivity = Date.now() / 1000;
 		};
 
 		const onResponse = (response: any) => {
-			const request = response.request();
-			if (!pending.has(request)) return;
-			pending.delete(request);
+			const request = response.request?.() ?? response.request;
+			if (!pendingRequests.has(request)) {
+				return;
+			}
+			pendingRequests.delete(request);
 			lastActivity = Date.now() / 1000;
 		};
 
-		page.on('request', onRequest);
-		page.on('response', onResponse);
-
 		const waitForIdle = async () => {
-			const start = Date.now() / 1000;
+			const startTime = Date.now() / 1000;
 			while (true) {
 				await new Promise((resolve) => setTimeout(resolve, 100));
 				const now = Date.now() / 1000;
-				if (pending.size === 0 && now - lastActivity >= 0.5) {
+				if (pendingRequests.size === 0 && now - lastActivity >= (this.browser_profile.wait_for_network_idle_page_load_time ?? 0.5)) {
 					this.currentPageLoadingStatus = null;
 					break;
 				}
-				if (now - start > 5) {
-					this.currentPageLoadingStatus = `Page loading was aborted after 5 seconds with ${pending.size} pending network requests. You may want to use the wait action to allow more time for the page to fully load.`;
+				if (now - startTime > (this.browser_profile.maximum_wait_page_load_time ?? 5)) {
+					this.currentPageLoadingStatus = `Page loading was aborted after ${this.browser_profile.maximum_wait_page_load_time ?? 5}s with ${pendingRequests.size} pending network requests. You may want to use the wait action to allow more time for the page to fully load.`;
 					break;
 				}
 			}
 		};
 
-		try {
-			await waitForIdle();
-		} finally {
-			page.off('request', onRequest);
-			page.off('response', onResponse);
+		if (typeof page?.on === 'function' && typeof page?.off === 'function') {
+			page.on('request', onRequest);
+			page.on('response', onResponse);
+			try {
+				await waitForIdle();
+			} finally {
+				page.off('request', onRequest);
+				page.off('response', onResponse);
+			}
+		} else {
+			this.currentPageLoadingStatus = null;
 		}
 	}
 
