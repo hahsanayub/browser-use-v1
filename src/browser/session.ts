@@ -91,6 +91,58 @@ export class BrowserSession {
 		this.tabPages.set(this._tabs[0].page_id, this.agent_current_page ?? null);
 	}
 
+	private async _waitForStableNetwork(page: Page) {
+		const pending = new Set<any>();
+		let lastActivity = Date.now() / 1000;
+
+		const relevantResourceTypes = new Set(['document', 'stylesheet', 'image', 'font', 'script', 'iframe']);
+		const ignoredTypes = new Set(['websocket', 'media', 'eventsource', 'manifest', 'other']);
+		const ignoredUrlPatterns = ['analytics', 'tracking', 'telemetry', 'beacon', 'metrics', 'doubleclick', 'adsystem', 'adserver', 'advertising'];
+
+		const onRequest = (request: any) => {
+			if (!relevantResourceTypes.has(request.resourceType())) return;
+			if (ignoredTypes.has(request.resourceType())) return;
+			const url = request.url().toLowerCase();
+			if (ignoredUrlPatterns.some((pattern) => url.includes(pattern))) return;
+			if (url.startsWith('data:') || url.startsWith('blob:')) return;
+			pending.add(request);
+			lastActivity = Date.now() / 1000;
+		};
+
+		const onResponse = (response: any) => {
+			const request = response.request();
+			if (!pending.has(request)) return;
+			pending.delete(request);
+			lastActivity = Date.now() / 1000;
+		};
+
+		page.on('request', onRequest);
+		page.on('response', onResponse);
+
+		const waitForIdle = async () => {
+			const start = Date.now() / 1000;
+			while (true) {
+				await new Promise((resolve) => setTimeout(resolve, 100));
+				const now = Date.now() / 1000;
+				if (pending.size === 0 && now - lastActivity >= 0.5) {
+					this.currentPageLoadingStatus = null;
+					break;
+				}
+				if (now - start > 5) {
+					this.currentPageLoadingStatus = `Page loading was aborted after 5 seconds with ${pending.size} pending network requests. You may want to use the wait action to allow more time for the page to fully load.`;
+					break;
+				}
+			}
+		};
+
+		try {
+			await waitForIdle();
+		} finally {
+			page.off('request', onRequest);
+			page.off('response', onResponse);
+		}
+	}
+
 	private _setActivePage(page: Page | null) {
 		const currentTab = this._tabs[this.currentTabIndex];
 		if (currentTab) {
@@ -297,7 +349,9 @@ export class BrowserSession {
 		const page = await this.get_current_page();
 		if (page?.goto) {
 			try {
-				await page.goto(normalized, { waitUntil: 'domcontentloaded' }).catch(() => {});
+				this.currentPageLoadingStatus = null;
+				await page.goto(normalized, { waitUntil: 'domcontentloaded' });
+				await this._waitForStableNetwork(page);
 			} catch (error) {
 				const message = (error as Error).message ?? 'Navigation failed';
 				throw new BrowserError(message);
@@ -332,7 +386,9 @@ export class BrowserSession {
 		try {
 			page = (await this.browser_context?.new_page?.()) ?? null;
 			if (page) {
-				await page.goto(normalized, { waitUntil: 'domcontentloaded' }).catch(() => {});
+				this.currentPageLoadingStatus = null;
+				await page.goto(normalized, { waitUntil: 'domcontentloaded' });
+				await this._waitForStableNetwork(page);
 			}
 		} catch (error) {
 			this.logger.debug(`Failed to open new tab via Playwright: ${(error as Error).message}`);
@@ -491,9 +547,9 @@ export class BrowserSession {
 
 	async get_selector_map() {
 		if (!this.cachedBrowserState) {
-			return {};
+			await this.get_browser_state_with_recovery({ cache_clickable_elements_hashes: true, include_screenshot: false });
 		}
-		return this.cachedBrowserState.selector_map ?? {};
+		return this.cachedBrowserState?.selector_map ?? {};
 	}
 
 	static is_file_input(node: DOMElementNode | null) {
