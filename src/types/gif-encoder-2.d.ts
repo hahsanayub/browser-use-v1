@@ -3,12 +3,13 @@ declare module 'gif-encoder-2' {
 
     class GifEncoder {
         constructor(width: number, height: number, algorithm?: string, useOptimizer?: boolean, totalFrames?: number);
+        createReadStream(): NodeJS.ReadableStream;
         start(): void;
         setDelay(delay: number): void;
         setQuality(quality: number): void;
         setRepeat(repeat: number): void;
         setTransparent(color: number): void;
-        addFrame(ctx: CanvasRenderingContext2D): void;
+        addFrame(ctx: any): void;
         finish(): void;
         out: {
             getData(): Buffer;

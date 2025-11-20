@@ -127,7 +127,7 @@ const addLogo = (ctx: CanvasRenderingContext2D, width: number, image: Image | nu
 	const aspect = image.width / image.height || 1;
 	const targetWidth = targetHeight * aspect;
 	ctx.globalAlpha = 0.9;
-	ctx.drawImage(image, width - targetWidth - margin, margin, targetWidth, targetHeight);
+	ctx.drawImage(image as any, width - targetWidth - margin, margin, targetWidth, targetHeight);
 	ctx.restore();
 };
 
@@ -181,7 +181,7 @@ const drawScreenshotFrame = (
 	titleFontSize: number,
 	logo: Image | null,
 ) => {
-	ctx.drawImage(image, 0, 0, width, height);
+	ctx.drawImage(image as any, 0, 0, width, height);
 	if (goalText) {
 		addOverlayToContext(ctx, width, height, stepNumber, goalText, fontFamily, titleFontSize);
 	}

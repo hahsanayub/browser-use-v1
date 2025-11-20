@@ -57,7 +57,26 @@ export class AgentTelemetryEvent extends BaseTelemetryEvent implements AgentTele
 
 	constructor(payload: AgentTelemetryPayload) {
 		super();
-		Object.assign(this, payload);
+		this.task = payload.task;
+		this.model = payload.model;
+		this.model_provider = payload.model_provider;
+		this.planner_llm = payload.planner_llm;
+		this.max_steps = payload.max_steps;
+		this.max_actions_per_step = payload.max_actions_per_step;
+		this.use_vision = payload.use_vision;
+		this.use_validation = payload.use_validation;
+		this.version = payload.version;
+		this.source = payload.source;
+		this.cdp_url = payload.cdp_url;
+		this.action_errors = payload.action_errors;
+		this.action_history = payload.action_history;
+		this.urls_visited = payload.urls_visited;
+		this.steps = payload.steps;
+		this.total_input_tokens = payload.total_input_tokens;
+		this.total_duration_seconds = payload.total_duration_seconds;
+		this.success = payload.success;
+		this.final_result_response = payload.final_result_response;
+		this.error_message = payload.error_message;
 	}
 }
 

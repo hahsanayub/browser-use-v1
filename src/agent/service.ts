@@ -47,7 +47,7 @@ loadEnv();
 
 const logger = createLogger('browser_use.agent');
 
-export const log_response = (response: AgentOutput, registry?: Controller, logInstance = logger) => {
+export const log_response = (response: AgentOutput, registry?: Controller<any>, logInstance = logger) => {
 	if (response.current_state.thinking) {
 		logInstance.info(`💡 Thinking:\n${response.current_state.thinking}`);
 	}
@@ -218,6 +218,7 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 	_session_start_time = 0;
 	_task_start_time = 0;
 	_force_exit_telemetry_logged = false;
+	system_prompt_class: SystemPrompt;
 
 	constructor(params: AgentConstructorParams<Context, AgentStructuredOutput>) {
 		const {
@@ -276,8 +277,8 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 		this.output_model_schema = output_model_schema ?? null;
 		this.sensitive_data = sensitive_data;
 		this.available_file_paths = available_file_paths || [];
-		this.controller = controller ?? new DefaultController({ display_files_in_done_text });
-		this.initial_actions = initial_actions;
+		this.controller = (controller ?? new DefaultController({ display_files_in_done_text })) as Controller<Context>;
+		this.initial_actions = initial_actions as Array<Record<string, Record<string, unknown>>> | null;
 		this.register_new_step_callback = register_new_step_callback;
 		this.register_done_callback = register_done_callback;
 		this.register_external_agent_status_raise_error_callback = register_external_agent_status_raise_error_callback;
@@ -344,16 +345,18 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 			this.logger.info('📁 Initialized download tracking for agent');
 		}
 
+		this.system_prompt_class = new SystemPrompt(
+			this.controller.registry.get_prompt_description(),
+			this.settings.max_actions_per_step,
+			this.settings.override_system_message,
+			this.settings.extend_system_message,
+			this.settings.use_thinking,
+			this.settings.flash_mode,
+		);
+
 		this._message_manager = new MessageManager(
 			task,
-			new SystemPrompt({
-				action_description: this.controller.registry.get_prompt_description(),
-				max_actions_per_step: this.settings.max_actions_per_step,
-				override_system_message: override_system_message ?? undefined,
-				extend_system_message: extend_system_message ?? undefined,
-				use_thinking: this.settings.use_thinking,
-				flash_mode: this.settings.flash_mode,
-			}).get_system_message(),
+			this.system_prompt_class.get_system_message(),
 			this.file_system!,
 			this.state.message_manager_state as MessageManagerState,
 			this.settings.use_thinking,
@@ -558,7 +561,7 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 				const step_info = new AgentStepInfo(step, max_steps);
 
 				try {
-					await this._executeWithTimeout(this.step(step_info), this.settings.step_timeout ?? 0);
+					await this._executeWithTimeout(this._step(step_info), this.settings.step_timeout ?? 0);
 					this.logger.debug(`✅ Completed step ${step + 1}/${max_steps}`);
 				} catch (error) {
 					const message = error instanceof Error ? error.message : String(error);
@@ -666,8 +669,7 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 		return result;
 	}
 
-	@time_execution_async('--step')
-	async step(step_info: AgentStepInfo | null = null) {
+	async _step(step_info: AgentStepInfo | null = null) {
 		this.step_start_time = Date.now() / 1000;
 		let browser_state_summary: BrowserStateSummary | null = null;
 
@@ -743,7 +745,6 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 		}
 	}
 
-	@observe_debug({ ignore_input: true, name: 'get_next_action' })
 	private async _get_next_action(browser_state_summary: BrowserStateSummary) {
 		const input_messages = this._message_manager.get_messages();
 		this.logger.debug(
@@ -766,9 +767,12 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 		}
 
 		this.state.last_model_output = model_output;
-
+		let actions: Array<Record<string, Record<string, unknown>>> = [];
+		if (model_output) {
+			actions = model_output.action.map((a) => a.model_dump());
+		}
 		await this._raise_if_stopped_or_paused();
-		await this._handle_post_llm_processing(browser_state_summary, input_messages);
+		await this._handle_post_llm_processing(browser_state_summary, input_messages, actions);
 		await this._raise_if_stopped_or_paused();
 	}
 
@@ -780,7 +784,7 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 		this.logger.debug(
 			`⚡ Step ${this.state.n_steps}: Executing ${this.state.last_model_output.action.length} actions...`,
 		);
-		const result = await this.multi_act(this.state.last_model_output.action);
+		const result = await this.multi_act(this.state.last_model_output.action.map((a) => a.model_dump()));
 		this.logger.debug(`✅ Step ${this.state.n_steps}: Actions completed`);
 		this.state.last_result = result;
 	}
@@ -804,7 +808,7 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 			const actionParams = action[actionName];
 
 			try {
-				const actResult = await this.controller.registry.execute_action(
+				const actResult = await (this.controller.registry as any).execute_action(
 					actionName,
 					actionParams,
 					{
@@ -813,7 +817,7 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 						sensitive_data: this.sensitive_data,
 						available_file_paths: this.available_file_paths,
 						file_system: this.file_system,
-						context: this.context,
+						context: this.context ?? undefined,
 					},
 				);
 				results.push(actResult);
@@ -885,7 +889,11 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 		}
 	}
 
-	private async _handle_post_llm_processing(browser_state_summary: BrowserStateSummary, input_messages: any[]) {
+	private async _handle_post_llm_processing(
+		browser_state_summary: BrowserStateSummary,
+		input_messages: any[],
+		actions: Array<Record<string, Record<string, unknown>>> = [],
+	) {
 		if (this.register_new_step_callback && this.state.last_model_output) {
 			await this.register_new_step_callback(browser_state_summary, this.state.last_model_output, this.state.n_steps);
 		}
@@ -897,7 +905,7 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 			await fs.promises.writeFile(
 				filepath,
 				JSON.stringify({ messages: input_messages, response: this.state.last_model_output?.model_dump() }, null, 2),
-				this.settings.save_conversation_path_encoding || 'utf-8',
+				this.settings.save_conversation_path_encoding as BufferEncoding,
 			);
 		}
 	}

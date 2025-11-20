@@ -97,9 +97,10 @@ export class Controller<Context = unknown> {
 		this.registry
 			.action('Search the query in Google...', { param_model: SearchGoogleActionSchema })
 			(async (params: SearchGoogleAction, { browser_session }) => {
+				if (!browser_session) throw new Error('Browser session missing');
 				const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(params.query)}&udm=14`;
 				const page = await browser_session.get_current_page();
-				const currentUrl = page?.url?.replace(/\/+$/, '');
+				const currentUrl = page?.url().replace(/\/+$/, '');
 				if (currentUrl === 'https://www.google.com') {
 					await browser_session.navigate_to(searchUrl);
 				} else {
@@ -117,6 +118,7 @@ export class Controller<Context = unknown> {
 		this.registry
 			.action('Navigate to URL...', { param_model: GoToUrlActionSchema })
 			(async (params: GoToUrlAction, { browser_session }) => {
+				if (!browser_session) throw new Error('Browser session missing');
 				try {
 					if (params.new_tab) {
 						await browser_session.create_new_tab(params.url);
@@ -153,6 +155,7 @@ export class Controller<Context = unknown> {
 			});
 
 		this.registry.action('Go back', { param_model: NoParamsActionSchema })(async (_params, { browser_session }) => {
+			if (!browser_session) throw new Error('Browser session missing');
 			await browser_session.go_back();
 			const msg = '🔙  Navigated back';
 			return new ActionResult({ extracted_content: msg });
@@ -175,6 +178,7 @@ export class Controller<Context = unknown> {
 		this.registry
 			.action('Click element by index', { param_model: ClickElementActionSchema })
 			(async (params: ClickElementAction, { browser_session }) => {
+				if (!browser_session) throw new Error('Browser session missing');
 				const element = await browser_session.get_dom_element_by_index(params.index);
 				if (!element) {
 					throw new BrowserError(`Element index ${params.index} does not exist - retry or use alternative actions`);
@@ -216,6 +220,7 @@ export class Controller<Context = unknown> {
 		this.registry
 			.action('Click and input text into an input interactive element', { param_model: InputTextActionSchema })
 			(async (params: InputTextAction, { browser_session, has_sensitive_data }) => {
+				if (!browser_session) throw new Error('Browser session missing');
 				const element = await browser_session.get_dom_element_by_index(params.index);
 				if (!element) {
 					throw new BrowserError(`Element index ${params.index} does not exist - retry or use alternative actions`);
@@ -235,6 +240,7 @@ export class Controller<Context = unknown> {
 		this.registry
 			.action('Upload file to interactive element with file path', { param_model: UploadFileActionSchema })
 			(async (params: UploadFileAction, { browser_session, available_file_paths }) => {
+				if (!browser_session) throw new Error('Browser session missing');
 				if (!available_file_paths?.includes(params.path)) {
 					throw new BrowserError(`File path ${params.path} is not available`);
 				}
@@ -252,7 +258,7 @@ export class Controller<Context = unknown> {
 					throw new BrowserError(`No file upload element found at index ${params.index}`);
 				}
 
-				await locator.set_input_files(params.path);
+				await locator.setInputFiles(params.path);
 				const msg = `📁 Successfully uploaded file to index ${params.index}`;
 				return new ActionResult({
 					extracted_content: msg,
@@ -266,6 +272,7 @@ export class Controller<Context = unknown> {
 		type SwitchTabAction = z.infer<typeof SwitchTabActionSchema>;
 		this.registry.action('Switch tab', { param_model: SwitchTabActionSchema })(async (params: SwitchTabAction, ctx) => {
 			const { browser_session } = ctx;
+			if (!browser_session) throw new Error('Browser session missing');
 			await browser_session.switch_to_tab(params.page_id);
 			const page: Page | null = await browser_session.get_current_page();
 			try {
@@ -284,6 +291,7 @@ export class Controller<Context = unknown> {
 		type CloseTabAction = z.infer<typeof CloseTabActionSchema>;
 		this.registry.action('Close an existing tab', { param_model: CloseTabActionSchema })(
 			async (params: CloseTabAction, { browser_session }) => {
+				if (!browser_session) throw new Error('Browser session missing');
 				await browser_session.switch_to_tab(params.page_id);
 				const page: Page | null = await browser_session.get_current_page();
 				const url = page?.url ?? '';
@@ -345,8 +353,8 @@ Query: ${params.query}
 Website:
 ${content}`;
 
-				const response = await page_extraction_llm.ainvoke([new UserMessage(prompt)]);
-				const completion = response?.completion ?? '';
+				const extraction = await (page_extraction_llm as any).ainvoke([new UserMessage(prompt)]);
+				const completion = extraction?.completion ?? '';
 				const extracted_content = `Page Link: ${page.url}\nQuery: ${params.query}\nExtracted Content:\n${completion}`;
 
 				let includeOnce = false;
@@ -381,6 +389,7 @@ ${content}`;
 				'Scroll the page by specified number of pages (down=True scrolls down, down=False scrolls up).',
 				{ param_model: ScrollActionSchema },
 			)(async (params: ScrollAction, { browser_session }) => {
+				if (!browser_session) throw new Error('Browser session missing');
 				const page: Page | null = await browser_session.get_current_page();
 				if (!page || !page.evaluate) {
 					throw new BrowserError('Unable to access current page for scrolling.');
@@ -391,7 +400,7 @@ ${content}`;
 				const scrollBy = direction * deltaPages * 0.8;
 
 				await page.evaluate(
-					({ amount }) => {
+					({ amount }: { amount: number }) => {
 						const distance = amount * window.innerHeight;
 						window.scrollBy({ top: distance, behavior: 'smooth' });
 					},
@@ -409,13 +418,14 @@ ${content}`;
 		this.registry
 			.action('Scroll to a text in the current page', { param_model: ScrollToTextActionSchema })
 			(async (params: ScrollToTextAction, { browser_session }) => {
+				if (!browser_session) throw new Error('Browser session missing');
 				const page: Page | null = await browser_session.get_current_page();
 				if (!page?.evaluate) {
 					throw new BrowserError('Unable to access page for scrolling.');
 				}
 
 				const success = await page.evaluate(
-					({ text }) => {
+					({ text }: { text: string }) => {
 						const iterator = document.createNodeIterator(document.body, NodeFilter.SHOW_ELEMENT);
 						let node: Node | null;
 						while ((node = iterator.nextNode())) {
@@ -518,6 +528,7 @@ ${content}`;
 		type SendKeysAction = z.infer<typeof SendKeysActionSchema>;
 		this.registry.action('Send keys to the active page', { param_model: SendKeysActionSchema })(
 			async (params: SendKeysAction, { browser_session }) => {
+				if (!browser_session) throw new Error('Browser session missing');
 				const page: Page | null = await browser_session.get_current_page();
 				const keyboard = page?.keyboard;
 				if (!keyboard) {
@@ -549,6 +560,7 @@ ${content}`;
 		this.registry
 			.action('Get all options from a native dropdown or ARIA menu', { param_model: DropdownOptionsActionSchema })
 			(async (params: DropdownAction, { browser_session }) => {
+				if (!browser_session) throw new Error('Browser session missing');
 				const page: Page | null = await browser_session.get_current_page();
 				const domElement = await browser_session.get_dom_element_by_index(params.index);
 				if (!domElement) {
@@ -562,7 +574,7 @@ ${content}`;
 				}
 
 				const payload = await page.evaluate(
-					({ xpath }) => {
+					({ xpath }: { xpath: string }) => {
 						const element = document.evaluate(
 							xpath,
 							document,
@@ -617,6 +629,7 @@ ${content}`;
 		this.registry
 			.action('Select dropdown option or ARIA menu item by text', { param_model: SelectDropdownActionSchema })
 			(async (params: SelectAction, { browser_session }) => {
+				if (!browser_session) throw new Error('Browser session missing');
 				const page: Page | null = await browser_session.get_current_page();
 				const domElement = await browser_session.get_dom_element_by_index(params.index);
 				if (!domElement?.xpath) {
@@ -629,7 +642,7 @@ ${content}`;
 				for (const frame of page.frames ?? []) {
 					try {
 						const typeInfo = await frame.evaluate(
-							(xpath) => {
+							(xpath: string) => {
 								const element = document.evaluate(
 									xpath,
 									document,
@@ -660,7 +673,7 @@ ${content}`;
 						}
 
 						const clicked = await frame.evaluate(
-							({ xpath, text }) => {
+							({ xpath, text }: { xpath: string; text: string }) => {
 								const root = document.evaluate(
 									xpath,
 									document,
@@ -703,6 +716,7 @@ ${content}`;
 			.action('Google Sheets: Get the contents of the entire sheet', {
 				domains: ['https://docs.google.com'],
 			})(async (_params, { browser_session }) => {
+				if (!browser_session) throw new Error('Browser session missing');
 				const page: Page | null = await browser_session.get_current_page();
 				await page?.keyboard?.press('Enter');
 				await page?.keyboard?.press('Escape');
@@ -723,6 +737,7 @@ ${content}`;
 				domains: ['https://docs.google.com'],
 				param_model: SheetsRangeActionSchema,
 			})(async (params: SheetsRange, { browser_session }) => {
+				if (!browser_session) throw new Error('Browser session missing');
 				const page: Page | null = await browser_session.get_current_page();
 				await this.gotoSheetsRange(page, params.cell_or_range);
 				await page?.keyboard?.press('ControlOrMeta+C');
@@ -742,10 +757,11 @@ ${content}`;
 				domains: ['https://docs.google.com'],
 				param_model: SheetsUpdateActionSchema,
 			})(async (params: SheetsUpdate, { browser_session }) => {
+				if (!browser_session) throw new Error('Browser session missing');
 				const page: Page | null = await browser_session.get_current_page();
 				await this.gotoSheetsRange(page, params.cell_or_range);
 				await page?.evaluate?.(
-					(value) => {
+					(value: string) => {
 						const clipboardData = new DataTransfer();
 						clipboardData.setData('text/plain', value);
 						document.activeElement?.dispatchEvent(new ClipboardEvent('paste', { clipboardData }));
@@ -763,6 +779,7 @@ ${content}`;
 				domains: ['https://docs.google.com'],
 				param_model: SheetsRangeActionSchema,
 			})(async (params: SheetsRange, { browser_session }) => {
+				if (!browser_session) throw new Error('Browser session missing');
 				const page: Page | null = await browser_session.get_current_page();
 				await this.gotoSheetsRange(page, params.cell_or_range);
 				await page?.keyboard?.press('Backspace');
@@ -777,6 +794,7 @@ ${content}`;
 				domains: ['https://docs.google.com'],
 				param_model: SheetsRangeActionSchema,
 			})(async (params: SheetsRange, { browser_session }) => {
+				if (!browser_session) throw new Error('Browser session missing');
 				const page: Page | null = await browser_session.get_current_page();
 				await this.gotoSheetsRange(page, params.cell_or_range);
 				return new ActionResult({
@@ -790,6 +808,7 @@ ${content}`;
 				'Google Sheets: Fallback method to type text into the currently selected cell',
 				{ domains: ['https://docs.google.com'], param_model: SheetsInputActionSchema },
 			)(async (params: z.infer<typeof SheetsInputActionSchema>, { browser_session }) => {
+				if (!browser_session) throw new Error('Browser session missing');
 				const page: Page | null = await browser_session.get_current_page();
 				await page?.keyboard?.type(params.text, { delay: 100 });
 				await page?.keyboard?.press('Enter');

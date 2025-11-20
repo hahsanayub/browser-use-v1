@@ -9,10 +9,7 @@ import { ActionModel, ActionRegistry, RegisteredAction } from './views.js';
 
 const logger = createLogger('browser_use.controller.registry');
 
-type BrowserSession = {
-	agent_current_page?: { url?: string };
-	get_current_page?: () => Promise<Page | null>;
-};
+import type { BrowserSession } from '../../browser/session.js';
 
 type BaseChatModel = unknown;
 
@@ -100,7 +97,7 @@ export class Registry<Context = unknown> {
 
 				let currentUrl: string | null = null;
 				if (browser_session?.agent_current_page?.url) {
-					currentUrl = browser_session.agent_current_page.url;
+					currentUrl = browser_session.agent_current_page.url();
 				} else if (browser_session?.get_current_page) {
 					const currentPage = await browser_session.get_current_page();
 					currentUrl = currentPage?.url() ?? null;
