@@ -807,13 +807,109 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 		actions: Array<Record<string, Record<string, unknown>>>,
 		options: { check_for_new_elements?: boolean } = {},
 	) {
+		const { check_for_new_elements = true } = options;
 		const results: ActionResult[] = [];
+
+		if (!this.browser_session) {
+			throw new Error('BrowserSession is not set up');
+		}
+
+		// ==================== Selector Map Caching ====================
+		// Check if any action uses an index, if so cache the selector map
+		let cached_selector_map: Record<number, any> = {};
+		let cached_path_hashes: Set<string> = new Set();
 
 		for (const action of actions) {
 			const actionName = Object.keys(action)[0];
 			const actionParams = action[actionName];
+			const index = (actionParams as any)?.index;
 
+			if (index !== null && index !== undefined) {
+				cached_selector_map = (await this.browser_session.get_selector_map?.()) || {};
+				cached_path_hashes = new Set(
+					Object.values(cached_selector_map).map((e: any) => e?.hash?.branch_path_hash).filter(Boolean)
+				);
+				break;
+			}
+		}
+
+		// ==================== Execute Actions ====================
+		for (let i = 0; i < actions.length; i++) {
+			const action = actions[i];
+			const actionName = Object.keys(action)[0];
+			const actionParams = action[actionName];
+
+			// ==================== Done Action Position Validation ====================
+			// ONLY ALLOW TO CALL `done` IF IT IS A SINGLE ACTION
+			if (i > 0 && actionName === 'done') {
+				const msg = `Done action is allowed only as a single action - stopped after action ${i} / ${actions.length}.`;
+				this.logger.info(msg);
+				break;
+			}
+
+			// ==================== Index Change & New Element Detection ====================
+			if (i > 0) {
+				const currentIndex = (actionParams as any)?.index;
+				if (currentIndex !== null && currentIndex !== undefined) {
+					// Get new browser state after previous action
+					const new_browser_state_summary = await this.browser_session.get_browser_state_with_recovery?.({
+						cache_clickable_elements_hashes: false,
+						include_screenshot: false,
+					});
+					const new_selector_map = new_browser_state_summary?.selector_map || {};
+
+					// Detect index change after previous action
+					const orig_target = cached_selector_map[currentIndex];
+					const orig_target_hash = orig_target?.hash?.branch_path_hash || null;
+					const new_target = new_selector_map[currentIndex];
+					const new_target_hash = new_target?.hash?.branch_path_hash || null;
+
+					if (orig_target_hash !== new_target_hash) {
+						const msg = `Element index changed after action ${i} / ${actions.length}, because page changed.`;
+						this.logger.info(msg);
+						results.push(
+							new ActionResult({
+								extracted_content: msg,
+								include_in_memory: true,
+								long_term_memory: msg,
+							})
+						);
+						break;
+					}
+
+					// Check for new elements on the page
+					const new_path_hashes = new Set(
+						Object.values(new_selector_map).map((e: any) => e?.hash?.branch_path_hash).filter(Boolean)
+					);
+
+					// Check if new elements appeared (new_path_hashes is not a subset of cached_path_hashes)
+					const has_new_elements = Array.from(new_path_hashes).some(hash => !cached_path_hashes.has(hash));
+
+					if (check_for_new_elements && has_new_elements) {
+						const msg = `Something new appeared after action ${i} / ${actions.length}, following actions are NOT executed and should be retried.`;
+						this.logger.info(msg);
+						results.push(
+							new ActionResult({
+								extracted_content: msg,
+								include_in_memory: true,
+								long_term_memory: msg,
+							})
+						);
+						break;
+					}
+				}
+
+				// Wait between actions
+				const wait_time = (this.browser_session as any)?.browser_profile?.wait_between_actions || 0;
+				if (wait_time > 0) {
+					await this._sleep(wait_time);
+				}
+			}
+
+			// ==================== Execute Action ====================
 			try {
+				await this._raise_if_stopped_or_paused();
+
 				const actResult = await (this.controller.registry as any).execute_action(
 					actionName,
 					actionParams,
@@ -827,10 +923,18 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 					},
 				);
 				results.push(actResult);
+
+				// Log action execution
+				this.logger.info(`☑️ Executed action ${i + 1}/${actions.length}: ${actionName}(${JSON.stringify(actionParams)})`);
+
+				// Break early if done, error, or last action
+				if (results[results.length - 1]?.is_done || results[results.length - 1]?.error || i === actions.length - 1) {
+					break;
+				}
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
-				this.logger.error(`❌ Action ${actionName} failed: ${message}`);
-				results.push(new ActionResult({ error: message }));
+				this.logger.error(`❌ Action ${i + 1} failed: ${message}`);
+				throw error;
 			}
 		}
 
