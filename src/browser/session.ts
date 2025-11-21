@@ -1141,6 +1141,158 @@ export class BrowserSession {
 		}
 	}
 
+	// ==================== P2 Additional Functions ====================
+
+	/**
+	 * Get information about all open tabs
+	 * @returns Array of tab information including page_id, url, and title
+	 */
+	async get_tabs_info(): Promise<Array<{ page_id: number; url: string; title: string }>> {
+		if (!this.browser_context) {
+			return [];
+		}
+
+		const tabs_info: Array<{ page_id: number; url: string; title: string }> = [];
+		const pages = this.browser_context.pages();
+
+		for (let page_id = 0; page_id < pages.length; page_id++) {
+			const page = pages[page_id];
+
+			// Skip chrome:// pages and new tab pages
+			const isNewTab = page.url() === 'about:blank' || page.url().startsWith('chrome://newtab');
+			if (isNewTab || page.url().startsWith('chrome://')) {
+				if (isNewTab) {
+					tabs_info.push({
+						page_id,
+						url: page.url(),
+						title: 'ignore this tab and do not use it',
+					});
+				} else {
+					tabs_info.push({
+						page_id,
+						url: page.url(),
+						title: page.url(),
+					});
+				}
+				continue;
+			}
+
+			// Normal pages - try to get title with timeout
+			try {
+				const titlePromise = page.title();
+				const timeoutPromise = new Promise<string>((_, reject) => {
+					setTimeout(() => reject(new Error('timeout')), 2000);
+				});
+
+				const title = await Promise.race([titlePromise, timeoutPromise]);
+				tabs_info.push({ page_id, url: page.url(), title });
+			} catch (error) {
+				this.logger.debug(`⚠️ Failed to get tab info for tab #${page_id}: ${page.url()} (using fallback title)`);
+
+				if (isNewTab) {
+					tabs_info.push({
+						page_id,
+						url: page.url(),
+						title: 'ignore this tab and do not use it',
+					});
+				} else {
+					tabs_info.push({
+						page_id,
+						url: page.url(),
+						title: page.url(), // Use URL as fallback title
+					});
+				}
+			}
+		}
+
+		return tabs_info;
+	}
+
+	/**
+	 * Check if a page is responsive by trying to evaluate simple JavaScript
+	 * @param page - The page to check
+	 * @param timeout - Timeout in seconds (default: 5)
+	 * @returns True if page is responsive, false otherwise
+	 */
+	async _is_page_responsive(page: any, timeout: number = 5.0): Promise<boolean> {
+		try {
+			const evalPromise = page.evaluate('1');
+			const timeoutPromise = new Promise<never>((_, reject) => {
+				setTimeout(() => reject(new Error('timeout')), timeout * 1000);
+			});
+
+			await Promise.race([evalPromise, timeoutPromise]);
+			return true;
+		} catch (error) {
+			return false;
+		}
+	}
+
+	/**
+	 * Get scroll information for the current page
+	 * @returns Object with scroll position and page dimensions
+	 */
+	async get_scroll_info(): Promise<{
+		scroll_x: number;
+		scroll_y: number;
+		page_width: number;
+		page_height: number;
+		viewport_width: number;
+		viewport_height: number;
+	}> {
+		const page = await this.get_current_page();
+		if (!page) {
+			return {
+				scroll_x: 0,
+				scroll_y: 0,
+				page_width: 0,
+				page_height: 0,
+				viewport_width: 0,
+				viewport_height: 0,
+			};
+		}
+
+		return await page.evaluate(() => {
+			return {
+				scroll_x: window.scrollX || window.pageXOffset || document.documentElement.scrollLeft || 0,
+				scroll_y: window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0,
+				page_width: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth || 0),
+				page_height: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight || 0),
+				viewport_width: window.innerWidth,
+				viewport_height: window.innerHeight,
+			};
+		});
+	}
+
+	/**
+	 * Remove all highlights from the current page
+	 */
+	async remove_highlights(): Promise<void> {
+		const page = await this.get_current_page();
+		if (!page) {
+			return;
+		}
+
+		try {
+			await page.evaluate(() => {
+				// Remove all elements with browser-use highlight class
+				const highlights = document.querySelectorAll('.browser-use-highlight');
+				highlights.forEach((el) => el.remove());
+
+				// Remove inline highlight styles
+				const styled = document.querySelectorAll('[style*="browser-use"]');
+				styled.forEach((el: any) => {
+					if (el.style) {
+						el.style.outline = '';
+						el.style.border = '';
+					}
+				});
+			});
+		} catch (error) {
+			this.logger.debug(`Failed to remove highlights: ${(error as Error).message}`);
+		}
+	}
+
 }
 
 export { DEFAULT_BROWSER_PROFILE };

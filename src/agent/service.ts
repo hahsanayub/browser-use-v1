@@ -1191,12 +1191,88 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 		}
 	}
 
+	/**
+	 * Handle all types of errors that can occur during a step
+	 * Implements intelligent error handling with:
+	 * - Validation error hints
+	 * - Rate limit auto-retry
+	 * - Parse error guidance
+	 * - Token limit warnings
+	 */
 	private async _handle_step_error(error: Error) {
 		const include_trace = this.logger.level === 'debug';
-		const error_msg = AgentError.format_error(error, include_trace);
+		let error_msg = AgentError.format_error(error, include_trace);
+		const prefix = `❌ Result failed ${this.state.consecutive_failures + 1}/${this.settings.max_failures} times:\n `;
 		this.state.consecutive_failures += 1;
-		this.logger.error(`❌ Result failed ${this.state.consecutive_failures}/${this.settings.max_failures} times:\n ${error_msg}`);
+
+		// 1. Handle Validation Errors (Pydantic/Zod)
+		if (error.name === 'ValidationError' || error.name === 'ZodError' || error instanceof TypeError) {
+			this.logger.error(`${prefix}${error_msg}`);
+
+			// Add context hint for validation errors
+			if (error_msg.includes('Max token limit reached') || error_msg.includes('token')) {
+				error_msg += '\n\n💡 Hint: Your response was too long. Keep your thinking and output concise.';
+			} else {
+				error_msg += '\n\n💡 Hint: Your output format was invalid. Please follow the exact schema structure required for actions.';
+			}
+		}
+		// 2. Handle Interrupted Errors
+		else if (error.message.includes('interrupted') || error.message.includes('abort')) {
+			error_msg = `The agent was interrupted mid-step${error.message ? ` - ${error.message}` : ''}`;
+			this.logger.error(`${prefix}${error_msg}`);
+		}
+		// 3. Handle Parse Errors
+		else if (error_msg.includes('Could not parse') || error_msg.includes('tool_use_failed') || error_msg.includes('Failed to parse')) {
+			this.logger.debug(`Model: ${(this.llm as any).model} failed to parse response`);
+			error_msg += '\n\n💡 Hint: Return a valid JSON object with the required fields.';
+			this.logger.error(`${prefix}${error_msg}`);
+		}
+		// 4. Handle Rate Limit Errors (OpenAI, Anthropic, Google)
+		else if (this._isRateLimitError(error, error_msg)) {
+			this.logger.warning(`${prefix}${error_msg}`);
+			this.logger.warning(`⏳ Rate limit detected, waiting ${this.settings.retry_delay}s before retrying...`);
+
+			// Auto-retry: wait before continuing
+			await this._sleep(this.settings.retry_delay);
+			error_msg += `\n\n⏳ Retrying after ${this.settings.retry_delay}s delay...`;
+		}
+		// 5. Handle All Other Errors
+		else {
+			this.logger.error(`${prefix}${error_msg}`);
+		}
+
 		this.state.last_result = [new ActionResult({ error: error_msg })];
+	}
+
+	/**
+	 * Check if an error is a rate limit error from various LLM providers
+	 */
+	private _isRateLimitError(error: Error, error_msg: string): boolean {
+		// Check error class name
+		const errorClassName = error.constructor.name;
+		if (errorClassName === 'RateLimitError' || errorClassName === 'ResourceExhausted') {
+			return true;
+		}
+
+		// Check error message patterns
+		const rateLimitPatterns = [
+			'rate_limit_exceeded',
+			'rate limit exceeded',
+			'RateLimitError',
+			'RESOURCE_EXHAUSTED',
+			'ResourceExhausted',
+			'tokens per minute',
+			'TPM',
+			'requests per minute',
+			'RPM',
+			'quota exceeded',
+			'too many requests',
+			'429',
+		];
+
+		return rateLimitPatterns.some(pattern =>
+			error_msg.toLowerCase().includes(pattern.toLowerCase())
+		);
 	}
 
 	private async _finalize(browser_state_summary: BrowserStateSummary | null) {
