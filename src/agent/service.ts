@@ -15,6 +15,8 @@ import { SystemPrompt } from './prompts.js';
 import { MessageManager } from './message-manager/service.js';
 import type { MessageManagerState } from './message-manager/views.js';
 import { BrowserStateSummary, BrowserStateHistory } from '../browser/views.js';
+import { HistoryTreeProcessor } from '../dom/history-tree-processor/service.js';
+import { DOMHistoryElement } from '../dom/history-tree-processor/view.js';
 import type { BaseChatModel } from '../llm/base.js';
 import type { UsageSummary } from '../tokens/views.js';
 import type { ActionResultInit } from './views.js';
@@ -42,6 +44,7 @@ import { create_history_gif } from './gif.js';
 import { ScreenshotService } from '../screenshots/service.js';
 import { ProductTelemetry, productTelemetry } from '../telemetry/service.js';
 import { AgentTelemetryEvent } from '../telemetry/views.js';
+import { TokenCost } from '../tokens/service.js';
 
 loadEnv();
 
@@ -79,6 +82,12 @@ type Page = any;
 type ControllerContext = unknown;
 
 type AgentHookFunc<Context, AgentStructuredOutput> = (agent: Agent<Context, AgentStructuredOutput>) => Promise<void> | void;
+
+interface RerunHistoryOptions {
+	max_retries?: number;
+	skip_failures?: boolean;
+	delay_between_actions?: number;
+}
 
 interface AgentConstructorParams<Context, AgentStructuredOutput> {
 	task: string;
@@ -314,18 +323,15 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 			step_timeout,
 		};
 
-		this.token_cost_service = {
-			register_llm: () => { },
-			register_usage: () => { },
-			get_usage_summary: async () => null,
-			log_usage_summary: async () => { },
-			get_usage_tokens_for_model: () => ({ prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }),
-		};
-		if (typeof this.token_cost_service.register_llm === 'function') {
-			this.token_cost_service.register_llm(llm);
-			if (page_extraction_llm) {
-				this.token_cost_service.register_llm(page_extraction_llm);
-			}
+		this.token_cost_service = new TokenCost(calculate_cost);
+		if (calculate_cost) {
+			this.token_cost_service.initialize().catch((error: Error) => {
+				this.logger.debug(`Failed to initialize token cost service: ${error.message}`);
+			});
+		}
+		this.token_cost_service.register_llm(llm);
+		if (page_extraction_llm) {
+			this.token_cost_service.register_llm(page_extraction_llm);
 		}
 
 		this.state = params.injected_agent_state || new AgentState();
@@ -829,6 +835,177 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 		}
 
 		return results;
+	}
+
+	async rerun_history(
+		history: AgentHistoryList,
+		options: RerunHistoryOptions = {},
+	): Promise<ActionResult[]> {
+		const {
+			max_retries = 3,
+			skip_failures = true,
+			delay_between_actions = 2,
+		} = options;
+
+		if (this.initial_actions?.length) {
+			const initialResult = await this.multi_act(this.initial_actions);
+			this.state.last_result = initialResult;
+		}
+
+		const results: ActionResult[] = [];
+
+		for (let index = 0; index < history.history.length; index++) {
+			const historyItem = history.history[index];
+			const goal = historyItem.model_output?.current_state?.next_goal ?? '';
+			this.logger.info(`Replaying step ${index + 1}/${history.history.length}: goal: ${goal}`);
+
+			const actions = historyItem.model_output?.action ?? [];
+			const hasValidAction = actions.length && !actions.every((action) => action == null);
+			if (!historyItem.model_output || !hasValidAction) {
+				this.logger.warning(`Step ${index + 1}: No action to replay, skipping`);
+				results.push(new ActionResult({ error: 'No action to replay' }));
+				continue;
+			}
+
+			let attempt = 0;
+			while (attempt < max_retries) {
+				try {
+					const stepResult = await this._execute_history_step(historyItem, delay_between_actions);
+					results.push(...stepResult);
+					break;
+				} catch (error) {
+					attempt += 1;
+					if (attempt === max_retries) {
+						const message = `Step ${index + 1} failed after ${max_retries} attempts: ${
+							(error as Error).message ?? error
+						}`;
+						this.logger.error(message);
+						const failure = new ActionResult({ error: message });
+						results.push(failure);
+						if (!skip_failures) {
+							throw new Error(message);
+						}
+					} else {
+						this.logger.warning(
+							`Step ${index + 1} failed (attempt ${attempt}/${max_retries}), retrying...`,
+						);
+						await this._sleep(delay_between_actions);
+					}
+				}
+		}
+
+		return results;
+	}
+
+	private async _execute_history_step(historyItem: AgentHistory, delaySeconds: number) {
+		if (!this.browser_session) {
+			throw new Error('BrowserSession is not set up');
+		}
+		const browser_state_summary: BrowserStateSummary | null =
+			await this.browser_session.get_browser_state_with_recovery?.({
+				cache_clickable_elements_hashes: false,
+				include_screenshot: false,
+			});
+		if (!browser_state_summary || !historyItem.model_output) {
+			throw new Error('Invalid browser state or model output');
+		}
+
+		const interactedElements = historyItem.state?.interacted_element ?? [];
+		const updatedActions: Array<Record<string, Record<string, unknown>>> = [];
+		for (let actionIndex = 0; actionIndex < historyItem.model_output.action.length; actionIndex++) {
+			const originalAction = historyItem.model_output.action[actionIndex];
+			if (!originalAction) {
+				continue;
+			}
+			const updatedAction = await this._update_action_indices(
+				this._coerceHistoryElement(interactedElements[actionIndex]),
+				originalAction,
+				browser_state_summary,
+			);
+			if (!updatedAction) {
+				throw new Error(`Could not find matching element ${actionIndex} in current page`);
+			}
+
+			if (typeof (updatedAction as any)?.model_dump === 'function') {
+				updatedActions.push((updatedAction as any).model_dump({ exclude_unset: true }));
+			} else {
+				updatedActions.push(updatedAction as any);
+			}
+		}
+
+		const result = await this.multi_act(updatedActions);
+		await this._sleep(delaySeconds);
+		return result;
+	}
+
+	private async _update_action_indices(
+		historicalElement: DOMHistoryElement | null,
+		action: any,
+		browserStateSummary: BrowserStateSummary,
+	) {
+		if (!historicalElement || !browserStateSummary?.element_tree) {
+			return action;
+		}
+
+		const currentNode = HistoryTreeProcessor.find_history_element_in_tree(
+			historicalElement,
+			browserStateSummary.element_tree,
+		);
+		if (!currentNode || currentNode.highlight_index == null) {
+			return null;
+		}
+
+		const currentIndex = typeof action?.get_index === 'function' ? action.get_index() : null;
+		if (currentIndex !== currentNode.highlight_index && typeof action?.set_index === 'function') {
+			action.set_index(currentNode.highlight_index);
+			this.logger.info(
+				`Element moved in DOM, updated index from ${currentIndex} to ${currentNode.highlight_index}`,
+			);
+		}
+
+		return action;
+	}
+
+	async load_and_rerun(history_file: string | null = null, options: RerunHistoryOptions = {}) {
+		const target = history_file ?? 'AgentHistory.json';
+		const history = AgentHistoryList.load_from_file(target, this.AgentOutput);
+		return this.rerun_history(history, options);
+	}
+
+	save_history(file_path: string | null = null) {
+		const target = file_path ?? 'AgentHistory.json';
+		this.history.save_to_file(target);
+	}
+
+	private _coerceHistoryElement(
+		element: DOMHistoryElement | (Partial<DOMHistoryElement> & Record<string, any>) | null | undefined,
+	): DOMHistoryElement | null {
+		if (!element) {
+			return null;
+		}
+		if (element instanceof DOMHistoryElement) {
+			return element;
+		}
+		const payload = element as Record<string, any>;
+		return new DOMHistoryElement(
+			payload.tag_name ?? '',
+			payload.xpath ?? '',
+			payload.highlight_index ?? null,
+			payload.entire_parent_branch_path ?? [],
+			payload.attributes ?? {},
+			payload.shadow_root ?? false,
+			payload.css_selector ?? null,
+			payload.page_coordinates ?? null,
+			payload.viewport_coordinates ?? null,
+			payload.viewport_info ?? null,
+		);
+	}
+
+	private async _sleep(seconds: number) {
+		if (seconds <= 0) {
+			return;
+		}
+		await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
 	}
 
 	async wait_until_resumed() {
