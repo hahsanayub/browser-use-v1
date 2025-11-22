@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawn, exec, type ChildProcess } from 'node:child_process';
+import { promisify } from 'node:util';
 import { createLogger } from '../logging-config.js';
 import { uuid7str } from '../utils.js';
 import type { Browser, BrowserContext, Page, Locator } from './types.js';
@@ -8,6 +10,8 @@ import { BrowserStateSummary, type TabInfo, BrowserError } from './views.js';
 import { DOMElementNode, DOMState, type SelectorMap } from '../dom/views.js';
 import { normalize_url } from './utils.js';
 import { DomService } from '../dom/service.js';
+
+const execAsync = promisify(exec);
 
 export interface BrowserSessionInit {
 	id?: string;
@@ -70,6 +74,8 @@ export class BrowserSession {
 	private _autoDownloadPdfs = true;
 	private tabPages = new Map<number, Page | null>();
 	private currentPageLoadingStatus: string | null = null;
+	private _subprocess: ChildProcess | null = null;
+	private _childProcesses: Set<number> = new Set();
 
 	constructor(init: BrowserSessionInit = {}) {
 		this.browser_profile = init.browser_profile ?? new BrowserProfile(init.profile ?? {});
@@ -300,8 +306,104 @@ export class BrowserSession {
 		return this;
 	}
 
+	/**
+	 * Setup browser session by connecting to an existing browser process via PID
+	 * Useful for debugging or connecting to manually launched browsers
+	 * @param browserPid - Process ID of the browser to connect to
+	 * @param cdpUrl - Optional CDP URL (will be discovered if not provided)
+	 */
+	async setupBrowserViaBrowserPid(browserPid: number, cdpUrl?: string): Promise<void> {
+		this.logger.info(`Connecting to existing browser with PID ${browserPid}`);
+
+		this.browser_pid = browserPid;
+
+		// If CDP URL not provided, try to discover it
+		if (!cdpUrl) {
+			cdpUrl = await this._discoverCdpUrl(browserPid);
+		}
+
+		if (!cdpUrl) {
+			throw new Error(`Could not discover CDP URL for browser PID ${browserPid}`);
+		}
+
+		this.cdp_url = cdpUrl;
+		this.logger.info(`Discovered CDP URL: ${cdpUrl}`);
+
+		// Connect to browser via CDP
+		try {
+			const playwright = await import('playwright');
+			const browser = await playwright.chromium.connectOverCDP(cdpUrl);
+
+			this.browser = browser as any;
+			this.playwright = playwright;
+
+			// Get or create context
+			const contexts = browser.contexts();
+			if (contexts.length > 0) {
+				this.browser_context = contexts[0] as any;
+			} else {
+				this.browser_context = (await browser.newContext()) as any;
+			}
+
+			// Get or create page
+			const pages = this.browser_context.pages();
+			if (pages.length > 0) {
+				this.agent_current_page = pages[0] as any;
+				this.human_current_page = pages[0] as any;
+			} else {
+				const page = await this.browser_context.newPage();
+				this.agent_current_page = page as any;
+				this.human_current_page = page as any;
+			}
+
+			// We don't own this browser since we're connecting to existing one
+			this.ownsBrowserResources = false;
+
+			this.initialized = true;
+			this.logger.info(`Successfully connected to browser PID ${browserPid}`);
+		} catch (error) {
+			throw new Error(`Failed to connect to browser PID ${browserPid}: ${(error as Error).message}`);
+		}
+	}
+
+	/**
+	 * Discover CDP URL from browser PID
+	 * Tries common ports and checks for debugging endpoints
+	 */
+	private async _discoverCdpUrl(browserPid: number): Promise<string | null> {
+		const commonPorts = [9222, 9223, 9224, 9225];
+
+		for (const port of commonPorts) {
+			try {
+				const response = await fetch(`http://localhost:${port}/json/version`);
+				if (response.ok) {
+					const data = await response.json();
+					if (data.webSocketDebuggerUrl) {
+						this.logger.debug(`Found CDP endpoint on port ${port}`);
+						return data.webSocketDebuggerUrl;
+					}
+				}
+			} catch {
+				// Port not accessible, try next
+				continue;
+			}
+		}
+
+		this.logger.warning(`Could not discover CDP URL for PID ${browserPid} on common ports`);
+		return null;
+	}
+
 	async close() {
 		this.initialized = false;
+
+		// Kill child processes first
+		await this._killChildProcesses();
+
+		// If we own the browser resources, terminate the browser process
+		if (this.ownsBrowserResources && this.browser_pid) {
+			await this._terminateBrowserProcess();
+		}
+
 		this.browser = null;
 		this.browser_context = null;
 		this.agent_current_page = null;
@@ -2661,6 +2763,393 @@ export class BrowserSession {
 			// Always clear recovery flag
 			this._inRecovery = false;
 		}
+	}
+
+	// endregion
+
+	// region - Enhanced CSS Selector Generation
+
+	/**
+	 * Generate enhanced CSS selector for an element
+	 * Handles special characters and provides fallback strategies
+	 * @param xpath - XPath of the element
+	 * @param element - Optional element node for additional context
+	 * @returns Enhanced CSS selector string
+	 */
+	private _enhancedCssSelectorForElement(xpath: string, element?: DOMElementNode): string {
+		// Try to convert XPath to CSS selector
+		const cssSelector = this._xpathToCss(xpath);
+
+		if (cssSelector) {
+			return cssSelector;
+		}
+
+		// Fallback: use element attributes if available
+		if (element) {
+			const selectors: string[] = [];
+
+			// Try ID first (most specific)
+			if (element.attributes?.id) {
+				const id = this._escapeSelector(element.attributes.id as string);
+				selectors.push(`#${id}`);
+			}
+
+			// Try class names
+			if (element.attributes?.class) {
+				const classes = (element.attributes.class as string)
+					.split(/\s+/)
+					.filter(c => c.length > 0)
+					.map(c => `.${this._escapeSelector(c)}`)
+					.join('');
+				if (classes) {
+					selectors.push(`${element.tag_name}${classes}`);
+				}
+			}
+
+			// Try name attribute
+			if (element.attributes?.name) {
+				const name = this._escapeSelector(element.attributes.name as string);
+				selectors.push(`${element.tag_name}[name="${name}"]`);
+			}
+
+			// Try data attributes
+			for (const [key, value] of Object.entries(element.attributes || {})) {
+				if (key.startsWith('data-')) {
+					const escaped = this._escapeSelector(String(value));
+					selectors.push(`${element.tag_name}[${key}="${escaped}"]`);
+				}
+			}
+
+			if (selectors.length > 0) {
+				return selectors[0];
+			}
+
+			// Last resort: just the tag name
+			return element.tag_name || 'div';
+		}
+
+		// Ultimate fallback
+		return 'body';
+	}
+
+	/**
+	 * Convert XPath to CSS selector
+	 * Handles simple XPath expressions
+	 */
+	private _xpathToCss(xpath: string): string | null {
+		try {
+			// Remove leading slashes
+			let path = xpath.replace(/^\/+/, '');
+
+			// Handle simple cases like /html/body/div[1]/span[2]
+			const parts = path.split('/');
+			const cssparts: string[] = [];
+
+			for (const part of parts) {
+				// Extract tag and index: div[1] -> {tag: 'div', index: 1}
+				const match = part.match(/^([a-zA-Z0-9_-]+)(?:\[(\d+)\])?$/);
+				if (match) {
+					const [, tag, index] = match;
+					if (index) {
+						// CSS uses nth-of-type (1-indexed like XPath)
+						cssparts.push(`${tag}:nth-of-type(${index})`);
+					} else {
+						cssparts.push(tag);
+					}
+				} else {
+					// Complex XPath, can't convert
+					return null;
+				}
+			}
+
+			return cssparts.join(' > ');
+		} catch {
+			return null;
+		}
+	}
+
+	/**
+	 * Escape special characters in CSS selectors
+	 * Handles characters that need escaping in CSS
+	 */
+	private _escapeSelector(selector: string): string {
+		// Escape special CSS characters
+		return selector.replace(/[!"#$%&'()*+,.\/:;<=>?@\[\\\]^`{|}~]/g, '\\$&');
+	}
+
+	// endregion
+
+	// region - User Data Directory Management
+
+	/**
+	 * Prepare user data directory for browser profile
+	 * Handles singleton lock conflicts and creates temp profiles if needed
+	 */
+	async prepareUserDataDir(userDataDir?: string): Promise<string> {
+		if (!userDataDir) {
+			// Use profile's user data dir or create temp one
+			userDataDir = this.browser_profile.user_data_dir || await this._createTempUserDataDir();
+		}
+
+		// Check for singleton lock conflicts
+		const hasConflict = await this._checkForSingletonLockConflict(userDataDir);
+		if (hasConflict) {
+			this.logger.warning(`Singleton lock detected in ${userDataDir}, falling back to temp profile`);
+			userDataDir = await this._fallbackToTempProfile();
+		}
+
+		// Ensure directory exists
+		if (!fs.existsSync(userDataDir)) {
+			fs.mkdirSync(userDataDir, { recursive: true });
+			this.logger.debug(`Created user data directory: ${userDataDir}`);
+		}
+
+		return userDataDir;
+	}
+
+	/**
+	 * Check if user data directory has a singleton lock
+	 * This happens when another Chrome instance is using the profile
+	 */
+	private async _checkForSingletonLockConflict(userDataDir: string): Promise<boolean> {
+		try {
+			const singletonLockFile = path.join(userDataDir, 'SingletonLock');
+			const singletonSocketFile = path.join(userDataDir, 'SingletonSocket');
+			const singletonCookieFile = path.join(userDataDir, 'SingletonCookie');
+
+			// Check if any singleton lock files exist
+			if (fs.existsSync(singletonLockFile) || fs.existsSync(singletonSocketFile) || fs.existsSync(singletonCookieFile)) {
+				// Try to detect if process is still alive (Unix-like systems)
+				if (process.platform !== 'win32' && fs.existsSync(singletonLockFile)) {
+					try {
+						// Try to read the lock file to get PID
+						const lockContent = fs.readFileSync(singletonLockFile, 'utf-8');
+						const pidMatch = lockContent.match(/(\d+)/);
+						if (pidMatch) {
+							const pid = parseInt(pidMatch[1], 10);
+							try {
+								// Check if process exists (signal 0 doesn't kill, just checks)
+								process.kill(pid, 0);
+								return true; // Process exists, lock is valid
+							} catch {
+								// Process doesn't exist, stale lock
+								this.logger.debug(`Stale singleton lock detected, removing`);
+								fs.unlinkSync(singletonLockFile);
+								return false;
+							}
+						}
+					} catch {
+						// Couldn't read lock file
+					}
+				}
+				return true;
+			}
+			return false;
+		} catch (error) {
+			this.logger.debug(`Error checking singleton lock: ${(error as Error).message}`);
+			return false;
+		}
+	}
+
+	/**
+	 * Fallback to a temporary profile when the primary one is locked
+	 */
+	private async _fallbackToTempProfile(): Promise<string> {
+		const tempDir = await this._createTempUserDataDir();
+		this.logger.info(`Using temporary profile: ${tempDir}`);
+		return tempDir;
+	}
+
+	/**
+	 * Create a temporary user data directory
+	 */
+	private async _createTempUserDataDir(): Promise<string> {
+		const osTempDir = require('os').tmpdir();
+		const tempDir = path.join(osTempDir, `browser-use-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		fs.mkdirSync(tempDir, { recursive: true });
+		return tempDir;
+	}
+
+	// endregion
+
+	// region - Page Visibility Listeners
+
+	/**
+	 * Setup listeners for page visibility changes
+	 * Tracks when user switches tabs to update human_current_page
+	 */
+	private async _setupCurrentPageChangeListeners(): Promise<void> {
+		if (!this.browser_context) {
+			return;
+		}
+
+		// Listen for page events to track which page the user is viewing
+		this.browser_context.on?.('page', (page: Page) => {
+			this.logger.debug(`New page created: ${page.url?.() || 'about:blank'}`);
+
+			// Setup visibility change listener for this page
+			page.on?.('visibilitychange', () => {
+				this._onTabVisibilityChange(page);
+			});
+
+			// Track new page
+			if (page.url && !page.url().startsWith('about:')) {
+				this.human_current_page = page;
+			}
+		});
+	}
+
+	/**
+	 * Callback when tab visibility changes
+	 * Updates human_current_page to reflect which tab the user is viewing
+	 */
+	private _onTabVisibilityChange(page: Page): void {
+		try {
+			// Check if page is visible
+			page.evaluate?.(() => document.visibilityState === 'visible')
+				.then((isVisible: boolean) => {
+					if (isVisible) {
+						this.logger.debug(`Tab became visible: ${page.url?.() || 'unknown'}`);
+						this.human_current_page = page;
+					}
+				})
+				.catch(() => {
+					// Ignore errors from closed pages
+				});
+		} catch {
+			// Ignore errors
+		}
+	}
+
+	// endregion
+
+	// region - Process Management
+
+	/**
+	 * Kill all child processes spawned by this browser session
+	 */
+	private async _killChildProcesses(): Promise<void> {
+		if (this._childProcesses.size === 0) {
+			return;
+		}
+
+		this.logger.debug(`Killing ${this._childProcesses.size} child processes`);
+
+		for (const pid of this._childProcesses) {
+			try {
+				// Try to kill the process
+				process.kill(pid, 'SIGTERM');
+				this.logger.debug(`Sent SIGTERM to process ${pid}`);
+
+				// Wait briefly and check if still alive
+				await new Promise(resolve => setTimeout(resolve, 500));
+
+				try {
+					// Check if process still exists
+					process.kill(pid, 0);
+					// If we get here, process is still alive, force kill
+					process.kill(pid, 'SIGKILL');
+					this.logger.debug(`Sent SIGKILL to process ${pid}`);
+				} catch {
+					// Process is dead, ignore
+				}
+			} catch (error) {
+				// Process doesn't exist or we don't have permission
+				this.logger.debug(`Could not kill process ${pid}: ${(error as Error).message}`);
+			}
+		}
+
+		this._childProcesses.clear();
+	}
+
+	/**
+	 * Terminate the browser process and all its children
+	 */
+	private async _terminateBrowserProcess(): Promise<void> {
+		if (!this.browser_pid) {
+			return;
+		}
+
+		try {
+			this.logger.debug(`Terminating browser process ${this.browser_pid}`);
+
+			// Platform-specific process tree termination
+			if (process.platform === 'win32') {
+				// Windows: use taskkill to kill process tree
+				await execAsync(`taskkill /PID ${this.browser_pid} /T /F`).catch(() => {
+					// Ignore errors if process already dead
+				});
+			} else {
+				// Unix-like: kill process group
+				try {
+					// Try to kill the process group
+					process.kill(-this.browser_pid, 'SIGTERM');
+					await new Promise(resolve => setTimeout(resolve, 1000));
+
+					// Check if still alive and force kill if needed
+					try {
+						process.kill(-this.browser_pid, 0);
+						process.kill(-this.browser_pid, 'SIGKILL');
+					} catch {
+						// Process is dead
+					}
+				} catch {
+					// Fallback to killing just the process
+					try {
+						process.kill(this.browser_pid, 'SIGTERM');
+						await new Promise(resolve => setTimeout(resolve, 1000));
+						process.kill(this.browser_pid, 'SIGKILL');
+					} catch {
+						// Process doesn't exist
+					}
+				}
+			}
+		} catch (error) {
+			this.logger.debug(`Error terminating browser process: ${(error as Error).message}`);
+		}
+	}
+
+	/**
+	 * Get child processes of a given PID
+	 * Cross-platform implementation using ps on Unix-like systems and WMIC on Windows
+	 */
+	private async _getChildProcesses(pid: number): Promise<number[]> {
+		try {
+			if (process.platform === 'win32') {
+				// Windows: use WMIC
+				const { stdout } = await execAsync(`wmic process where (ParentProcessId=${pid}) get ProcessId`);
+				const pids = stdout
+					.split('\n')
+					.slice(1) // Skip header
+					.map(line => parseInt(line.trim(), 10))
+					.filter(p => !isNaN(p));
+				return pids;
+			} else {
+				// Unix-like: use ps
+				const { stdout } = await execAsync(`ps -o pid= --ppid ${pid}`);
+				const pids = stdout
+					.split('\n')
+					.map(line => parseInt(line.trim(), 10))
+					.filter(p => !isNaN(p));
+				return pids;
+			}
+		} catch {
+			return [];
+		}
+	}
+
+	/**
+	 * Track a child process
+	 */
+	private _trackChildProcess(pid: number): void {
+		this._childProcesses.add(pid);
+	}
+
+	/**
+	 * Untrack a child process
+	 */
+	private _untrackChildProcess(pid: number): void {
+		this._childProcesses.delete(pid);
 	}
 
 	// endregion
