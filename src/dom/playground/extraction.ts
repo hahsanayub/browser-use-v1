@@ -1,7 +1,203 @@
+import * as fs from 'fs/promises';
+import * as readline from 'readline';
+import { promisify } from 'util';
+import { encoding_for_model } from 'tiktoken';
+import { BrowserProfile, BrowserSession } from '../../browser/index.js';
+import type { ViewportSize } from '../../browser/types.js';
 import { DomService } from '../service.js';
+import { DEFAULT_INCLUDE_ATTRIBUTES } from '../views.js';
+import { AgentMessagePrompt } from '../../agent/prompts.js';
+import { FileSystem } from '../../filesystem/file-system.js';
 
-async function main() {
-    console.log('Extraction playground');
+const TIMEOUT = 60;
+
+/**
+ * Interactive DOM element testing tool.
+ *
+ * This playground allows you to:
+ * - Navigate to websites
+ * - Extract DOM state and clickable elements
+ * - Interactively click elements by index
+ * - Input text into elements
+ * - Copy element JSON to clipboard
+ * - Analyze token counts for LLM prompts
+ *
+ * Usage:
+ * - Enter an element index to click it
+ * - Enter 'index,text' to input text into an element
+ * - Enter 'c,index' to copy element JSON to clipboard
+ * - Enter 'q' to quit
+ */
+async function testFocusVsAllElements(): Promise<void> {
+    const browserSession = new BrowserSession({
+        browserProfile: new BrowserProfile({
+            windowSize: { width: 1100, height: 1000 } as ViewportSize,
+            disableSecurity: true,
+            waitForNetworkIdlePageLoadTime: 1,
+            headless: false,
+        }),
+    });
+
+    const websites = [
+        'https://google.com',
+        'https://www.ycombinator.com/companies',
+        'https://kayak.com/flights',
+        'https://docs.google.com/spreadsheets/d/1INaIcfpYXlMRWO__de61SHFCaqt1lfHlcvtXZPItlpI/edit',
+        'https://www.zeiss.com/career/en/job-search.html?page=1',
+        'https://www.mlb.com/yankees/stats/',
+        'https://www.amazon.com/s?k=laptop&s=review-rank',
+        'https://reddit.com',
+        'https://codepen.io/geheimschriftstift/pen/mPLvQz',
+        'https://www.google.com/search?q=google+hi',
+        'https://amazon.com',
+        'https://github.com',
+    ];
+
+    await browserSession.start();
+    const page = await browserSession.getCurrentPage();
+    const domService = new DomService(page);
+
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+    });
+
+    const question = promisify(rl.question).bind(rl);
+
+    for (const website of websites) {
+        await page.goto(website);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        let lastClickedIndex: number | null = null;
+
+        while (true) {
+            try {
+                console.log(`\n${'='.repeat(50)}\nTesting ${website}\n${'='.repeat(50)}`);
+
+                console.log('\nGetting page state...');
+
+                const startTime = Date.now();
+                const allElementsState = await browserSession.getStateSummary(true);
+                const endTime = Date.now();
+                console.log(`get_state_summary took ${((endTime - startTime) / 1000).toFixed(2)} seconds`);
+
+                const selectorMap = allElementsState.selectorMap;
+                const totalElements = Object.keys(selectorMap).length;
+                console.log(`Total number of elements: ${totalElements}`);
+
+                const prompt = new AgentMessagePrompt({
+                    browserStateSummary: allElementsState,
+                    fileSystem: new FileSystem('./tmp'),
+                    includeAttributes: DEFAULT_INCLUDE_ATTRIBUTES,
+                    stepInfo: null,
+                });
+
+                const userMessage = prompt.getUserMessage(false).text || '';
+
+                const textToSave = userMessage;
+
+                await fs.mkdir('./tmp', { recursive: true });
+                await fs.writeFile('./tmp/user_message.txt', textToSave, 'utf-8');
+
+                await fs.writeFile(
+                    './tmp/element_tree.json',
+                    JSON.stringify(allElementsState.elementTree.toJSON(), null, 0),
+                    'utf-8'
+                );
+
+                try {
+                    const encoding = encoding_for_model('gpt-4o');
+                    const tokenCount = encoding.encode(textToSave).length;
+                    console.log(`Token count: ${tokenCount}`);
+                } catch (error) {
+                    console.log('Could not calculate token count:', (error as Error).message);
+                }
+
+                console.log('User message written to ./tmp/user_message.txt');
+                console.log('Element tree written to ./tmp/element_tree.json');
+
+                const answer = await question(
+                    "Enter element index to click, 'index,text' to input, 'c,index' to copy element JSON, or 'q' to quit: "
+                ) as string;
+
+                if (answer.toLowerCase().trim() === 'q') {
+                    break;
+                }
+
+                try {
+                    if (answer.toLowerCase().startsWith('c,')) {
+                        const parts = answer.split(',', 2);
+                        if (parts.length === 2) {
+                            try {
+                                const targetIndex = parseInt(parts[1].trim(), 10);
+                                if (targetIndex in selectorMap) {
+                                    const elementNode = selectorMap[targetIndex];
+                                    const elementJson = JSON.stringify(elementNode.toJSON(), null, 2);
+                                    console.log(`Element ${targetIndex} JSON:`);
+                                    console.log(elementJson);
+                                    console.log(`\nElement: ${elementNode.tagName}`);
+                                } else {
+                                    console.log(`Invalid index: ${targetIndex}`);
+                                }
+                            } catch {
+                                console.log(`Invalid index format: ${parts[1]}`);
+                            }
+                        } else {
+                            console.log("Invalid input format. Use 'c,index'.");
+                        }
+                    } else if (answer.includes(',')) {
+                        const parts = answer.split(',', 2);
+                        if (parts.length === 2) {
+                            try {
+                                const targetIndex = parseInt(parts[0].trim(), 10);
+                                const textToInput = parts[1];
+                                if (targetIndex in selectorMap) {
+                                    const elementNode = selectorMap[targetIndex];
+                                    console.log(
+                                        `Inputting text '${textToInput}' into element ${targetIndex}: ${elementNode.tagName}`
+                                    );
+                                    await (browserSession as any)._inputTextElementNode(elementNode, textToInput);
+                                    console.log('Input successful.');
+                                } else {
+                                    console.log(`Invalid index: ${targetIndex}`);
+                                }
+                            } catch {
+                                console.log(`Invalid index format: ${parts[0]}`);
+                            }
+                        } else {
+                            console.log("Invalid input format. Use 'index,text'.");
+                        }
+                    } else {
+                        try {
+                            const clickedIndex = parseInt(answer, 10);
+                            if (clickedIndex in selectorMap) {
+                                const elementNode = selectorMap[clickedIndex];
+                                console.log(`Clicking element ${clickedIndex}: ${elementNode.tagName}`);
+                                await (browserSession as any)._clickElementNode(elementNode);
+                                console.log('Click successful.');
+                            } else {
+                                console.log(`Invalid index: ${clickedIndex}`);
+                            }
+                        } catch {
+                            console.log(`Invalid input: '${answer}'. Enter an index, 'index,text', 'c,index', or 'q'.`);
+                        }
+                    }
+                } catch (actionError) {
+                    console.log(`Action failed: ${(actionError as Error).message}`);
+                }
+            } catch (error) {
+                console.log(`Error in loop: ${(error as Error).message}`);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+        }
+    }
+
+    rl.close();
+    await browserSession.close();
 }
 
-main();
+if (require.main === module) {
+    testFocusVsAllElements().catch(console.error);
+}
+
+export { testFocusVsAllElements };

@@ -1,0 +1,135 @@
+# DXT ignore file for browser-use (Node.js version)
+
+# Development and testing
+tests/
+test/
+__tests__/
+examples/
+docs/
+*.test.ts
+*.test.js
+*_test.ts
+*_test.js
+test_*.ts
+test_*.js
+debug_*.ts
+debug_*.js
+private_example/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.tsbuildinfo
+*.js.map
+*.d.ts.map
+
+# Development tools
+.git/
+.github/
+.venv/
+node_modules/
+.env
+.env.*
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# CI/CD
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+Jenkinsfile
+azure-pipelines.yml
+
+# Documentation
+README.md
+CONTRIBUTING.md
+CHANGELOG.md
+LICENSE
+*.md
+mkdocs.yml
+docs/
+
+# Configuration files
+.gitignore
+.gitattributes
+.editorconfig
+.pre-commit-config.yaml
+.eslintrc*
+.prettierrc*
+.eslintignore
+.prettierignore
+tsconfig.json
+vitest.config.ts
+jest.config.js
+.mypy_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+*.cover
+.hypothesis/
+.ruff_cache/
+
+# Package files we don't need
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+requirements*.txt
+poetry.lock
+Pipfile
+Pipfile.lock
+setup.py
+setup.cfg
+tox.ini
+noxfile.py
+Makefile
+
+# Exclude large/unnecessary node_modules parts
+node_modules/*/test/
+node_modules/*/tests/
+node_modules/*/_test/
+node_modules/*/testing/
+node_modules/*/examples/
+node_modules/*/docs/
+node_modules/*/benchmarks/
+node_modules/*/.git/
+
+# Exclude development dependencies
+node_modules/typescript/
+node_modules/ts-node/
+node_modules/tsx/
+node_modules/@types/
+node_modules/eslint/
+node_modules/prettier/
+node_modules/vitest/
+node_modules/jest/
+node_modules/@vitest/
+node_modules/@jest/
+
+# Build script (not needed)
+build_dxt.sh
+build_dxt.js
+
+# Logs
+logs/
+recordings/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+.cache/
