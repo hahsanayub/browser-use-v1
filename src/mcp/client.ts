@@ -25,16 +25,36 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from '@modelcontextprotocol/sdk/types.js';
+import {
+    CallToolRequestSchema,
+    ListToolsRequestSchema,
+    ListPromptsRequestSchema,
+    GetPromptRequestSchema,
+    type Tool,
+    type Prompt,
+} from '@modelcontextprotocol/sdk/types.js';
 import { createLogger } from '../logging-config.js';
 import type { Controller } from '../controller/service.js';
 import type { Registry } from '../controller/registry/service.js';
 import { ActionResult } from '../agent/views.js';
 import { productTelemetry } from '../telemetry/service.js';
 import { MCPClientTelemetryEvent } from '../telemetry/views.js';
-import { get_browser_use_version } from '../utils.js';
+import { get_browser_use_version, retryAsync } from '../utils.js';
 
 const logger = createLogger('browser_use.mcp.client');
+
+export interface MCPClientOptions {
+    /** Maximum number of connection retry attempts (default: 3) */
+    maxRetries?: number;
+    /** Connection timeout in seconds (default: 30) */
+    connectionTimeout?: number;
+    /** Tool call timeout in seconds (default: 60) */
+    toolCallTimeout?: number;
+    /** Enable auto-reconnect on connection loss (default: true) */
+    autoReconnect?: boolean;
+    /** Health check interval in seconds (default: 30, 0 = disabled) */
+    healthCheckInterval?: number;
+}
 
 export class MCPClient {
     private client: Client;
@@ -43,19 +63,41 @@ export class MCPClient {
     private env?: Record<string, string>;
     private serverName: string;
     private _tools: Map<string, Tool> = new Map();
+    private _prompts: Map<string, Prompt> = new Map();
     private _registeredActions: Set<string> = new Set();
     private _connected = false;
+    private _connecting = false;
+    private _toolCallCount = 0;
+    private _errorCount = 0;
+    private _lastConnectTime?: number;
+    private _lastHealthCheck?: number;
+    private _healthCheckInterval?: NodeJS.Timeout;
+
+    // Options
+    private maxRetries: number;
+    private connectionTimeout: number;
+    private toolCallTimeout: number;
+    private autoReconnect: boolean;
+    private healthCheckIntervalSeconds: number;
 
     constructor(
         serverName: string,
         command: string,
         args: string[] = [],
-        env?: Record<string, string>
+        env?: Record<string, string>,
+        options: MCPClientOptions = {}
     ) {
         this.serverName = serverName;
         this.command = command;
         this.args = args;
         this.env = env;
+
+        // Set options with defaults
+        this.maxRetries = options.maxRetries ?? 3;
+        this.connectionTimeout = options.connectionTimeout ?? 30;
+        this.toolCallTimeout = options.toolCallTimeout ?? 60;
+        this.autoReconnect = options.autoReconnect ?? true;
+        this.healthCheckIntervalSeconds = options.healthCheckInterval ?? 30;
 
         this.client = new Client(
             {
@@ -71,39 +113,74 @@ export class MCPClient {
     /**
      * Connect to the MCP server and discover available tools
      */
-    async connect(timeout: number = 30): Promise<void> {
+    async connect(timeout?: number): Promise<void> {
         if (this._connected) {
             logger.debug(`Already connected to ${this.serverName}`);
             return;
         }
 
+        if (this._connecting) {
+            logger.debug(`Connection already in progress for ${this.serverName}`);
+            return;
+        }
+
+        this._connecting = true;
+        const actualTimeout = timeout ?? this.connectionTimeout;
         const startTime = Date.now() / 1000;
         let errorMsg: string | null = null;
 
         try {
             logger.info(`🔌 Connecting to MCP server '${this.serverName}': ${this.command} ${this.args.join(' ')}`);
 
-            // Create transport with environment variables
-            const transport = new StdioClientTransport({
-                command: this.command,
-                args: this.args,
-                env: this.env,
-            });
+            // Use retry logic for connection
+            await retryAsync(
+                async () => {
+                    // Create transport with environment variables
+                    const transport = new StdioClientTransport({
+                        command: this.command,
+                        args: this.args,
+                        env: this.env,
+                    });
 
-            // Connect with timeout
-            await this._connectWithTimeout(transport, timeout);
+                    // Connect with timeout
+                    await this._connectWithTimeout(transport, actualTimeout);
+                },
+                {
+                    maxAttempts: this.maxRetries,
+                    delayMs: 1000,
+                    backoffMultiplier: 2,
+                    onRetry: (error, attempt, delay) => {
+                        logger.warning(`Connection attempt ${attempt} failed for '${this.serverName}': ${error.message}. Retrying in ${delay}ms...`);
+                    },
+                }
+            );
+
             this._connected = true;
+            this._lastConnectTime = Date.now() / 1000;
 
             // Discover available tools
             const result = await this.client.request(ListToolsRequestSchema, {});
             this._tools = new Map(result.tools.map(tool => [tool.name, tool]));
 
-            logger.info(`📦 Discovered ${this._tools.size} tools from '${this.serverName}': ${Array.from(this._tools.keys()).join(', ')}`);
+            // Try to discover prompts (optional)
+            try {
+                await this.listPrompts();
+            } catch {
+                // Prompts are optional, ignore failures
+            }
+
+            logger.info(`📦 Discovered ${this._tools.size} tools${this._prompts.size > 0 ? ` and ${this._prompts.size} prompts` : ''} from '${this.serverName}'`);
+
+            // Start health checks
+            this._startHealthCheck();
 
         } catch (error) {
             errorMsg = error instanceof Error ? error.message : String(error);
+            this._connected = false;
             throw error;
         } finally {
+            this._connecting = false;
+
             // Capture telemetry for connect action
             const duration = Date.now() / 1000 - startTime;
             productTelemetry.capture(
@@ -150,10 +227,18 @@ export class MCPClient {
 
         try {
             logger.info(`🔌 Disconnecting from MCP server '${this.serverName}'`);
+
+            // Stop health checks
+            this._stopHealthCheck();
+
             await this.client.close();
             this._connected = false;
             this._tools.clear();
+            this._prompts.clear();
             this._registeredActions.clear();
+
+            const stats = this.getStats();
+            logger.info(`Disconnected from '${this.serverName}' (${stats.toolCallCount} tool calls, ${(stats.successRate * 100).toFixed(1)}% success rate)`);
         } catch (error) {
             errorMsg = error instanceof Error ? error.message : String(error);
             logger.error(`Error disconnecting from MCP server: ${errorMsg}`);
@@ -199,6 +284,8 @@ export class MCPClient {
         try {
             logger.debug(`🔧 Calling MCP tool '${name}' with params: ${JSON.stringify(args)}`);
 
+            this._toolCallCount++;
+
             const result = await this.client.request(CallToolRequestSchema, {
                 name,
                 arguments: args,
@@ -206,6 +293,7 @@ export class MCPClient {
 
             return result.content;
         } catch (error) {
+            this._errorCount++;
             errorMsg = error instanceof Error ? error.message : String(error);
             logger.error(`MCP tool '${name}' failed: ${errorMsg}`);
             throw error;
@@ -358,6 +446,152 @@ export class MCPClient {
 
         // Direct result or unknown format
         return String(result);
+    }
+
+    /**
+     * List available prompts from the MCP server
+     */
+    async listPrompts(): Promise<Prompt[]> {
+        if (!this._connected) {
+            await this.connect();
+        }
+
+        try {
+            const result = await this.client.request(ListPromptsRequestSchema, {});
+            this._prompts = new Map(result.prompts.map(prompt => [prompt.name, prompt]));
+            return Array.from(this._prompts.values());
+        } catch (error) {
+            logger.debug(`Server '${this.serverName}' does not support prompts`);
+            return [];
+        }
+    }
+
+    /**
+     * Get a prompt with arguments
+     */
+    async getPrompt(name: string, args?: Record<string, string>): Promise<any> {
+        if (!this._connected) {
+            await this.connect();
+        }
+
+        try {
+            const result = await this.client.request(GetPromptRequestSchema, {
+                name,
+                arguments: args,
+            });
+            return result;
+        } catch (error) {
+            logger.error(`Failed to get prompt '${name}': ${error}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Start health check monitoring
+     */
+    private _startHealthCheck(): void {
+        if (this.healthCheckIntervalSeconds <= 0 || this._healthCheckInterval) {
+            return;
+        }
+
+        this._healthCheckInterval = setInterval(async () => {
+            try {
+                await this._performHealthCheck();
+            } catch (error) {
+                logger.warning(`Health check failed for '${this.serverName}': ${error}`);
+                if (this.autoReconnect) {
+                    await this._attemptReconnect();
+                }
+            }
+        }, this.healthCheckIntervalSeconds * 1000);
+    }
+
+    /**
+     * Stop health check monitoring
+     */
+    private _stopHealthCheck(): void {
+        if (this._healthCheckInterval) {
+            clearInterval(this._healthCheckInterval);
+            this._healthCheckInterval = undefined;
+        }
+    }
+
+    /**
+     * Perform health check by listing tools
+     */
+    private async _performHealthCheck(): Promise<void> {
+        if (!this._connected) {
+            return;
+        }
+
+        try {
+            await this.client.request(ListToolsRequestSchema, {});
+            this._lastHealthCheck = Date.now() / 1000;
+        } catch (error) {
+            this._connected = false;
+            throw error;
+        }
+    }
+
+    /**
+     * Attempt to reconnect to the server
+     */
+    private async _attemptReconnect(): Promise<void> {
+        logger.info(`Attempting to reconnect to '${this.serverName}'...`);
+        this._connected = false;
+
+        try {
+            await this.connect(this.connectionTimeout);
+            logger.info(`✅ Reconnected to '${this.serverName}'`);
+        } catch (error) {
+            logger.error(`Failed to reconnect to '${this.serverName}': ${error}`);
+        }
+    }
+
+    /**
+     * Get client statistics
+     */
+    public getStats(): {
+        serverName: string;
+        connected: boolean;
+        toolsDiscovered: number;
+        promptsDiscovered: number;
+        toolCallCount: number;
+        errorCount: number;
+        successRate: number;
+        uptime?: number;
+        lastHealthCheck?: number;
+    } {
+        const uptime = this._lastConnectTime ? Date.now() / 1000 - this._lastConnectTime : undefined;
+        const successRate = this._toolCallCount > 0 ? 1 - this._errorCount / this._toolCallCount : 1;
+
+        return {
+            serverName: this.serverName,
+            connected: this._connected,
+            toolsDiscovered: this._tools.size,
+            promptsDiscovered: this._prompts.size,
+            toolCallCount: this._toolCallCount,
+            errorCount: this._errorCount,
+            successRate,
+            uptime,
+            lastHealthCheck: this._lastHealthCheck,
+        };
+    }
+
+    /**
+     * Check if client is connected
+     */
+    public isConnected(): boolean {
+        return this._connected;
+    }
+
+    /**
+     * Reset statistics
+     */
+    public resetStats(): void {
+        this._toolCallCount = 0;
+        this._errorCount = 0;
+        logger.debug(`Reset statistics for '${this.serverName}'`);
     }
 
     // Async context manager support

@@ -30,6 +30,15 @@ const createEmptyDomState = (): DOMState => {
 	return new DOMState(root, {} as SelectorMap);
 };
 
+/**
+ * Cached clickable elements hashes for the last state
+ * Used to reduce token usage by tracking which elements are new
+ */
+interface CachedClickableElementHashes {
+	url: string;
+	hashes: Set<string>;
+}
+
 export interface BrowserStateOptions {
 	cache_clickable_elements_hashes?: boolean;
 	include_screenshot?: boolean;
@@ -48,6 +57,7 @@ export class BrowserSession {
 	browser_pid: number | null;
 	playwright: unknown;
 	private cachedBrowserState: BrowserStateSummary | null = null;
+	private _cachedClickableElementHashes: CachedClickableElementHashes | null = null;
 	private currentUrl: string;
 	private currentTitle: string;
 	private _logger: ReturnType<typeof createLogger> | null = null;
@@ -94,9 +104,39 @@ export class BrowserSession {
 	private async _waitForStableNetwork(page: Page) {
 		const pendingRequests = new Set<any>();
 		let lastActivity = Date.now() / 1000;
+
+		// Relevant resource types that indicate page loading progress
 		const relevantResourceTypes = new Set(['document', 'stylesheet', 'image', 'font', 'script', 'iframe']);
 		const ignoredResourceTypes = new Set(['websocket', 'media', 'eventsource', 'manifest', 'other']);
-		const ignoredUrlPatterns = ['analytics', 'tracking', 'telemetry', 'beacon', 'metrics', 'doubleclick', 'adsystem', 'adserver', 'advertising', 'livechat', 'zendesk'];
+
+		// Expanded URL pattern filters - more comprehensive blocking
+		const ignoredUrlPatterns = [
+			'analytics', 'tracking', 'telemetry', 'beacon', 'metrics',
+			'doubleclick', 'adsystem', 'adserver', 'advertising',
+			'facebook.com/plugins', 'platform.twitter', 'linkedin.com/embed',
+			'livechat', 'zendesk', 'intercom', 'crisp.chat', 'hotjar',
+			'push-notifications', 'onesignal', 'pushwoosh',
+			'heartbeat', 'ping', 'alive',
+			'webrtc', 'rtmp://', 'wss://',
+			'cloudfront.net/assets', 'fastly.net'
+		];
+
+		// Content types that should be filtered
+		const relevantContentTypes = new Set([
+			'text/html', 'text/css', 'application/javascript',
+			'application/x-javascript', 'text/javascript',
+			'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml',
+			'font/woff', 'font/woff2', 'application/font-woff', 'application/font-woff2'
+		]);
+
+		// Streaming media content types to ignore
+		const streamingContentTypes = new Set([
+			'video/', 'audio/', 'application/octet-stream',
+			'application/x-mpegurl', 'application/vnd.apple.mpegurl'
+		]);
+
+		// Max response size to track (5MB)
+		const maxResponseSize = 5 * 1024 * 1024;
 
 		const onRequest = (request: any) => {
 			const resourceType = request.resourceType?.() ?? request.resourceType;
@@ -106,11 +146,23 @@ export class BrowserSession {
 			if (ignoredResourceTypes.has(resourceType)) {
 				return;
 			}
+
 			const url = request.url?.().toLowerCase?.() ?? request.url?.toLowerCase?.() ?? '';
-			if (ignoredUrlPatterns.some((pattern) => url.includes(pattern))) {
+
+			// Filter data URLs and blob URLs
+			if (url.startsWith('data:') || url.startsWith('blob:')) {
 				return;
 			}
-			if (url.startsWith('data:') || url.startsWith('blob:')) {
+
+			// Filter by URL patterns
+			if (ignoredUrlPatterns.some((pattern) => url.includes(pattern.toLowerCase()))) {
+				return;
+			}
+
+			// Filter prefetch requests
+			const headers = request.headers?.() ?? request.headers ?? {};
+			const purpose = headers['purpose'] || headers['sec-fetch-dest'];
+			if (purpose === 'prefetch' || headers['x-moz'] === 'prefetch') {
 				return;
 			}
 
@@ -118,11 +170,46 @@ export class BrowserSession {
 			lastActivity = Date.now() / 1000;
 		};
 
-		const onResponse = (response: any) => {
+		const onResponse = async (response: any) => {
 			const request = response.request?.() ?? response.request;
 			if (!pendingRequests.has(request)) {
 				return;
 			}
+
+			try {
+				// Check Content-Type header
+				const headers = response.headers?.() ?? response.headers ?? {};
+				const contentType = headers['content-type'] || headers['Content-Type'] || '';
+
+				// Filter streaming media
+				if (streamingContentTypes.has(contentType.split(';')[0].trim())) {
+					pendingRequests.delete(request);
+					return;
+				}
+
+				// Check if content type is relevant
+				const baseContentType = contentType.split(';')[0].trim();
+				const isRelevant = Array.from(relevantContentTypes).some(ct =>
+					baseContentType.startsWith(ct) || ct.startsWith(baseContentType)
+				);
+
+				if (contentType && !isRelevant) {
+					// Unknown content type, still track but log it
+					this.logger.debug(`Tracking unknown content type: ${baseContentType}`);
+				}
+
+				// Check response size (if available)
+				const contentLength = headers['content-length'] || headers['Content-Length'];
+				if (contentLength && parseInt(contentLength, 10) > maxResponseSize) {
+					this.logger.debug(`Skipping large response (${contentLength} bytes): ${request.url?.().substring?.(0, 50) ?? ''}`);
+					pendingRequests.delete(request);
+					return;
+				}
+			} catch (error) {
+				// If header inspection fails, still process the response
+				this.logger.debug(`Error inspecting response headers: ${(error as Error).message}`);
+			}
+
 			pendingRequests.delete(request);
 			lastActivity = Date.now() / 1000;
 		};
@@ -310,6 +397,25 @@ export class BrowserSession {
 			is_pdf_viewer: Boolean(this.currentUrl?.toLowerCase().endsWith('.pdf')),
 			loading_status: this.currentPageLoadingStatus,
 		});
+
+		// Implement clickable element hash caching to detect new elements
+		if (options.cache_clickable_elements_hashes && page) {
+			const currentUrl = page.url();
+			const currentHashes = this._computeElementHashes(domState.selector_map);
+
+			// Mark new elements if we have cached hashes for this URL
+			if (this._cachedClickableElementHashes &&
+				this._cachedClickableElementHashes.url === currentUrl) {
+				this._markNewElements(domState.selector_map, this._cachedClickableElementHashes.hashes);
+			}
+
+			// Update cache with current hashes
+			this._cachedClickableElementHashes = {
+				url: currentUrl,
+				hashes: currentHashes
+			};
+		}
+
 		this.cachedBrowserState = summary;
 		return summary;
 	}
@@ -1278,9 +1384,26 @@ export class BrowserSession {
 
 		const updated_state = await this._get_updated_state(-1, include_screenshot);
 
-		// TODO: Implement clickable element hash caching when needed
-		// This would involve tracking which elements are new since the last state
-		// to help reduce token usage in the LLM
+		// Implement clickable element hash caching to detect new elements
+		if (cache_clickable_elements_hashes) {
+			const page = await this.get_current_page();
+			if (page) {
+				const currentUrl = page.url();
+				const currentHashes = this._computeElementHashes(updated_state.selector_map);
+
+				// Mark new elements if we have cached hashes for this URL
+				if (this._cachedClickableElementHashes &&
+					this._cachedClickableElementHashes.url === currentUrl) {
+					this._markNewElements(updated_state.selector_map, this._cachedClickableElementHashes.hashes);
+				}
+
+				// Update cache with current hashes
+				this._cachedClickableElementHashes = {
+					url: currentUrl,
+					hashes: currentHashes
+				};
+			}
+		}
 
 		this.cachedBrowserState = updated_state;
 		return this.cachedBrowserState;
@@ -1957,6 +2080,590 @@ export class BrowserSession {
 			this.logger.debug(`Failed to remove highlights: ${(error as Error).message}`);
 		}
 	}
+
+	// region - Trace Recording
+
+	/**
+	 * Start tracing on browser context if traces_dir is configured
+	 * Note: Currently optional as it may cause performance issues in some cases
+	 */
+	private async _startContextTracing(): Promise<void> {
+		if (this.browser_profile.traces_dir && this.browser_context) {
+			try {
+				this.logger.debug(`📽️ Starting tracing (will save to: ${this.browser_profile.traces_dir})`);
+				await this.browser_context.tracing.start({
+					screenshots: true,
+					snapshots: true,
+					sources: false, // Reduce trace size
+				});
+			} catch (error) {
+				this.logger.warning(`Failed to start tracing: ${(error as Error).message}`);
+			}
+		}
+	}
+
+	/**
+	 * Save browser trace recording
+	 */
+	private async _saveTraceRecording(): Promise<void> {
+		if (this.browser_profile.traces_dir && this.browser_context) {
+			try {
+				const tracesPath = this.browser_profile.traces_dir;
+				let finalTracePath: string;
+
+				// Check if path has extension
+				if (path.extname(tracesPath)) {
+					// Path has extension, use as-is (user specified exact file path)
+					finalTracePath = tracesPath;
+				} else {
+					// Path has no extension, treat as directory and create filename
+					const traceFilename = `BrowserSession_${this.id}.zip`;
+					finalTracePath = path.join(tracesPath, traceFilename);
+				}
+
+				this.logger.info(`🎥 Saving browser_context trace to ${finalTracePath}...`);
+				await this.browser_context.tracing.stop({ path: finalTracePath });
+			} catch (error) {
+				this.logger.warning(`Failed to save trace recording: ${(error as Error).message}`);
+			}
+		}
+	}
+
+	// endregion
+
+	// region - CDP Advanced Integration
+
+	/**
+	 * Scroll using CDP Input.synthesizeScrollGesture for universal compatibility
+	 * @param page - The page to scroll
+	 * @param pixels - Number of pixels to scroll (positive = up, negative = down)
+	 * @returns true if successful, false if failed
+	 */
+	private async _scrollWithCdpGesture(page: Page, pixels: number): Promise<boolean> {
+		try {
+			// Use CDP to synthesize scroll gesture - works in all contexts including PDFs
+			const cdpSession = await this.browser_context!.newCDPSession(page);
+
+			// Get viewport center for scroll origin
+			const viewport = await page.evaluate(() => ({
+				width: window.innerWidth,
+				height: window.innerHeight
+			}));
+
+			const centerX = Math.floor(viewport.width / 2);
+			const centerY = Math.floor(viewport.height / 2);
+
+			await cdpSession.send('Input.synthesizeScrollGesture', {
+				x: centerX,
+				y: centerY,
+				xDistance: 0,
+				yDistance: -pixels, // Negative = scroll down, Positive = scroll up
+				gestureSourceType: 'mouse', // Use mouse gestures for better compatibility
+				speed: 3000, // Pixels per second
+			});
+
+			try {
+				await Promise.race([
+					cdpSession.detach(),
+					new Promise<void>(resolve => setTimeout(resolve, 1000))
+				]);
+			} catch {
+				// Ignore detach errors
+			}
+
+			this.logger.debug(`📄 Scrolled via CDP Input.synthesizeScrollGesture: ${pixels}px`);
+			return true;
+		} catch (error) {
+			this.logger.warning(`❌ Scrolling via CDP Input.synthesizeScrollGesture failed: ${(error as Error).message}`);
+			return false;
+		}
+	}
+
+	/**
+	 * Scroll the current page container
+	 * @param pixels - Number of pixels to scroll (positive = up, negative = down)
+	 */
+	private async _scrollContainer(pixels: number): Promise<void> {
+		const page = await this.getCurrentPage();
+
+		// Try CDP scroll gesture first (works universally including PDFs)
+		if (await this._scrollWithCdpGesture(page, pixels)) {
+			return;
+		}
+
+		// Fallback to JavaScript for older browsers or when CDP fails
+		this.logger.debug('Falling back to JavaScript scrolling');
+		const SMART_SCROLL_JS = `(dy) => {
+			const bigEnough = el => el.clientHeight >= window.innerHeight * 0.5;
+			const canScroll = el =>
+				el &&
+				/(auto|scroll|overlay)/.test(getComputedStyle(el).overflowY) &&
+				el.scrollHeight > el.clientHeight &&
+				bigEnough(el);
+
+			let el = document.activeElement;
+			while (el && !canScroll(el) && el !== document.body) el = el.parentElement;
+
+			el = canScroll(el)
+					? el
+					: [...document.querySelectorAll('*')].find(canScroll)
+					|| document.scrollingElement
+					|| document.documentElement;
+
+			if (el === document.scrollingElement ||
+				el === document.documentElement ||
+				el === document.body) {
+				window.scrollBy(0, dy);
+			} else {
+				el.scrollBy(0, dy);
+			}
+		}`;
+
+		await page.evaluate(SMART_SCROLL_JS, pixels);
+	}
+
+	/**
+	 * Compute hashes for all clickable elements in the selector map
+	 * @param selectorMap - Selector map from DOM state
+	 * @returns Set of element hashes
+	 */
+	private _computeElementHashes(selectorMap: SelectorMap): Set<string> {
+		const hashes = new Set<string>();
+
+		for (const [index, element] of Object.entries(selectorMap)) {
+			if (element instanceof DOMElementNode) {
+				// Create hash from element's xpath and key attributes
+				const hashParts = [
+					element.xpath || '',
+					element.tag_name || '',
+					JSON.stringify(element.attributes || {}),
+				];
+				const hash = hashParts.join('|');
+				hashes.add(hash);
+			}
+		}
+
+		return hashes;
+	}
+
+	/**
+	 * Mark elements in the selector map as new if they weren't in the cached hashes
+	 * @param selectorMap - Selector map to update
+	 * @param cachedHashes - Previously cached element hashes
+	 */
+	private _markNewElements(selectorMap: SelectorMap, cachedHashes: Set<string>): void {
+		for (const [index, element] of Object.entries(selectorMap)) {
+			if (element instanceof DOMElementNode) {
+				// Create hash for current element
+				const hashParts = [
+					element.xpath || '',
+					element.tag_name || '',
+					JSON.stringify(element.attributes || {}),
+				];
+				const hash = hashParts.join('|');
+
+				// Mark as new if not in cached hashes
+				if (!cachedHashes.has(hash)) {
+					// Add a marker to the element's attributes to indicate it's new
+					element.attributes = element.attributes || {};
+					(element.attributes as any)['__browser_use_new_element'] = true;
+				}
+			}
+		}
+	}
+
+	/**
+	 * Helper to get a safe method name from the calling context
+	 * Used for recovery error messages
+	 */
+	private _getCurrentMethodName(): string {
+		try {
+			const stack = new Error().stack;
+			if (!stack) return 'unknown';
+
+			const lines = stack.split('\n');
+			// Skip first 3 lines: Error, this method, and the caller
+			const callerLine = lines[3] || '';
+			const match = callerLine.match(/at (?:BrowserSession\.)?(\w+)/);
+			return match ? match[1] : 'unknown';
+		} catch {
+			return 'unknown';
+		}
+	}
+
+	/**
+	 * Get current page with fallback logic
+	 * Alias for compatibility with Python API
+	 */
+	async getCurrentPage(): Promise<Page | null> {
+		return await this.get_current_page();
+	}
+
+	/**
+	 * Log warning about unsafe glob patterns
+	 * @param pattern - The glob pattern being used
+	 */
+	private _logGlobWarning(pattern: string): void {
+		const unsafePatterns = ['**/*', '**/.*', '~/*', '/etc/*', '/sys/*', '/proc/*'];
+		const isUnsafe = unsafePatterns.some(unsafe =>
+			pattern.includes(unsafe) || pattern.startsWith(unsafe.replace('**/', ''))
+		);
+
+		if (isUnsafe) {
+			this.logger.warning(
+				`⚠️ Potentially unsafe glob pattern detected: "${pattern}". ` +
+				`This could access system files or expose sensitive data.`
+			);
+		}
+	}
+
+	/**
+	 * Create a shallow copy of the browser session
+	 * Note: This doesn't copy the actual browser instance, just the session metadata
+	 * @returns A new BrowserSession instance with copied state
+	 */
+	modelCopy(): BrowserSession {
+		return new BrowserSession({
+			id: this.id,
+			browser_profile: this.browser_profile,
+			browser: this.browser,
+			browser_context: this.browser_context,
+			page: this.agent_current_page,
+			title: this.currentTitle,
+			url: this.currentUrl,
+			wss_url: this.wss_url,
+			cdp_url: this.cdp_url,
+			browser_pid: this.browser_pid,
+			playwright: this.playwright,
+			downloaded_files: [...this.downloaded_files],
+		});
+	}
+
+	// endregion
+
+	// region - Page Health Check and Recovery
+
+	private _inRecovery = false;
+
+	/**
+	 * Check if a page is responsive by trying to evaluate simple JavaScript
+	 * @param page - The page to check
+	 * @param timeout - Timeout in seconds (default: 5.0)
+	 * @returns true if page is responsive, false otherwise
+	 */
+	private async _isPageResponsive(page: Page, timeout: number = 5.0): Promise<boolean> {
+		try {
+			const timeoutMs = timeout * 1000;
+			await Promise.race([
+				page.evaluate('1'),
+				new Promise((_, reject) =>
+					setTimeout(() => reject(new Error('Timeout')), timeoutMs)
+				)
+			]);
+			return true;
+		} catch (error) {
+			return false;
+		}
+	}
+
+	/**
+	 * Force close a crashed page using CDP from a clean temporary page
+	 * @param pageUrl - The URL of the page to force close
+	 * @returns true if successful, false otherwise
+	 */
+	private async _forceClosePageViaCdp(pageUrl: string): Promise<boolean> {
+		try {
+			if (!this.browser_context) {
+				throw new Error('Browser context is not set up yet');
+			}
+
+			// Create a clean page for CDP operations
+			const tempPage = await Promise.race([
+				this.browser_context.newPage(),
+				new Promise<never>((_, reject) =>
+					setTimeout(() => reject(new Error('Timeout creating temp page')), 5000)
+				)
+			]);
+
+			await Promise.race([
+				tempPage.goto('about:blank'),
+				new Promise<never>((_, reject) =>
+					setTimeout(() => reject(new Error('Timeout navigating to blank')), 2000)
+				)
+			]);
+
+			try {
+				// Create CDP session from the clean page
+				const cdpSession = await Promise.race([
+					this.browser_context.newCDPSession(tempPage),
+					new Promise<never>((_, reject) =>
+						setTimeout(() => reject(new Error('Timeout creating CDP session')), 5000)
+					)
+				]);
+
+				try {
+					// Get all browser targets
+					const targets = await Promise.race([
+						cdpSession.send('Target.getTargets'),
+						new Promise<never>((_, reject) =>
+							setTimeout(() => reject(new Error('Timeout getting targets')), 2000)
+						)
+					]) as any;
+
+					// Find the crashed page target
+					let blockedTargetId: string | null = null;
+					const targetInfos = targets.targetInfos || [];
+					for (const target of targetInfos) {
+						if (target.type === 'page' && target.url === pageUrl) {
+							blockedTargetId = target.targetId;
+							break;
+						}
+					}
+
+					if (blockedTargetId) {
+						// Force close the target
+						this.logger.warning(
+							`🪓 Force-closing crashed page target_id=${blockedTargetId} via CDP: ${pageUrl.substring(0, 50)}...`
+						);
+						await Promise.race([
+							cdpSession.send('Target.closeTarget', { targetId: blockedTargetId }),
+							new Promise<never>((_, reject) =>
+								setTimeout(() => reject(new Error('Timeout closing target')), 2000)
+							)
+						]);
+						return true;
+					} else {
+						this.logger.debug(
+							`❌ Could not find CDP page target_id to force-close: ${pageUrl.substring(0, 50)} (concurrency issues?)`
+						);
+						return false;
+					}
+				} finally {
+					try {
+						await Promise.race([
+							cdpSession.detach(),
+							new Promise<void>((resolve) => setTimeout(resolve, 1000))
+						]);
+					} catch {
+						// Ignore detach errors
+					}
+				}
+			} finally {
+				await tempPage.close();
+			}
+		} catch (error) {
+			this.logger.error(`❌ Using raw CDP to force-close crashed page failed: ${(error as Error).message}`);
+			return false;
+		}
+	}
+
+	/**
+	 * Try to reopen a URL in a new page and check if it's responsive
+	 * @param url - The URL to reopen
+	 * @param timeoutMs - Navigation timeout in milliseconds
+	 * @returns true if successful and responsive, false otherwise
+	 */
+	private async _tryReopenUrl(url: string, timeoutMs?: number): Promise<boolean> {
+		if (!url || url.startsWith('about:') || url.startsWith('chrome://') || url.startsWith('edge://')) {
+			return false;
+		}
+
+		const timeout = timeoutMs || this.browser_profile.default_navigation_timeout || 6000;
+
+		try {
+			this.logger.debug(`🔄 Attempting to reload URL that crashed: ${url.substring(0, 50)}`);
+
+			if (!this.browser_context) {
+				throw new Error('Browser context is not set');
+			}
+
+			// Create new page directly to avoid circular dependency
+			const newPage = await this.browser_context.newPage();
+			this.agent_current_page = newPage;
+
+			// Update human tab reference if there is no human tab yet
+			if (!this.human_current_page || this.human_current_page.isClosed()) {
+				this.human_current_page = newPage;
+			}
+
+			// Set viewport for new tab
+			if (this.browser_profile.window_size) {
+				await newPage.setViewportSize(this.browser_profile.window_size);
+			}
+
+			// Navigate with timeout
+			try {
+				await Promise.race([
+					newPage.goto(url, { waitUntil: 'load', timeout }),
+					new Promise<never>((_, reject) =>
+						setTimeout(() => reject(new Error('Navigation timeout')), timeout + 500)
+					)
+				]);
+			} catch (error) {
+				this.logger.debug(
+					`⚠️ Attempting to reload previously crashed URL ${url.substring(0, 50)} failed again: ${(error as Error).name}`
+				);
+			}
+
+			// Wait a bit for any transient blocking to resolve
+			await new Promise(resolve => setTimeout(resolve, 1000));
+
+			// Check if the reopened page is responsive
+			const isResponsive = await this._isPageResponsive(newPage, 2.0);
+
+			if (isResponsive) {
+				this.logger.info(`✅ Page recovered and is now responsive after reopening on: ${url.substring(0, 50)}`);
+				return true;
+			} else {
+				this.logger.warning(`⚠️ Reopened page ${url.substring(0, 50)} is still unresponsive`);
+				// Close the unresponsive page before returning
+				try {
+					await this._forceClosePageViaCdp(newPage.url());
+				} catch (error) {
+					this.logger.error(
+						`❌ Failed to close crashed page ${url.substring(0, 50)} via CDP: ${(error as Error).message} (something is very wrong or system is extremely overloaded)`
+					);
+				}
+				this.agent_current_page = null; // Clear reference to closed page
+				return false;
+			}
+		} catch (error) {
+			this.logger.error(`❌ Retrying crashed page ${url.substring(0, 50)} failed: ${(error as Error).message}`);
+			return false;
+		}
+	}
+
+	/**
+	 * Create a new blank page as a fallback when recovery fails
+	 * @param url - The original URL that failed
+	 */
+	private async _createBlankFallbackPage(url: string): Promise<void> {
+		this.logger.warning(
+			`⚠️ Resetting to about:blank as fallback because browser is unable to load the original URL without crashing: ${url.substring(0, 50)}`
+		);
+
+		// Close any existing broken page
+		if (this.agent_current_page && !this.agent_current_page.isClosed()) {
+			try {
+				await this.agent_current_page.close();
+			} catch {
+				// Ignore close errors
+			}
+		}
+
+		if (!this.browser_context) {
+			throw new Error('Browser context is not set');
+		}
+
+		// Create fresh page directly (avoid decorated methods to prevent circular dependency)
+		const newPage = await this.browser_context.newPage();
+		this.agent_current_page = newPage;
+
+		// Update human tab reference if there is no human tab yet
+		if (!this.human_current_page || this.human_current_page.isClosed()) {
+			this.human_current_page = newPage;
+		}
+
+		// Set viewport for new tab
+		if (this.browser_profile.window_size) {
+			await newPage.setViewportSize(this.browser_profile.window_size);
+		}
+
+		// Navigate to blank
+		try {
+			await newPage.goto('about:blank', { waitUntil: 'load', timeout: 5000 });
+		} catch (error) {
+			this.logger.error(
+				`❌ Failed to navigate to about:blank: ${(error as Error).message} (something is very wrong or system is extremely overloaded)`
+			);
+			throw error;
+		}
+
+		// Verify it's responsive
+		if (!await this._isPageResponsive(newPage, 1.0)) {
+			throw new BrowserError(
+				'Browser is unable to load any new about:blank pages (something is very wrong or browser is extremely overloaded)'
+			);
+		}
+	}
+
+	/**
+	 * Recover from an unresponsive page by closing and reopening it
+	 * @param callingMethod - The name of the method that detected the unresponsive page
+	 * @param timeoutMs - Navigation timeout in milliseconds
+	 */
+	private async _recoverUnresponsivePage(callingMethod: string, timeoutMs?: number): Promise<void> {
+		this.logger.warning(`⚠️ Page JS engine became unresponsive in ${callingMethod}(), attempting recovery...`);
+		const timeout = Math.min(3000, timeoutMs || this.browser_profile.default_navigation_timeout || 5000);
+
+		// Check if browser connection is still alive
+		if (this.browser && !this.browser.isConnected()) {
+			this.logger.error('❌ Browser connection lost - browser process may have crashed');
+			throw new Error('Browser connection lost - cannot recover unresponsive page');
+		}
+
+		// Prevent re-entrance
+		if (this._inRecovery) {
+			this.logger.debug('Already in recovery, skipping nested recovery attempt');
+			return;
+		}
+
+		this._inRecovery = true;
+		try {
+			// Get current URL before recovery
+			if (!this.agent_current_page) {
+				throw new Error('Agent current page is not set');
+			}
+			const currentUrl = this.agent_current_page.url();
+
+			// Clear page references
+			const blockedPage = this.agent_current_page;
+			this.agent_current_page = null;
+			if (blockedPage === this.human_current_page) {
+				this.human_current_page = null;
+			}
+
+			// Force-close the crashed page via CDP
+			this.logger.debug('🪓 Page Recovery Step 1/3: Force-closing crashed page via CDP...');
+			await this._forceClosePageViaCdp(currentUrl);
+
+			// Remove the closed page from browser_context.pages by forcing a refresh
+			if (this.browser_context && this.browser_context.pages()) {
+				for (const page of this.browser_context.pages().slice()) {
+					const pageUrl = page.url();
+					if (pageUrl === currentUrl && !page.isClosed() &&
+						!pageUrl.startsWith('about:') && !pageUrl.startsWith('chrome://') && !pageUrl.startsWith('edge://')) {
+						try {
+							await page.close();
+							this.logger.debug(
+								`🪓 Closed page because it has a known crash-causing URL: ${pageUrl.substring(0, 50)}`
+							);
+						} catch {
+							// Page might already be closed via CDP
+						}
+					}
+				}
+			}
+
+			// Try to reopen the URL (in case blocking was transient)
+			this.logger.debug('🍼 Page Recovery Step 2/3: Trying to reopen the URL again...');
+			if (await this._tryReopenUrl(currentUrl, timeout)) {
+				this.logger.debug('✅ Page Recovery Step 3/3: Page loading succeeded after 2nd attempt!');
+				return; // Success!
+			}
+
+			// If that failed, fall back to blank page
+			this.logger.debug(
+				'❌ Page Recovery Step 3/3: Loading the page a 2nd time failed as well, browser seems unable to load this URL without getting stuck, retreating to a safe page...'
+			);
+			await this._createBlankFallbackPage(currentUrl);
+		} finally {
+			// Always clear recovery flag
+			this._inRecovery = false;
+		}
+	}
+
+	// endregion
 
 }
 

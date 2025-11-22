@@ -26,7 +26,14 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from '@modelcontextprotocol/sdk/types.js';
+import {
+    CallToolRequestSchema,
+    ListToolsRequestSchema,
+    ListPromptsRequestSchema,
+    GetPromptRequestSchema,
+    type Tool,
+    type Prompt,
+} from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { createLogger } from '../logging-config.js';
@@ -49,12 +56,28 @@ console.warn = (...args: any[]) => console.error(...args);
 
 const logger = createLogger('browser_use.mcp.server');
 
+export interface MCPPromptTemplate {
+    name: string;
+    description: string;
+    arguments?: Array<{
+        name: string;
+        description?: string;
+        required?: boolean;
+    }>;
+    template: (args: Record<string, string>) => string;
+}
+
 export class MCPServer {
     private server: Server;
     private tools: Record<string, any> = {};
+    private prompts: Map<string, MCPPromptTemplate> = new Map();
     private browserSession: BrowserSession | null = null;
     private controller: Controller<any> | null = null;
     private startTime: number;
+    private isRunning = false;
+    private toolExecutionCount = 0;
+    private errorCount = 0;
+    private abortController: AbortController | null = null;
 
     constructor(name: string, version: string) {
         this.server = new Server(
@@ -65,15 +88,18 @@ export class MCPServer {
             {
                 capabilities: {
                     tools: {},
+                    prompts: {},
                 },
             }
         );
 
         this.startTime = Date.now() / 1000;
         this.setupHandlers();
+        this.registerDefaultPrompts();
     }
 
     private setupHandlers() {
+        // List available tools
         this.server.setRequestHandler(ListToolsRequestSchema, async () => {
             return {
                 tools: Object.entries(this.tools).map(([name, tool]) => ({
@@ -84,6 +110,7 @@ export class MCPServer {
             };
         });
 
+        // Execute tool
         this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const startTime = Date.now() / 1000;
             let errorMsg: string | null = null;
@@ -95,17 +122,19 @@ export class MCPServer {
                 }
 
                 logger.debug(`Executing tool: ${request.params.name}`);
+                this.toolExecutionCount++;
                 const result = await tool.handler(request.params.arguments || {});
 
                 return {
                     content: [
                         {
                             type: 'text',
-                            text: typeof result === 'string' ? result : JSON.stringify(result),
+                            text: typeof result === 'string' ? result : JSON.stringify(result, null, 2),
                         },
                     ],
                 };
             } catch (error) {
+                this.errorCount++;
                 errorMsg = error instanceof Error ? error.message : String(error);
                 logger.error(`Tool execution failed: ${errorMsg}`);
                 return {
@@ -115,6 +144,7 @@ export class MCPServer {
                             text: `Error: ${errorMsg}`,
                         },
                     ],
+                    isError: true,
                 };
             } finally {
                 // Capture telemetry for tool calls
@@ -129,6 +159,89 @@ export class MCPServer {
                     })
                 );
             }
+        });
+
+        // List available prompts
+        this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
+            return {
+                prompts: Array.from(this.prompts.values()).map((prompt) => ({
+                    name: prompt.name,
+                    description: prompt.description,
+                    arguments: prompt.arguments,
+                })),
+            };
+        });
+
+        // Get prompt with arguments
+        this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+            const prompt = this.prompts.get(request.params.name);
+            if (!prompt) {
+                throw new Error(`Prompt not found: ${request.params.name}`);
+            }
+
+            const args = request.params.arguments || {};
+            const message = prompt.template(args);
+
+            return {
+                messages: [
+                    {
+                        role: 'user',
+                        content: {
+                            type: 'text',
+                            text: message,
+                        },
+                    },
+                ],
+            };
+        });
+    }
+
+    /**
+     * Register default prompts for common browser automation tasks
+     */
+    private registerDefaultPrompts() {
+        // Scrape data prompt
+        this.registerPrompt({
+            name: 'scrape_data',
+            description: 'Extract structured data from a website',
+            arguments: [
+                { name: 'url', description: 'URL to scrape', required: true },
+                { name: 'data_type', description: 'Type of data to extract', required: true },
+            ],
+            template: (args) => `Use browser_navigate to go to ${args.url}, then use browser_extract_content to extract ${args.data_type}. If the page requires interaction, use browser_get_state to find elements and browser_click/browser_type as needed.`,
+        });
+
+        // Fill form prompt
+        this.registerPrompt({
+            name: 'fill_form',
+            description: 'Fill out and submit a web form',
+            arguments: [
+                { name: 'url', description: 'URL of the form', required: true },
+                { name: 'field_data', description: 'JSON object with field values', required: true },
+            ],
+            template: (args) => `Navigate to ${args.url}, use browser_get_state to identify form fields, then use browser_type to fill in: ${args.field_data}. Finally, click the submit button.`,
+        });
+
+        // Multi-step task prompt
+        this.registerPrompt({
+            name: 'multi_step_task',
+            description: 'Execute a complex multi-step task',
+            arguments: [
+                { name: 'task_description', description: 'Detailed description of the task', required: true },
+                { name: 'max_steps', description: 'Maximum number of steps (default: 100)', required: false },
+            ],
+            template: (args) => `Use retry_with_browser_use_agent with task: '${args.task_description}'. Set max_steps=${args.max_steps || '100'} and use_vision=true for better understanding.`,
+        });
+
+        // Research topic prompt
+        this.registerPrompt({
+            name: 'research_topic',
+            description: 'Research a topic across multiple websites',
+            arguments: [
+                { name: 'topic', description: 'Topic to research', required: true },
+                { name: 'sites', description: 'Comma-separated list of websites', required: true },
+            ],
+            template: (args) => `Open multiple tabs using browser_navigate with new_tab=true for sites: ${args.sites}. Use browser_extract_content on each to gather information about ${args.topic}. Switch between tabs with browser_switch_tab.`,
         });
     }
 
@@ -203,6 +316,11 @@ export class MCPServer {
      * Start the MCP server
      */
     public async start() {
+        if (this.isRunning) {
+            logger.warning('MCP Server is already running');
+            return;
+        }
+
         // Capture telemetry for server start
         productTelemetry.capture(
             new MCPServerTelemetryEvent({
@@ -214,8 +332,10 @@ export class MCPServer {
         try {
             const transport = new StdioServerTransport();
             await this.server.connect(transport);
-            logger.info('🔌 MCP Server started');
+            this.isRunning = true;
+            logger.info(`🔌 MCP Server started (${this.getToolCount()} tools, ${this.getPromptCount()} prompts registered)`);
         } catch (error) {
+            this.isRunning = false;
             logger.error(`Failed to start MCP server: ${error}`);
             throw error;
         }
@@ -225,7 +345,20 @@ export class MCPServer {
      * Stop the MCP server and cleanup resources
      */
     public async stop(): Promise<void> {
+        if (!this.isRunning) {
+            logger.warning('MCP Server is not running');
+            return;
+        }
+
         try {
+            this.isRunning = false;
+
+            // Cancel any pending operations
+            if (this.abortController) {
+                this.abortController.abort();
+                this.abortController = null;
+            }
+
             // Close browser session if active
             if (this.browserSession) {
                 await this.browserSession.stop();
@@ -244,10 +377,19 @@ export class MCPServer {
             );
             productTelemetry.flush();
 
-            logger.info('🔌 MCP Server stopped');
+            const stats = this.getStats();
+            logger.info(`🔌 MCP Server stopped (uptime: ${Math.floor(stats.uptime)}s, executions: ${stats.executionCount}, success rate: ${(stats.successRate * 100).toFixed(1)}%)`);
         } catch (error) {
             logger.error(`Error stopping MCP server: ${error}`);
         }
+    }
+
+    /**
+     * Register a prompt template
+     */
+    public registerPrompt(prompt: MCPPromptTemplate): void {
+        this.prompts.set(prompt.name, prompt);
+        logger.debug(`Registered prompt: ${prompt.name}`);
     }
 
     /**
@@ -255,5 +397,81 @@ export class MCPServer {
      */
     public getToolCount(): number {
         return Object.keys(this.tools).length;
+    }
+
+    /**
+     * Get the number of registered prompts
+     */
+    public getPromptCount(): number {
+        return this.prompts.size;
+    }
+
+    /**
+     * Get server health status
+     */
+    public getHealth(): {
+        status: 'healthy' | 'degraded' | 'unhealthy';
+        uptime: number;
+        toolExecutionCount: number;
+        errorCount: number;
+        errorRate: number;
+        browserSessionActive: boolean;
+    } {
+        const uptime = Date.now() / 1000 - this.startTime;
+        const errorRate = this.toolExecutionCount > 0 ? this.errorCount / this.toolExecutionCount : 0;
+
+        let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
+        if (errorRate > 0.5) {
+            status = 'unhealthy';
+        } else if (errorRate > 0.2) {
+            status = 'degraded';
+        }
+
+        return {
+            status,
+            uptime,
+            toolExecutionCount: this.toolExecutionCount,
+            errorCount: this.errorCount,
+            errorRate,
+            browserSessionActive: this.browserSession !== null,
+        };
+    }
+
+    /**
+     * Get server statistics
+     */
+    public getStats(): {
+        toolsRegistered: number;
+        promptsRegistered: number;
+        uptime: number;
+        executionCount: number;
+        errorCount: number;
+        successRate: number;
+    } {
+        const health = this.getHealth();
+        return {
+            toolsRegistered: this.getToolCount(),
+            promptsRegistered: this.getPromptCount(),
+            uptime: health.uptime,
+            executionCount: this.toolExecutionCount,
+            errorCount: this.errorCount,
+            successRate: health.toolExecutionCount > 0 ? 1 - health.errorRate : 1,
+        };
+    }
+
+    /**
+     * Reset statistics
+     */
+    public resetStats(): void {
+        this.toolExecutionCount = 0;
+        this.errorCount = 0;
+        logger.info('Statistics reset');
+    }
+
+    /**
+     * Check if server is running
+     */
+    public isServerRunning(): boolean {
+        return this.isRunning;
     }
 }

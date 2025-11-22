@@ -436,3 +436,143 @@ export const uuid7str = () => {
 	const hex = bytes.toString('hex');
 	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 };
+
+/**
+ * Retry configuration options
+ */
+export interface RetryOptions {
+	/** Maximum number of retry attempts (default: 3) */
+	maxAttempts?: number;
+	/** Delay between retries in milliseconds (default: 1000) */
+	delayMs?: number;
+	/** Exponential backoff multiplier (default: 1 = no backoff) */
+	backoffMultiplier?: number;
+	/** Maximum delay in milliseconds for exponential backoff (default: 30000) */
+	maxDelayMs?: number;
+	/** Function to determine if error is retryable (default: all errors retryable) */
+	shouldRetry?: (error: Error, attempt: number) => boolean;
+	/** Callback called on each retry attempt */
+	onRetry?: (error: Error, attempt: number, nextDelayMs: number) => void;
+}
+
+/**
+ * Retry an async function with configurable attempts and delays
+ * Implements exponential backoff with jitter
+ *
+ * @param fn - The async function to retry
+ * @param options - Retry configuration
+ * @returns The result of the function
+ * @throws The last error if all retries fail
+ *
+ * @example
+ * const result = await retryAsync(
+ *   async () => await fetchData(),
+ *   { maxAttempts: 3, delayMs: 1000, backoffMultiplier: 2 }
+ * );
+ */
+export async function retryAsync<T>(
+	fn: () => Promise<T>,
+	options: RetryOptions = {}
+): Promise<T> {
+	const {
+		maxAttempts = 3,
+		delayMs = 1000,
+		backoffMultiplier = 1,
+		maxDelayMs = 30000,
+		shouldRetry = () => true,
+		onRetry,
+	} = options;
+
+	let lastError: Error | null = null;
+
+	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+		try {
+			return await fn();
+		} catch (error) {
+			lastError = error as Error;
+
+			// Check if we should retry
+			const isLastAttempt = attempt === maxAttempts;
+			if (isLastAttempt || !shouldRetry(lastError, attempt)) {
+				throw lastError;
+			}
+
+			// Calculate delay with exponential backoff and jitter
+			const baseDelay = delayMs * Math.pow(backoffMultiplier, attempt - 1);
+			const jitter = Math.random() * 0.3 * baseDelay; // Add up to 30% jitter
+			const nextDelay = Math.min(baseDelay + jitter, maxDelayMs);
+
+			// Notify about retry
+			if (onRetry) {
+				onRetry(lastError, attempt, nextDelay);
+			}
+
+			// Wait before next attempt
+			await new Promise(resolve => setTimeout(resolve, nextDelay));
+		}
+	}
+
+	// This should never be reached, but TypeScript requires it
+	throw lastError || new Error('Retry failed with unknown error');
+}
+
+/**
+ * Create a semaphore for limiting concurrent operations
+ *
+ * @example
+ * const semaphore = createSemaphore(3); // Allow max 3 concurrent operations
+ * await semaphore.acquire();
+ * try {
+ *   await doWork();
+ * } finally {
+ *   semaphore.release();
+ * }
+ */
+export function createSemaphore(maxConcurrent: number) {
+	let activeCount = 0;
+	const queue: Array<() => void> = [];
+
+	return {
+		/**
+		 * Acquire a semaphore slot
+		 * Waits if max concurrent operations are already running
+		 */
+		async acquire(): Promise<void> {
+			if (activeCount < maxConcurrent) {
+				activeCount++;
+				return;
+			}
+
+			await new Promise<void>(resolve => {
+				queue.push(resolve);
+			});
+		},
+
+		/**
+		 * Release a semaphore slot
+		 * Allows next queued operation to proceed
+		 */
+		release(): void {
+			const next = queue.shift();
+			if (next) {
+				next();
+			} else {
+				activeCount--;
+			}
+		},
+
+		/**
+		 * Get current active count
+		 */
+		getActiveCount(): number {
+			return activeCount;
+		},
+
+		/**
+		 * Get queue length
+		 */
+		getQueueLength(): number {
+			return queue.length;
+		},
+	};
+}
