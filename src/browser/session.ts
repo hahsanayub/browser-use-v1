@@ -10,6 +10,7 @@ import { BrowserStateSummary, type TabInfo, BrowserError } from './views.js';
 import { DOMElementNode, DOMState, type SelectorMap } from '../dom/views.js';
 import { normalize_url } from './utils.js';
 import { DomService } from '../dom/service.js';
+import { showDVDScreensaver, showSpinner, withDVDScreensaver } from './dvd-screensaver.js';
 
 const execAsync = promisify(exec);
 
@@ -3151,6 +3152,61 @@ export class BrowserSession {
 	private _untrackChildProcess(pid: number): void {
 		this._childProcesses.delete(pid);
 	}
+
+	// region: Loading Animations
+
+	/**
+	 * Show DVD screensaver loading animation
+	 * Returns a function to stop the animation
+	 *
+	 * @param message - Message to display (default: 'Loading...')
+	 * @param fps - Frames per second (default: 10)
+	 * @returns Function to stop the animation
+	 *
+	 * @example
+	 * const stopAnimation = this._showDvdScreensaverLoadingAnimation('Loading page...');
+	 * await someLongOperation();
+	 * stopAnimation();
+	 */
+	_showDvdScreensaverLoadingAnimation(message: string = 'Loading...', fps: number = 10): () => void {
+		return showDVDScreensaver(message, fps);
+	}
+
+	/**
+	 * Show simple spinner loading animation
+	 * Returns a function to stop the animation
+	 *
+	 * @param message - Message to display (default: 'Loading...')
+	 * @param fps - Frames per second (default: 10)
+	 * @returns Function to stop the animation
+	 *
+	 * @example
+	 * const stopSpinner = this._showSpinnerLoadingAnimation('Processing...');
+	 * await someLongOperation();
+	 * stopSpinner();
+	 */
+	_showSpinnerLoadingAnimation(message: string = 'Loading...', fps: number = 10): () => void {
+		return showSpinner(message, fps);
+	}
+
+	/**
+	 * Execute an async operation with DVD screensaver animation
+	 *
+	 * @param operation - Async operation to execute
+	 * @param message - Message to display during operation
+	 * @returns Result of the operation
+	 *
+	 * @example
+	 * const page = await this._withDvdScreensaver(
+	 *   async () => await this.browser_context!.newPage(),
+	 *   'Opening new page...'
+	 * );
+	 */
+	async _withDvdScreensaver<T>(operation: () => Promise<T>, message: string = 'Loading...'): Promise<T> {
+		return withDVDScreensaver(operation, message);
+	}
+
+	// endregion: Loading Animations
 
 	// endregion
 

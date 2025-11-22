@@ -1,6 +1,7 @@
 export * from './config.js';
 export * from './logging-config.js';
 export * from './observability.js';
+export * from './observability-decorators.js';
 export * from './exceptions.js';
 export * from './utils.js';
 

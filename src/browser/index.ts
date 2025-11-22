@@ -6,3 +6,5 @@ export * from './browser.js';
 export * from './context.js';
 export * from './session.js';
 export * from './extensions.js';
+export * from './dvd-screensaver.js';
+export * from './playwright-manager.js';
