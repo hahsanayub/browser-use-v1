@@ -1265,6 +1265,671 @@ export class BrowserSession {
 	}
 
 	/**
+	 * Get a summary of the current browser state
+	 * @param cache_clickable_elements_hashes - Cache clickable element hashes to detect new elements
+	 * @param include_screenshot - Include screenshot in state summary
+	 * @returns BrowserStateSummary with current page state
+	 */
+	async get_state_summary(
+		cache_clickable_elements_hashes: boolean = true,
+		include_screenshot: boolean = true
+	): Promise<BrowserStateSummary> {
+		this.logger.debug('🔄 Starting get_state_summary...');
+
+		const updated_state = await this._get_updated_state(-1, include_screenshot);
+
+		// TODO: Implement clickable element hash caching when needed
+		// This would involve tracking which elements are new since the last state
+		// to help reduce token usage in the LLM
+
+		this.cachedBrowserState = updated_state;
+		return this.cachedBrowserState;
+	}
+
+	/**
+	 * Get minimal state summary without DOM processing, but with screenshot
+	 * Used when page is in error state or unresponsive
+	 */
+	async get_minimal_state_summary(): Promise<BrowserStateSummary> {
+		try {
+			const page = await this.get_current_page();
+			const url = page ? page.url() : 'unknown';
+
+			// Try to get title safely
+			let title = 'Page Load Error';
+			try {
+				if (page) {
+					const titlePromise = page.title();
+					const timeoutPromise = new Promise<never>((_, reject) =>
+						setTimeout(() => reject(new Error('timeout')), 2000)
+					);
+					title = await Promise.race([titlePromise, timeoutPromise]);
+				}
+			} catch (error) {
+				// Keep default title
+			}
+
+			// Try to get tabs info safely
+			let tabs_info: TabInfo[] = [];
+			try {
+				const tabsPromise = this.get_tabs_info();
+				const timeoutPromise = new Promise<never>((_, reject) =>
+					setTimeout(() => reject(new Error('timeout')), 2000)
+				);
+				tabs_info = await Promise.race([tabsPromise, timeoutPromise]);
+			} catch (error) {
+				// Keep empty tabs
+			}
+
+			// Create minimal DOM element for error state
+			const minimal_element_tree = new DOMElementNode(
+				true,
+				null,
+				'body',
+				'/body',
+				{},
+				[]
+			);
+
+			// Try to get screenshot
+			let screenshot_b64: string | null = null;
+			try {
+				screenshot_b64 = await this.take_screenshot();
+			} catch (error) {
+				this.logger.debug(`Screenshot failed in minimal state: ${(error as Error).message}`);
+			}
+
+			// Use default viewport dimensions
+			const viewport = this.browser_profile.viewport || { width: 1280, height: 720 };
+
+			return new BrowserStateSummary({
+				element_tree: minimal_element_tree,
+				selector_map: {},
+				url,
+				title,
+				tabs: tabs_info,
+				screenshot: screenshot_b64,
+				page_info: {
+					viewport_width: viewport.width,
+					viewport_height: viewport.height,
+					page_width: viewport.width,
+					page_height: viewport.height,
+					scroll_x: 0,
+					scroll_y: 0,
+					pixels_above: 0,
+					pixels_below: 0,
+					pixels_left: 0,
+					pixels_right: 0,
+				},
+				pixels_above: 0,
+				pixels_below: 0,
+				browser_errors: ['Page in error state - minimal navigation available'],
+				is_pdf_viewer: false,
+				loading_status: this.currentPageLoadingStatus,
+			});
+		} catch (error) {
+			this.logger.error(`Failed to get minimal state summary: ${(error as Error).message}`);
+			throw error;
+		}
+	}
+
+	/**
+	 * Internal method to get updated browser state with DOM processing
+	 * @param focus_element - Element index to focus on (default: -1)
+	 * @param include_screenshot - Whether to include screenshot
+	 */
+	private async _get_updated_state(
+		focus_element: number = -1,
+		include_screenshot: boolean = true
+	): Promise<BrowserStateSummary> {
+		const page = await this.get_current_page();
+		if (!page) {
+			throw new Error('No current page available');
+		}
+
+		const page_url = page.url();
+
+		// Check for new tab or chrome:// pages - fast path
+		const is_empty_page = this._is_new_tab_page(page_url) || page_url.startsWith('chrome://');
+
+		if (is_empty_page) {
+			this.logger.debug(`⚡ Fast path for empty page: ${page_url}`);
+
+			// Create minimal DOM state
+			const minimal_element_tree = new DOMElementNode(
+				false,
+				null,
+				'body',
+				'',
+				{},
+				[]
+			);
+
+			const tabs_info = await this.get_tabs_info();
+			const viewport = this.browser_profile.viewport || { width: 1280, height: 720 };
+
+			return new BrowserStateSummary({
+				element_tree: minimal_element_tree,
+				selector_map: {},
+				url: page_url,
+				title: this._is_new_tab_page(page_url) ? 'New Tab' : 'Chrome Page',
+				tabs: tabs_info,
+				screenshot: null,
+				page_info: {
+					viewport_width: viewport.width,
+					viewport_height: viewport.height,
+					page_width: viewport.width,
+					page_height: viewport.height,
+					scroll_x: 0,
+					scroll_y: 0,
+					pixels_above: 0,
+					pixels_below: 0,
+					pixels_left: 0,
+					pixels_right: 0,
+				},
+				pixels_above: 0,
+				pixels_below: 0,
+				browser_errors: [],
+				is_pdf_viewer: false,
+				loading_status: this.currentPageLoadingStatus,
+			});
+		}
+
+		// Normal path for regular pages
+		this.logger.debug('🧹 Removing highlights...');
+		try {
+			await this.remove_highlights();
+		} catch (error) {
+			this.logger.debug('Timeout removing highlights');
+		}
+
+		// Check for PDF and auto-download if needed
+		try {
+			const pdf_path = await this._auto_download_pdf_if_needed(page);
+			if (pdf_path) {
+				this.logger.info(`📄 PDF auto-downloaded: ${pdf_path}`);
+			}
+		} catch (error) {
+			this.logger.debug(`PDF auto-download check failed: ${(error as Error).message}`);
+		}
+
+		// DOM processing
+		this.logger.debug('🌳 Starting DOM processing...');
+		const dom_service = new DomService(page, this.logger);
+
+		let content: DOMState;
+		try {
+			const domPromise = dom_service.get_clickable_elements({
+				focus_element,
+				viewport_expansion: this.browser_profile.viewport_expansion,
+				highlight_elements: this.browser_profile.highlight_elements,
+			});
+			const timeoutPromise = new Promise<never>((_, reject) =>
+				setTimeout(() => reject(new Error('DOM processing timeout')), 45000)
+			);
+
+			content = await Promise.race([domPromise, timeoutPromise]);
+			this.logger.debug('✅ DOM processing completed');
+		} catch (error) {
+			this.logger.warning(`DOM processing timed out for ${page_url}`);
+			this.logger.warning('🔄 Falling back to minimal DOM state...');
+
+			// Create minimal DOM state for fallback
+			const minimal_element_tree = new DOMElementNode(
+				true,
+				null,
+				'body',
+				'/body',
+				{},
+				[]
+			);
+			content = new DOMState(minimal_element_tree, {});
+		}
+
+		// Get tabs info
+		this.logger.debug('📋 Getting tabs info...');
+		const tabs_info = await this.get_tabs_info();
+		this.logger.debug('✅ Tabs info completed');
+
+		// Screenshot
+		let screenshot_b64: string | null = null;
+		if (include_screenshot) {
+			try {
+				this.logger.debug('📸 Capturing screenshot...');
+				screenshot_b64 = await this.take_screenshot();
+			} catch (error) {
+				this.logger.warning(`❌ Screenshot failed for ${page_url}: ${(error as Error).message}`);
+			}
+		}
+
+		// Get page info and scroll info
+		const page_info = await this.get_page_info(page);
+
+		let pixels_above = 0;
+		let pixels_below = 0;
+		try {
+			this.logger.debug('📏 Getting scroll info...');
+			const scroll_info = await Promise.race([
+				this.get_scroll_info(),
+				new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+			]);
+
+			// Calculate pixels above/below viewport
+			pixels_above = Math.max(0, scroll_info.scroll_y);
+			const viewport_bottom = scroll_info.scroll_y + scroll_info.viewport_height;
+			pixels_below = Math.max(0, scroll_info.page_height - viewport_bottom);
+
+			this.logger.debug('✅ Scroll info completed');
+		} catch (error) {
+			this.logger.warning(`Failed to get scroll info: ${(error as Error).message}`);
+		}
+
+		// Get title
+		let title = 'Title unavailable';
+		try {
+			const titlePromise = page.title();
+			const timeoutPromise = new Promise<never>((_, reject) =>
+				setTimeout(() => reject(new Error('timeout')), 3000)
+			);
+			title = await Promise.race([titlePromise, timeoutPromise]);
+		} catch (error) {
+			// Keep default title
+		}
+
+		// Check for errors
+		const browser_errors: string[] = [];
+		if (Object.keys(content.selector_map).length === 0) {
+			browser_errors.push(
+				`DOM processing timed out for ${page_url} - using minimal state. Basic navigation still available.`
+			);
+		}
+
+		// Check if PDF viewer
+		const is_pdf_viewer = await this._is_pdf_viewer(page);
+
+		const browser_state = new BrowserStateSummary({
+			element_tree: content.element_tree,
+			selector_map: content.selector_map,
+			url: page_url,
+			title,
+			tabs: tabs_info,
+			screenshot: screenshot_b64,
+			page_info,
+			pixels_above,
+			pixels_below,
+			browser_errors,
+			is_pdf_viewer,
+			loading_status: this.currentPageLoadingStatus,
+		});
+
+		this.logger.debug('✅ get_state_summary completed successfully');
+		return browser_state;
+	}
+
+	/**
+	 * Check if a URL is a new tab page
+	 */
+	private _is_new_tab_page(url: string): boolean {
+		return url === 'about:blank' || url === 'about:newtab' || url === 'chrome://newtab/';
+	}
+
+	/**
+	 * Check if page is displaying a PDF
+	 */
+	private async _is_pdf_viewer(page: Page): Promise<boolean> {
+		try {
+			const url = page.url();
+			if (url.endsWith('.pdf') || url.includes('.pdf?')) {
+				return true;
+			}
+
+			// Check for PDF viewer in page content
+			const is_pdf = await page.evaluate(() => {
+				return document.querySelector('embed[type="application/pdf"]') !== null ||
+					   document.querySelector('object[type="application/pdf"]') !== null;
+			});
+
+			return is_pdf;
+		} catch (error) {
+			return false;
+		}
+	}
+
+	/**
+	 * Auto-download PDF if detected and auto-download is enabled
+	 */
+	private async _auto_download_pdf_if_needed(page: Page): Promise<string | null> {
+		if (!this._autoDownloadPdfs) {
+			return null;
+		}
+
+		try {
+			const is_pdf = await this._is_pdf_viewer(page);
+			if (!is_pdf) {
+				return null;
+			}
+
+			const url = page.url();
+			this.logger.info(`📄 PDF detected: ${url}`);
+
+			// TODO: Implement actual PDF download logic
+			// This would involve:
+			// 1. Getting the PDF URL
+			// 2. Downloading it to a temp directory
+			// 3. Adding to downloaded_files list
+			// 4. Returning the file path
+
+			return null;
+		} catch (error) {
+			this.logger.debug(`PDF detection failed: ${(error as Error).message}`);
+			return null;
+		}
+	}
+
+	/**
+	 * Check if an element is visible on the page
+	 */
+	private async _is_visible(element: any): Promise<boolean> {
+		try {
+			const is_hidden = await element.isHidden();
+			const bbox = await element.boundingBox();
+
+			return !is_hidden && bbox !== null && bbox.width > 0 && bbox.height > 0;
+		} catch (error) {
+			return false;
+		}
+	}
+
+	/**
+	 * Locate an element by XPath
+	 */
+	async get_locate_element_by_xpath(xpath: string): Promise<any> {
+		const page = await this.get_current_page();
+		if (!page) {
+			return null;
+		}
+
+		try {
+			// Use XPath to locate the element
+			const element_handle = await page.locator(`xpath=${xpath}`).elementHandle();
+			if (element_handle) {
+				const is_visible = await this._is_visible(element_handle);
+				if (is_visible) {
+					await element_handle.scrollIntoViewIfNeeded({ timeout: 1000 });
+				}
+				return element_handle;
+			}
+			return null;
+		} catch (error) {
+			this.logger.error(`❌ Failed to locate xpath ${xpath}: ${(error as Error).message}`);
+			return null;
+		}
+	}
+
+	/**
+	 * Locate an element by CSS selector
+	 */
+	async get_locate_element_by_css_selector(css_selector: string): Promise<any> {
+		const page = await this.get_current_page();
+		if (!page) {
+			return null;
+		}
+
+		try {
+			// Use CSS selector to locate the element
+			const element_handle = await page.locator(css_selector).elementHandle();
+			if (element_handle) {
+				const is_visible = await this._is_visible(element_handle);
+				if (is_visible) {
+					await element_handle.scrollIntoViewIfNeeded({ timeout: 1000 });
+				}
+				return element_handle;
+			}
+			return null;
+		} catch (error) {
+			this.logger.error(`❌ Failed to locate element ${css_selector}: ${(error as Error).message}`);
+			return null;
+		}
+	}
+
+	/**
+	 * Locate an element by text content
+	 * @param text - Text to search for
+	 * @param nth - Which matching element to return (0-based index)
+	 * @param element_type - Optional tag name to filter by (e.g., 'button', 'span')
+	 */
+	async get_locate_element_by_text(
+		text: string,
+		nth: number = 0,
+		element_type: string | null = null
+	): Promise<any> {
+		const page = await this.get_current_page();
+		if (!page) {
+			return null;
+		}
+
+		try {
+			// Build selector: filter by element type and text
+			const selector = element_type
+				? `${element_type}:text("${text}")`
+				: `:text("${text}")`;
+
+			// Get all matching elements
+			const locator = page.locator(selector);
+			const count = await locator.count();
+
+			if (count === 0) {
+				this.logger.error(`❌ No element with text '${text}' found`);
+				return null;
+			}
+
+			// Filter visible elements
+			const visible_elements: any[] = [];
+			for (let i = 0; i < count; i++) {
+				const element_handle = await locator.nth(i).elementHandle();
+				if (element_handle && await this._is_visible(element_handle)) {
+					visible_elements.push(element_handle);
+				}
+			}
+
+			if (visible_elements.length === 0) {
+				this.logger.error(`❌ No visible element with text '${text}' found`);
+				return null;
+			}
+
+			if (nth >= visible_elements.length) {
+				this.logger.error(`❌ Element with text '${text}' not found at index #${nth}`);
+				return null;
+			}
+
+			const element_handle = visible_elements[nth];
+			const is_visible = await this._is_visible(element_handle);
+			if (is_visible) {
+				await element_handle.scrollIntoViewIfNeeded({ timeout: 1000 });
+			}
+
+			return element_handle;
+		} catch (error) {
+			this.logger.error(`❌ Failed to locate element by text '${text}': ${(error as Error).message}`);
+			return null;
+		}
+	}
+
+	/**
+	 * Check if browser session is connected and has valid browser/context objects
+	 * @param restart - If true, attempt to create a new tab if no pages exist
+	 */
+	async is_connected(restart: boolean = true): Promise<boolean> {
+		if (!this.browser_context) {
+			return false;
+		}
+
+		try {
+			// Check if browser is connected
+			if (this.browser && !(this.browser as any).isConnected()) {
+				return false;
+			}
+
+			// Check if browser context's browser is connected (context may reference a different browser object)
+			const context_browser = (this.browser_context as any).browser?.();
+			if (context_browser && !(context_browser as any).isConnected()) {
+				return false;
+			}
+
+			// Check if context has at least one page
+			const pages = this.browser_context.pages();
+			if (pages.length === 0) {
+				if (restart) {
+					// Try to create a new page to keep context alive
+					try {
+						await this.browser_context.newPage();
+					} catch (error) {
+						return false;
+					}
+				} else {
+					return false;
+				}
+			}
+
+			return true;
+		} catch (error) {
+			return false;
+		}
+	}
+
+	/**
+	 * Check if a URL is allowed based on allowed_domains configuration
+	 * @param url - URL to check
+	 */
+	private _is_url_allowed(url: string): boolean {
+		if (!this.browser_profile.allowed_domains || this.browser_profile.allowed_domains.length === 0) {
+			return true; // No restrictions if allowed_domains not configured
+		}
+
+		// Always allow new tab pages
+		if (this._is_new_tab_page(url)) {
+			return true;
+		}
+
+		// Check against allowed domains
+		for (const allowed_domain of this.browser_profile.allowed_domains) {
+			try {
+				// Simple glob-like pattern matching
+				// TODO: Implement full match_url_with_domain_pattern logic
+				const pattern = allowed_domain
+					.replace(/\*/g, '.*')
+					.replace(/\./g, '\\.');
+
+				const regex = new RegExp(pattern, 'i');
+				if (regex.test(url)) {
+					return true;
+				}
+			} catch (error) {
+				this.logger.warning(`Invalid domain pattern: ${allowed_domain}`);
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Navigate helper with URL validation
+	 */
+	async navigate(url: string): Promise<void> {
+		// Validate URL is allowed
+		if (!this._is_url_allowed(url)) {
+			throw new Error(
+				`URL ${url} is not in allowed_domains. ` +
+				`Current allowed_domains: ${JSON.stringify(this.browser_profile.allowed_domains)}`
+			);
+		}
+
+		await this.navigate_to(url);
+	}
+
+	/**
+	 * Kill the browser session (force close even if keep_alive=true)
+	 */
+	async kill(): Promise<void> {
+		this.logger.info('💀 Force killing browser session...');
+
+		// Temporarily disable keep_alive to ensure browser closes
+		const original_keep_alive = this.browser_profile.keep_alive;
+		this.browser_profile.keep_alive = false;
+
+		try {
+			await this.close();
+		} finally {
+			// Restore original keep_alive setting
+			this.browser_profile.keep_alive = original_keep_alive;
+		}
+	}
+
+	/**
+	 * Alias for close() to match Python API
+	 */
+	async stop(): Promise<void> {
+		await this.close();
+	}
+
+	/**
+	 * Perform a click action with download and navigation handling
+	 * @param element_node - DOM element to click
+	 */
+	async perform_click(element_node: DOMElementNode): Promise<string | null> {
+		const page = await this.get_current_page();
+		if (!page) {
+			throw new Error('No current page available');
+		}
+
+		const element_handle = await this.get_locate_element(element_node);
+		if (!element_handle) {
+			throw new Error(`Element not found: ${JSON.stringify(element_node)}`);
+		}
+
+		// Check if downloads are enabled
+		const downloads_path = this.browser_profile.downloads_path;
+		if (downloads_path) {
+			try {
+				// Try to detect file download
+				const download_promise = page.waitForEvent('download', { timeout: 5000 });
+
+				// Perform the click
+				await element_handle.click();
+
+				// Wait for download or timeout
+				const download = await download_promise;
+
+				// Save the downloaded file
+				const suggested_filename = download.suggestedFilename();
+				const download_path = path.join(downloads_path, suggested_filename);
+
+				await download.saveAs(download_path);
+				this.logger.info(`⬇️ Downloaded file to: ${download_path}`);
+
+				// Track the downloaded file
+				this._downloaded_files.push(download_path);
+				this.logger.info(`📁 Added download to session tracking (total: ${this._downloaded_files.length} files)`);
+
+				return download_path;
+			} catch (error) {
+				// No download triggered, treat as normal click
+				this.logger.debug('No download triggered within timeout. Checking navigation...');
+				try {
+					await page.waitForLoadState();
+				} catch (e) {
+					this.logger.warning(`Navigation check failed: ${(e as Error).message}`);
+				}
+			}
+		} else {
+			// No downloads path configured, just click
+			await element_handle.click();
+		}
+
+		return null;
+	}
+
+	/**
 	 * Remove all highlights from the current page
 	 */
 	async remove_highlights(): Promise<void> {
