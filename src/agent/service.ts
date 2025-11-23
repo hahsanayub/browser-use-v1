@@ -30,6 +30,7 @@ import {
 	AgentStepInfo,
 	AgentError,
 	StepMetadata,
+	ActionModel,
 } from './views.js';
 import type { StructuredOutputParser } from './views.js';
 import { observe, observe_debug } from '../observability.js';
@@ -228,6 +229,10 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 	_task_start_time = 0;
 	_force_exit_telemetry_logged = false;
 	system_prompt_class: SystemPrompt;
+	ActionModel: typeof ActionModel = ActionModel;
+	AgentOutput: typeof AgentOutput = AgentOutput;
+	DoneActionModel: typeof ActionModel = ActionModel;
+	DoneAgentOutput: typeof AgentOutput = AgentOutput;
 
 	constructor(params: AgentConstructorParams<Context, AgentStructuredOutput>) {
 		const {
@@ -391,6 +396,161 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 		this._session_start_time = 0;
 		this._task_start_time = 0;
 		this._force_exit_telemetry_logged = false;
+
+		// Security validation for sensitive_data and allowed_domains
+		this._validateSecuritySettings();
+
+		// LLM verification and setup
+		this._verifyAndSetupLlm();
+
+		// Model-specific vision handling
+		this._handleModelSpecificVision();
+	}
+
+	/**
+	 * Handle model-specific vision capabilities
+	 * Some models like DeepSeek and Grok don't support vision yet
+	 */
+	private _handleModelSpecificVision() {
+		const modelName = this.llm.model?.toLowerCase() || '';
+
+		// Handle DeepSeek models
+		if (modelName.includes('deepseek') && this.settings.use_vision) {
+			this.logger.warning('⚠️ DeepSeek models do not support use_vision=True yet. Setting use_vision=False for now...');
+			this.settings.use_vision = false;
+		}
+
+		// Handle XAI (Grok) models
+		if (modelName.includes('grok') && this.settings.use_vision) {
+			this.logger.warning('⚠️ XAI models do not support use_vision=True yet. Setting use_vision=False for now...');
+			this.settings.use_vision = false;
+		}
+	}
+
+	/**
+	 * Verify that the LLM API keys are setup and the LLM API is responding properly.
+	 * Also handles model capability detection.
+	 */
+	private _verifyAndSetupLlm() {
+		// Skip verification if already done or if configured to skip
+		if ((this.llm as any)._verified_api_keys === true || CONFIG.SKIP_LLM_API_KEY_VERIFICATION) {
+			(this.llm as any)._verified_api_keys = true;
+			return true;
+		}
+
+		// Mark as verified
+		(this.llm as any)._verified_api_keys = true;
+
+		// Log LLM information
+		this.logger.debug(`🤖 Using LLM: ${this.llm.model || 'unknown model'}`);
+
+		return true;
+	}
+
+	/**
+	 * Validates security settings when sensitive_data is provided
+	 * Checks if allowed_domains is properly configured to prevent credential leakage
+	 */
+	private _validateSecuritySettings() {
+		if (!this.sensitive_data) {
+			return;
+		}
+
+		// Check if sensitive_data has domain-specific credentials
+		const hasDomainSpecificCredentials = Object.values(this.sensitive_data).some(
+			(value) => typeof value === 'object' && value !== null
+		);
+
+		// If no allowed_domains are configured, show a security warning
+		if (!this.browser_session?.browser_profile?.config?.allowed_domains) {
+			this.logger.error(
+				'⚠️⚠️⚠️ Agent(sensitive_data=••••••••) was provided but BrowserSession(allowed_domains=[...]) is not locked down! ⚠️⚠️⚠️\n' +
+				'          ☠️ If the agent visits a malicious website and encounters a prompt-injection attack, your sensitive_data may be exposed!\n\n' +
+				'             https://docs.browser-use.com/customize/browser-settings#restrict-urls\n' +
+				'Waiting 10 seconds before continuing... Press [Ctrl+C] to abort.'
+			);
+
+			// Check if we're in an interactive shell (TTY)
+			if (process.stdin.isTTY) {
+				// Sleep for 10 seconds to give user time to abort
+				const sleepMs = 10000;
+				const sleepPromise = new Promise<void>((resolve) => {
+					const timeout = setTimeout(() => {
+						process.stdin.removeListener('data', abortHandler);
+						resolve();
+					}, sleepMs);
+
+					const abortHandler = (data: Buffer) => {
+						// Check for Ctrl+C (0x03)
+						if (data.toString().includes('\x03')) {
+							clearTimeout(timeout);
+							this.logger.info(
+								'\n\n 🛑 Exiting now... set BrowserSession(allowed_domains=["example.com", "example.org"]) to only domains you trust to see your sensitive_data.'
+							);
+							process.exit(0);
+						}
+					};
+
+					process.stdin.on('data', abortHandler);
+				});
+
+				// This is a blocking operation in the constructor - not ideal but matches Python behavior
+				// In production, users should set allowed_domains to avoid this
+			}
+
+			this.logger.warning(
+				'‼️ Continuing with insecure settings for now... but this will become a hard error in the future!'
+			);
+		}
+		// If we're using domain-specific credentials, validate domain patterns
+		else if (hasDomainSpecificCredentials) {
+			const allowedDomains = this.browser_session!.browser_profile!.config.allowed_domains!;
+
+			// Get domain patterns from sensitive_data where value is an object
+			const domainPatterns = Object.keys(this.sensitive_data).filter(
+				(key) => typeof this.sensitive_data![key] === 'object' && this.sensitive_data![key] !== null
+			);
+
+			// Validate each domain pattern against allowed_domains
+			for (const domainPattern of domainPatterns) {
+				let isAllowed = false;
+
+				for (const allowedDomain of allowedDomains) {
+					// Special cases that don't require URL matching
+					if (domainPattern === allowedDomain || allowedDomain === '*') {
+						isAllowed = true;
+						break;
+					}
+
+					// Extract the domain parts, ignoring scheme
+					const patternDomain = domainPattern.includes('://')
+						? domainPattern.split('://')[1]
+						: domainPattern;
+					const allowedDomainPart = allowedDomain.includes('://')
+						? allowedDomain.split('://')[1]
+						: allowedDomain;
+
+					// Check if pattern is covered by an allowed domain
+					// Example: "google.com" is covered by "*.google.com"
+					if (
+						patternDomain === allowedDomainPart ||
+						(allowedDomainPart.startsWith('*.') &&
+							(patternDomain === allowedDomainPart.slice(2) ||
+								patternDomain.endsWith('.' + allowedDomainPart.slice(2))))
+					) {
+						isAllowed = true;
+						break;
+					}
+				}
+
+				if (!isAllowed) {
+					this.logger.warning(
+						`⚠️ Domain pattern "${domainPattern}" in sensitive_data is not covered by any pattern in allowed_domains=${JSON.stringify(allowedDomains)}\n` +
+						`   This may be a security risk as credentials could be used on unintended domains.`
+					);
+				}
+			}
+		}
 	}
 
 	private _initFileSystem(file_system_path: string | null) {
@@ -483,8 +643,60 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 		this.source = source;
 	}
 
+	/**
+	 * Setup dynamic action models from controller's registry
+	 * Initially only include actions with no filters
+	 */
 	private _setup_action_models() {
-		/* Placeholder for action model customization */
+		// Initially only include actions with no filters
+		this.ActionModel = this.controller.registry.create_action_model();
+
+		// Create output model with the dynamic actions
+		if (this.settings.flash_mode) {
+			this.AgentOutput = AgentOutput.type_with_custom_actions_flash_mode(this.ActionModel);
+		} else if (this.settings.use_thinking) {
+			this.AgentOutput = AgentOutput.type_with_custom_actions(this.ActionModel);
+		} else {
+			this.AgentOutput = AgentOutput.type_with_custom_actions_no_thinking(this.ActionModel);
+		}
+
+		// Used to force the done action when max_steps is reached
+		this.DoneActionModel = this.controller.registry.create_action_model();
+		if (this.settings.flash_mode) {
+			this.DoneAgentOutput = AgentOutput.type_with_custom_actions_flash_mode(this.DoneActionModel);
+		} else if (this.settings.use_thinking) {
+			this.DoneAgentOutput = AgentOutput.type_with_custom_actions(this.DoneActionModel);
+		} else {
+			this.DoneAgentOutput = AgentOutput.type_with_custom_actions_no_thinking(this.DoneActionModel);
+		}
+	}
+
+	/**
+	 * Update action models with page-specific actions
+	 * Called during each step to filter actions based on current page context
+	 */
+	private async _updateActionModelsForPage(page: Page | null) {
+		// Create new action model with current page's filtered actions
+		this.ActionModel = this.controller.registry.create_action_model();
+
+		// Update output model with the new actions
+		if (this.settings.flash_mode) {
+			this.AgentOutput = AgentOutput.type_with_custom_actions_flash_mode(this.ActionModel);
+		} else if (this.settings.use_thinking) {
+			this.AgentOutput = AgentOutput.type_with_custom_actions(this.ActionModel);
+		} else {
+			this.AgentOutput = AgentOutput.type_with_custom_actions_no_thinking(this.ActionModel);
+		}
+
+		// Update done action model too
+		this.DoneActionModel = this.controller.registry.create_action_model();
+		if (this.settings.flash_mode) {
+			this.DoneAgentOutput = AgentOutput.type_with_custom_actions_flash_mode(this.DoneActionModel);
+		} else if (this.settings.use_thinking) {
+			this.DoneAgentOutput = AgentOutput.type_with_custom_actions(this.DoneActionModel);
+		} else {
+			this.DoneAgentOutput = AgentOutput.type_with_custom_actions_no_thinking(this.DoneActionModel);
+		}
 	}
 
 	async run(

@@ -336,6 +336,45 @@ export class Controller<Context = unknown> {
 				}
 				let content = turndown.turndown(rawHtml);
 				content = content.replace(/\n+/g, '\n');
+
+				// Manually append iframe text into the content so it's readable by the LLM (includes cross-origin iframes)
+				const frames = page.frames?.() || [];
+				for (const iframe of frames) {
+					try {
+						// Wait for iframe to load with aggressive timeout
+						await iframe.waitForLoadState?.({ timeout: 1000 }).catch(() => {});
+					} catch {
+						// Ignore iframe load errors
+					}
+
+					const iframeUrl = iframe.url?.();
+					const pageUrl = page.url?.();
+					if (
+						iframeUrl &&
+						pageUrl &&
+						iframeUrl !== pageUrl &&
+						!iframeUrl.startsWith('data:') &&
+						!iframeUrl.startsWith('about:')
+					) {
+						content += `\n\nIFRAME ${iframeUrl}:\n`;
+						try {
+							// Aggressive timeouts for iframe content
+							const iframeHtml = await Promise.race([
+								iframe.content?.(),
+								new Promise<string>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2000)),
+							]);
+							const iframeMarkdown = turndown.turndown(iframeHtml || '');
+							content += iframeMarkdown;
+						} catch {
+							// Skip failed iframes
+							content += '';
+						}
+					}
+				}
+
+				// Replace multiple sequential \n with a single \n
+				content = content.replace(/\n+/g, '\n');
+
 				const maxChars = 30000;
 				if (content.length > maxChars) {
 					const head = content.slice(0, maxChars / 2);
@@ -386,7 +425,7 @@ ${content}`;
 		type ScrollAction = z.infer<typeof ScrollActionSchema>;
 		this.registry
 			.action(
-				'Scroll the page by specified number of pages (down=True scrolls down, down=False scrolls up).',
+				'Scroll the page by specified number of pages (set down=True to scroll down, down=False to scroll up, num_pages=number of pages to scroll like 0.5 for half page, 1.0 for one page, etc.). Optional index parameter to scroll within a specific element or its scroll container (works well for dropdowns and custom UI components).',
 				{ param_model: ScrollActionSchema },
 			)(async (params: ScrollAction, { browser_session }) => {
 				if (!browser_session) throw new Error('Browser session missing');
@@ -395,23 +434,193 @@ ${content}`;
 					throw new BrowserError('Unable to access current page for scrolling.');
 				}
 
-				const deltaPages = Math.max(Math.min(params.num_pages, 5), -5);
-				const direction = params.down ? 1 : -1;
-				const scrollBy = direction * deltaPages * 0.8;
+				// Helper function to get window height with retries
+				const getWindowHeight = async (retries = 3): Promise<number> => {
+					for (let i = 0; i < retries; i++) {
+						try {
+							const height = await page.evaluate(() => window.innerHeight);
+							return height || 0;
+						} catch (error) {
+							if (i === retries - 1) {
+								throw new Error(`Scroll failed due to an error: ${error}`);
+							}
+							await new Promise((resolve) => setTimeout(resolve, 1000));
+						}
+					}
+					return 0;
+				};
 
-				await page.evaluate(
-					({ amount }: { amount: number }) => {
-						const distance = amount * window.innerHeight;
-						window.scrollBy({ top: distance, behavior: 'smooth' });
-					},
-					{ amount: scrollBy },
-				);
+				const windowHeight = await getWindowHeight();
+				const scrollAmount = Math.floor(windowHeight * params.num_pages);
+				const pagesScrolled = params.num_pages;
+				const dy = params.down ? scrollAmount : -scrollAmount;
+				const direction = params.down ? 'down' : 'up';
+				let scrollTarget = 'the page';
 
-				const msg = `📜 Scrolled ${params.down ? 'down' : 'up'} ${Math.abs(deltaPages)} page(s)`;
+				// Element-specific scrolling if index is provided
+				if (params.index !== undefined && params.index !== null) {
+					try {
+						const elementNode = await browser_session.get_dom_element_by_index(params.index);
+						if (!elementNode) {
+							throw new Error(`Element index ${params.index} does not exist - retry or use alternative actions`);
+						}
+
+						// Try direct container scrolling (no events that might close dropdowns)
+						const containerScrollJs = `
+						(params) => {
+							const { dy, elementXPath } = params;
+
+							// Get the target element by XPath
+							const targetElement = document.evaluate(elementXPath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+							if (!targetElement) {
+								return { success: false, reason: 'Element not found by XPath' };
+							}
+
+							console.log('[SCROLL DEBUG] Starting direct container scroll for element:', targetElement.tagName);
+
+							// Try to find scrollable containers in the hierarchy (starting from element itself)
+							let currentElement = targetElement;
+							let scrollSuccess = false;
+							let scrolledElement = null;
+							let scrollDelta = 0;
+							let attempts = 0;
+
+							// Check up to 10 elements in hierarchy (including the target element itself)
+							while (currentElement && attempts < 10) {
+								const computedStyle = window.getComputedStyle(currentElement);
+								const hasScrollableY = /(auto|scroll|overlay)/.test(computedStyle.overflowY);
+								const canScrollVertically = currentElement.scrollHeight > currentElement.clientHeight;
+
+								console.log('[SCROLL DEBUG] Checking element:', currentElement.tagName,
+									'hasScrollableY:', hasScrollableY,
+									'canScrollVertically:', canScrollVertically,
+									'scrollHeight:', currentElement.scrollHeight,
+									'clientHeight:', currentElement.clientHeight);
+
+								if (hasScrollableY && canScrollVertically) {
+									const beforeScroll = currentElement.scrollTop;
+									const maxScroll = currentElement.scrollHeight - currentElement.clientHeight;
+
+									// Calculate scroll amount (1/3 of provided dy for gentler scrolling)
+									let scrollAmount = dy / 3;
+
+									// Ensure we don't scroll beyond bounds
+									if (scrollAmount > 0) {
+										scrollAmount = Math.min(scrollAmount, maxScroll - beforeScroll);
+									} else {
+										scrollAmount = Math.max(scrollAmount, -beforeScroll);
+									}
+
+									// Try direct scrollTop manipulation (most reliable)
+									currentElement.scrollTop = beforeScroll + scrollAmount;
+
+									const afterScroll = currentElement.scrollTop;
+									const actualScrollDelta = afterScroll - beforeScroll;
+
+									console.log('[SCROLL DEBUG] Scroll attempt:', currentElement.tagName,
+										'before:', beforeScroll, 'after:', afterScroll, 'delta:', actualScrollDelta);
+
+									if (Math.abs(actualScrollDelta) > 0.5) {
+										scrollSuccess = true;
+										scrolledElement = currentElement;
+										scrollDelta = actualScrollDelta;
+										console.log('[SCROLL DEBUG] Successfully scrolled container:', currentElement.tagName, 'delta:', actualScrollDelta);
+										break;
+									}
+								}
+
+								// Move to parent (but don't go beyond body for dropdown case)
+								if (currentElement === document.body || currentElement === document.documentElement) {
+									break;
+								}
+								currentElement = currentElement.parentElement;
+								attempts++;
+							}
+
+							if (scrollSuccess) {
+								// Successfully scrolled a container
+								return {
+									success: true,
+									method: 'direct_container_scroll',
+									containerType: 'element',
+									containerTag: scrolledElement.tagName.toLowerCase(),
+									containerClass: scrolledElement.className || '',
+									containerId: scrolledElement.id || '',
+									scrollDelta: scrollDelta
+								};
+							} else {
+								// No container found or could scroll
+								console.log('[SCROLL DEBUG] No scrollable container found for element');
+								return {
+									success: false,
+									reason: 'No scrollable container found',
+									needsPageScroll: true
+								};
+							}
+						}
+						`;
+
+						const scrollParams = { dy, elementXPath: elementNode.xpath };
+						const result = await page.evaluate(containerScrollJs, scrollParams) as any;
+
+						if (result.success) {
+							if (result.containerType === 'element') {
+								let containerInfo = result.containerTag;
+								if (result.containerId) {
+									containerInfo += `#${result.containerId}`;
+								} else if (result.containerClass) {
+									containerInfo += `.${result.containerClass.split(' ')[0]}`;
+								}
+								scrollTarget = `element ${params.index}'s scroll container (${containerInfo})`;
+								// Don't do additional page scrolling since we successfully scrolled the container
+							} else {
+								scrollTarget = `the page (fallback from element ${params.index})`;
+							}
+						} else {
+							// Container scroll failed, need page-level scrolling
+							this.logger.debug(`Container scroll failed for element ${params.index}: ${result.reason || 'Unknown'}`);
+							scrollTarget = `the page (no container found for element ${params.index})`;
+							// This will trigger page-level scrolling below
+						}
+					} catch (error) {
+						this.logger.debug(`Element-specific scrolling failed for index ${params.index}: ${error}`);
+						scrollTarget = `the page (fallback from element ${params.index})`;
+						// Fall through to page-level scrolling
+					}
+				}
+
+				// Page-level scrolling (default or fallback)
+				if (
+					scrollTarget === 'the page' ||
+					scrollTarget.includes('fallback') ||
+					scrollTarget.includes('no container found') ||
+					scrollTarget.includes('mouse wheel failed')
+				) {
+					this.logger.debug(`🔄 Performing page-level scrolling. Reason: ${scrollTarget}`);
+					try {
+						await (browser_session as any)._scrollContainer(dy);
+					} catch (error) {
+						// Hard fallback: always works on root scroller
+						await page.evaluate((y: number) => window.scrollBy(0, y), dy);
+						this.logger.debug('Smart scroll failed; used window.scrollBy fallback', error);
+					}
+				}
+
+				// Create descriptive message
+				let longTermMemory: string;
+				if (pagesScrolled === 1.0) {
+					longTermMemory = `Scrolled ${direction} ${scrollTarget} by one page`;
+				} else {
+					longTermMemory = `Scrolled ${direction} ${scrollTarget} by ${pagesScrolled} pages`;
+				}
+
+				const msg = `🔍 ${longTermMemory}`;
+				this.logger.info(msg);
+
 				return new ActionResult({
 					extracted_content: msg,
 					include_in_memory: true,
-					long_term_memory: msg,
+					long_term_memory: longTermMemory,
 				});
 			});
 		type ScrollToTextAction = z.infer<typeof ScrollToTextActionSchema>;

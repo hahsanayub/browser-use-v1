@@ -576,3 +576,121 @@ export function createSemaphore(maxConcurrent: number) {
 		},
 	};
 }
+
+/**
+ * Check if a URL is a new tab page (about:blank or chrome://new-tab-page).
+ */
+export function is_new_tab_page(url: string): boolean {
+	return url === 'about:blank' || url === 'chrome://new-tab-page/' || url === 'chrome://new-tab-page';
+}
+
+/**
+ * Check if a URL matches a domain pattern. SECURITY CRITICAL.
+ *
+ * Supports optional glob patterns and schemes:
+ * - *.example.com will match sub.example.com and example.com
+ * - *google.com will match google.com, agoogle.com, and www.google.com
+ * - http*://example.com will match http://example.com, https://example.com
+ * - chrome-extension://* will match chrome-extension://aaaaaaaaaaaa and chrome-extension://bbbbbbbbbbbbb
+ *
+ * When no scheme is specified, https is used by default for security.
+ * For example, 'example.com' will match 'https://example.com' but not 'http://example.com'.
+ *
+ * Note: New tab pages (about:blank, chrome://new-tab-page) must be handled at the callsite, not inside this function.
+ */
+export function match_url_with_domain_pattern(url: string, domain_pattern: string, log_warnings = false): boolean {
+	try {
+		// Note: new tab pages should be handled at the callsite, not here
+		if (is_new_tab_page(url)) {
+			return false;
+		}
+
+		const parsed_url = new URL(url);
+
+		// Extract only the hostname and scheme components
+		const scheme = parsed_url.protocol.replace(':', '').toLowerCase();
+		const domain = parsed_url.hostname.toLowerCase();
+
+		if (!scheme || !domain) {
+			return false;
+		}
+
+		// Normalize the domain pattern
+		const normalizedPattern = domain_pattern.toLowerCase();
+
+		// Handle pattern with scheme
+		let pattern_scheme: string;
+		let pattern_domain: string;
+
+		if (normalizedPattern.includes('://')) {
+			const parts = normalizedPattern.split('://');
+			pattern_scheme = parts[0];
+			pattern_domain = parts[1];
+		} else {
+			pattern_scheme = 'https'; // Default to matching only https for security
+			pattern_domain = normalizedPattern;
+		}
+
+		// Handle port in pattern (we strip ports from patterns since we already extracted only the hostname from the URL)
+		if (pattern_domain.includes(':') && !pattern_domain.startsWith(':')) {
+			pattern_domain = pattern_domain.split(':')[0];
+		}
+
+		// If scheme doesn't match using minimatch, return false
+		const minimatch = require('minimatch');
+		if (!minimatch(scheme, pattern_scheme)) {
+			return false;
+		}
+
+		// Check for exact match
+		if (pattern_domain === '*' || domain === pattern_domain) {
+			return true;
+		}
+
+		// Handle glob patterns
+		if (pattern_domain.includes('*')) {
+			// Check for unsafe glob patterns
+			// First, check for patterns like *.*.domain which are unsafe
+			if ((pattern_domain.match(/\*\./g) || []).length > 1 || (pattern_domain.match(/\.\*/g) || []).length > 1) {
+				if (log_warnings) {
+					console.error(`⛔️ Multiple wildcards in pattern=[${domain_pattern}] are not supported`);
+				}
+				return false; // Don't match unsafe patterns
+			}
+
+			// Check for wildcards in TLD part (example.*)
+			if (pattern_domain.endsWith('.*')) {
+				if (log_warnings) {
+					console.error(`⛔️ Wildcard TLDs like in pattern=[${domain_pattern}] are not supported for security`);
+				}
+				return false; // Don't match unsafe patterns
+			}
+
+			// Then check for embedded wildcards
+			const bare_domain = pattern_domain.replace('*.', '');
+			if (bare_domain.includes('*')) {
+				if (log_warnings) {
+					console.error(`⛔️ Only *.domain style patterns are supported, ignoring pattern=[${domain_pattern}]`);
+				}
+				return false; // Don't match unsafe patterns
+			}
+
+			// Special handling so that *.google.com also matches bare google.com
+			if (pattern_domain.startsWith('*.')) {
+				const base = pattern_domain.slice(2); // Remove '*.'
+				if (domain === base || domain.endsWith('.' + base)) {
+					return true;
+				}
+			}
+
+			// Use minimatch for pattern matching
+			return minimatch(domain, pattern_domain);
+		}
+
+		// No match
+		return false;
+	} catch (error) {
+		// Invalid URL or pattern
+		return false;
+	}
+}
