@@ -1,10 +1,10 @@
 import type {
-	Browser as PlaywrightBrowser,
-	BrowserContext as PlaywrightBrowserContext,
-	ElementHandle as PlaywrightElementHandle,
-	FrameLocator as PlaywrightFrameLocator,
-	Page as PlaywrightPage,
-	Locator as PlaywrightLocator,
+  Browser as PlaywrightBrowser,
+  BrowserContext as PlaywrightBrowserContext,
+  ElementHandle as PlaywrightElementHandle,
+  FrameLocator as PlaywrightFrameLocator,
+  Page as PlaywrightPage,
+  Locator as PlaywrightLocator,
 } from 'playwright';
 import type { BrowserContextOptions, LaunchOptions } from 'playwright-core';
 
@@ -25,8 +25,15 @@ export const async_playwright = async () => import('playwright');
 export const async_patchright = async_playwright;
 
 export type ProxySettings = NonNullable<LaunchOptions['proxy']>;
-export type HttpCredentials = NonNullable<BrowserContextOptions['httpCredentials']>;
+export type HttpCredentials = NonNullable<
+  BrowserContextOptions['httpCredentials']
+>;
 export type Geolocation = NonNullable<BrowserContextOptions['geolocation']>;
 export type ViewportSize = NonNullable<BrowserContextOptions['viewport']>;
-export type StorageState = Exclude<BrowserContextOptions['storageState'], undefined>;
-export type ClientCertificate = NonNullable<NonNullable<BrowserContextOptions['clientCertificates']>[number]>;
+export type StorageState = Exclude<
+  BrowserContextOptions['storageState'],
+  undefined
+>;
+export type ClientCertificate = NonNullable<
+  NonNullable<BrowserContextOptions['clientCertificates']>[number]
+>;

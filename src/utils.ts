@@ -18,315 +18,371 @@ let _exiting = false;
 type Callback = (() => void) | undefined;
 
 export interface SignalHandlerOptions {
-	pause_callback?: Callback;
-	resume_callback?: Callback;
-	custom_exit_callback?: Callback;
-	exit_on_second_int?: boolean;
-	interruptible_task_patterns?: string[];
+  pause_callback?: Callback;
+  resume_callback?: Callback;
+  custom_exit_callback?: Callback;
+  exit_on_second_int?: boolean;
+  interruptible_task_patterns?: string[];
 }
 
 export class SignalHandler {
-	loop: NodeJS.EventEmitter | null = null;
-	pause_callback?: Callback;
-	resume_callback?: Callback;
-	custom_exit_callback?: Callback;
-	exit_on_second_int: boolean;
-	interruptible_task_patterns: string[];
-	is_windows: boolean;
-	private ctrl_c_pressed = false;
-	private waiting_for_input = false;
-	private bound_sigint = this.sigint_handler.bind(this);
-	private bound_sigterm = this.sigterm_handler.bind(this);
+  loop: NodeJS.EventEmitter | null = null;
+  pause_callback?: Callback;
+  resume_callback?: Callback;
+  custom_exit_callback?: Callback;
+  exit_on_second_int: boolean;
+  interruptible_task_patterns: string[];
+  is_windows: boolean;
+  private ctrl_c_pressed = false;
+  private waiting_for_input = false;
+  private bound_sigint = this.sigint_handler.bind(this);
+  private bound_sigterm = this.sigterm_handler.bind(this);
 
-	constructor(options: SignalHandlerOptions = {}) {
-		this.pause_callback = options.pause_callback;
-		this.resume_callback = options.resume_callback;
-		this.custom_exit_callback = options.custom_exit_callback;
-		this.exit_on_second_int = options.exit_on_second_int ?? true;
-		this.interruptible_task_patterns = options.interruptible_task_patterns ?? ['step', 'multi_act', 'get_next_action'];
-		this.is_windows = os.platform() === 'win32';
-	}
+  constructor(options: SignalHandlerOptions = {}) {
+    this.pause_callback = options.pause_callback;
+    this.resume_callback = options.resume_callback;
+    this.custom_exit_callback = options.custom_exit_callback;
+    this.exit_on_second_int = options.exit_on_second_int ?? true;
+    this.interruptible_task_patterns = options.interruptible_task_patterns ?? [
+      'step',
+      'multi_act',
+      'get_next_action',
+    ];
+    this.is_windows = os.platform() === 'win32';
+  }
 
-	register() {
-		process.on('SIGINT', this.bound_sigint);
-		process.on('SIGTERM', this.bound_sigterm);
-	}
+  register() {
+    process.on('SIGINT', this.bound_sigint);
+    process.on('SIGTERM', this.bound_sigterm);
+  }
 
-	unregister() {
-		process.off('SIGINT', this.bound_sigint);
-		process.off('SIGTERM', this.bound_sigterm);
-	}
+  unregister() {
+    process.off('SIGINT', this.bound_sigint);
+    process.off('SIGTERM', this.bound_sigterm);
+  }
 
-	private _handle_second_ctrl_c() {
-		if (!_exiting) {
-			_exiting = true;
-			if (this.custom_exit_callback) {
-				try {
-					this.custom_exit_callback();
-				} catch (error) {
-					logger.error(`Error in exit callback: ${(error as Error).message}`);
-				}
-			}
-		}
+  private _handle_second_ctrl_c() {
+    if (!_exiting) {
+      _exiting = true;
+      if (this.custom_exit_callback) {
+        try {
+          this.custom_exit_callback();
+        } catch (error) {
+          logger.error(`Error in exit callback: ${(error as Error).message}`);
+        }
+      }
+    }
 
-		stderr.write('\n\n🛑  Got second Ctrl+C. Exiting immediately...\n');
-		stderr.write('\x1b[?25h\x1b[0m\x1b[?1l\x1b[?2004l\r');
-		process.exit(0);
-	}
+    stderr.write('\n\n🛑  Got second Ctrl+C. Exiting immediately...\n');
+    stderr.write('\x1b[?25h\x1b[0m\x1b[?1l\x1b[?2004l\r');
+    process.exit(0);
+  }
 
-	private _cancel_interruptible_tasks() {
-		// Node.js does not provide asyncio-style task cancellation.
-		// Users should manage their own interruptible work via pause/resume callbacks.
-	}
+  private _cancel_interruptible_tasks() {
+    // Node.js does not provide asyncio-style task cancellation.
+    // Users should manage their own interruptible work via pause/resume callbacks.
+  }
 
-	async wait_for_resume() {
-		this.waiting_for_input = true;
-		const green = '\x1b[32;1m';
-		const red = '\x1b[31m';
-		const blink = '\x1b[33;5m';
-		const unblink = '\x1b[0m';
-		const reset = '\x1b[0m';
+  async wait_for_resume() {
+    this.waiting_for_input = true;
+    const green = '\x1b[32;1m';
+    const red = '\x1b[31m';
+    const blink = '\x1b[33;5m';
+    const unblink = '\x1b[0m';
+    const reset = '\x1b[0m';
 
-		stderr.write(
-			`➡️  Press ${green}[Enter]${reset} to resume or ${red}[Ctrl+C]${reset} again to exit${blink}...${unblink} `,
-		);
+    stderr.write(
+      `➡️  Press ${green}[Enter]${reset} to resume or ${red}[Ctrl+C]${reset} again to exit${blink}...${unblink} `
+    );
 
-		await new Promise<void>((resolve) => {
-			const rl = readline.createInterface({ input: process.stdin, output: stderr });
-			const cleanup = () => {
-				this.waiting_for_input = false;
-				rl.close();
-				resolve();
-			};
+    await new Promise<void>((resolve) => {
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: stderr,
+      });
+      const cleanup = () => {
+        this.waiting_for_input = false;
+        rl.close();
+        resolve();
+      };
 
-			rl.once('line', () => {
-				if (this.resume_callback) {
-					try {
-						this.resume_callback();
-					} catch (error) {
-						logger.error(`Error in resume callback: ${(error as Error).message}`);
-					}
-				}
-				cleanup();
-			});
+      rl.once('line', () => {
+        if (this.resume_callback) {
+          try {
+            this.resume_callback();
+          } catch (error) {
+            logger.error(
+              `Error in resume callback: ${(error as Error).message}`
+            );
+          }
+        }
+        cleanup();
+      });
 
-			rl.once('SIGINT', () => {
-				this._handle_second_ctrl_c();
-				cleanup();
-			});
-		});
-	}
+      rl.once('SIGINT', () => {
+        this._handle_second_ctrl_c();
+        cleanup();
+      });
+    });
+  }
 
-	reset() {
-		this.ctrl_c_pressed = false;
-		this.waiting_for_input = false;
-	}
+  reset() {
+    this.ctrl_c_pressed = false;
+    this.waiting_for_input = false;
+  }
 
-	private sigint_handler() {
-		if (_exiting) {
-			process.exit(0);
-		}
+  private sigint_handler() {
+    if (_exiting) {
+      process.exit(0);
+    }
 
-		if (this.ctrl_c_pressed) {
-			if (this.waiting_for_input) {
-				return;
-			}
-			if (this.exit_on_second_int) {
-				this._handle_second_ctrl_c();
-			}
-		}
+    if (this.ctrl_c_pressed) {
+      if (this.waiting_for_input) {
+        return;
+      }
+      if (this.exit_on_second_int) {
+        this._handle_second_ctrl_c();
+      }
+    }
 
-		this.ctrl_c_pressed = true;
-		this._cancel_interruptible_tasks();
+    this.ctrl_c_pressed = true;
+    this._cancel_interruptible_tasks();
 
-		if (this.pause_callback) {
-			try {
-				this.pause_callback();
-			} catch (error) {
-				logger.error(`Error in pause callback: ${(error as Error).message}`);
-			}
-		}
+    if (this.pause_callback) {
+      try {
+        this.pause_callback();
+      } catch (error) {
+        logger.error(`Error in pause callback: ${(error as Error).message}`);
+      }
+    }
 
-		stderr.write('----------------------------------------------------------------------\n');
-	}
+    stderr.write(
+      '----------------------------------------------------------------------\n'
+    );
+  }
 
-	private sigterm_handler() {
-		if (!_exiting) {
-			_exiting = true;
-			stderr.write('\n\n🛑 SIGTERM received. Exiting immediately...\n\n');
-			if (this.custom_exit_callback) {
-				this.custom_exit_callback();
-			}
-		}
-		process.exit(0);
-	}
+  private sigterm_handler() {
+    if (!_exiting) {
+      _exiting = true;
+      stderr.write('\n\n🛑 SIGTERM received. Exiting immediately...\n\n');
+      if (this.custom_exit_callback) {
+        this.custom_exit_callback();
+      }
+    }
+    process.exit(0);
+  }
 }
 
 const strip_hyphen = (value: string) => value.replace(/^-+|-+$/g, '').trim();
 
 const pick_logger = (args: unknown[]): ReturnType<typeof createLogger> => {
-	if (args.length > 0) {
-		const candidate = args[0] as { logger?: ReturnType<typeof createLogger> };
-		if (candidate && candidate.logger) {
-			return candidate.logger;
-		}
-	}
-	return logger;
+  if (args.length > 0) {
+    const candidate = args[0] as { logger?: ReturnType<typeof createLogger> };
+    if (candidate && candidate.logger) {
+      return candidate.logger;
+    }
+  }
+  return logger;
 };
 
 export const time_execution_sync =
-	(additional_text = '') =>
-	<T extends (...args: any[]) => any>(func: T) => {
-		const label = strip_hyphen(additional_text);
-		const wrapper = function (this: ThisType<T>, ...args: Parameters<T>): ReturnType<T> {
-			const start = performance.now();
-			const result = func.apply(this, args);
-			const execution_time = (performance.now() - start) / 1000;
-			if (execution_time > 0.25) {
-				pick_logger(args).debug(`⏳ ${label}() took ${execution_time.toFixed(2)}s`);
-			}
-			return result;
-		};
-		return wrapper as T;
-	};
+  (additional_text = '') =>
+  <T extends (...args: any[]) => any>(func: T) => {
+    const label = strip_hyphen(additional_text);
+    const wrapper = function (
+      this: ThisType<T>,
+      ...args: Parameters<T>
+    ): ReturnType<T> {
+      const start = performance.now();
+      const result = func.apply(this, args);
+      const execution_time = (performance.now() - start) / 1000;
+      if (execution_time > 0.25) {
+        pick_logger(args).debug(
+          `⏳ ${label}() took ${execution_time.toFixed(2)}s`
+        );
+      }
+      return result;
+    };
+    return wrapper as T;
+  };
 
 export const time_execution_async =
-	(additional_text = '') =>
-	<T extends (...args: any[]) => Promise<any>>(func: T) => {
-		const label = strip_hyphen(additional_text);
-		const wrapper = async function (this: ThisType<T>, ...args: Parameters<T>): Promise<Awaited<ReturnType<T>>> {
-			const start = performance.now();
-			const result = await func.apply(this, args);
-			const execution_time = (performance.now() - start) / 1000;
-			if (execution_time > 0.25) {
-				pick_logger(args).debug(`⏳ ${label}() took ${execution_time.toFixed(2)}s`);
-			}
-			return result;
-		};
-		return wrapper as T;
-	};
+  (additional_text = '') =>
+  <T extends (...args: any[]) => Promise<any>>(func: T) => {
+    const label = strip_hyphen(additional_text);
+    const wrapper = async function (
+      this: ThisType<T>,
+      ...args: Parameters<T>
+    ): Promise<Awaited<ReturnType<T>>> {
+      const start = performance.now();
+      const result = await func.apply(this, args);
+      const execution_time = (performance.now() - start) / 1000;
+      if (execution_time > 0.25) {
+        pick_logger(args).debug(
+          `⏳ ${label}() took ${execution_time.toFixed(2)}s`
+        );
+      }
+      return result;
+    };
+    return wrapper as T;
+  };
 
 export const singleton = <T extends (...args: any[]) => any>(cls: T) => {
-	let instance: ReturnType<T> | undefined;
-	return (...args: Parameters<T>): ReturnType<T> => {
-		if (instance === undefined) {
-			instance = cls(...args);
-		}
-		return instance as ReturnType<T>;
-	};
+  let instance: ReturnType<T> | undefined;
+  return (...args: Parameters<T>): ReturnType<T> => {
+    if (instance === undefined) {
+      instance = cls(...args);
+    }
+    return instance as ReturnType<T>;
+  };
 };
 
-export const check_env_variables = (keys: string[], predicate: (values: string[]) => boolean = (values) =>
-	values.every((value) => value.trim().length > 0),
+export const check_env_variables = (
+  keys: string[],
+  predicate: (values: string[]) => boolean = (values) =>
+    values.every((value) => value.trim().length > 0)
 ) => {
-	const values = keys.map((key) => process.env[key] ?? '');
-	return predicate(values);
+  const values = keys.map((key) => process.env[key] ?? '');
+  return predicate(values);
 };
 
 export const is_unsafe_pattern = (pattern: string) => {
-	if (pattern.includes('://')) {
-		const [, ...rest] = pattern.split('://');
-		pattern = rest.join('://');
-	}
-	const bare_domain = pattern.replace('.*', '').replace('*.', '');
-	return bare_domain.includes('*');
+  if (pattern.includes('://')) {
+    const [, ...rest] = pattern.split('://');
+    pattern = rest.join('://');
+  }
+  const bare_domain = pattern.replace('.*', '').replace('*.', '');
+  return bare_domain.includes('*');
 };
 
-export const is_new_tab_page = (url: string) => ['about:blank', 'chrome://new-tab-page/', 'chrome://new-tab-page'].includes(url);
+export const is_new_tab_page = (url: string) =>
+  ['about:blank', 'chrome://new-tab-page/', 'chrome://new-tab-page'].includes(
+    url
+  );
 
-const escape_regex = (value: string) => value.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+const escape_regex = (value: string) =>
+  value.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
 
-const glob_to_regex = (pattern: string) => new RegExp(`^${pattern.split('*').map(escape_regex).join('.*')}$`);
+const glob_to_regex = (pattern: string) =>
+  new RegExp(`^${pattern.split('*').map(escape_regex).join('.*')}$`);
 
-const matches_pattern = (value: string, pattern: string) => glob_to_regex(pattern).test(value);
+const matches_pattern = (value: string, pattern: string) =>
+  glob_to_regex(pattern).test(value);
 
-export const match_url_with_domain_pattern = (url: string, domain_pattern: string, log_warnings = false) => {
-	try {
-		if (is_new_tab_page(url)) {
-			return false;
-		}
+export const match_url_with_domain_pattern = (
+  url: string,
+  domain_pattern: string,
+  log_warnings = false
+) => {
+  try {
+    if (is_new_tab_page(url)) {
+      return false;
+    }
 
-		const parsed_url = new URL(url);
-		const scheme = parsed_url.protocol.replace(':', '').toLowerCase();
-		const domain = parsed_url.hostname.toLowerCase();
+    const parsed_url = new URL(url);
+    const scheme = parsed_url.protocol.replace(':', '').toLowerCase();
+    const domain = parsed_url.hostname.toLowerCase();
 
-		if (!scheme || !domain) {
-			return false;
-		}
+    if (!scheme || !domain) {
+      return false;
+    }
 
-		let pattern_scheme = 'https';
-		let pattern_domain = domain_pattern.toLowerCase();
-		if (pattern_domain.includes('://')) {
-			[pattern_scheme, pattern_domain] = pattern_domain.split('://', 2);
-		}
+    let pattern_scheme = 'https';
+    let pattern_domain = domain_pattern.toLowerCase();
+    if (pattern_domain.includes('://')) {
+      [pattern_scheme, pattern_domain] = pattern_domain.split('://', 2);
+    }
 
-		if (pattern_domain.includes(':') && !pattern_domain.startsWith(':')) {
-			pattern_domain = pattern_domain.split(':')[0];
-		}
+    if (pattern_domain.includes(':') && !pattern_domain.startsWith(':')) {
+      pattern_domain = pattern_domain.split(':')[0];
+    }
 
-		if (!matches_pattern(scheme, pattern_scheme)) {
-			return false;
-		}
+    if (!matches_pattern(scheme, pattern_scheme)) {
+      return false;
+    }
 
-		if (pattern_domain === '*' || domain === pattern_domain) {
-			return true;
-		}
+    if (pattern_domain === '*' || domain === pattern_domain) {
+      return true;
+    }
 
-		if (pattern_domain.includes('*')) {
-			if (pattern_domain.split('*.').length - 1 > 1 || pattern_domain.split('.*').length - 1 > 1) {
-				if (log_warnings) {
-					logger.error(`⛔️ Multiple wildcards in pattern=[${domain_pattern}] are not supported`);
-				}
-				return false;
-			}
+    if (pattern_domain.includes('*')) {
+      if (
+        pattern_domain.split('*.').length - 1 > 1 ||
+        pattern_domain.split('.*').length - 1 > 1
+      ) {
+        if (log_warnings) {
+          logger.error(
+            `⛔️ Multiple wildcards in pattern=[${domain_pattern}] are not supported`
+          );
+        }
+        return false;
+      }
 
-			if (pattern_domain.endsWith('.*')) {
-				if (log_warnings) {
-					logger.error(`⛔️ Wildcard TLDs like in pattern=[${domain_pattern}] are not supported for security`);
-				}
-				return false;
-			}
+      if (pattern_domain.endsWith('.*')) {
+        if (log_warnings) {
+          logger.error(
+            `⛔️ Wildcard TLDs like in pattern=[${domain_pattern}] are not supported for security`
+          );
+        }
+        return false;
+      }
 
-			const bare_domain = pattern_domain.replace('*.', '');
-			if (bare_domain.includes('*')) {
-				if (log_warnings) {
-					logger.error(`⛔️ Only *.domain style patterns are supported, ignoring pattern=[${domain_pattern}]`);
-				}
-				return false;
-			}
+      const bare_domain = pattern_domain.replace('*.', '');
+      if (bare_domain.includes('*')) {
+        if (log_warnings) {
+          logger.error(
+            `⛔️ Only *.domain style patterns are supported, ignoring pattern=[${domain_pattern}]`
+          );
+        }
+        return false;
+      }
 
-			if (pattern_domain.startsWith('*.')) {
-				const parent_domain = pattern_domain.slice(2);
-				if (domain === parent_domain || matches_pattern(domain, parent_domain)) {
-					return true;
-				}
-			}
+      if (pattern_domain.startsWith('*.')) {
+        const parent_domain = pattern_domain.slice(2);
+        if (
+          domain === parent_domain ||
+          matches_pattern(domain, parent_domain)
+        ) {
+          return true;
+        }
+      }
 
-			return matches_pattern(domain, pattern_domain);
-		}
+      return matches_pattern(domain, pattern_domain);
+    }
 
-		return false;
-	} catch (error) {
-		logger.error(`⛔️ Error matching URL ${url} with pattern ${domain_pattern}: ${(error as Error).message}`);
-		return false;
-	}
+    return false;
+  } catch (error) {
+    logger.error(
+      `⛔️ Error matching URL ${url} with pattern ${domain_pattern}: ${(error as Error).message}`
+    );
+    return false;
+  }
 };
 
-export const merge_dicts = (a: Record<string, any>, b: Record<string, any>, path: (string | number)[] = []) => {
-	for (const key of Object.keys(b)) {
-		if (key in a) {
-			if (typeof a[key] === 'object' && !Array.isArray(a[key]) && typeof b[key] === 'object' && !Array.isArray(b[key])) {
-				merge_dicts(a[key], b[key], [...path, key]);
-			} else if (Array.isArray(a[key]) && Array.isArray(b[key])) {
-				a[key] = [...a[key], ...b[key]];
-			} else if (a[key] !== b[key]) {
-				throw new Error(`Conflict at ${[...path, key].join('.')}`);
-			}
-		} else {
-			a[key] = b[key];
-		}
-	}
-	return a;
+export const merge_dicts = (
+  a: Record<string, any>,
+  b: Record<string, any>,
+  path: (string | number)[] = []
+) => {
+  for (const key of Object.keys(b)) {
+    if (key in a) {
+      if (
+        typeof a[key] === 'object' &&
+        !Array.isArray(a[key]) &&
+        typeof b[key] === 'object' &&
+        !Array.isArray(b[key])
+      ) {
+        merge_dicts(a[key], b[key], [...path, key]);
+      } else if (Array.isArray(a[key]) && Array.isArray(b[key])) {
+        a[key] = [...a[key], ...b[key]];
+      } else if (a[key] !== b[key]) {
+        throw new Error(`Conflict at ${[...path, key].join('.')}`);
+      }
+    } else {
+      a[key] = b[key];
+    }
+  }
+  return a;
 };
 
 const __filename = fileURLToPath(import.meta.url);
@@ -336,123 +392,142 @@ const package_root = path.resolve(__dirname, '..');
 let cached_version: string | null = null;
 
 export const get_browser_use_version = () => {
-	if (cached_version) {
-		return cached_version;
-	}
+  if (cached_version) {
+    return cached_version;
+  }
 
-	try {
-		const package_json = JSON.parse(fs.readFileSync(path.join(package_root, 'package.json'), 'utf-8'));
-		if (package_json?.version) {
-			const version = String(package_json.version);
-			cached_version = version;
-			process.env.LIBRARY_VERSION = version;
-			return version;
-		}
-	} catch (error) {
-		logger.debug(`Error detecting browser-use version: ${(error as Error).message}`);
-	}
+  try {
+    const package_json = JSON.parse(
+      fs.readFileSync(path.join(package_root, 'package.json'), 'utf-8')
+    );
+    if (package_json?.version) {
+      const version = String(package_json.version);
+      cached_version = version;
+      process.env.LIBRARY_VERSION = version;
+      return version;
+    }
+  } catch (error) {
+    logger.debug(
+      `Error detecting browser-use version: ${(error as Error).message}`
+    );
+  }
 
-	return 'unknown';
+  return 'unknown';
 };
 
 let cached_git_info: Record<string, string> | null | undefined;
 
 export const get_git_info = () => {
-	if (cached_git_info !== undefined) {
-		return cached_git_info;
-	}
+  if (cached_git_info !== undefined) {
+    return cached_git_info;
+  }
 
-	try {
-		const git_dir = path.join(package_root, '.git');
-		if (!fs.existsSync(git_dir)) {
-			cached_git_info = null;
-			return null;
-		}
+  try {
+    const git_dir = path.join(package_root, '.git');
+    if (!fs.existsSync(git_dir)) {
+      cached_git_info = null;
+      return null;
+    }
 
-		const commit_hash = execSync('git rev-parse HEAD', { cwd: package_root, stdio: ['ignore', 'pipe', 'ignore'] })
-			.toString()
-			.trim();
-		const branch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: package_root, stdio: ['ignore', 'pipe', 'ignore'] })
-			.toString()
-			.trim();
-		const remote_url = execSync('git config --get remote.origin.url', { cwd: package_root, stdio: ['ignore', 'pipe', 'ignore'] })
-			.toString()
-			.trim();
-		const commit_timestamp = execSync('git show -s --format=%ci HEAD', { cwd: package_root, stdio: ['ignore', 'pipe', 'ignore'] })
-			.toString()
-			.trim();
+    const commit_hash = execSync('git rev-parse HEAD', {
+      cwd: package_root,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .toString()
+      .trim();
+    const branch = execSync('git rev-parse --abbrev-ref HEAD', {
+      cwd: package_root,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .toString()
+      .trim();
+    const remote_url = execSync('git config --get remote.origin.url', {
+      cwd: package_root,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .toString()
+      .trim();
+    const commit_timestamp = execSync('git show -s --format=%ci HEAD', {
+      cwd: package_root,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .toString()
+      .trim();
 
-		cached_git_info = { commit_hash, branch, remote_url, commit_timestamp };
-		return cached_git_info;
-	} catch (error) {
-		logger.debug(`Error getting git info: ${(error as Error).message}`);
-		cached_git_info = null;
-		return null;
-	}
+    cached_git_info = { commit_hash, branch, remote_url, commit_timestamp };
+    return cached_git_info;
+  } catch (error) {
+    logger.debug(`Error getting git info: ${(error as Error).message}`);
+    cached_git_info = null;
+    return null;
+  }
 };
 
 export const _log_pretty_path = (input: unknown) => {
-	if (!input) {
-		return '';
-	}
+  if (!input) {
+    return '';
+  }
 
-	if (typeof input !== 'string') {
-		return `<${(input as { constructor: { name: string } }).constructor?.name || typeof input}>`;
-	}
+  if (typeof input !== 'string') {
+    return `<${(input as { constructor: { name: string } }).constructor?.name || typeof input}>`;
+  }
 
-	const normalized = input.trim();
-	if (!normalized) {
-		return '';
-	}
+  const normalized = input.trim();
+  if (!normalized) {
+    return '';
+  }
 
-	let pretty_path = normalized.replace(os.homedir(), '~');
-	pretty_path = pretty_path.replace(process.cwd(), '.');
+  let pretty_path = normalized.replace(os.homedir(), '~');
+  pretty_path = pretty_path.replace(process.cwd(), '.');
 
-	return pretty_path.includes(' ') ? `"${pretty_path}"` : pretty_path;
+  return pretty_path.includes(' ') ? `"${pretty_path}"` : pretty_path;
 };
 
 export const _log_pretty_url = (value: string, max_len: number | null = 22) => {
-	let sanitized = value.replace('https://', '').replace('http://', '').replace('www.', '');
-	if (max_len !== null && sanitized.length > max_len) {
-		sanitized = `${sanitized.slice(0, max_len)}…`;
-	}
-	return sanitized;
+  let sanitized = value
+    .replace('https://', '')
+    .replace('http://', '')
+    .replace('www.', '');
+  if (max_len !== null && sanitized.length > max_len) {
+    sanitized = `${sanitized.slice(0, max_len)}…`;
+  }
+  return sanitized;
 };
 
 export const log_pretty_path = _log_pretty_path;
 export const log_pretty_url = _log_pretty_url;
 
 export const uuid7str = () => {
-	const timestamp = Buffer.alloc(6);
-	const now = Date.now();
-	timestamp.writeUIntBE(now, 0, 6);
+  const timestamp = Buffer.alloc(6);
+  const now = Date.now();
+  timestamp.writeUIntBE(now, 0, 6);
 
-	const random = crypto.randomBytes(10);
-	const bytes = Buffer.concat([timestamp, random]);
+  const random = crypto.randomBytes(10);
+  const bytes = Buffer.concat([timestamp, random]);
 
-	bytes[6] = (bytes[6] & 0x0f) | 0x70;
-	bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  bytes[6] = (bytes[6] & 0x0f) | 0x70;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
 
-	const hex = bytes.toString('hex');
-	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  const hex = bytes.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 };
 
 /**
  * Retry configuration options
  */
 export interface RetryOptions {
-	/** Maximum number of retry attempts (default: 3) */
-	maxAttempts?: number;
-	/** Delay between retries in milliseconds (default: 1000) */
-	delayMs?: number;
-	/** Exponential backoff multiplier (default: 1 = no backoff) */
-	backoffMultiplier?: number;
-	/** Maximum delay in milliseconds for exponential backoff (default: 30000) */
-	maxDelayMs?: number;
-	/** Function to determine if error is retryable (default: all errors retryable) */
-	shouldRetry?: (error: Error, attempt: number) => boolean;
-	/** Callback called on each retry attempt */
-	onRetry?: (error: Error, attempt: number, nextDelayMs: number) => void;
+  /** Maximum number of retry attempts (default: 3) */
+  maxAttempts?: number;
+  /** Delay between retries in milliseconds (default: 1000) */
+  delayMs?: number;
+  /** Exponential backoff multiplier (default: 1 = no backoff) */
+  backoffMultiplier?: number;
+  /** Maximum delay in milliseconds for exponential backoff (default: 30000) */
+  maxDelayMs?: number;
+  /** Function to determine if error is retryable (default: all errors retryable) */
+  shouldRetry?: (error: Error, attempt: number) => boolean;
+  /** Callback called on each retry attempt */
+  onRetry?: (error: Error, attempt: number, nextDelayMs: number) => void;
 }
 
 /**
@@ -471,49 +546,49 @@ export interface RetryOptions {
  * );
  */
 export async function retryAsync<T>(
-	fn: () => Promise<T>,
-	options: RetryOptions = {}
+  fn: () => Promise<T>,
+  options: RetryOptions = {}
 ): Promise<T> {
-	const {
-		maxAttempts = 3,
-		delayMs = 1000,
-		backoffMultiplier = 1,
-		maxDelayMs = 30000,
-		shouldRetry = () => true,
-		onRetry,
-	} = options;
+  const {
+    maxAttempts = 3,
+    delayMs = 1000,
+    backoffMultiplier = 1,
+    maxDelayMs = 30000,
+    shouldRetry = () => true,
+    onRetry,
+  } = options;
 
-	let lastError: Error | null = null;
+  let lastError: Error | null = null;
 
-	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-		try {
-			return await fn();
-		} catch (error) {
-			lastError = error as Error;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error as Error;
 
-			// Check if we should retry
-			const isLastAttempt = attempt === maxAttempts;
-			if (isLastAttempt || !shouldRetry(lastError, attempt)) {
-				throw lastError;
-			}
+      // Check if we should retry
+      const isLastAttempt = attempt === maxAttempts;
+      if (isLastAttempt || !shouldRetry(lastError, attempt)) {
+        throw lastError;
+      }
 
-			// Calculate delay with exponential backoff and jitter
-			const baseDelay = delayMs * Math.pow(backoffMultiplier, attempt - 1);
-			const jitter = Math.random() * 0.3 * baseDelay; // Add up to 30% jitter
-			const nextDelay = Math.min(baseDelay + jitter, maxDelayMs);
+      // Calculate delay with exponential backoff and jitter
+      const baseDelay = delayMs * Math.pow(backoffMultiplier, attempt - 1);
+      const jitter = Math.random() * 0.3 * baseDelay; // Add up to 30% jitter
+      const nextDelay = Math.min(baseDelay + jitter, maxDelayMs);
 
-			// Notify about retry
-			if (onRetry) {
-				onRetry(lastError, attempt, nextDelay);
-			}
+      // Notify about retry
+      if (onRetry) {
+        onRetry(lastError, attempt, nextDelay);
+      }
 
-			// Wait before next attempt
-			await new Promise(resolve => setTimeout(resolve, nextDelay));
-		}
-	}
+      // Wait before next attempt
+      await new Promise((resolve) => setTimeout(resolve, nextDelay));
+    }
+  }
 
-	// This should never be reached, but TypeScript requires it
-	throw lastError || new Error('Retry failed with unknown error');
+  // This should never be reached, but TypeScript requires it
+  throw lastError || new Error('Retry failed with unknown error');
 }
 
 /**
@@ -529,59 +604,63 @@ export async function retryAsync<T>(
  * }
  */
 export function createSemaphore(maxConcurrent: number) {
-	let activeCount = 0;
-	const queue: Array<() => void> = [];
+  let activeCount = 0;
+  const queue: Array<() => void> = [];
 
-	return {
-		/**
-		 * Acquire a semaphore slot
-		 * Waits if max concurrent operations are already running
-		 */
-		async acquire(): Promise<void> {
-			if (activeCount < maxConcurrent) {
-				activeCount++;
-				return;
-			}
+  return {
+    /**
+     * Acquire a semaphore slot
+     * Waits if max concurrent operations are already running
+     */
+    async acquire(): Promise<void> {
+      if (activeCount < maxConcurrent) {
+        activeCount++;
+        return;
+      }
 
-			await new Promise<void>(resolve => {
-				queue.push(resolve);
-			});
-		},
+      await new Promise<void>((resolve) => {
+        queue.push(resolve);
+      });
+    },
 
-		/**
-		 * Release a semaphore slot
-		 * Allows next queued operation to proceed
-		 */
-		release(): void {
-			const next = queue.shift();
-			if (next) {
-				next();
-			} else {
-				activeCount--;
-			}
-		},
+    /**
+     * Release a semaphore slot
+     * Allows next queued operation to proceed
+     */
+    release(): void {
+      const next = queue.shift();
+      if (next) {
+        next();
+      } else {
+        activeCount--;
+      }
+    },
 
-		/**
-		 * Get current active count
-		 */
-		getActiveCount(): number {
-			return activeCount;
-		},
+    /**
+     * Get current active count
+     */
+    getActiveCount(): number {
+      return activeCount;
+    },
 
-		/**
-		 * Get queue length
-		 */
-		getQueueLength(): number {
-			return queue.length;
-		},
-	};
+    /**
+     * Get queue length
+     */
+    getQueueLength(): number {
+      return queue.length;
+    },
+  };
 }
 
 /**
  * Check if a URL is a new tab page (about:blank or chrome://new-tab-page).
  */
 export function is_new_tab_page(url: string): boolean {
-	return url === 'about:blank' || url === 'chrome://new-tab-page/' || url === 'chrome://new-tab-page';
+  return (
+    url === 'about:blank' ||
+    url === 'chrome://new-tab-page/' ||
+    url === 'chrome://new-tab-page'
+  );
 }
 
 /**
@@ -598,99 +677,112 @@ export function is_new_tab_page(url: string): boolean {
  *
  * Note: New tab pages (about:blank, chrome://new-tab-page) must be handled at the callsite, not inside this function.
  */
-export function match_url_with_domain_pattern(url: string, domain_pattern: string, log_warnings = false): boolean {
-	try {
-		// Note: new tab pages should be handled at the callsite, not here
-		if (is_new_tab_page(url)) {
-			return false;
-		}
+export function match_url_with_domain_pattern(
+  url: string,
+  domain_pattern: string,
+  log_warnings = false
+): boolean {
+  try {
+    // Note: new tab pages should be handled at the callsite, not here
+    if (is_new_tab_page(url)) {
+      return false;
+    }
 
-		const parsed_url = new URL(url);
+    const parsed_url = new URL(url);
 
-		// Extract only the hostname and scheme components
-		const scheme = parsed_url.protocol.replace(':', '').toLowerCase();
-		const domain = parsed_url.hostname.toLowerCase();
+    // Extract only the hostname and scheme components
+    const scheme = parsed_url.protocol.replace(':', '').toLowerCase();
+    const domain = parsed_url.hostname.toLowerCase();
 
-		if (!scheme || !domain) {
-			return false;
-		}
+    if (!scheme || !domain) {
+      return false;
+    }
 
-		// Normalize the domain pattern
-		const normalizedPattern = domain_pattern.toLowerCase();
+    // Normalize the domain pattern
+    const normalizedPattern = domain_pattern.toLowerCase();
 
-		// Handle pattern with scheme
-		let pattern_scheme: string;
-		let pattern_domain: string;
+    // Handle pattern with scheme
+    let pattern_scheme: string;
+    let pattern_domain: string;
 
-		if (normalizedPattern.includes('://')) {
-			const parts = normalizedPattern.split('://');
-			pattern_scheme = parts[0];
-			pattern_domain = parts[1];
-		} else {
-			pattern_scheme = 'https'; // Default to matching only https for security
-			pattern_domain = normalizedPattern;
-		}
+    if (normalizedPattern.includes('://')) {
+      const parts = normalizedPattern.split('://');
+      pattern_scheme = parts[0];
+      pattern_domain = parts[1];
+    } else {
+      pattern_scheme = 'https'; // Default to matching only https for security
+      pattern_domain = normalizedPattern;
+    }
 
-		// Handle port in pattern (we strip ports from patterns since we already extracted only the hostname from the URL)
-		if (pattern_domain.includes(':') && !pattern_domain.startsWith(':')) {
-			pattern_domain = pattern_domain.split(':')[0];
-		}
+    // Handle port in pattern (we strip ports from patterns since we already extracted only the hostname from the URL)
+    if (pattern_domain.includes(':') && !pattern_domain.startsWith(':')) {
+      pattern_domain = pattern_domain.split(':')[0];
+    }
 
-		// If scheme doesn't match using minimatch, return false
-		const minimatch = require('minimatch');
-		if (!minimatch(scheme, pattern_scheme)) {
-			return false;
-		}
+    // If scheme doesn't match using minimatch, return false
+    const minimatch = require('minimatch');
+    if (!minimatch(scheme, pattern_scheme)) {
+      return false;
+    }
 
-		// Check for exact match
-		if (pattern_domain === '*' || domain === pattern_domain) {
-			return true;
-		}
+    // Check for exact match
+    if (pattern_domain === '*' || domain === pattern_domain) {
+      return true;
+    }
 
-		// Handle glob patterns
-		if (pattern_domain.includes('*')) {
-			// Check for unsafe glob patterns
-			// First, check for patterns like *.*.domain which are unsafe
-			if ((pattern_domain.match(/\*\./g) || []).length > 1 || (pattern_domain.match(/\.\*/g) || []).length > 1) {
-				if (log_warnings) {
-					console.error(`⛔️ Multiple wildcards in pattern=[${domain_pattern}] are not supported`);
-				}
-				return false; // Don't match unsafe patterns
-			}
+    // Handle glob patterns
+    if (pattern_domain.includes('*')) {
+      // Check for unsafe glob patterns
+      // First, check for patterns like *.*.domain which are unsafe
+      if (
+        (pattern_domain.match(/\*\./g) || []).length > 1 ||
+        (pattern_domain.match(/\.\*/g) || []).length > 1
+      ) {
+        if (log_warnings) {
+          console.error(
+            `⛔️ Multiple wildcards in pattern=[${domain_pattern}] are not supported`
+          );
+        }
+        return false; // Don't match unsafe patterns
+      }
 
-			// Check for wildcards in TLD part (example.*)
-			if (pattern_domain.endsWith('.*')) {
-				if (log_warnings) {
-					console.error(`⛔️ Wildcard TLDs like in pattern=[${domain_pattern}] are not supported for security`);
-				}
-				return false; // Don't match unsafe patterns
-			}
+      // Check for wildcards in TLD part (example.*)
+      if (pattern_domain.endsWith('.*')) {
+        if (log_warnings) {
+          console.error(
+            `⛔️ Wildcard TLDs like in pattern=[${domain_pattern}] are not supported for security`
+          );
+        }
+        return false; // Don't match unsafe patterns
+      }
 
-			// Then check for embedded wildcards
-			const bare_domain = pattern_domain.replace('*.', '');
-			if (bare_domain.includes('*')) {
-				if (log_warnings) {
-					console.error(`⛔️ Only *.domain style patterns are supported, ignoring pattern=[${domain_pattern}]`);
-				}
-				return false; // Don't match unsafe patterns
-			}
+      // Then check for embedded wildcards
+      const bare_domain = pattern_domain.replace('*.', '');
+      if (bare_domain.includes('*')) {
+        if (log_warnings) {
+          console.error(
+            `⛔️ Only *.domain style patterns are supported, ignoring pattern=[${domain_pattern}]`
+          );
+        }
+        return false; // Don't match unsafe patterns
+      }
 
-			// Special handling so that *.google.com also matches bare google.com
-			if (pattern_domain.startsWith('*.')) {
-				const base = pattern_domain.slice(2); // Remove '*.'
-				if (domain === base || domain.endsWith('.' + base)) {
-					return true;
-				}
-			}
+      // Special handling so that *.google.com also matches bare google.com
+      if (pattern_domain.startsWith('*.')) {
+        const base = pattern_domain.slice(2); // Remove '*.'
+        if (domain === base || domain.endsWith('.' + base)) {
+          return true;
+        }
+      }
 
-			// Use minimatch for pattern matching
-			return minimatch(domain, pattern_domain);
-		}
+      // Use minimatch for pattern matching
+      return minimatch(domain, pattern_domain);
+    }
 
-		// No match
-		return false;
-	} catch (error) {
-		// Invalid URL or pattern
-		return false;
-	}
+    // No match
+    return false;
+  } catch (error) {
+    // Invalid URL or pattern
+    return false;
+  }
 }

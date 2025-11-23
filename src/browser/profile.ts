@@ -4,7 +4,14 @@ import path from 'node:path';
 import os from 'node:os';
 import https from 'node:https';
 import AdmZip from 'adm-zip';
-import type { ClientCertificate, Geolocation, HttpCredentials, ProxySettings, ViewportSize, StorageState } from './types.js';
+import type {
+  ClientCertificate,
+  Geolocation,
+  HttpCredentials,
+  ProxySettings,
+  ViewportSize,
+  StorageState,
+} from './types.js';
 import { CONFIG } from '../config.js';
 import { observe_debug } from '../observability.js';
 import { createLogger } from '../logging-config.js';
@@ -15,254 +22,254 @@ const logger = createLogger('browser_use.browser.profile');
 export const CHROME_DEBUG_PORT = 9242;
 
 export const CHROME_DISABLED_COMPONENTS = [
-	'AcceptCHFrame',
-	'AutoExpandDetailsElement',
-	'AvoidUnnecessaryBeforeUnloadCheckSync',
-	'CertificateTransparencyComponentUpdater',
-	'DestroyProfileOnBrowserClose',
-	'DialMediaRouteProvider',
-	'ExtensionManifestV2Disabled',
-	'GlobalMediaControls',
-	'HttpsUpgrades',
-	'ImprovedCookieControls',
-	'LazyFrameLoading',
-	'LensOverlay',
-	'MediaRouter',
-	'PaintHolding',
-	'ThirdPartyStoragePartitioning',
-	'Translate',
-	'AutomationControlled',
-	'BackForwardCache',
-	'OptimizationHints',
-	'ProcessPerSiteUpToMainFrameThreshold',
-	'InterestFeedContentSuggestions',
-	'CalculateNativeWinOcclusion',
-	'HeavyAdPrivacyMitigations',
-	'PrivacySandboxSettings4',
-	'AutofillServerCommunication',
-	'CrashReporting',
-	'OverscrollHistoryNavigation',
-	'InfiniteSessionRestore',
-	'ExtensionDisableUnsupportedDeveloper',
+  'AcceptCHFrame',
+  'AutoExpandDetailsElement',
+  'AvoidUnnecessaryBeforeUnloadCheckSync',
+  'CertificateTransparencyComponentUpdater',
+  'DestroyProfileOnBrowserClose',
+  'DialMediaRouteProvider',
+  'ExtensionManifestV2Disabled',
+  'GlobalMediaControls',
+  'HttpsUpgrades',
+  'ImprovedCookieControls',
+  'LazyFrameLoading',
+  'LensOverlay',
+  'MediaRouter',
+  'PaintHolding',
+  'ThirdPartyStoragePartitioning',
+  'Translate',
+  'AutomationControlled',
+  'BackForwardCache',
+  'OptimizationHints',
+  'ProcessPerSiteUpToMainFrameThreshold',
+  'InterestFeedContentSuggestions',
+  'CalculateNativeWinOcclusion',
+  'HeavyAdPrivacyMitigations',
+  'PrivacySandboxSettings4',
+  'AutofillServerCommunication',
+  'CrashReporting',
+  'OverscrollHistoryNavigation',
+  'InfiniteSessionRestore',
+  'ExtensionDisableUnsupportedDeveloper',
 ];
 
 export const CHROME_HEADLESS_ARGS = ['--headless=new'];
 
 export const CHROME_DOCKER_ARGS = [
-	'--no-sandbox',
-	'--disable-gpu-sandbox',
-	'--disable-setuid-sandbox',
-	'--disable-dev-shm-usage',
-	'--no-xshm',
-	'--no-zygote',
-	'--disable-site-isolation-trials',
+  '--no-sandbox',
+  '--disable-gpu-sandbox',
+  '--disable-setuid-sandbox',
+  '--disable-dev-shm-usage',
+  '--no-xshm',
+  '--no-zygote',
+  '--disable-site-isolation-trials',
 ];
 
 export const CHROME_DISABLE_SECURITY_ARGS = [
-	'--disable-site-isolation-trials',
-	'--disable-web-security',
-	'--disable-features=IsolateOrigins,site-per-process',
-	'--allow-running-insecure-content',
-	'--ignore-certificate-errors',
-	'--ignore-ssl-errors',
-	'--ignore-certificate-errors-spki-list',
+  '--disable-site-isolation-trials',
+  '--disable-web-security',
+  '--disable-features=IsolateOrigins,site-per-process',
+  '--allow-running-insecure-content',
+  '--ignore-certificate-errors',
+  '--ignore-ssl-errors',
+  '--ignore-certificate-errors-spki-list',
 ];
 
 export const CHROME_DETERMINISTIC_RENDERING_ARGS = [
-	'--deterministic-mode',
-	'--js-flags=--random-seed=1157259159',
-	'--force-device-scale-factor=2',
-	'--enable-webgl',
-	'--font-render-hinting=none',
-	'--force-color-profile=srgb',
+  '--deterministic-mode',
+  '--js-flags=--random-seed=1157259159',
+  '--force-device-scale-factor=2',
+  '--enable-webgl',
+  '--font-render-hinting=none',
+  '--force-color-profile=srgb',
 ];
 
 export const CHROME_DEFAULT_ARGS = [
-	'--disable-field-trial-config',
-	'--disable-background-networking',
-	'--disable-background-timer-throttling',
-	'--disable-backgrounding-occluded-windows',
-	'--disable-back-forward-cache',
-	'--disable-breakpad',
-	'--disable-client-side-phishing-detection',
-	'--disable-component-extensions-with-background-pages',
-	'--disable-component-update',
-	'--no-default-browser-check',
-	'--disable-dev-shm-usage',
-	'--disable-hang-monitor',
-	'--disable-ipc-flooding-protection',
-	'--disable-popup-blocking',
-	'--disable-prompt-on-repost',
-	'--disable-renderer-backgrounding',
-	'--metrics-recording-only',
-	'--no-first-run',
-	'--password-store=basic',
-	'--use-mock-keychain',
-	'--no-service-autorun',
-	'--export-tagged-pdf',
-	'--disable-search-engine-choice-screen',
-	'--unsafely-disable-devtools-self-xss-warnings',
-	'--enable-features=NetworkService,NetworkServiceInProcess',
-	'--enable-network-information-downlink-max',
-	'--test-type=gpu',
-	'--disable-sync',
-	'--allow-legacy-extension-manifests',
-	'--allow-pre-commit-input',
-	'--disable-blink-features=AutomationControlled',
-	'--install-autogenerated-theme=0,0,0',
-	'--log-level=2',
-	'--disable-focus-on-load',
-	'--disable-window-activation',
-	'--generate-pdf-document-outline',
-	'--no-pings',
-	'--ash-no-nudges',
-	'--disable-infobars',
-	'--simulate-outdated-no-au="Tue, 31 Dec 2099 23:59:59 GMT"',
-	'--hide-crash-restore-bubble',
-	'--suppress-message-center-popups',
-	'--disable-domain-reliability',
-	'--disable-datasaver-prompt',
-	'--disable-speech-synthesis-api',
-	'--disable-speech-api',
-	'--disable-print-preview',
-	'--safebrowsing-disable-auto-update',
-	'--disable-external-intent-requests',
-	'--disable-desktop-notifications',
-	'--noerrdialogs',
-	'--silent-debugger-extension-api',
-	'--disable-extensions-http-throttling',
-	'--extensions-on-chrome-urls',
-	'--disable-default-apps',
-	`--disable-features=${CHROME_DISABLED_COMPONENTS.join(',')}`,
+  '--disable-field-trial-config',
+  '--disable-background-networking',
+  '--disable-background-timer-throttling',
+  '--disable-backgrounding-occluded-windows',
+  '--disable-back-forward-cache',
+  '--disable-breakpad',
+  '--disable-client-side-phishing-detection',
+  '--disable-component-extensions-with-background-pages',
+  '--disable-component-update',
+  '--no-default-browser-check',
+  '--disable-dev-shm-usage',
+  '--disable-hang-monitor',
+  '--disable-ipc-flooding-protection',
+  '--disable-popup-blocking',
+  '--disable-prompt-on-repost',
+  '--disable-renderer-backgrounding',
+  '--metrics-recording-only',
+  '--no-first-run',
+  '--password-store=basic',
+  '--use-mock-keychain',
+  '--no-service-autorun',
+  '--export-tagged-pdf',
+  '--disable-search-engine-choice-screen',
+  '--unsafely-disable-devtools-self-xss-warnings',
+  '--enable-features=NetworkService,NetworkServiceInProcess',
+  '--enable-network-information-downlink-max',
+  '--test-type=gpu',
+  '--disable-sync',
+  '--allow-legacy-extension-manifests',
+  '--allow-pre-commit-input',
+  '--disable-blink-features=AutomationControlled',
+  '--install-autogenerated-theme=0,0,0',
+  '--log-level=2',
+  '--disable-focus-on-load',
+  '--disable-window-activation',
+  '--generate-pdf-document-outline',
+  '--no-pings',
+  '--ash-no-nudges',
+  '--disable-infobars',
+  '--simulate-outdated-no-au="Tue, 31 Dec 2099 23:59:59 GMT"',
+  '--hide-crash-restore-bubble',
+  '--suppress-message-center-popups',
+  '--disable-domain-reliability',
+  '--disable-datasaver-prompt',
+  '--disable-speech-synthesis-api',
+  '--disable-speech-api',
+  '--disable-print-preview',
+  '--safebrowsing-disable-auto-update',
+  '--disable-external-intent-requests',
+  '--disable-desktop-notifications',
+  '--noerrdialogs',
+  '--silent-debugger-extension-api',
+  '--disable-extensions-http-throttling',
+  '--extensions-on-chrome-urls',
+  '--disable-default-apps',
+  `--disable-features=${CHROME_DISABLED_COMPONENTS.join(',')}`,
 ];
 
 const DEFAULT_EXTENSIONS = [
-	{
-		name: 'uBlock Origin',
-		id: 'cjpalhdlnbpafiamejdnhcphjbkeiagm',
-		url: 'https://clients2.google.com/service/update2/crx?response=redirect&prodversion=130&acceptformat=crx3&x=id%3Dcjpalhdlnbpafiamejdnhcphjbkeiagm%26uc',
-	},
-	{
-		name: "I still don't care about cookies",
-		id: 'edibdbjcniadpccecjdfdjjppcpchdlm',
-		url: 'https://clients2.google.com/service/update2/crx?response=redirect&prodversion=130&acceptformat=crx3&x=id%3Dedibdbjcniadpccecjdfdjjppcpchdlm%26uc',
-	},
-	{
-		name: 'ClearURLs',
-		id: 'lckanjgmijmafbedllaakclkaicjfmnk',
-		url: 'https://clients2.google.com/service/update2/crx?response=redirect&prodversion=130&acceptformat=crx3&x=id%3Dlckanjgmijmafbedllaakclkaicjfmnk%26uc',
-	},
+  {
+    name: 'uBlock Origin',
+    id: 'cjpalhdlnbpafiamejdnhcphjbkeiagm',
+    url: 'https://clients2.google.com/service/update2/crx?response=redirect&prodversion=130&acceptformat=crx3&x=id%3Dcjpalhdlnbpafiamejdnhcphjbkeiagm%26uc',
+  },
+  {
+    name: "I still don't care about cookies",
+    id: 'edibdbjcniadpccecjdfdjjppcpchdlm',
+    url: 'https://clients2.google.com/service/update2/crx?response=redirect&prodversion=130&acceptformat=crx3&x=id%3Dedibdbjcniadpccecjdfdjjppcpchdlm%26uc',
+  },
+  {
+    name: 'ClearURLs',
+    id: 'lckanjgmijmafbedllaakclkaicjfmnk',
+    url: 'https://clients2.google.com/service/update2/crx?response=redirect&prodversion=130&acceptformat=crx3&x=id%3Dlckanjgmijmafbedllaakclkaicjfmnk%26uc',
+  },
 ];
 
 const parseDisplayEnv = () => {
-	const width = process.env.BROWSER_USE_SCREEN_WIDTH;
-	const height = process.env.BROWSER_USE_SCREEN_HEIGHT;
-	if (width && height) {
-		const parsedWidth = Number(width);
-		const parsedHeight = Number(height);
-		if (!Number.isNaN(parsedWidth) && !Number.isNaN(parsedHeight)) {
-			return { width: parsedWidth, height: parsedHeight };
-		}
-	}
-	return null;
+  const width = process.env.BROWSER_USE_SCREEN_WIDTH;
+  const height = process.env.BROWSER_USE_SCREEN_HEIGHT;
+  if (width && height) {
+    const parsedWidth = Number(width);
+    const parsedHeight = Number(height);
+    if (!Number.isNaN(parsedWidth) && !Number.isNaN(parsedHeight)) {
+      return { width: parsedWidth, height: parsedHeight };
+    }
+  }
+  return null;
 };
 
 export const get_display_size = (): ViewportSize | null => {
-	// Node.js lacks a portable cross-platform API for monitor size detection.
-	// Support manual overrides via env vars and fall back to null otherwise.
-	return parseDisplayEnv();
+  // Node.js lacks a portable cross-platform API for monitor size detection.
+  // Support manual overrides via env vars and fall back to null otherwise.
+  return parseDisplayEnv();
 };
 
 export const get_window_adjustments = (): [number, number] => {
-	if (process.platform === 'darwin') {
-		return [-4, 24];
-	}
-	if (process.platform === 'win32') {
-		return [-8, 0];
-	}
-	return [0, 0];
+  if (process.platform === 'darwin') {
+    return [-4, 24];
+  }
+  if (process.platform === 'win32') {
+    return [-8, 0];
+  }
+  return [0, 0];
 };
 
 const validate_url = (url: string, schemes: string[] = []) => {
-	try {
-		const parsed = new URL(url);
-		if (schemes.length > 0 && parsed.protocol) {
-			const lowered = parsed.protocol.replace(':', '').toLowerCase();
-			if (!schemes.map((s) => s.toLowerCase()).includes(lowered)) {
-				throw new Error();
-			}
-		}
-		return url;
-	} catch {
-		throw new Error(`Invalid URL format: ${url}`);
-	}
+  try {
+    const parsed = new URL(url);
+    if (schemes.length > 0 && parsed.protocol) {
+      const lowered = parsed.protocol.replace(':', '').toLowerCase();
+      if (!schemes.map((s) => s.toLowerCase()).includes(lowered)) {
+        throw new Error();
+      }
+    }
+    return url;
+  } catch {
+    throw new Error(`Invalid URL format: ${url}`);
+  }
 };
 
 const validate_float_range = (value: number, min: number, max: number) => {
-	if (value < min || value > max) {
-		throw new Error(`Value ${value} outside of range ${min}-${max}`);
-	}
-	return value;
+  if (value < min || value > max) {
+    throw new Error(`Value ${value} outside of range ${min}-${max}`);
+  }
+  return value;
 };
 
 const validate_cli_arg = (arg: string) => {
-	if (!arg.startsWith('--')) {
-		throw new Error(`Invalid CLI argument: ${arg} (should start with --)`);
-	}
-	return arg;
+  if (!arg.startsWith('--')) {
+    throw new Error(`Invalid CLI argument: ${arg} (should start with --)`);
+  }
+  return arg;
 };
 
 export enum ColorScheme {
-	LIGHT = 'light',
-	DARK = 'dark',
-	NO_PREFERENCE = 'no-preference',
-	NULL = 'null',
+  LIGHT = 'light',
+  DARK = 'dark',
+  NO_PREFERENCE = 'no-preference',
+  NULL = 'null',
 }
 
 export enum Contrast {
-	NO_PREFERENCE = 'no-preference',
-	MORE = 'more',
-	NULL = 'null',
+  NO_PREFERENCE = 'no-preference',
+  MORE = 'more',
+  NULL = 'null',
 }
 
 export enum ReducedMotion {
-	REDUCE = 'reduce',
-	NO_PREFERENCE = 'no-preference',
-	NULL = 'null',
+  REDUCE = 'reduce',
+  NO_PREFERENCE = 'no-preference',
+  NULL = 'null',
 }
 
 export enum ForcedColors {
-	ACTIVE = 'active',
-	NONE = 'none',
-	NULL = 'null',
+  ACTIVE = 'active',
+  NONE = 'none',
+  NULL = 'null',
 }
 
 export enum ServiceWorkers {
-	ALLOW = 'allow',
-	BLOCK = 'block',
+  ALLOW = 'allow',
+  BLOCK = 'block',
 }
 
 export enum RecordHarContent {
-	OMIT = 'omit',
-	EMBED = 'embed',
-	ATTACH = 'attach',
+  OMIT = 'omit',
+  EMBED = 'embed',
+  ATTACH = 'attach',
 }
 
 export enum RecordHarMode {
-	FULL = 'full',
-	MINIMAL = 'minimal',
+  FULL = 'full',
+  MINIMAL = 'minimal',
 }
 
 export enum BrowserChannel {
-	CHROMIUM = 'chromium',
-	CHROME = 'chrome',
-	CHROME_BETA = 'chrome-beta',
-	CHROME_DEV = 'chrome-dev',
-	CHROME_CANARY = 'chrome-canary',
-	MSEDGE = 'msedge',
-	MSEDGE_BETA = 'msedge-beta',
-	MSEDGE_DEV = 'msedge-dev',
-	MSEDGE_CANARY = 'msedge-canary',
+  CHROMIUM = 'chromium',
+  CHROME = 'chrome',
+  CHROME_BETA = 'chrome-beta',
+  CHROME_DEV = 'chrome-dev',
+  CHROME_CANARY = 'chrome-canary',
+  MSEDGE = 'msedge',
+  MSEDGE_BETA = 'msedge-beta',
+  MSEDGE_DEV = 'msedge-dev',
+  MSEDGE_CANARY = 'msedge-canary',
 }
 
 export const BROWSERUSE_DEFAULT_CHANNEL = BrowserChannel.CHROMIUM;
@@ -270,639 +277,718 @@ export const BROWSERUSE_DEFAULT_CHANNEL = BrowserChannel.CHROMIUM;
 type Nullable<T> = T | null;
 
 type WindowRect = {
-	width: number;
-	height: number;
+  width: number;
+  height: number;
 };
 
 export interface BrowserContextArgs {
-	accept_downloads: boolean;
-	offline: boolean;
-	strict_selectors: boolean;
-	proxy: Nullable<ProxySettings>;
-	permissions: string[];
-	bypass_csp: boolean;
-	client_certificates: ClientCertificate[];
-	extra_http_headers: Record<string, string>;
-	http_credentials: Nullable<HttpCredentials>;
-	ignore_https_errors: boolean;
-	java_script_enabled: boolean;
-	base_url: Nullable<string>;
-	service_workers: ServiceWorkers;
-	user_agent: Nullable<string>;
-	screen: Nullable<ViewportSize>;
-	viewport: Nullable<ViewportSize>;
-	no_viewport: Nullable<boolean>;
-	device_scale_factor: Nullable<number>;
-	is_mobile: boolean;
-	has_touch: boolean;
-	locale: Nullable<string>;
-	geolocation: Nullable<Geolocation>;
-	timezone_id: Nullable<string>;
-	color_scheme: ColorScheme;
-	contrast: Contrast;
-	reduced_motion: ReducedMotion;
-	forced_colors: ForcedColors;
-	record_har_content: RecordHarContent;
-	record_har_mode: RecordHarMode;
-	record_har_omit_content: boolean;
-	record_har_path: Nullable<string>;
-	record_har_url_filter: Nullable<string | RegExp>;
-	record_video_dir: Nullable<string>;
-	record_video_size: Nullable<ViewportSize>;
+  accept_downloads: boolean;
+  offline: boolean;
+  strict_selectors: boolean;
+  proxy: Nullable<ProxySettings>;
+  permissions: string[];
+  bypass_csp: boolean;
+  client_certificates: ClientCertificate[];
+  extra_http_headers: Record<string, string>;
+  http_credentials: Nullable<HttpCredentials>;
+  ignore_https_errors: boolean;
+  java_script_enabled: boolean;
+  base_url: Nullable<string>;
+  service_workers: ServiceWorkers;
+  user_agent: Nullable<string>;
+  screen: Nullable<ViewportSize>;
+  viewport: Nullable<ViewportSize>;
+  no_viewport: Nullable<boolean>;
+  device_scale_factor: Nullable<number>;
+  is_mobile: boolean;
+  has_touch: boolean;
+  locale: Nullable<string>;
+  geolocation: Nullable<Geolocation>;
+  timezone_id: Nullable<string>;
+  color_scheme: ColorScheme;
+  contrast: Contrast;
+  reduced_motion: ReducedMotion;
+  forced_colors: ForcedColors;
+  record_har_content: RecordHarContent;
+  record_har_mode: RecordHarMode;
+  record_har_omit_content: boolean;
+  record_har_path: Nullable<string>;
+  record_har_url_filter: Nullable<string | RegExp>;
+  record_video_dir: Nullable<string>;
+  record_video_size: Nullable<ViewportSize>;
 }
 
 export interface BrowserConnectArgs {
-	headers: Nullable<Record<string, string>>;
-	slow_mo: number;
-	timeout: number;
+  headers: Nullable<Record<string, string>>;
+  slow_mo: number;
+  timeout: number;
 }
 
 export interface BrowserLaunchArgs {
-	env: Nullable<Record<string, string | number | boolean>>;
-	executable_path: Nullable<string>;
-	headless: Nullable<boolean>;
-	args: string[];
-	ignore_default_args: string[] | true;
-	channel: Nullable<BrowserChannel>;
-	chromium_sandbox: boolean;
-	devtools: boolean;
-	slow_mo: number;
-	timeout: number;
-	proxy: Nullable<ProxySettings>;
-	downloads_path: Nullable<string>;
-	traces_dir: Nullable<string>;
-	handle_sighup: boolean;
-	handle_sigint: boolean;
-	handle_sigterm: boolean;
+  env: Nullable<Record<string, string | number | boolean>>;
+  executable_path: Nullable<string>;
+  headless: Nullable<boolean>;
+  args: string[];
+  ignore_default_args: string[] | true;
+  channel: Nullable<BrowserChannel>;
+  chromium_sandbox: boolean;
+  devtools: boolean;
+  slow_mo: number;
+  timeout: number;
+  proxy: Nullable<ProxySettings>;
+  downloads_path: Nullable<string>;
+  traces_dir: Nullable<string>;
+  handle_sighup: boolean;
+  handle_sigint: boolean;
+  handle_sigterm: boolean;
 }
 
 export type BrowserNewContextArgs = BrowserContextArgs & {
-	storage_state: Nullable<string | StorageState | Record<string, unknown>>;
+  storage_state: Nullable<string | StorageState | Record<string, unknown>>;
 };
 
 export type BrowserLaunchPersistentContextArgs = BrowserContextArgs &
-	BrowserLaunchArgs & {
-		user_data_dir: Nullable<string>;
-	};
+  BrowserLaunchArgs & {
+    user_data_dir: Nullable<string>;
+  };
 
 export interface BrowserProfileSpecificOptions {
-	id: string;
-	user_data_dir: Nullable<string>;
-	storage_state: Nullable<string | StorageState | Record<string, unknown>>;
-	stealth: boolean;
-	disable_security: boolean;
-	deterministic_rendering: boolean;
-	allowed_domains: Nullable<string[]>;
-	keep_alive: Nullable<boolean>;
-	enable_default_extensions: boolean;
-	window_size: Nullable<ViewportSize>;
-	window_height: Nullable<number>;
-	window_width: Nullable<number>;
-	window_position: Nullable<WindowRect>;
-	default_navigation_timeout: Nullable<number>;
-	default_timeout: Nullable<number>;
-	minimum_wait_page_load_time: number;
-	wait_for_network_idle_page_load_time: number;
-	maximum_wait_page_load_time: number;
-	wait_between_actions: number;
-	include_dynamic_attributes: boolean;
-	highlight_elements: boolean;
-	viewport_expansion: number;
-	profile_directory: string;
-	cookies_file: Nullable<string>;
+  id: string;
+  user_data_dir: Nullable<string>;
+  storage_state: Nullable<string | StorageState | Record<string, unknown>>;
+  stealth: boolean;
+  disable_security: boolean;
+  deterministic_rendering: boolean;
+  allowed_domains: Nullable<string[]>;
+  keep_alive: Nullable<boolean>;
+  enable_default_extensions: boolean;
+  window_size: Nullable<ViewportSize>;
+  window_height: Nullable<number>;
+  window_width: Nullable<number>;
+  window_position: Nullable<WindowRect>;
+  default_navigation_timeout: Nullable<number>;
+  default_timeout: Nullable<number>;
+  minimum_wait_page_load_time: number;
+  wait_for_network_idle_page_load_time: number;
+  maximum_wait_page_load_time: number;
+  wait_between_actions: number;
+  include_dynamic_attributes: boolean;
+  highlight_elements: boolean;
+  viewport_expansion: number;
+  profile_directory: string;
+  cookies_file: Nullable<string>;
 }
 
 export type BrowserProfileOptions = BrowserContextArgs &
-	BrowserLaunchArgs &
-	BrowserConnectArgs &
-	BrowserProfileSpecificOptions;
+  BrowserLaunchArgs &
+  BrowserConnectArgs &
+  BrowserProfileSpecificOptions;
 
-const DEFAULT_PERMISSIONS = ['clipboard-read', 'clipboard-write', 'notifications'];
+const DEFAULT_PERMISSIONS = [
+  'clipboard-read',
+  'clipboard-write',
+  'notifications',
+];
 
 const DEFAULT_IGNORE_ARGS = [
-	'--enable-automation',
-	'--disable-extensions',
-	'--hide-scrollbars',
-	'--disable-features=AcceptCHFrame,AutoExpandDetailsElement,AvoidUnnecessaryBeforeUnloadCheckSync,CertificateTransparencyComponentUpdater,DeferRendererTasksAfterInput,DestroyProfileOnBrowserClose,DialMediaRouteProvider,ExtensionManifestV2Disabled,GlobalMediaControls,HttpsUpgrades,ImprovedCookieControls,LazyFrameLoading,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate',
+  '--enable-automation',
+  '--disable-extensions',
+  '--hide-scrollbars',
+  '--disable-features=AcceptCHFrame,AutoExpandDetailsElement,AvoidUnnecessaryBeforeUnloadCheckSync,CertificateTransparencyComponentUpdater,DeferRendererTasksAfterInput,DestroyProfileOnBrowserClose,DialMediaRouteProvider,ExtensionManifestV2Disabled,GlobalMediaControls,HttpsUpgrades,ImprovedCookieControls,LazyFrameLoading,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate',
 ];
 
 const DEFAULT_BROWSER_PROFILE_OPTIONS: BrowserProfileOptions = {
-	accept_downloads: true,
-	offline: false,
-	strict_selectors: false,
-	proxy: null,
-	permissions: DEFAULT_PERMISSIONS.slice(),
-	bypass_csp: false,
-	client_certificates: [],
-	extra_http_headers: {},
-	http_credentials: null,
-	ignore_https_errors: false,
-	java_script_enabled: true,
-	base_url: null,
-	service_workers: ServiceWorkers.ALLOW,
-	user_agent: null,
-	screen: null,
-	viewport: null,
-	no_viewport: null,
-	device_scale_factor: null,
-	is_mobile: false,
-	has_touch: false,
-	locale: null,
-	geolocation: null,
-	timezone_id: null,
-	color_scheme: ColorScheme.LIGHT,
-	contrast: Contrast.NO_PREFERENCE,
-	reduced_motion: ReducedMotion.NO_PREFERENCE,
-	forced_colors: ForcedColors.NONE,
-	record_har_content: RecordHarContent.EMBED,
-	record_har_mode: RecordHarMode.FULL,
-	record_har_omit_content: false,
-	record_har_path: null,
-	record_har_url_filter: null,
-	record_video_dir: null,
-	record_video_size: null,
-headers: null,
-slow_mo: 0,
-timeout: 30000,
-env: null,
-executable_path: null,
-headless: null,
-args: [],
-ignore_default_args: DEFAULT_IGNORE_ARGS.slice(),
-channel: null,
-chromium_sandbox: !CONFIG.IN_DOCKER,
-devtools: false,
-downloads_path: null,
-traces_dir: null,
-handle_sighup: true,
-handle_sigint: false,
-handle_sigterm: false,
-	id: uuid7str(),
-	user_data_dir: CONFIG.BROWSER_USE_DEFAULT_USER_DATA_DIR,
-	storage_state: null,
-	stealth: false,
-	disable_security: false,
-	deterministic_rendering: false,
-	allowed_domains: null,
-	keep_alive: null,
-	enable_default_extensions: true,
-	window_size: null,
-	window_height: null,
-	window_width: null,
-	window_position: { width: 0, height: 0 },
-	default_navigation_timeout: null,
-	default_timeout: null,
-	minimum_wait_page_load_time: 0.25,
-	wait_for_network_idle_page_load_time: 0.5,
-	maximum_wait_page_load_time: 5.0,
-	wait_between_actions: 0.5,
-	include_dynamic_attributes: true,
-	highlight_elements: true,
-	viewport_expansion: 500,
-	profile_directory: 'Default',
-	cookies_file: null,
+  accept_downloads: true,
+  offline: false,
+  strict_selectors: false,
+  proxy: null,
+  permissions: DEFAULT_PERMISSIONS.slice(),
+  bypass_csp: false,
+  client_certificates: [],
+  extra_http_headers: {},
+  http_credentials: null,
+  ignore_https_errors: false,
+  java_script_enabled: true,
+  base_url: null,
+  service_workers: ServiceWorkers.ALLOW,
+  user_agent: null,
+  screen: null,
+  viewport: null,
+  no_viewport: null,
+  device_scale_factor: null,
+  is_mobile: false,
+  has_touch: false,
+  locale: null,
+  geolocation: null,
+  timezone_id: null,
+  color_scheme: ColorScheme.LIGHT,
+  contrast: Contrast.NO_PREFERENCE,
+  reduced_motion: ReducedMotion.NO_PREFERENCE,
+  forced_colors: ForcedColors.NONE,
+  record_har_content: RecordHarContent.EMBED,
+  record_har_mode: RecordHarMode.FULL,
+  record_har_omit_content: false,
+  record_har_path: null,
+  record_har_url_filter: null,
+  record_video_dir: null,
+  record_video_size: null,
+  headers: null,
+  slow_mo: 0,
+  timeout: 30000,
+  env: null,
+  executable_path: null,
+  headless: null,
+  args: [],
+  ignore_default_args: DEFAULT_IGNORE_ARGS.slice(),
+  channel: null,
+  chromium_sandbox: !CONFIG.IN_DOCKER,
+  devtools: false,
+  downloads_path: null,
+  traces_dir: null,
+  handle_sighup: true,
+  handle_sigint: false,
+  handle_sigterm: false,
+  id: uuid7str(),
+  user_data_dir: CONFIG.BROWSER_USE_DEFAULT_USER_DATA_DIR,
+  storage_state: null,
+  stealth: false,
+  disable_security: false,
+  deterministic_rendering: false,
+  allowed_domains: null,
+  keep_alive: null,
+  enable_default_extensions: true,
+  window_size: null,
+  window_height: null,
+  window_width: null,
+  window_position: { width: 0, height: 0 },
+  default_navigation_timeout: null,
+  default_timeout: null,
+  minimum_wait_page_load_time: 0.25,
+  wait_for_network_idle_page_load_time: 0.5,
+  maximum_wait_page_load_time: 5.0,
+  wait_between_actions: 0.5,
+  include_dynamic_attributes: true,
+  highlight_elements: true,
+  viewport_expansion: 500,
+  profile_directory: 'Default',
+  cookies_file: null,
 };
 
 const argsAsDict = (args: string[]) => {
-	const result: Record<string, string> = {};
-	for (const arg of args) {
-		const [keyPart, valuePart = ''] = arg.split('=', 1);
-		const key = keyPart.trim().replace(/^-+/, '');
-		result[key] = valuePart.trim();
-	}
-	return result;
+  const result: Record<string, string> = {};
+  for (const arg of args) {
+    const [keyPart, valuePart = ''] = arg.split('=', 1);
+    const key = keyPart.trim().replace(/^-+/, '');
+    result[key] = valuePart.trim();
+  }
+  return result;
 };
 
 const argsAsList = (args: Record<string, string>) =>
-	Object.entries(args).map(([key, value]) => (value ? `--${key.replace(/^-+/, '')}=${value}` : `--${key.replace(/^-+/, '')}`));
+  Object.entries(args).map(([key, value]) =>
+    value
+      ? `--${key.replace(/^-+/, '')}=${value}`
+      : `--${key.replace(/^-+/, '')}`
+  );
 
-const cloneDefaultOptions = (): BrowserProfileOptions => JSON.parse(JSON.stringify(DEFAULT_BROWSER_PROFILE_OPTIONS));
+const cloneDefaultOptions = (): BrowserProfileOptions =>
+  JSON.parse(JSON.stringify(DEFAULT_BROWSER_PROFILE_OPTIONS));
 
 export class BrowserProfile {
-	private options: BrowserProfileOptions;
+  private options: BrowserProfileOptions;
 
-	constructor(init: Partial<BrowserProfileOptions> = {}) {
-		const defaults = cloneDefaultOptions();
-		this.options = {
-			...defaults,
-			...init,
-			permissions: init.permissions ? [...init.permissions] : defaults.permissions,
-			client_certificates: init.client_certificates ? [...init.client_certificates] : [],
-			extra_http_headers: init.extra_http_headers ? { ...init.extra_http_headers } : {},
-			args: init.args ? init.args.map(validate_cli_arg) : [],
-			ignore_default_args: Array.isArray(init.ignore_default_args)
-				? init.ignore_default_args.map(validate_cli_arg)
-				: init.ignore_default_args ?? defaults.ignore_default_args,
-			window_position: init.window_position ?? defaults.window_position,
-		};
-		this.options.id = init.id ?? uuid7str();
-		this.applyLegacyWindowSize();
-		this.warnStorageStateUserDataDirConflict();
-		this.warnUserDataDirNonDefault();
-		this.warnDeterministicRenderingWeirdness();
-	}
+  constructor(init: Partial<BrowserProfileOptions> = {}) {
+    const defaults = cloneDefaultOptions();
+    this.options = {
+      ...defaults,
+      ...init,
+      permissions: init.permissions
+        ? [...init.permissions]
+        : defaults.permissions,
+      client_certificates: init.client_certificates
+        ? [...init.client_certificates]
+        : [],
+      extra_http_headers: init.extra_http_headers
+        ? { ...init.extra_http_headers }
+        : {},
+      args: init.args ? init.args.map(validate_cli_arg) : [],
+      ignore_default_args: Array.isArray(init.ignore_default_args)
+        ? init.ignore_default_args.map(validate_cli_arg)
+        : (init.ignore_default_args ?? defaults.ignore_default_args),
+      window_position: init.window_position ?? defaults.window_position,
+    };
+    this.options.id = init.id ?? uuid7str();
+    this.applyLegacyWindowSize();
+    this.warnStorageStateUserDataDirConflict();
+    this.warnUserDataDirNonDefault();
+    this.warnDeterministicRenderingWeirdness();
+  }
 
-	toString() {
-		return `BrowserProfile#${this.options.id.slice(-4)}`;
-	}
+  toString() {
+    return `BrowserProfile#${this.options.id.slice(-4)}`;
+  }
 
-	describe() {
-		const shortDir = this.options.user_data_dir ? log_pretty_path(this.options.user_data_dir) : '<incognito>';
-		return `BrowserProfile#${this.options.id.slice(-4)}(user_data_dir=${shortDir}, headless=${this.options.headless})`;
-	}
+  describe() {
+    const shortDir = this.options.user_data_dir
+      ? log_pretty_path(this.options.user_data_dir)
+      : '<incognito>';
+    return `BrowserProfile#${this.options.id.slice(-4)}(user_data_dir=${shortDir}, headless=${this.options.headless})`;
+  }
 
-	public get config(): BrowserProfileOptions {
-		return this.options;
-	}
+  public get config(): BrowserProfileOptions {
+    return this.options;
+  }
 
-	private applyLegacyWindowSize() {
-		const { window_width, window_height } = this.options;
-		if (window_width || window_height) {
-			logger.warning(
-				'⚠️ BrowserProfile(window_width=..., window_height=...) are deprecated, use BrowserProfile(window_size={"width": 1280, "height": 1100}) instead.',
-			);
-			const newSize = { ...(this.options.window_size ?? { width: 0, height: 0 }) };
-			newSize.width = newSize.width || window_width || 1280;
-			newSize.height = newSize.height || window_height || 1100;
-			this.options.window_size = newSize;
-		}
-	}
+  private applyLegacyWindowSize() {
+    const { window_width, window_height } = this.options;
+    if (window_width || window_height) {
+      logger.warning(
+        '⚠️ BrowserProfile(window_width=..., window_height=...) are deprecated, use BrowserProfile(window_size={"width": 1280, "height": 1100}) instead.'
+      );
+      const newSize = {
+        ...(this.options.window_size ?? { width: 0, height: 0 }),
+      };
+      newSize.width = newSize.width || window_width || 1280;
+      newSize.height = newSize.height || window_height || 1100;
+      this.options.window_size = newSize;
+    }
+  }
 
-	private warnStorageStateUserDataDirConflict() {
-		const hasStorageState = this.options.storage_state !== null;
-		const hasUserDataDir = Boolean(this.options.user_data_dir && !this.options.user_data_dir.toLowerCase().includes('tmp'));
-		const hasCookiesFile = this.options.cookies_file !== null;
-		const staticSource = hasCookiesFile ? 'cookies_file' : hasStorageState ? 'storage_state' : null;
+  private warnStorageStateUserDataDirConflict() {
+    const hasStorageState = this.options.storage_state !== null;
+    const hasUserDataDir = Boolean(
+      this.options.user_data_dir &&
+        !this.options.user_data_dir.toLowerCase().includes('tmp')
+    );
+    const hasCookiesFile = this.options.cookies_file !== null;
+    const staticSource = hasCookiesFile
+      ? 'cookies_file'
+      : hasStorageState
+        ? 'storage_state'
+        : null;
 
-		if (staticSource && hasUserDataDir) {
-			logger.warning(
-				`⚠️ BrowserSession(...) was passed both ${staticSource} AND user_data_dir. ${staticSource}=${
-					this.options.storage_state ?? this.options.cookies_file
-				} will forcibly overwrite cookies/localStorage/sessionStorage in user_data_dir=${this.options.user_data_dir}. For multiple browsers in parallel, use only storage_state with user_data_dir=None, or use a separate user_data_dir for each browser and set storage_state=None.`,
-			);
-		}
-	}
+    if (staticSource && hasUserDataDir) {
+      logger.warning(
+        `⚠️ BrowserSession(...) was passed both ${staticSource} AND user_data_dir. ${staticSource}=${
+          this.options.storage_state ?? this.options.cookies_file
+        } will forcibly overwrite cookies/localStorage/sessionStorage in user_data_dir=${this.options.user_data_dir}. For multiple browsers in parallel, use only storage_state with user_data_dir=None, or use a separate user_data_dir for each browser and set storage_state=None.`
+      );
+    }
+  }
 
-	private warnUserDataDirNonDefault() {
-		const isNotDefault = Boolean(
-			this.options.executable_path || (this.options.channel && this.options.channel !== BROWSERUSE_DEFAULT_CHANNEL),
-		);
-		if (this.options.user_data_dir === CONFIG.BROWSER_USE_DEFAULT_USER_DATA_DIR && isNotDefault) {
-			const alternateName = this.options.executable_path
-				? path.basename(this.options.executable_path).toLowerCase().replace(/ /g, '-')
-				: this.options.channel
-					? this.options.channel.toLowerCase()
-					: 'none';
-			logger.warning(
-				`⚠️ ${this} Changing user_data_dir=${log_pretty_path(this.options.user_data_dir)} ➡️ .../default-${alternateName} to avoid ${alternateName.toUpperCase()} corruping default profile created by ${BROWSERUSE_DEFAULT_CHANNEL}`,
-			);
-			const dir = path.dirname(CONFIG.BROWSER_USE_DEFAULT_USER_DATA_DIR);
-			this.options.user_data_dir = path.join(dir, `default-${alternateName}`);
-		}
-	}
+  private warnUserDataDirNonDefault() {
+    const isNotDefault = Boolean(
+      this.options.executable_path ||
+        (this.options.channel &&
+          this.options.channel !== BROWSERUSE_DEFAULT_CHANNEL)
+    );
+    if (
+      this.options.user_data_dir === CONFIG.BROWSER_USE_DEFAULT_USER_DATA_DIR &&
+      isNotDefault
+    ) {
+      const alternateName = this.options.executable_path
+        ? path
+            .basename(this.options.executable_path)
+            .toLowerCase()
+            .replace(/ /g, '-')
+        : this.options.channel
+          ? this.options.channel.toLowerCase()
+          : 'none';
+      logger.warning(
+        `⚠️ ${this} Changing user_data_dir=${log_pretty_path(this.options.user_data_dir)} ➡️ .../default-${alternateName} to avoid ${alternateName.toUpperCase()} corruping default profile created by ${BROWSERUSE_DEFAULT_CHANNEL}`
+      );
+      const dir = path.dirname(CONFIG.BROWSER_USE_DEFAULT_USER_DATA_DIR);
+      this.options.user_data_dir = path.join(dir, `default-${alternateName}`);
+    }
+  }
 
-	private warnDeterministicRenderingWeirdness() {
-		if (this.options.deterministic_rendering) {
-			logger.warning(
-				'⚠️ BrowserSession(deterministic_rendering=True) is NOT RECOMMENDED. It breaks many sites and increases chances of getting blocked by anti-bot systems. It hardcodes the JS random seed and forces browsers across Linux/Mac/Windows to use the same font rendering engine so that identical screenshots can be generated.',
-			);
-		}
-	}
+  private warnDeterministicRenderingWeirdness() {
+    if (this.options.deterministic_rendering) {
+      logger.warning(
+        '⚠️ BrowserSession(deterministic_rendering=True) is NOT RECOMMENDED. It breaks many sites and increases chances of getting blocked by anti-bot systems. It hardcodes the JS random seed and forces browsers across Linux/Mac/Windows to use the same font rendering engine so that identical screenshots can be generated.'
+      );
+    }
+  }
 
-	private getDefaultArgsList() {
-		const ignore = this.options.ignore_default_args;
-		if (Array.isArray(ignore)) {
-			const ignoreSet = new Set(ignore);
-			return CHROME_DEFAULT_ARGS.filter((arg) => !ignoreSet.has(arg));
-		}
-		if (ignore === true) {
-			return [];
-		}
-		return [...CHROME_DEFAULT_ARGS];
-	}
+  private getDefaultArgsList() {
+    const ignore = this.options.ignore_default_args;
+    if (Array.isArray(ignore)) {
+      const ignoreSet = new Set(ignore);
+      return CHROME_DEFAULT_ARGS.filter((arg) => !ignoreSet.has(arg));
+    }
+    if (ignore === true) {
+      return [];
+    }
+    return [...CHROME_DEFAULT_ARGS];
+  }
 
-	private getWindowSizeArgs() {
-		const args: string[] = [];
-		const size = this.options.window_size;
-		if (size && size.width && size.height) {
-			args.push(`--window-size=${size.width},${size.height}`);
-		} else if (!this.options.headless) {
-			args.push('--start-maximized');
-		}
-		return args;
-	}
+  private getWindowSizeArgs() {
+    const args: string[] = [];
+    const size = this.options.window_size;
+    if (size && size.width && size.height) {
+      args.push(`--window-size=${size.width},${size.height}`);
+    } else if (!this.options.headless) {
+      args.push('--start-maximized');
+    }
+    return args;
+  }
 
-	private getWindowPositionArgs() {
-		const args: string[] = [];
-		const position = this.options.window_position;
-		if (position && typeof position.width === 'number' && typeof position.height === 'number') {
-			args.push(`--window-position=${position.width},${position.height}`);
-		}
-		return args;
-	}
+  private getWindowPositionArgs() {
+    const args: string[] = [];
+    const position = this.options.window_position;
+    if (
+      position &&
+      typeof position.width === 'number' &&
+      typeof position.height === 'number'
+    ) {
+      args.push(`--window-position=${position.width},${position.height}`);
+    }
+    return args;
+  }
 
-	private async getExtensionArgs() {
-		const extensionPaths = await this.ensureDefaultExtensionsDownloaded();
-		const args = [
-			'--enable-extensions',
-			'--disable-extensions-file-access-check',
-			'--disable-extensions-http-throttling',
-			'--enable-extension-activity-logging',
-		];
-		if (extensionPaths.length) {
-			args.push(`--load-extension=${extensionPaths.join(',')}`);
-		}
-		return args;
-	}
+  private async getExtensionArgs() {
+    const extensionPaths = await this.ensureDefaultExtensionsDownloaded();
+    const args = [
+      '--enable-extensions',
+      '--disable-extensions-file-access-check',
+      '--disable-extensions-http-throttling',
+      '--enable-extension-activity-logging',
+    ];
+    if (extensionPaths.length) {
+      args.push(`--load-extension=${extensionPaths.join(',')}`);
+    }
+    return args;
+  }
 
-	private async ensureDefaultExtensionsDownloaded() {
-		const cacheDir = CONFIG.BROWSER_USE_EXTENSIONS_DIR;
-		await fsp.mkdir(cacheDir, { recursive: true });
-		const extensionPaths: string[] = [];
-		const loadedNames: string[] = [];
+  private async ensureDefaultExtensionsDownloaded() {
+    const cacheDir = CONFIG.BROWSER_USE_EXTENSIONS_DIR;
+    await fsp.mkdir(cacheDir, { recursive: true });
+    const extensionPaths: string[] = [];
+    const loadedNames: string[] = [];
 
-		for (const ext of DEFAULT_EXTENSIONS) {
-			const extDir = path.join(cacheDir, ext.id);
-			const manifestPath = path.join(extDir, 'manifest.json');
-			if (fs.existsSync(extDir) && fs.existsSync(manifestPath)) {
-				extensionPaths.push(extDir);
-				loadedNames.push(ext.name);
-				continue;
-			}
+    for (const ext of DEFAULT_EXTENSIONS) {
+      const extDir = path.join(cacheDir, ext.id);
+      const manifestPath = path.join(extDir, 'manifest.json');
+      if (fs.existsSync(extDir) && fs.existsSync(manifestPath)) {
+        extensionPaths.push(extDir);
+        loadedNames.push(ext.name);
+        continue;
+      }
 
-			const crxFile = path.join(cacheDir, `${ext.id}.crx`);
-			try {
-				if (!fs.existsSync(crxFile)) {
-					logger.info(`📦 Downloading ${ext.name} extension...`);
-					await this.downloadExtension(ext.url, crxFile);
-				}
+      const crxFile = path.join(cacheDir, `${ext.id}.crx`);
+      try {
+        if (!fs.existsSync(crxFile)) {
+          logger.info(`📦 Downloading ${ext.name} extension...`);
+          await this.downloadExtension(ext.url, crxFile);
+        }
 
-				if (fs.existsSync(crxFile)) {
-					logger.info(`📂 Extracting ${ext.name} extension...`);
-					await this.extractExtension(crxFile, extDir);
-					extensionPaths.push(extDir);
-					loadedNames.push(ext.name);
-				}
-			} catch (error) {
-				logger.warning(`⚠️ Failed to setup ${ext.name} extension: ${(error as Error).message}`);
-			}
-		}
+        if (fs.existsSync(crxFile)) {
+          logger.info(`📂 Extracting ${ext.name} extension...`);
+          await this.extractExtension(crxFile, extDir);
+          extensionPaths.push(extDir);
+          loadedNames.push(ext.name);
+        }
+      } catch (error) {
+        logger.warning(
+          `⚠️ Failed to setup ${ext.name} extension: ${(error as Error).message}`
+        );
+      }
+    }
 
-		if (extensionPaths.length) {
-			logger.info(`✅ Extensions ready: ${extensionPaths.length} extensions loaded (${loadedNames.join(', ')})`);
-		} else {
-			logger.warning('⚠️ No default extensions could be loaded');
-		}
+    if (extensionPaths.length) {
+      logger.info(
+        `✅ Extensions ready: ${extensionPaths.length} extensions loaded (${loadedNames.join(', ')})`
+      );
+    } else {
+      logger.warning('⚠️ No default extensions could be loaded');
+    }
 
-		return extensionPaths;
-	}
+    return extensionPaths;
+  }
 
-	private downloadExtension(url: string, outputPath: string, redirectCount = 0): Promise<void> {
-		const maxRedirects = 5;
-		return new Promise((resolve, reject) => {
-			https
-				.get(url, (response) => {
-					const { statusCode, headers } = response;
-					if (
-						statusCode &&
-						statusCode >= 300 &&
-						statusCode < 400 &&
-						headers.location &&
-						redirectCount < maxRedirects
-					) {
-						response.resume();
-						this.downloadExtension(headers.location, outputPath, redirectCount + 1).then(resolve).catch(reject);
-						return;
-					}
+  private downloadExtension(
+    url: string,
+    outputPath: string,
+    redirectCount = 0
+  ): Promise<void> {
+    const maxRedirects = 5;
+    return new Promise((resolve, reject) => {
+      https
+        .get(url, (response) => {
+          const { statusCode, headers } = response;
+          if (
+            statusCode &&
+            statusCode >= 300 &&
+            statusCode < 400 &&
+            headers.location &&
+            redirectCount < maxRedirects
+          ) {
+            response.resume();
+            this.downloadExtension(
+              headers.location,
+              outputPath,
+              redirectCount + 1
+            )
+              .then(resolve)
+              .catch(reject);
+            return;
+          }
 
-					if (!statusCode || statusCode >= 400) {
-						reject(new Error(`Failed to download extension (status ${statusCode ?? 'unknown'})`));
-						return;
-					}
+          if (!statusCode || statusCode >= 400) {
+            reject(
+              new Error(
+                `Failed to download extension (status ${statusCode ?? 'unknown'})`
+              )
+            );
+            return;
+          }
 
-					const chunks: Buffer[] = [];
-					response.on('data', (chunk) => chunks.push(chunk));
-					response.on('end', async () => {
-						try {
-							await fsp.writeFile(outputPath, Buffer.concat(chunks));
-							resolve();
-						} catch (error) {
-							reject(error);
-						}
-					});
-				})
-				.on('error', reject);
-		});
-	}
+          const chunks: Buffer[] = [];
+          response.on('data', (chunk) => chunks.push(chunk));
+          response.on('end', async () => {
+            try {
+              await fsp.writeFile(outputPath, Buffer.concat(chunks));
+              resolve();
+            } catch (error) {
+              reject(error);
+            }
+          });
+        })
+        .on('error', reject);
+    });
+  }
 
-	private async extractExtension(crxPath: string, extractDir: string) {
-		if (fs.existsSync(extractDir)) {
-			await fsp.rm(extractDir, { recursive: true, force: true });
-		}
-		await fsp.mkdir(extractDir, { recursive: true });
+  private async extractExtension(crxPath: string, extractDir: string) {
+    if (fs.existsSync(extractDir)) {
+      await fsp.rm(extractDir, { recursive: true, force: true });
+    }
+    await fsp.mkdir(extractDir, { recursive: true });
 
-		const buffer = await fsp.readFile(crxPath);
-		try {
-			const zip = new AdmZip(buffer);
-			zip.extractAllTo(extractDir, true);
-		} catch {
-			const zipBuffer = this.stripCrxHeader(buffer);
-			const zip = new AdmZip(zipBuffer);
-			zip.extractAllTo(extractDir, true);
-		}
+    const buffer = await fsp.readFile(crxPath);
+    try {
+      const zip = new AdmZip(buffer);
+      zip.extractAllTo(extractDir, true);
+    } catch {
+      const zipBuffer = this.stripCrxHeader(buffer);
+      const zip = new AdmZip(zipBuffer);
+      zip.extractAllTo(extractDir, true);
+    }
 
-		if (!fs.existsSync(path.join(extractDir, 'manifest.json'))) {
-			throw new Error('No manifest.json found in extension');
-		}
-	}
+    if (!fs.existsSync(path.join(extractDir, 'manifest.json'))) {
+      throw new Error('No manifest.json found in extension');
+    }
+  }
 
-	private stripCrxHeader(buffer: Buffer) {
-		const magic = buffer.subarray(0, 4).toString();
-		if (magic !== 'Cr24') {
-			throw new Error('Invalid CRX file format');
-		}
+  private stripCrxHeader(buffer: Buffer) {
+    const magic = buffer.subarray(0, 4).toString();
+    if (magic !== 'Cr24') {
+      throw new Error('Invalid CRX file format');
+    }
 
-		const version = buffer.readUInt32LE(4);
-		if (version === 2) {
-			const pubkeyLen = buffer.readUInt32LE(8);
-			const sigLen = buffer.readUInt32LE(12);
-			const offset = 16 + pubkeyLen + sigLen;
-			return buffer.subarray(offset);
-		}
+    const version = buffer.readUInt32LE(4);
+    if (version === 2) {
+      const pubkeyLen = buffer.readUInt32LE(8);
+      const sigLen = buffer.readUInt32LE(12);
+      const offset = 16 + pubkeyLen + sigLen;
+      return buffer.subarray(offset);
+    }
 
-		if (version === 3) {
-			const headerLen = buffer.readUInt32LE(8);
-			const offset = 12 + headerLen;
-			return buffer.subarray(offset);
-		}
+    if (version === 3) {
+      const headerLen = buffer.readUInt32LE(8);
+      const offset = 12 + headerLen;
+      return buffer.subarray(offset);
+    }
 
-		throw new Error(`Unsupported CRX version: ${version}`);
-	}
+    throw new Error(`Unsupported CRX version: ${version}`);
+  }
 
-	public async getArgs() {
-		const defaultArgs = this.getDefaultArgsList();
-		const preConversionArgs = [
-			...defaultArgs,
-			...this.options.args,
-			`--profile-directory=${this.options.profile_directory}`,
-			...(CONFIG.IN_DOCKER || !this.options.chromium_sandbox ? CHROME_DOCKER_ARGS : []),
-			...(this.options.headless ? CHROME_HEADLESS_ARGS : []),
-			...(this.options.disable_security ? CHROME_DISABLE_SECURITY_ARGS : []),
-			...(this.options.deterministic_rendering ? CHROME_DETERMINISTIC_RENDERING_ARGS : []),
-			...this.getWindowSizeArgs(),
-			...this.getWindowPositionArgs(),
-			...(this.options.enable_default_extensions ? await this.getExtensionArgs() : []),
-		];
+  public async getArgs() {
+    const defaultArgs = this.getDefaultArgsList();
+    const preConversionArgs = [
+      ...defaultArgs,
+      ...this.options.args,
+      `--profile-directory=${this.options.profile_directory}`,
+      ...(CONFIG.IN_DOCKER || !this.options.chromium_sandbox
+        ? CHROME_DOCKER_ARGS
+        : []),
+      ...(this.options.headless ? CHROME_HEADLESS_ARGS : []),
+      ...(this.options.disable_security ? CHROME_DISABLE_SECURITY_ARGS : []),
+      ...(this.options.deterministic_rendering
+        ? CHROME_DETERMINISTIC_RENDERING_ARGS
+        : []),
+      ...this.getWindowSizeArgs(),
+      ...this.getWindowPositionArgs(),
+      ...(this.options.enable_default_extensions
+        ? await this.getExtensionArgs()
+        : []),
+    ];
 
-		const finalArgs = argsAsList(argsAsDict(preConversionArgs));
-		return finalArgs;
-	}
+    const finalArgs = argsAsList(argsAsDict(preConversionArgs));
+    return finalArgs;
+  }
 
-	public async detect_display_configuration() {
-		const runner = observe_debug({
-			name: 'detect_display_configuration',
-			ignore_input: true,
-			ignore_output: true,
-		})(async () => {
-			const displaySize = get_display_size();
-			const hasScreen = Boolean(displaySize);
-			this.options.screen = this.options.screen || displaySize || { width: 1280, height: 1100 };
+  public async detect_display_configuration() {
+    const runner = observe_debug({
+      name: 'detect_display_configuration',
+      ignore_input: true,
+      ignore_output: true,
+    })(async () => {
+      const displaySize = get_display_size();
+      const hasScreen = Boolean(displaySize);
+      this.options.screen = this.options.screen ||
+        displaySize || { width: 1280, height: 1100 };
 
-			if (this.options.headless === null) {
-				this.options.headless = !hasScreen;
-			}
+      if (this.options.headless === null) {
+        this.options.headless = !hasScreen;
+      }
 
-			if (this.options.headless) {
-				this.options.viewport = this.options.viewport || this.options.window_size || this.options.screen;
-				this.options.window_position = null;
-				this.options.window_size = null;
-				this.options.no_viewport = false;
-			} else {
-				this.options.window_size = this.options.window_size || this.options.screen;
-				this.options.no_viewport = this.options.no_viewport ?? true;
-				this.options.viewport = this.options.no_viewport ? null : this.options.viewport;
-			}
+      if (this.options.headless) {
+        this.options.viewport =
+          this.options.viewport ||
+          this.options.window_size ||
+          this.options.screen;
+        this.options.window_position = null;
+        this.options.window_size = null;
+        this.options.no_viewport = false;
+      } else {
+        this.options.window_size =
+          this.options.window_size || this.options.screen;
+        this.options.no_viewport = this.options.no_viewport ?? true;
+        this.options.viewport = this.options.no_viewport
+          ? null
+          : this.options.viewport;
+      }
 
-			let useViewport =
-				Boolean(this.options.headless) ||
-				Boolean(this.options.viewport) ||
-				Boolean(this.options.device_scale_factor);
-			if (this.options.no_viewport === null) {
-				this.options.no_viewport = !useViewport;
-			}
-			useViewport = !this.options.no_viewport;
+      let useViewport =
+        Boolean(this.options.headless) ||
+        Boolean(this.options.viewport) ||
+        Boolean(this.options.device_scale_factor);
+      if (this.options.no_viewport === null) {
+        this.options.no_viewport = !useViewport;
+      }
+      useViewport = !this.options.no_viewport;
 
-			if (useViewport) {
-				this.options.viewport = this.options.viewport || this.options.screen || { width: 1280, height: 1100 };
-				this.options.device_scale_factor = this.options.device_scale_factor || 1.0;
-			} else {
-				this.options.viewport = null;
-				this.options.device_scale_factor = null;
-				this.options.screen = null;
-			}
+      if (useViewport) {
+        this.options.viewport = this.options.viewport ||
+          this.options.screen || { width: 1280, height: 1100 };
+        this.options.device_scale_factor =
+          this.options.device_scale_factor || 1.0;
+      } else {
+        this.options.viewport = null;
+        this.options.device_scale_factor = null;
+        this.options.screen = null;
+      }
 
-			if (this.options.headless && this.options.no_viewport) {
-				throw new Error('headless=True and no_viewport=True cannot both be set at the same time');
-			}
-		});
+      if (this.options.headless && this.options.no_viewport) {
+        throw new Error(
+          'headless=True and no_viewport=True cannot both be set at the same time'
+        );
+      }
+    });
 
-		return runner.call(this);
-	}
+    return runner.call(this);
+  }
 
-	private cloneContextArgs(): BrowserContextArgs {
-		const o = this.options;
-		return {
-			accept_downloads: o.accept_downloads,
-			offline: o.offline,
-			strict_selectors: o.strict_selectors,
-			proxy: o.proxy ? { ...o.proxy } : null,
-			permissions: [...o.permissions],
-			bypass_csp: o.bypass_csp,
-			client_certificates: o.client_certificates ? [...o.client_certificates] : [],
-			extra_http_headers: { ...o.extra_http_headers },
-			http_credentials: o.http_credentials ? { ...o.http_credentials } : null,
-			ignore_https_errors: o.ignore_https_errors,
-			java_script_enabled: o.java_script_enabled,
-			base_url: o.base_url,
-			service_workers: o.service_workers,
-			user_agent: o.user_agent,
-			screen: o.screen ? { ...o.screen } : null,
-			viewport: o.viewport ? { ...o.viewport } : null,
-			no_viewport: o.no_viewport,
-			device_scale_factor: o.device_scale_factor,
-			is_mobile: o.is_mobile,
-			has_touch: o.has_touch,
-			locale: o.locale,
-			geolocation: o.geolocation ? { ...o.geolocation } : null,
-			timezone_id: o.timezone_id,
-			color_scheme: o.color_scheme,
-			contrast: o.contrast,
-			reduced_motion: o.reduced_motion,
-			forced_colors: o.forced_colors,
-			record_har_content: o.record_har_content,
-			record_har_mode: o.record_har_mode,
-			record_har_omit_content: o.record_har_omit_content,
-			record_har_path: o.record_har_path,
-			record_har_url_filter: o.record_har_url_filter,
-			record_video_dir: o.record_video_dir,
-			record_video_size: o.record_video_size ? { ...o.record_video_size } : null,
-		};
-	}
+  private cloneContextArgs(): BrowserContextArgs {
+    const o = this.options;
+    return {
+      accept_downloads: o.accept_downloads,
+      offline: o.offline,
+      strict_selectors: o.strict_selectors,
+      proxy: o.proxy ? { ...o.proxy } : null,
+      permissions: [...o.permissions],
+      bypass_csp: o.bypass_csp,
+      client_certificates: o.client_certificates
+        ? [...o.client_certificates]
+        : [],
+      extra_http_headers: { ...o.extra_http_headers },
+      http_credentials: o.http_credentials ? { ...o.http_credentials } : null,
+      ignore_https_errors: o.ignore_https_errors,
+      java_script_enabled: o.java_script_enabled,
+      base_url: o.base_url,
+      service_workers: o.service_workers,
+      user_agent: o.user_agent,
+      screen: o.screen ? { ...o.screen } : null,
+      viewport: o.viewport ? { ...o.viewport } : null,
+      no_viewport: o.no_viewport,
+      device_scale_factor: o.device_scale_factor,
+      is_mobile: o.is_mobile,
+      has_touch: o.has_touch,
+      locale: o.locale,
+      geolocation: o.geolocation ? { ...o.geolocation } : null,
+      timezone_id: o.timezone_id,
+      color_scheme: o.color_scheme,
+      contrast: o.contrast,
+      reduced_motion: o.reduced_motion,
+      forced_colors: o.forced_colors,
+      record_har_content: o.record_har_content,
+      record_har_mode: o.record_har_mode,
+      record_har_omit_content: o.record_har_omit_content,
+      record_har_path: o.record_har_path,
+      record_har_url_filter: o.record_har_url_filter,
+      record_video_dir: o.record_video_dir,
+      record_video_size: o.record_video_size
+        ? { ...o.record_video_size }
+        : null,
+    };
+  }
 
-	private cloneLaunchArgs(args: string[]): BrowserLaunchArgs {
-		const o = this.options;
-		return {
-			env: o.env ? { ...o.env } : null,
-			executable_path: o.executable_path,
-			headless: o.headless,
-			args,
-			ignore_default_args: Array.isArray(o.ignore_default_args) ? [...o.ignore_default_args] : o.ignore_default_args,
-			channel: o.channel,
-			chromium_sandbox: o.chromium_sandbox,
-			devtools: o.devtools,
-			slow_mo: o.slow_mo,
-			timeout: o.timeout,
-			proxy: o.proxy ? { ...o.proxy } : null,
-			downloads_path: o.downloads_path,
-			traces_dir: o.traces_dir,
-			handle_sighup: o.handle_sighup,
-			handle_sigint: o.handle_sigint,
-			handle_sigterm: o.handle_sigterm,
-		};
-	}
+  private cloneLaunchArgs(args: string[]): BrowserLaunchArgs {
+    const o = this.options;
+    return {
+      env: o.env ? { ...o.env } : null,
+      executable_path: o.executable_path,
+      headless: o.headless,
+      args,
+      ignore_default_args: Array.isArray(o.ignore_default_args)
+        ? [...o.ignore_default_args]
+        : o.ignore_default_args,
+      channel: o.channel,
+      chromium_sandbox: o.chromium_sandbox,
+      devtools: o.devtools,
+      slow_mo: o.slow_mo,
+      timeout: o.timeout,
+      proxy: o.proxy ? { ...o.proxy } : null,
+      downloads_path: o.downloads_path,
+      traces_dir: o.traces_dir,
+      handle_sighup: o.handle_sighup,
+      handle_sigint: o.handle_sigint,
+      handle_sigterm: o.handle_sigterm,
+    };
+  }
 
-	public kwargs_for_new_context(): BrowserNewContextArgs {
-		return {
-			...this.cloneContextArgs(),
-			storage_state: this.options.storage_state
-				? typeof this.options.storage_state === 'string'
-					? this.options.storage_state
-					: { ...(this.options.storage_state as Record<string, unknown>) }
-				: null,
-		};
-	}
+  public kwargs_for_new_context(): BrowserNewContextArgs {
+    return {
+      ...this.cloneContextArgs(),
+      storage_state: this.options.storage_state
+        ? typeof this.options.storage_state === 'string'
+          ? this.options.storage_state
+          : { ...(this.options.storage_state as Record<string, unknown>) }
+        : null,
+    };
+  }
 
-	public kwargs_for_connect(): BrowserConnectArgs {
-		return {
-			headers: this.options.headers ? { ...this.options.headers } : null,
-			slow_mo: this.options.slow_mo,
-			timeout: this.options.timeout,
-		};
-	}
+  public kwargs_for_connect(): BrowserConnectArgs {
+    return {
+      headers: this.options.headers ? { ...this.options.headers } : null,
+      slow_mo: this.options.slow_mo,
+      timeout: this.options.timeout,
+    };
+  }
 
-	public async kwargs_for_launch(): Promise<BrowserLaunchArgs> {
-		const args = await this.getArgs();
-		return this.cloneLaunchArgs(args);
-	}
+  public async kwargs_for_launch(): Promise<BrowserLaunchArgs> {
+    const args = await this.getArgs();
+    return this.cloneLaunchArgs(args);
+  }
 
-	public async kwargs_for_launch_persistent_context(): Promise<BrowserLaunchPersistentContextArgs> {
-		const args = await this.getArgs();
-		return {
-			...this.cloneContextArgs(),
-			...this.cloneLaunchArgs(args),
-			user_data_dir: this.options.user_data_dir,
-		};
-	}
+  public async kwargs_for_launch_persistent_context(): Promise<BrowserLaunchPersistentContextArgs> {
+    const args = await this.getArgs();
+    return {
+      ...this.cloneContextArgs(),
+      ...this.cloneLaunchArgs(args),
+      user_data_dir: this.options.user_data_dir,
+    };
+  }
 }
 
 export const DEFAULT_BROWSER_PROFILE = new BrowserProfile();

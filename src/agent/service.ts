@@ -1233,9 +1233,8 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 				} catch (error) {
 					attempt += 1;
 					if (attempt === max_retries) {
-						const message = `Step ${index + 1} failed after ${max_retries} attempts: ${
-							(error as Error).message ?? error
-						}`;
+						const message = `Step ${index + 1} failed after ${max_retries} attempts: ${(error as Error).message ?? error
+							}`;
 						this.logger.error(message);
 						const failure = new ActionResult({ error: message });
 						results.push(failure);
@@ -1249,10 +1248,10 @@ export class Agent<Context = ControllerContext, AgentStructuredOutput = unknown>
 						await this._sleep(delay_between_actions);
 					}
 				}
-		}
+			}
 
-		return results;
-	}
+			return results;
+		}
 
 	private async _execute_history_step(historyItem: AgentHistory, delaySeconds: number) {
 		if (!this.browser_session) {

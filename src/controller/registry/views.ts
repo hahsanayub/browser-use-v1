@@ -3,18 +3,18 @@ import type { Page } from '../../browser/types.js';
 import { match_url_with_domain_pattern } from '../../utils.js';
 
 const getPageUrl = (page: Page | null | undefined) => {
-	if (!page) {
-		return '';
-	}
-	const candidate = (page as any).url;
-	if (typeof candidate === 'function') {
-		try {
-			return candidate.call(page);
-		} catch {
-			return '';
-		}
-	}
-	return candidate ?? '';
+  if (!page) {
+    return '';
+  }
+  const candidate = (page as any).url;
+  if (typeof candidate === 'function') {
+    try {
+      return candidate.call(page);
+    } catch {
+      return '';
+    }
+  }
+  return candidate ?? '';
 };
 
 export type ActionHandler = (...args: any[]) => Promise<unknown> | unknown;
@@ -24,147 +24,152 @@ type BaseChatModel = unknown;
 type FileSystem = unknown;
 
 export class RegisteredAction {
-	constructor(
-		public readonly name: string,
-		public readonly description: string,
-		public readonly handler: ActionHandler,
-		public readonly paramSchema: ZodTypeAny,
-		public readonly domains: string[] | null = null,
-		public readonly pageFilter: ((page: Page) => boolean) | null = null,
-	) {}
+  constructor(
+    public readonly name: string,
+    public readonly description: string,
+    public readonly handler: ActionHandler,
+    public readonly paramSchema: ZodTypeAny,
+    public readonly domains: string[] | null = null,
+    public readonly pageFilter: ((page: Page) => boolean) | null = null
+  ) {}
 
-	promptDescription() {
-		const skipKeys = new Set(['title']);
-		let description = `${this.description}: \n`;
-		description += `{${this.name}: `;
+  promptDescription() {
+    const skipKeys = new Set(['title']);
+    let description = `${this.description}: \n`;
+    description += `{${this.name}: `;
 
-		const schemaShape =
-			(this.paramSchema instanceof z.ZodObject && this.paramSchema.shape) ||
-			('shape' in this.paramSchema ? (this.paramSchema as any).shape : null);
+    const schemaShape =
+      (this.paramSchema instanceof z.ZodObject && this.paramSchema.shape) ||
+      ('shape' in this.paramSchema ? (this.paramSchema as any).shape : null);
 
-		if (schemaShape) {
-			const props = Object.fromEntries(
-				Object.entries(schemaShape).map(([key, value]) => {
-					const entries = value instanceof z.ZodType ? value._def : value;
-					const cleanEntries = Object.fromEntries(
-						Object.entries(entries as Record<string, unknown>).filter(([propKey]) => !skipKeys.has(propKey)),
-					);
-					return [key, cleanEntries];
-				}),
-			);
-			description += JSON.stringify(props);
-		} else {
-			description += '{}';
-		}
+    if (schemaShape) {
+      const props = Object.fromEntries(
+        Object.entries(schemaShape).map(([key, value]) => {
+          const entries = value instanceof z.ZodType ? value._def : value;
+          const cleanEntries = Object.fromEntries(
+            Object.entries(entries as Record<string, unknown>).filter(
+              ([propKey]) => !skipKeys.has(propKey)
+            )
+          );
+          return [key, cleanEntries];
+        })
+      );
+      description += JSON.stringify(props);
+    } else {
+      description += '{}';
+    }
 
-		description += '}';
-		return description;
-	}
+    description += '}';
+    return description;
+  }
 }
 
 export class ActionModel {
-	constructor(initialData: Record<string, any> = {}) {
-		this.data = initialData;
-	}
+  constructor(initialData: Record<string, any> = {}) {
+    this.data = initialData;
+  }
 
-	private data: Record<string, any>;
+  private data: Record<string, any>;
 
-	toJSON() {
-		return this.data;
-	}
+  toJSON() {
+    return this.data;
+  }
 
-	model_dump(options?: { exclude_none?: boolean }) {
-		const clone = JSON.parse(JSON.stringify(this.data));
-		if (options?.exclude_none) {
-			for (const [key, value] of Object.entries(clone)) {
-				if (value === null || value === undefined) {
-					delete clone[key];
-				}
-			}
-		}
-		return clone;
-	}
+  model_dump(options?: { exclude_none?: boolean }) {
+    const clone = JSON.parse(JSON.stringify(this.data));
+    if (options?.exclude_none) {
+      for (const [key, value] of Object.entries(clone)) {
+        if (value === null || value === undefined) {
+          delete clone[key];
+        }
+      }
+    }
+    return clone;
+  }
 
-	model_dump_json(options?: { exclude_none?: boolean }) {
-		return JSON.stringify(this.model_dump(options));
-	}
+  model_dump_json(options?: { exclude_none?: boolean }) {
+    return JSON.stringify(this.model_dump(options));
+  }
 
-	get_index(): number | null {
-		for (const value of Object.values(this.data)) {
-			if (value && typeof value === 'object' && 'index' in value) {
-				return (value as { index: number }).index ?? null;
-			}
-		}
-		return null;
-	}
+  get_index(): number | null {
+    for (const value of Object.values(this.data)) {
+      if (value && typeof value === 'object' && 'index' in value) {
+        return (value as { index: number }).index ?? null;
+      }
+    }
+    return null;
+  }
 
-	set_index(index: number) {
-		const [actionName] = Object.keys(this.data);
-		if (!actionName) {
-			return;
-		}
-		const params = this.data[actionName];
-		if (params && typeof params === 'object' && 'index' in params) {
-			(params as { index: number }).index = index;
-		}
-	}
+  set_index(index: number) {
+    const [actionName] = Object.keys(this.data);
+    if (!actionName) {
+      return;
+    }
+    const params = this.data[actionName];
+    if (params && typeof params === 'object' && 'index' in params) {
+      (params as { index: number }).index = index;
+    }
+  }
 }
 
 export class ActionRegistry {
-	private actions = new Map<string, RegisteredAction>();
+  private actions = new Map<string, RegisteredAction>();
 
-	register(action: RegisteredAction) {
-		this.actions.set(action.name, action);
-	}
+  register(action: RegisteredAction) {
+    this.actions.set(action.name, action);
+  }
 
-	get(name: string) {
-		return this.actions.get(name) ?? null;
-	}
+  get(name: string) {
+    return this.actions.get(name) ?? null;
+  }
 
-	getAll() {
-		return Array.from(this.actions.values());
-	}
+  getAll() {
+    return Array.from(this.actions.values());
+  }
 
-	get actionEntries() {
-		return Array.from(this.actions.values());
-	}
+  get actionEntries() {
+    return Array.from(this.actions.values());
+  }
 
-	get_prompt_description(page?: Page) {
-		if (!page) {
-			return this.actionEntries
-				.filter((action) => !action.pageFilter && !action.domains)
-				.map((action) => action.promptDescription())
-				.join('\n');
-		}
+  get_prompt_description(page?: Page) {
+    if (!page) {
+      return this.actionEntries
+        .filter((action) => !action.pageFilter && !action.domains)
+        .map((action) => action.promptDescription())
+        .join('\n');
+    }
 
-		const filtered = this.actionEntries.filter((action) => {
-			if (!action.domains && !action.pageFilter) {
-				return false;
-			}
+    const filtered = this.actionEntries.filter((action) => {
+      if (!action.domains && !action.pageFilter) {
+        return false;
+      }
 
-			const pageUrl = getPageUrl(page);
-			const domainAllowed =
-				!action.domains || action.domains.some((pattern) => match_url_with_domain_pattern(pageUrl, pattern));
-			const pageAllowed = action.pageFilter ? action.pageFilter(page) : true;
-			return domainAllowed && pageAllowed;
-		});
+      const pageUrl = getPageUrl(page);
+      const domainAllowed =
+        !action.domains ||
+        action.domains.some((pattern) =>
+          match_url_with_domain_pattern(pageUrl, pattern)
+        );
+      const pageAllowed = action.pageFilter ? action.pageFilter(page) : true;
+      return domainAllowed && pageAllowed;
+    });
 
-		return filtered.map((action) => action.promptDescription()).join('\n');
-	}
+    return filtered.map((action) => action.promptDescription()).join('\n');
+  }
 }
 
 export class SpecialActionParameters {
-	context: any | null = null;
-	browser_session: BrowserSession | null = null;
-	browser: BrowserSession | null = null;
-	browser_context: BrowserSession | null = null;
-	page: Page | null = null;
-	page_extraction_llm: BaseChatModel | null = null;
-	file_system: FileSystem | null = null;
-	available_file_paths: string[] | null = null;
-	has_sensitive_data = false;
+  context: any | null = null;
+  browser_session: BrowserSession | null = null;
+  browser: BrowserSession | null = null;
+  browser_context: BrowserSession | null = null;
+  page: Page | null = null;
+  page_extraction_llm: BaseChatModel | null = null;
+  file_system: FileSystem | null = null;
+  available_file_paths: string[] | null = null;
+  has_sensitive_data = false;
 
-	static get_browser_requiring_params(): Set<string> {
-		return new Set(['browser_session', 'browser', 'browser_context', 'page']);
-	}
+  static get_browser_requiring_params(): Set<string> {
+    return new Set(['browser_session', 'browser', 'browser_context', 'page']);
+  }
 }

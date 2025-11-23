@@ -1,14 +1,22 @@
-const SPECIAL_PROTOCOLS = ['about:', 'mailto:', 'tel:', 'ftp:', 'file:', 'data:', 'javascript:'];
+const SPECIAL_PROTOCOLS = [
+  'about:',
+  'mailto:',
+  'tel:',
+  'ftp:',
+  'file:',
+  'data:',
+  'javascript:',
+];
 
 export const normalize_url = (url: string) => {
-	const normalized = url.trim();
-	if (normalized.includes('://')) {
-		return normalized;
-	}
+  const normalized = url.trim();
+  if (normalized.includes('://')) {
+    return normalized;
+  }
 
-	if (SPECIAL_PROTOCOLS.some((protocol) => normalized.startsWith(protocol))) {
-		return normalized;
-	}
+  if (SPECIAL_PROTOCOLS.some((protocol) => normalized.startsWith(protocol))) {
+    return normalized;
+  }
 
-	return `https://${normalized}`;
+  return `https://${normalized}`;
 };
