@@ -17,17 +17,17 @@ While the original [browser-use Python library](https://github.com/browser-use/b
 
 ### Python vs TypeScript: Which Should You Use?
 
-| Feature | Python Version | TypeScript Version |
-|---------|---------------|-------------------|
-| **Recommended for** | Python developers, Data scientists, AI/ML engineers | JavaScript/TypeScript developers, Full-stack engineers |
-| **Ecosystem** | PyPI, pip | npm, yarn, pnpm |
-| **Type Safety** | Optional (with type hints) | Built-in (TypeScript) |
-| **Runtime** | Python 3.x | Node.js, Deno, Bun |
-| **LLM Providers** | 10+ providers | 10+ providers (same) |
-| **Browser Support** | Playwright | Playwright (same) |
-| **Documentation** | ⭐ Original & Complete | Port with TS-specific examples |
-| **Community** | ⭐ Larger & More Established | Growing |
-| **GitHub** | [browser-use/browser-use](https://github.com/browser-use/browser-use) | [unadlib/browser-use](https://github.com/unadlib/browser-use) |
+| Feature             | Python Version                                                        | TypeScript Version                                            |
+| ------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------- |
+| **Recommended for** | Python developers, Data scientists, AI/ML engineers                   | JavaScript/TypeScript developers, Full-stack engineers        |
+| **Ecosystem**       | PyPI, pip                                                             | npm, yarn, pnpm                                               |
+| **Type Safety**     | Optional (with type hints)                                            | Built-in (TypeScript)                                         |
+| **Runtime**         | Python 3.x                                                            | Node.js, Deno, Bun                                            |
+| **LLM Providers**   | 10+ providers                                                         | 10+ providers (same)                                          |
+| **Browser Support** | Playwright                                                            | Playwright (same)                                             |
+| **Documentation**   | ⭐ Original & Complete                                                | Port with TS-specific examples                                |
+| **Community**       | ⭐ Larger & More Established                                          | Growing                                                       |
+| **GitHub**          | [browser-use/browser-use](https://github.com/browser-use/browser-use) | [unadlib/browser-use](https://github.com/unadlib/browser-use) |
 
 **👉 If you're working in Python, we highly recommend using the [original browser-use library](https://github.com/browser-use/browser-use).** This TypeScript port is specifically for those who need to work within the JavaScript/TypeScript ecosystem.
 
@@ -77,12 +77,12 @@ import { ChatOpenAI } from 'browser-use';
 async function main() {
   const llm = new ChatOpenAI({
     model: 'gpt-4',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   const agent = new Agent({
     task: 'Go to google.com and search for "TypeScript browser automation"',
-    llm
+    llm,
   });
 
   const history = await agent.run();
@@ -152,8 +152,7 @@ main();
 Enable vision capabilities to let the AI analyze screenshots:
 
 ```typescript
-import { Controller } from 'browser-use';
-import { ChatGoogle } from 'browser-use';
+import { Controller, ChatGoogle } from 'browser-use';
 
 const controller = new Controller({
   config: {
@@ -171,8 +170,8 @@ await controller.goto('https://www.wikipedia.org');
 const history = await controller.run(
   'Describe what you see on this page and identify the main visual elements',
   {
-    useVision: true,  // Enable vision
-    visionDetailLevel: 'high',  // 'low' | 'high' | 'auto'
+    useVision: true, // Enable vision
+    visionDetailLevel: 'high', // 'low' | 'high' | 'auto'
     maxSteps: 5,
   }
 );
@@ -257,12 +256,12 @@ const profile = new BrowserProfile({
   disable_security: false,
   headless: true,
   extra_chromium_args: ['--disable-blink-features=AutomationControlled'],
-  wait_for_network_idle_page_load_time: 3,  // seconds
+  wait_for_network_idle_page_load_time: 3, // seconds
   allowed_domains: ['example.com', '*.google.com'],
   cookies_file: './cookies.json',
   downloads_path: './downloads',
-  highlight_elements: false,  // Visual debugging
-  viewport_expansion: 0,  // Expand viewport for element detection
+  highlight_elements: false, // Visual debugging
+  viewport_expansion: 0, // Expand viewport for element detection
 });
 
 const browserSession = new BrowserSession({
@@ -282,11 +281,11 @@ import { MCPController } from 'browser-use';
 const mcpController = new MCPController();
 
 // Add MCP server
-await mcpController.addServer(
-  'my-server',
-  'npx',
-  ['-y', '@modelcontextprotocol/server-filesystem', '/path/to/data']
-);
+await mcpController.addServer('my-server', 'npx', [
+  '-y',
+  '@modelcontextprotocol/server-filesystem',
+  '/path/to/data',
+]);
 
 // MCP tools are automatically available to the agent
 const tools = await mcpController.listAllTools();
@@ -351,27 +350,27 @@ GMAIL_TOKEN_PATH=./token.json
 ```typescript
 interface AgentConfig {
   // Execution limits
-  maxSteps?: number;              // Max steps before stopping (default: 100)
-  actionTimeout?: number;         // Timeout per action in ms (default: 5000)
+  maxSteps?: number; // Max steps before stopping (default: 100)
+  actionTimeout?: number; // Timeout per action in ms (default: 5000)
 
   // Vision/multimodal
-  useVision?: boolean;            // Enable screenshot analysis (default: false)
-  visionDetailLevel?: 'low' | 'high' | 'auto';  // Vision detail (default: 'auto')
+  useVision?: boolean; // Enable screenshot analysis (default: false)
+  visionDetailLevel?: 'low' | 'high' | 'auto'; // Vision detail (default: 'auto')
 
   // Error handling
-  continueOnFailure?: boolean;    // Continue on action failure (default: false)
-  maxRetryChain?: number;         // Max consecutive failures (default: 3)
+  continueOnFailure?: boolean; // Continue on action failure (default: false)
+  maxRetryChain?: number; // Max consecutive failures (default: 3)
 
   // Custom behavior
-  customInstructions?: string;    // Additional system instructions
+  customInstructions?: string; // Additional system instructions
 
   // Persistence
-  saveConversationPath?: string;  // Save conversation history
-  fileSystemPath?: string;        // FileSystem workspace path
+  saveConversationPath?: string; // Save conversation history
+  fileSystemPath?: string; // FileSystem workspace path
 
   // Advanced
-  validateOutput?: boolean;       // Validate structured outputs (default: false)
-  includeAttributes?: string[];   // DOM attributes to include
+  validateOutput?: boolean; // Validate structured outputs (default: false)
+  includeAttributes?: string[]; // DOM attributes to include
 }
 ```
 
@@ -383,7 +382,7 @@ interface AgentConfig {
 import { ChatOpenAI } from 'browser-use';
 
 const llm = new ChatOpenAI({
-  model: 'gpt-4o',  // or 'gpt-4', 'gpt-3.5-turbo'
+  model: 'gpt-4o', // or 'gpt-4', 'gpt-3.5-turbo'
   apiKey: process.env.OPENAI_API_KEY,
   temperature: 0.1,
   maxTokens: 4096,
@@ -396,7 +395,7 @@ const llm = new ChatOpenAI({
 import { ChatAnthropic } from 'browser-use';
 
 const llm = new ChatAnthropic({
-  model: 'claude-3-5-sonnet-20241022',  // or other Claude models
+  model: 'claude-3-5-sonnet-20241022', // or other Claude models
   apiKey: process.env.ANTHROPIC_API_KEY,
   temperature: 0.1,
 });
@@ -408,7 +407,7 @@ const llm = new ChatAnthropic({
 import { ChatGoogle } from 'browser-use';
 
 const llm = new ChatGoogle({
-  model: 'gemini-2.0-flash-exp',  // or 'gemini-pro', 'gemini-pro-vision'
+  model: 'gemini-2.0-flash-exp', // or 'gemini-pro', 'gemini-pro-vision'
   apiKey: process.env.GOOGLE_API_KEY,
   baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
 });
@@ -468,7 +467,7 @@ import { ChatOllama } from 'browser-use';
 
 const llm = new ChatOllama({
   model: 'llama3.1',
-  baseUrl: 'http://localhost:11434',  // default
+  baseUrl: 'http://localhost:11434', // default
 });
 ```
 
@@ -488,46 +487,57 @@ const llm = new ChatOpenRouter({
 The AI agent can perform these actions:
 
 ### Navigation
+
 - **search_google** - Search query in Google (web results only)
 - **go_to_url** - Navigate to a specific URL (with optional new tab)
 
 ### Element Interaction
+
 - **click_element** - Click buttons, links, or clickable elements by index
 - **input_text** - Type text into input fields and textareas by index
 
 ### Dropdown/Select
+
 - **dropdown_options** - Get available options from a dropdown
 - **select_dropdown** - Select option from dropdown by index
 
 ### Scrolling
+
 - **scroll** - Scroll page up/down by pixels or direction
 - **scroll_to_text** - Scroll to text content on page
 
 ### Tabs
+
 - **switch_tab** - Switch to different browser tab by index
 - **close_tab** - Close current or specific tab
 
 ### Keyboard
+
 - **send_keys** - Send keyboard input (Enter, Tab, Escape, etc.)
 
 ### Content Extraction
+
 - **extract_structured_data** - Extract specific data using LLM from page markdown
 
 ### FileSystem
+
 - **read_file** - Read file contents (supports PDF parsing)
 - **write_file** - Write content to file
 - **replace_file_str** - Replace string in file
 
 ### Google Sheets
+
 - **sheets_range** - Get cell range from Google Sheet
 - **sheets_update** - Update Google Sheet cells
 - **sheets_input** - Input data into Google Sheet
 
 ### Gmail
+
 - **get_recent_emails** - Fetch recent emails from Gmail
 - **send_email** - Send email via Gmail API
 
 ### Completion
+
 - **done** - Mark task as completed with optional structured output
 
 ## Examples
@@ -561,7 +571,7 @@ import { Agent, AgentError } from 'browser-use';
 
 try {
   const agent = new Agent({ task: 'Your task', llm });
-  const history = await agent.run(10);  // max 10 steps
+  const history = await agent.run(10); // max 10 steps
 
   // Check completion status
   const lastStep = history.history[history.history.length - 1];
@@ -686,7 +696,10 @@ const history = await agent.run();
 
 // Get token statistics
 const stats = history.stats();
-console.log('Total tokens:', stats.total_input_tokens + stats.total_output_tokens);
+console.log(
+  'Total tokens:',
+  stats.total_input_tokens + stats.total_output_tokens
+);
 console.log('Steps:', stats.n_steps);
 
 // Calculate cost (if pricing data available)
@@ -703,17 +716,13 @@ import { create_history_gif } from 'browser-use';
 
 const history = await agent.run();
 
-await create_history_gif(
-  'My automation task',
-  history,
-  {
-    output_path: 'agent-history.gif',
-    duration: 3000,  // ms per frame
-    show_goals: true,
-    show_task: true,
-    show_logo: false,
-  }
-);
+await create_history_gif('My automation task', history, {
+  output_path: 'agent-history.gif',
+  duration: 3000, // ms per frame
+  show_goals: true,
+  show_task: true,
+  show_logo: false,
+});
 
 console.log('Created agent-history.gif');
 ```
