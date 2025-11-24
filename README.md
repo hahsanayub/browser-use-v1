@@ -1,6 +1,47 @@
 # browser-use
 
+> 🙏 **A TypeScript port of the amazing [browser-use](https://github.com/browser-use/browser-use) Python library**
+>
+> This project is a faithful TypeScript/JavaScript implementation of the original [browser-use](https://github.com/browser-use/browser-use) Python library, bringing the power of AI-driven browser automation to the Node.js ecosystem. All credit for the innovative design and architecture goes to the original Python project and its creators.
+
 A TypeScript-first library for programmatic browser control, designed for building AI-powered web agents with vision capabilities and extensive LLM integrations.
+
+## Why TypeScript?
+
+While the original [browser-use Python library](https://github.com/browser-use/browser-use) is excellent and feature-complete, this TypeScript port aims to:
+
+- 🌍 Bring browser-use capabilities to the JavaScript/TypeScript ecosystem
+- 🔧 Enable seamless integration with Node.js, Deno, and Bun projects
+- 📦 Provide native TypeScript type definitions for better DX
+- 🤝 Make browser automation accessible to frontend and full-stack developers
+
+### Python vs TypeScript: Which Should You Use?
+
+| Feature | Python Version | TypeScript Version |
+|---------|---------------|-------------------|
+| **Recommended for** | Python developers, Data scientists, AI/ML engineers | JavaScript/TypeScript developers, Full-stack engineers |
+| **Ecosystem** | PyPI, pip | npm, yarn, pnpm |
+| **Type Safety** | Optional (with type hints) | Built-in (TypeScript) |
+| **Runtime** | Python 3.x | Node.js, Deno, Bun |
+| **LLM Providers** | 10+ providers | 10+ providers (same) |
+| **Browser Support** | Playwright | Playwright (same) |
+| **Documentation** | ⭐ Original & Complete | Port with TS-specific examples |
+| **Community** | ⭐ Larger & More Established | Growing |
+| **GitHub** | [browser-use/browser-use](https://github.com/browser-use/browser-use) | [unadlib/browser-use](https://github.com/unadlib/browser-use) |
+
+**👉 If you're working in Python, we highly recommend using the [original browser-use library](https://github.com/browser-use/browser-use).** This TypeScript port is specifically for those who need to work within the JavaScript/TypeScript ecosystem.
+
+### Commitment to the Original
+
+We are committed to:
+
+- ✅ Maintaining feature parity with the Python version whenever possible
+- 🔄 Keeping up with upstream updates and improvements
+- 🐛 Reporting bugs found in this port back to the original project when applicable
+- 📚 Directing users to the original project's documentation for core concepts
+- 🤝 Collaborating with the original authors and respecting their vision
+
+This is **not** a fork or competing project—it's a respectful port to serve a different programming language community.
 
 ## Features
 
@@ -716,7 +757,43 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Acknowledgments
 
-Built with:
-- [Playwright](https://playwright.dev/) - Browser automation
-- [Zod](https://zod.dev/) - Schema validation
-- [OpenAI](https://openai.com/), [Anthropic](https://anthropic.com/), [Google](https://ai.google.dev/), and other LLM providers
+### Original Project
+
+This TypeScript implementation would not exist without the groundbreaking work of the original **[browser-use](https://github.com/browser-use/browser-use)** Python library:
+
+- 🎯 **Original Project**: [browser-use/browser-use](https://github.com/browser-use/browser-use) (Python)
+- 👏 **Created by**: The browser-use team and contributors
+- 💡 **Inspiration**: All architectural decisions, agent design patterns, and innovative approaches come from the original Python implementation
+
+We are deeply grateful to the original authors for creating such an elegant and powerful solution for AI-driven browser automation. This TypeScript port aims to faithfully replicate their excellent work for the JavaScript/TypeScript community.
+
+### Key Differences from Python Version
+
+While we strive to maintain feature parity with the Python version, there are some differences due to platform constraints:
+
+- **Runtime**: Node.js/Deno/Bun instead of Python
+- **Type System**: TypeScript's structural typing vs Python's duck typing
+- **Async Model**: JavaScript Promises vs Python async/await (similar but different)
+- **Ecosystem**: npm packages vs PyPI packages
+
+### Technology Stack
+
+This project is built with:
+
+- [Playwright](https://playwright.dev/) - Browser automation framework
+- [Zod](https://zod.dev/) - TypeScript-first schema validation
+- [OpenAI](https://openai.com/), [Anthropic](https://anthropic.com/), [Google](https://ai.google.dev/) - LLM providers
+- And many other excellent open-source libraries
+
+### Community
+
+- 🌟 **Star the original Python project**: [browser-use/browser-use](https://github.com/browser-use/browser-use)
+- 🌟 **Star this TypeScript port**: [unadlib/browser-use](https://github.com/unadlib/browser-use)
+- 💬 **Join the community**: Share your use cases and contribute to both projects!
+
+## Related Projects
+
+- 🐍 [browser-use (Python)](https://github.com/browser-use/browser-use) - The original and official implementation
+- 🎭 [Playwright](https://playwright.dev/) - The browser automation foundation
+- 🤖 [LangChain](https://www.langchain.com/) - LLM application framework
+- 🦜 [Laminar](https://laminar.run/) - LLM observability platform
