@@ -23,7 +23,9 @@
     "test": "vitest run",
     "test:watch": "vitest --watch",
     "prettier": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "commit": "yarn git-cz"
+    "commit": "yarn git-cz",
+    "postinstall": "playwright install chromium",
+    "postinstall:ci": "playwright install --with-deps chromium"
   },
   "keywords": [
     "browser",
