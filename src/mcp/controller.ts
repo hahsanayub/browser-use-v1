@@ -9,8 +9,8 @@ export class MCPController {
   constructor() {}
 
   async addServer(command: string, args: string[]) {
-    const client = new MCPClient('browser-use-client', '1.0.0');
-    await client.connect(command, args);
+    const client = new MCPClient('browser-use-client', command, args);
+    await client.connect();
     this.clients.push(client);
     await this.registerTools(client);
   }

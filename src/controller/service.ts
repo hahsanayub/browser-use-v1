@@ -30,6 +30,7 @@ import {
 import { Registry } from './registry/service.js';
 import TurndownService from 'turndown';
 import { UserMessage } from '../llm/messages.js';
+import { createLogger } from '../logging-config.js';
 
 type BrowserSession = any;
 type Page = any;
@@ -68,6 +69,7 @@ const toActionEntries = (action: Record<string, unknown>) => {
 export class Controller<Context = unknown> {
   public registry: Registry<Context>;
   private displayFilesInDoneText: boolean;
+  private logger: ReturnType<typeof createLogger>;
 
   constructor(options: ControllerOptions<Context> = {}) {
     const {
@@ -77,6 +79,7 @@ export class Controller<Context = unknown> {
     } = options;
     this.registry = new Registry<Context>(exclude_actions);
     this.displayFilesInDoneText = display_files_in_done_text;
+    this.logger = createLogger('browser_use.controller');
 
     this.registerDefaultActions(output_model);
   }
@@ -396,7 +399,7 @@ export class Controller<Context = unknown> {
         for (const iframe of frames) {
           try {
             // Wait for iframe to load with aggressive timeout
-            await iframe.waitForLoadState?.({ timeout: 1000 }).catch(() => {});
+            await iframe.waitForLoadState?.('load').catch(() => {});
           } catch {
             // Ignore iframe load errors
           }

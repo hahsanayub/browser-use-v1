@@ -247,6 +247,7 @@ ${this.availableFilePaths.join('\n')}
     return agentState;
   }
 
+  // @ts-ignore - Decorator type mismatch with TypeScript strict mode
   @observe_debug({
     name: 'agent_message_prompt:get_user_message',
     ignore_input: true,

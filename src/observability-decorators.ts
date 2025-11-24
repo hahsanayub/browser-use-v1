@@ -223,15 +223,17 @@ export function withObservability<T extends (...args: any[]) => Promise<any>>(
  * Create a debug trace for a series of operations
  * Useful for tracking complex workflows
  */
+type TraceOperation = {
+  name: string;
+  startTime: number;
+  endTime?: number;
+  duration?: number;
+  status: 'pending' | 'success' | 'error';
+  error?: Error;
+};
+
 export class OperationTrace {
-  private operations: Array<{
-    name: string;
-    startTime: number;
-    endTime?: number;
-    duration?: number;
-    status: 'pending' | 'success' | 'error';
-    error?: Error;
-  }> = [];
+  private operations: TraceOperation[] = [];
 
   private logger: ReturnType<typeof createLogger>;
   private traceName: string;
@@ -299,7 +301,7 @@ export class OperationTrace {
     errorCount: number;
     pendingCount: number;
     totalDuration: number;
-    operations: typeof this.operations;
+    operations: TraceOperation[];
   } {
     const successCount = this.operations.filter(
       (o) => o.status === 'success'

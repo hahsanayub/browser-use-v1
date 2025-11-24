@@ -2,7 +2,7 @@ import Groq from 'groq-sdk';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { z } from 'zod';
 import type { BaseChatModel } from '../base.js';
-import type { ChatInvokeCompletion } from '../views.js';
+import { ChatInvokeCompletion } from '../views.js';
 import type { Message } from '../messages.js';
 import { GroqMessageSerializer } from './serializer.js';
 
@@ -42,7 +42,7 @@ export class ChatGroq implements BaseChatModel {
     const groqMessages = serializer.serialize(messages);
 
     let responseFormat:
-      | Groq.Chat.Completions.CompletionCreateParams.ResponseFormat
+      | Groq.Chat.Completions.CompletionCreateParams.ResponseFormatJsonObject
       | undefined = undefined;
     if (output_format && 'schema' in output_format && output_format.schema) {
       // Groq supports JSON mode, but not full JSON schema validation in the same way as OpenAI yet (or maybe it does now).
@@ -69,13 +69,13 @@ export class ChatGroq implements BaseChatModel {
       }
     }
 
-    return {
+    return new ChatInvokeCompletion(
       completion,
-      usage: {
-        promptTokens: response.usage?.prompt_tokens ?? 0,
-        completionTokens: response.usage?.completion_tokens ?? 0,
-        totalTokens: response.usage?.total_tokens ?? 0,
-      },
-    };
+      {
+        prompt_tokens: response.usage?.prompt_tokens ?? 0,
+        completion_tokens: response.usage?.completion_tokens ?? 0,
+        total_tokens: response.usage?.total_tokens ?? 0,
+      }
+    );
   }
 }

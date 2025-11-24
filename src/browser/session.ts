@@ -409,7 +409,7 @@ export class BrowserSession {
 
     // If CDP URL not provided, try to discover it
     if (!cdpUrl) {
-      cdpUrl = await this._discoverCdpUrl(browserPid);
+      cdpUrl = (await this._discoverCdpUrl(browserPid)) ?? undefined;
     }
 
     if (!cdpUrl) {
@@ -438,6 +438,9 @@ export class BrowserSession {
       }
 
       // Get or create page
+      if (!this.browser_context) {
+        throw new Error('Browser context not available');
+      }
       const pages = this.browser_context.pages();
       if (pages.length > 0) {
         this.agent_current_page = pages[0] as any;
@@ -536,7 +539,6 @@ export class BrowserSession {
       try {
         const image = await page.screenshot({
           type: 'png',
-          encoding: 'base64',
           fullPage: true,
         });
         screenshot =
@@ -664,7 +666,7 @@ export class BrowserSession {
         return tabPage;
       }
     }
-    const fallback = this.browser_context?.pages?.[0] ?? null;
+    const fallback = this.browser_context?.pages()?.[0] ?? null;
     this._setActivePage(fallback ?? null);
     return fallback;
   }
@@ -740,7 +742,7 @@ export class BrowserSession {
     this.historyStack.push(normalized);
     let page: Page | null = null;
     try {
-      page = (await this.browser_context?.new_page?.()) ?? null;
+      page = (await this.browser_context?.newPage?.()) ?? null;
       if (page) {
         this.currentPageLoadingStatus = null;
         await page.goto(normalized, { waitUntil: 'domcontentloaded' });
@@ -1816,9 +1818,8 @@ export class BrowserSession {
         height: 720,
       };
 
-      return new BrowserStateSummary({
-        element_tree: minimal_element_tree,
-        selector_map: {},
+      const dom_state = new DOMState(minimal_element_tree, {});
+      return new BrowserStateSummary(dom_state, {
         url,
         title,
         tabs: tabs_info,
@@ -1888,9 +1889,8 @@ export class BrowserSession {
         height: 720,
       };
 
-      return new BrowserStateSummary({
-        element_tree: minimal_element_tree,
-        selector_map: {},
+      const dom_state = new DOMState(minimal_element_tree, {});
+      return new BrowserStateSummary(dom_state, {
         url: page_url,
         title: this._is_new_tab_page(page_url) ? 'New Tab' : 'Chrome Page',
         tabs: tabs_info,
@@ -1941,11 +1941,11 @@ export class BrowserSession {
 
     let content: DOMState;
     try {
-      const domPromise = dom_service.get_clickable_elements({
+      const domPromise = dom_service.get_clickable_elements(
+        this.browser_profile.highlight_elements,
         focus_element,
-        viewport_expansion: this.browser_profile.viewport_expansion,
-        highlight_elements: this.browser_profile.highlight_elements,
-      });
+        this.browser_profile.viewport_expansion
+      );
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('DOM processing timeout')), 45000)
       );
@@ -2036,9 +2036,7 @@ export class BrowserSession {
     // Check if PDF viewer
     const is_pdf_viewer = await this._is_pdf_viewer(page);
 
-    const browser_state = new BrowserStateSummary({
-      element_tree: content.element_tree,
-      selector_map: content.selector_map,
+    const browser_state = new BrowserStateSummary(content, {
       url: page_url,
       title,
       tabs: tabs_info,
@@ -2420,9 +2418,9 @@ export class BrowserSession {
         this.logger.info(`⬇️ Downloaded file to: ${download_path}`);
 
         // Track the downloaded file
-        this._downloaded_files.push(download_path);
+        this.downloaded_files.push(download_path);
         this.logger.info(
-          `📁 Added download to session tracking (total: ${this._downloaded_files.length} files)`
+          `📁 Added download to session tracking (total: ${this.downloaded_files.length} files)`
         );
 
         return download_path;
@@ -2597,6 +2595,9 @@ export class BrowserSession {
    */
   private async _scrollContainer(pixels: number): Promise<void> {
     const page = await this.getCurrentPage();
+    if (!page) {
+      throw new Error('No active page available for scrolling');
+    }
 
     // Try CDP scroll gesture first (works universally including PDFs)
     if (await this._scrollWithCdpGesture(page, pixels)) {
@@ -3394,10 +3395,9 @@ export class BrowserSession {
     this.browser_context.on?.('page', (page: Page) => {
       this.logger.debug(`New page created: ${page.url?.() || 'about:blank'}`);
 
-      // Setup visibility change listener for this page
-      page.on?.('visibilitychange', () => {
-        this._onTabVisibilityChange(page);
-      });
+      // Note: 'visibilitychange' is not a standard Playwright page event
+      // Visibility tracking would need to be implemented differently
+      // (e.g., through page.evaluate polling or browser context events)
 
       // Track new page
       if (page.url && !page.url().startsWith('about:')) {

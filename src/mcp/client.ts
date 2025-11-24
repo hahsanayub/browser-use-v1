@@ -163,8 +163,8 @@ export class MCPClient {
       this._lastConnectTime = Date.now() / 1000;
 
       // Discover available tools
-      const result = await this.client.request(ListToolsRequestSchema, {});
-      this._tools = new Map(result.tools.map((tool) => [tool.name, tool]));
+      const result = await this.client.request(ListToolsRequestSchema as any, {} as any);
+      this._tools = new Map((result as any).tools.map((tool: any) => [tool.name, tool]));
 
       // Try to discover prompts (optional)
       try {
@@ -302,12 +302,12 @@ export class MCPClient {
 
       this._toolCallCount++;
 
-      const result = await this.client.request(CallToolRequestSchema, {
+      const result = await this.client.request(CallToolRequestSchema as any, {
         name,
         arguments: args,
-      });
+      } as any);
 
-      return result.content;
+      return (result as any).content;
     } catch (error) {
       this._errorCount++;
       errorMsg = error instanceof Error ? error.message : String(error);
@@ -481,9 +481,9 @@ export class MCPClient {
     }
 
     try {
-      const result = await this.client.request(ListPromptsRequestSchema, {});
+      const result = await this.client.request(ListPromptsRequestSchema as any, {} as any);
       this._prompts = new Map(
-        result.prompts.map((prompt) => [prompt.name, prompt])
+        (result as any).prompts.map((prompt: any) => [prompt.name, prompt])
       );
       return Array.from(this._prompts.values());
     } catch (error) {
@@ -501,11 +501,11 @@ export class MCPClient {
     }
 
     try {
-      const result = await this.client.request(GetPromptRequestSchema, {
+      const result = await this.client.request(GetPromptRequestSchema as any, {
         name,
         arguments: args,
-      });
-      return result;
+      } as any);
+      return result as any;
     } catch (error) {
       logger.error(`Failed to get prompt '${name}': ${error}`);
       throw error;
@@ -553,7 +553,7 @@ export class MCPClient {
     }
 
     try {
-      await this.client.request(ListToolsRequestSchema, {});
+      await this.client.request(ListToolsRequestSchema as any, {} as any);
       this._lastHealthCheck = Date.now() / 1000;
     } catch (error) {
       this._connected = false;

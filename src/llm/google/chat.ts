@@ -1,23 +1,22 @@
 import {
-  GoogleGenerativeAI,
-  type GenerateContentRequest,
+  GoogleGenAI,
   type Tool,
 } from '@google/genai';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { z } from 'zod';
 import type { BaseChatModel } from '../base.js';
-import type { ChatInvokeCompletion } from '../views.js';
+import { ChatInvokeCompletion } from '../views.js';
 import { type Message, SystemMessage } from '../messages.js';
 import { GoogleMessageSerializer } from './serializer.js';
 
 export class ChatGoogle implements BaseChatModel {
   public model: string;
   public provider = 'google';
-  private client: GoogleGenerativeAI;
+  private client: GoogleGenAI;
 
   constructor(model: string = 'gemini-1.5-pro') {
     this.model = model;
-    this.client = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
+    this.client = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY || '' });
   }
 
   get name(): string {
@@ -72,37 +71,38 @@ export class ChatGoogle implements BaseChatModel {
       }
     }
 
-    const model = this.client.getGenerativeModel({
-      model: this.model,
+    const config: any = {
       systemInstruction: systemInstruction,
-    });
+    };
 
-    const generationConfig: any = {};
     if (output_format && 'schema' in output_format && output_format.schema) {
       try {
         const jsonSchema = zodToJsonSchema(
           output_format as unknown as z.ZodType
         );
-        generationConfig.responseMimeType = 'application/json';
-        generationConfig.responseSchema = jsonSchema;
+        config.responseMimeType = 'application/json';
+        config.responseSchema = jsonSchema;
       } catch (e) {
         console.warn('Failed to set responseSchema', e);
       }
     }
 
-    const result = await model.generateContent({
+    const result = await this.client.models.generateContent({
+      model: this.model,
       contents,
-      generationConfig,
+      config,
     });
 
-    const response = result.response;
-    const text = response.text();
+    // Extract text from first candidate
+    const candidate = result.candidates?.[0];
+    const textParts = candidate?.content?.parts?.filter((p: any) => p.text) || [];
+    const text = textParts.map((p: any) => p.text).join('');
 
     let completion: T | string = text;
 
     if (output_format) {
       try {
-        if (generationConfig.responseMimeType === 'application/json') {
+        if (config.responseMimeType === 'application/json') {
           completion = output_format.parse(JSON.parse(text));
         } else {
           completion = output_format.parse(text);
@@ -113,13 +113,13 @@ export class ChatGoogle implements BaseChatModel {
       }
     }
 
-    return {
+    return new ChatInvokeCompletion(
       completion,
-      usage: {
-        promptTokens: response.usageMetadata?.promptTokenCount ?? 0,
-        completionTokens: response.usageMetadata?.candidatesTokenCount ?? 0,
-        totalTokens: response.usageMetadata?.totalTokenCount ?? 0,
-      },
-    };
+      {
+        prompt_tokens: result.usageMetadata?.promptTokenCount ?? 0,
+        completion_tokens: result.usageMetadata?.candidatesTokenCount ?? 0,
+        total_tokens: result.usageMetadata?.totalTokenCount ?? 0,
+      }
+    );
   }
 }

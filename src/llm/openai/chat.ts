@@ -3,7 +3,7 @@ import type { ChatCompletionMessageParam } from 'openai/resources/index.mjs';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { z } from 'zod';
 import type { BaseChatModel } from '../base.js';
-import type { ChatInvokeCompletion } from '../views.js';
+import { ChatInvokeCompletion } from '../views.js';
 import type { Message } from '../messages.js';
 import { OpenAIMessageSerializer } from './serializer.js';
 
@@ -106,13 +106,13 @@ export class ChatOpenAI implements BaseChatModel {
       }
     }
 
-    return {
+    return new ChatInvokeCompletion(
       completion,
-      usage: {
-        promptTokens: response.usage?.prompt_tokens ?? 0,
-        completionTokens: response.usage?.completion_tokens ?? 0,
-        totalTokens: response.usage?.total_tokens ?? 0,
-      },
-    };
+      {
+        prompt_tokens: response.usage?.prompt_tokens ?? 0,
+        completion_tokens: response.usage?.completion_tokens ?? 0,
+        total_tokens: response.usage?.total_tokens ?? 0,
+      }
+    );
   }
 }

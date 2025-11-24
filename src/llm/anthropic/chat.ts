@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { z } from 'zod';
 import type { BaseChatModel } from '../base.js';
-import type { ChatInvokeCompletion } from '../views.js';
+import { ChatInvokeCompletion } from '../views.js';
 import { type Message, SystemMessage } from '../messages.js';
 import { AnthropicMessageSerializer } from './serializer.js';
 
@@ -37,7 +37,7 @@ export class ChatAnthropic implements BaseChatModel {
     output_format?: { parse: (input: string) => T } | undefined
   ): Promise<ChatInvokeCompletion<T | string>> {
     const serializer = new AnthropicMessageSerializer();
-    const anthropicMessages = serializer.serialize(messages);
+    const [anthropicMessages] = serializer.serializeMessages(messages);
 
     const systemMessage = messages.find(
       (msg) => msg instanceof SystemMessage
@@ -97,13 +97,13 @@ export class ChatAnthropic implements BaseChatModel {
       completion = textBlock ? textBlock.text : '';
     }
 
-    return {
+    return new ChatInvokeCompletion(
       completion,
-      usage: {
-        promptTokens: response.usage.input_tokens,
-        completionTokens: response.usage.output_tokens,
-        totalTokens: response.usage.input_tokens + response.usage.output_tokens,
-      },
-    };
+      {
+        prompt_tokens: response.usage.input_tokens,
+        completion_tokens: response.usage.output_tokens,
+        total_tokens: response.usage.input_tokens + response.usage.output_tokens,
+      }
+    );
   }
 }

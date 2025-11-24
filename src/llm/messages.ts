@@ -64,10 +64,15 @@ export class ContentPartImageParam {
 }
 
 export class FunctionCall {
-  constructor(
-    public name: string,
-    public arguments: string
-  ) {}
+  public name: string;
+  // @ts-ignore - 'arguments' is a reserved keyword but valid as property name
+  public arguments: string;
+
+  constructor(name: string, args: string) {
+    this.name = name;
+    // @ts-ignore
+    this.arguments = args;
+  }
 
   toString() {
     return `${this.name}(${truncate(this.arguments, 80)})`;

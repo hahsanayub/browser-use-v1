@@ -15,7 +15,7 @@ async function main() {
   console.log(`Starting task: ${task}`);
 
   const llm = new ChatOpenAI();
-  const agent = new Agent(task, llm);
+  const agent = new Agent({ task, llm });
 
   try {
     await agent.run();

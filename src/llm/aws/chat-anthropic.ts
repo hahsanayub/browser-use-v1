@@ -25,7 +25,7 @@ import {
   type Tool as BedrockTool,
 } from '@aws-sdk/client-bedrock-runtime';
 import type { BaseChatModel } from '../base.js';
-import type { ChatInvokeCompletion } from '../views.js';
+import { ChatInvokeCompletion } from '../views.js';
 import { type Message, SystemMessage } from '../messages.js';
 import { AnthropicMessageSerializer } from '../anthropic/serializer.js';
 
@@ -205,16 +205,14 @@ export class ChatAnthropicBedrock implements BaseChatModel {
       }
     }
 
-    const usage = response.usage || {};
-
-    return {
+    return new ChatInvokeCompletion(
       completion,
-      usage: {
-        promptTokens: usage.inputTokens || 0,
-        completionTokens: usage.outputTokens || 0,
-        totalTokens: usage.totalTokens || 0,
-      },
-    };
+      {
+        prompt_tokens: response.usage?.inputTokens ?? 0,
+        completion_tokens: response.usage?.outputTokens ?? 0,
+        total_tokens: response.usage?.totalTokens ?? 0,
+      }
+    );
   }
 
   /**

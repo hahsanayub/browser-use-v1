@@ -52,7 +52,7 @@ export function registerGmailActions(
   // Register get_recent_emails action
   controller.registry.action(
     'Get recent emails from the mailbox with a keyword to retrieve verification codes, OTP, 2FA tokens, magic links, or any recent email content. Keep your query a single keyword.',
-    GetRecentEmailsParams
+    GetRecentEmailsParams as any
   )(async (params: GetRecentEmailsParams): Promise<ActionResult> => {
     try {
       if (!_gmailService) {

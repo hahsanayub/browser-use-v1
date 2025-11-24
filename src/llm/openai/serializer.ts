@@ -66,6 +66,6 @@ export class OpenAIMessageSerializer {
       };
     }
 
-    throw new Error(`Unknown message type: ${message.constructor.name}`);
+    throw new Error(`Unknown message type: ${(message as any).constructor.name}`);
   }
 }

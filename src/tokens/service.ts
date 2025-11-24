@@ -189,6 +189,7 @@ export class TokenCost {
     const self = this;
 
     (llm as BaseChatModel).ainvoke = async function (...args: any[]) {
+      // @ts-ignore - Spread operator type compatibility
       const result = await original(...args);
       if (result?.usage) {
         const usageEntry = self.addUsage(llm.model, result.usage);

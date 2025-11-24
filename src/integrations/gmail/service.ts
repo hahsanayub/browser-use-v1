@@ -211,12 +211,12 @@ export class GmailService {
       }
 
       // Get message list
-      const results: GaxiosResponse<gmail_v1.Schema$ListMessagesResponse> =
-        await this.service!.users.messages.list({
+      const results =
+        (await this.service!.users.messages.list({
           userId: 'me',
           maxResults: max_results,
           q: fullQuery,
-        });
+        })) as any;
 
       const messages = results.data.messages || [];
       if (!messages.length) {
@@ -232,12 +232,12 @@ export class GmailService {
         const message = messages[i];
         logger.debug(`📖 Reading email ${i + 1}/${messages.length}...`);
 
-        const fullMessage: GaxiosResponse<gmail_v1.Schema$Message> =
-          await this.service!.users.messages.get({
+        const fullMessage =
+          (await this.service!.users.messages.get({
             userId: 'me',
             id: message.id!,
             format: 'full',
-          });
+          })) as any;
 
         const emailData = this._parseEmail(fullMessage.data);
         emails.push(emailData);

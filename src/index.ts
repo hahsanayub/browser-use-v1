@@ -1,8 +1,26 @@
 export * from './config.js';
 export * from './logging-config.js';
-export * from './observability.js';
-export * from './observability-decorators.js';
-export * from './exceptions.js';
+
+// Export observability - note observeDebug exists in both files
+export {
+  observe,
+  observe_debug,
+  isLmnrAvailable,
+  isDebugMode,
+  getObservabilityStatus,
+} from './observability.js';
+export {
+  observeDebug,
+  observeDebugMethod,
+  OperationTrace,
+  trackPerformance,
+  withObservability,
+  PerformanceCounter,
+} from './observability-decorators.js';
+
+// Export exceptions - note URLNotAllowedError defined in both exceptions.js and browser/views.js
+export { URLNotAllowedError as BaseURLNotAllowedError } from './exceptions.js';
+
 export * from './utils.js';
 
 export * from './browser/index.js';

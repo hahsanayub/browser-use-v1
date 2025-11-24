@@ -481,7 +481,7 @@ export class Agent<
 
       try {
         // Get the parameter model for this action from registry
-        const actionInfo = (this.controller.registry.registry as any).actions[
+        const actionInfo = this.controller.registry.get_all_actions()[
           actionName
         ];
         if (!actionInfo) {

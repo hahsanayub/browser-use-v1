@@ -72,6 +72,14 @@ export class Registry<Context = unknown> {
     };
   }
 
+  public get_action(action_name: string) {
+    return this.registry.get(action_name);
+  }
+
+  public get_all_actions() {
+    return (this.registry as any).actions;
+  }
+
   public execute_action = observe_debug({
     name: 'execute_action',
     ignore_input: true,

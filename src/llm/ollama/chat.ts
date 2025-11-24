@@ -2,7 +2,7 @@ import { Ollama } from 'ollama';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { z } from 'zod';
 import type { BaseChatModel } from '../base.js';
-import type { ChatInvokeCompletion } from '../views.js';
+import { ChatInvokeCompletion } from '../views.js';
 import type { Message } from '../messages.js';
 import { OllamaMessageSerializer } from './serializer.js';
 
@@ -67,14 +67,14 @@ export class ChatOllama implements BaseChatModel {
       }
     }
 
-    return {
+    return new ChatInvokeCompletion(
       completion,
-      usage: {
-        promptTokens: response.prompt_eval_count ?? 0,
-        completionTokens: response.eval_count ?? 0,
-        totalTokens:
+      {
+        prompt_tokens: response.prompt_eval_count ?? 0,
+        completion_tokens: response.eval_count ?? 0,
+        total_tokens:
           (response.prompt_eval_count ?? 0) + (response.eval_count ?? 0),
-      },
-    };
+      }
+    );
   }
 }

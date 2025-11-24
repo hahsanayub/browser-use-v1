@@ -7,7 +7,7 @@ import {
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { z } from 'zod';
 import type { BaseChatModel } from '../base.js';
-import type { ChatInvokeCompletion } from '../views.js';
+import { ChatInvokeCompletion } from '../views.js';
 import { type Message, SystemMessage } from '../messages.js';
 import { AWSBedrockMessageSerializer } from './serializer.js';
 
@@ -117,13 +117,13 @@ export class ChatBedrockConverse implements BaseChatModel {
 
     const usage = response.usage || {};
 
-    return {
+    return new ChatInvokeCompletion(
       completion,
-      usage: {
-        promptTokens: usage.inputTokens || 0,
-        completionTokens: usage.outputTokens || 0,
-        totalTokens: usage.totalTokens || 0,
-      },
-    };
+      {
+        prompt_tokens: (usage as any).inputTokens || 0,
+        completion_tokens: (usage as any).outputTokens || 0,
+        total_tokens: (usage as any).totalTokens || 0,
+      }
+    );
   }
 }

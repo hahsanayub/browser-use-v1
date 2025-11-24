@@ -359,6 +359,6 @@ export class AnthropicMessageSerializer {
       }
     }
 
-    return cleanedMessages;
+    return cleanedMessages as any;
   }
 }

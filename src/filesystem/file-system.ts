@@ -7,8 +7,8 @@ import { spawnSync } from 'node:child_process';
 
 type PdfParseFn = (
   dataBuffer: Buffer,
-  options?: import('pdf-parse').Options
-) => Promise<import('pdf-parse').Result>;
+  options?: any
+) => Promise<any>;
 const require = createRequire(import.meta.url);
 const pdfParse = require('pdf-parse') as PdfParseFn;
 
@@ -504,5 +504,3 @@ export class FileSystem {
     return FileSystem.from_state_sync(state);
   }
 }
-
-export type { FileSystemState };

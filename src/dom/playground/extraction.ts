@@ -1,7 +1,6 @@
 import * as fs from 'fs/promises';
 import * as readline from 'readline';
 import { promisify } from 'util';
-import { encoding_for_model } from 'tiktoken';
 import { BrowserProfile, BrowserSession } from '../../browser/index.js';
 import type { ViewportSize } from '../../browser/types.js';
 import { DomService } from '../service.js';
@@ -30,10 +29,10 @@ const TIMEOUT = 60;
  */
 async function testFocusVsAllElements(): Promise<void> {
   const browserSession = new BrowserSession({
-    browserProfile: new BrowserProfile({
-      windowSize: { width: 1100, height: 1000 } as ViewportSize,
-      disableSecurity: true,
-      waitForNetworkIdlePageLoadTime: 1,
+    browser_profile: new BrowserProfile({
+      window_size: { width: 1100, height: 1000 } as ViewportSize,
+      disable_security: true,
+      wait_for_network_idle_page_load_time: 1,
       headless: false,
     }),
   });
@@ -55,6 +54,9 @@ async function testFocusVsAllElements(): Promise<void> {
 
   await browserSession.start();
   const page = await browserSession.getCurrentPage();
+  if (!page) {
+    throw new Error('No page available');
+  }
   const domService = new DomService(page);
 
   const rl = readline.createInterface({
@@ -79,24 +81,24 @@ async function testFocusVsAllElements(): Promise<void> {
         console.log('\nGetting page state...');
 
         const startTime = Date.now();
-        const allElementsState = await browserSession.getStateSummary(true);
+        const allElementsState = await browserSession.get_state_summary(true);
         const endTime = Date.now();
         console.log(
           `get_state_summary took ${((endTime - startTime) / 1000).toFixed(2)} seconds`
         );
 
-        const selectorMap = allElementsState.selectorMap;
+        const selectorMap = allElementsState.selector_map;
         const totalElements = Object.keys(selectorMap).length;
         console.log(`Total number of elements: ${totalElements}`);
 
         const prompt = new AgentMessagePrompt({
-          browserStateSummary: allElementsState,
-          fileSystem: new FileSystem('./tmp'),
-          includeAttributes: DEFAULT_INCLUDE_ATTRIBUTES,
-          stepInfo: null,
+          browser_state_summary: allElementsState,
+          file_system: new FileSystem('./tmp'),
+          include_attributes: DEFAULT_INCLUDE_ATTRIBUTES,
+          step_info: null,
         });
 
-        const userMessage = prompt.getUserMessage(false).text || '';
+        const userMessage = prompt.get_user_message(false).text || '';
 
         const textToSave = userMessage;
 
@@ -105,17 +107,20 @@ async function testFocusVsAllElements(): Promise<void> {
 
         await fs.writeFile(
           './tmp/element_tree.json',
-          JSON.stringify(allElementsState.elementTree.toJSON(), null, 0),
+          JSON.stringify(allElementsState.element_tree.toJSON(), null, 0),
           'utf-8'
         );
 
         try {
+          // Optional: tiktoken is not installed by default
+          // @ts-ignore - tiktoken is an optional dependency
+          const { encoding_for_model } = await import('tiktoken');
           const encoding = encoding_for_model('gpt-4o');
           const tokenCount = encoding.encode(textToSave).length;
           console.log(`Token count: ${tokenCount}`);
         } catch (error) {
           console.log(
-            'Could not calculate token count:',
+            'Could not calculate token count (tiktoken not installed):',
             (error as Error).message
           );
         }
@@ -123,9 +128,9 @@ async function testFocusVsAllElements(): Promise<void> {
         console.log('User message written to ./tmp/user_message.txt');
         console.log('Element tree written to ./tmp/element_tree.json');
 
-        const answer = (await question(
+        const answer = String(await question(
           "Enter element index to click, 'index,text' to input, 'c,index' to copy element JSON, or 'q' to quit: "
-        )) as string;
+        ));
 
         if (answer.toLowerCase().trim() === 'q') {
           break;
@@ -146,7 +151,7 @@ async function testFocusVsAllElements(): Promise<void> {
                   );
                   console.log(`Element ${targetIndex} JSON:`);
                   console.log(elementJson);
-                  console.log(`\nElement: ${elementNode.tagName}`);
+                  console.log(`\nElement: ${elementNode.tag_name}`);
                 } else {
                   console.log(`Invalid index: ${targetIndex}`);
                 }
@@ -165,7 +170,7 @@ async function testFocusVsAllElements(): Promise<void> {
                 if (targetIndex in selectorMap) {
                   const elementNode = selectorMap[targetIndex];
                   console.log(
-                    `Inputting text '${textToInput}' into element ${targetIndex}: ${elementNode.tagName}`
+                    `Inputting text '${textToInput}' into element ${targetIndex}: ${elementNode.tag_name}`
                   );
                   await (browserSession as any)._inputTextElementNode(
                     elementNode,
@@ -187,7 +192,7 @@ async function testFocusVsAllElements(): Promise<void> {
               if (clickedIndex in selectorMap) {
                 const elementNode = selectorMap[clickedIndex];
                 console.log(
-                  `Clicking element ${clickedIndex}: ${elementNode.tagName}`
+                  `Clicking element ${clickedIndex}: ${elementNode.tag_name}`
                 );
                 await (browserSession as any)._clickElementNode(elementNode);
                 console.log('Click successful.');

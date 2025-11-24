@@ -1,10 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createCanvas, loadImage, Image } from 'canvas';
+import type { CanvasRenderingContext2D as NodeCanvasRenderingContext2D } from 'canvas';
 import GIFEncoder from 'gif-encoder-2';
 import { createLogger } from '../logging-config.js';
 import { PLACEHOLDER_4PX_SCREENSHOT } from '../browser/views.js';
 import type { AgentHistoryList } from './views.js';
+
+// Type compatibility between node-canvas and browser canvas
+type CompatibleCanvasContext = NodeCanvasRenderingContext2D | CanvasRenderingContext2D;
 
 const logger = createLogger('browser_use.agent.gif');
 
@@ -46,7 +50,7 @@ const FONT_CANDIDATES = [
 const pickFont = () => FONT_CANDIDATES.join(', ');
 
 const wrapText = (
-  ctx: CanvasRenderingContext2D,
+  ctx: CompatibleCanvasContext,
   text: string,
   maxWidth: number
 ) => {
@@ -70,7 +74,7 @@ const wrapText = (
 };
 
 const drawRoundedRect = (
-  ctx: CanvasRenderingContext2D,
+  ctx: CompatibleCanvasContext,
   x: number,
   y: number,
   width: number,
@@ -96,7 +100,7 @@ const drawRoundedRect = (
 };
 
 const addOverlayToContext = (
-  ctx: CanvasRenderingContext2D,
+  ctx: CompatibleCanvasContext,
   width: number,
   height: number,
   stepNumber: number,
@@ -150,7 +154,7 @@ const addOverlayToContext = (
 };
 
 const addLogo = (
-  ctx: CanvasRenderingContext2D,
+  ctx: CompatibleCanvasContext,
   width: number,
   image: Image | null
 ) => {
@@ -161,8 +165,9 @@ const addLogo = (
   const aspect = image.width / image.height || 1;
   const targetWidth = targetHeight * aspect;
   ctx.globalAlpha = 0.9;
+  // @ts-ignore - drawImage signature compatibility
   ctx.drawImage(
-    image as any,
+    image,
     width - targetWidth - margin,
     margin,
     targetWidth,
@@ -182,7 +187,7 @@ const loadLogo = async () => {
 };
 
 const renderTaskFrame = (
-  ctx: CanvasRenderingContext2D,
+  ctx: CompatibleCanvasContext,
   width: number,
   height: number,
   task: string,
@@ -211,7 +216,7 @@ const renderTaskFrame = (
 };
 
 const drawScreenshotFrame = (
-  ctx: CanvasRenderingContext2D,
+  ctx: CompatibleCanvasContext,
   width: number,
   height: number,
   image: Image,
@@ -221,7 +226,8 @@ const drawScreenshotFrame = (
   titleFontSize: number,
   logo: Image | null
 ) => {
-  ctx.drawImage(image as any, 0, 0, width, height);
+  // @ts-ignore - drawImage signature compatibility
+  ctx.drawImage(image, 0, 0, width, height);
   if (goalText) {
     addOverlayToContext(
       ctx,
@@ -300,6 +306,7 @@ export const create_history_gif = async (
 
   if (show_task && task) {
     ctx.clearRect(0, 0, width, height);
+    // @ts-ignore - node-canvas types differ slightly from browser canvas
     renderTaskFrame(
       ctx,
       width,
@@ -326,6 +333,7 @@ export const create_history_gif = async (
         history.history[index]?.model_output?.current_state.next_goal
           ? history.history[index].model_output!.current_state.next_goal
           : '';
+      // @ts-ignore - node-canvas types differ slightly from browser canvas
       drawScreenshotFrame(
         ctx,
         width,

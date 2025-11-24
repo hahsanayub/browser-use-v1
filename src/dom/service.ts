@@ -54,11 +54,13 @@ export class DomService {
     this.jsCode = DOM_TREE_SCRIPT;
   }
 
+  // @ts-ignore - Decorator type mismatch with TypeScript strict mode
   @observe_debug({
     ignore_input: true,
     ignore_output: true,
     name: 'get_clickable_elements',
   })
+  // @ts-ignore - Decorator type mismatch with TypeScript strict mode
   @time_execution_async('--get_clickable_elements')
   async get_clickable_elements(
     highlight_elements = true,
@@ -73,6 +75,7 @@ export class DomService {
     return new DOMState(element_tree, selector_map);
   }
 
+  // @ts-ignore - Decorator type mismatch with TypeScript strict mode
   @time_execution_async('--get_cross_origin_iframes')
   async get_cross_origin_iframes() {
     const hiddenFrameUrls = await this.page
@@ -96,7 +99,7 @@ export class DomService {
     const currentHost = this.safeHostname(this.getPageUrl());
 
     return this.getFrames()
-      .map((frame) => this.getFrameUrl(frame))
+      .map((frame: any) => this.getFrameUrl(frame))
       .filter((url: string | null) => {
         if (!url) return false;
         const host = this.safeHostname(url);
@@ -107,6 +110,7 @@ export class DomService {
       });
   }
 
+  // @ts-ignore - Decorator type mismatch with TypeScript strict mode
   @time_execution_async('--build_dom_tree')
   private async _build_dom_tree(
     highlight_elements: boolean,
@@ -139,12 +143,11 @@ export class DomService {
         `🔧 Starting JavaScript DOM analysis for ${pageUrl.slice(0, 50)}...`
       );
       eval_page = await this.page.evaluate(
-        (script, evaluateArgs) => {
+        ({ script, evaluateArgs }: { script: any; evaluateArgs: any }) => {
           const fn = eval(script);
           return fn(evaluateArgs);
         },
-        this.jsCode,
-        args
+        { script: this.jsCode, evaluateArgs: args }
       );
       this.logger.debug('✅ JavaScript DOM analysis completed');
     } catch (error) {
@@ -176,6 +179,7 @@ export class DomService {
     return result;
   }
 
+  // @ts-ignore - Decorator type mismatch with TypeScript strict mode
   @time_execution_async('--construct_dom_tree')
   private async _construct_dom_tree(eval_page: SerializedDOMTree) {
     const selector_map: SelectorMap = {};

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ActionModel } from '../controller/registry/views.js';
+import { ActionModel } from '../controller/registry/views.js';
 import { BrowserStateHistory } from '../browser/views.js';
 import type { DOMHistoryElement } from '../dom/history-tree-processor/view.js';
 import { HistoryTreeProcessor } from '../dom/history-tree-processor/service.js';
@@ -8,6 +8,9 @@ import type { DOMElementNode, SelectorMap } from '../dom/views.js';
 import type { FileSystemState } from '../filesystem/file-system.js';
 import { MessageManagerState } from './message-manager/views.js';
 import type { UsageSummary } from '../tokens/views.js';
+
+// Re-export ActionModel for agent/service.ts
+export { ActionModel };
 
 export interface StructuredOutputParser<T = unknown> {
   parse?: (input: string) => T;
@@ -298,7 +301,7 @@ export class AgentOutput {
       return new AgentOutput();
     }
     const actions = Array.isArray(data.action)
-      ? data.action.map((item) => new ActionModel(item))
+      ? data.action.map((item: any) => new ActionModel(item))
       : [];
     return new AgentOutput({
       thinking: data.thinking ?? null,
@@ -648,6 +651,10 @@ export class AgentHistoryList<TStructured = unknown> {
       history: this.history.map((item) => item.toJSON()),
       usage: this.usage,
     };
+  }
+
+  model_dump() {
+    return this.toJSON();
   }
 }
 

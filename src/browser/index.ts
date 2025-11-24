@@ -1,10 +1,32 @@
 export * from './profile.js';
-export * from './types.js';
 export * from './views.js';
 export * from './utils.js';
-export * from './browser.js';
-export * from './context.js';
 export * from './session.js';
 export * from './extensions.js';
 export * from './dvd-screensaver.js';
 export * from './playwright-manager.js';
+
+// Export from context.ts (primary aliases for Browser/BrowserContext)
+export { Browser, BrowserConfig, BrowserContext, BrowserContextConfig } from './context.js';
+
+// Export Playwright types separately to avoid conflicts with context.ts
+export type {
+  Browser as PlaywrightBrowser,
+  BrowserContext as PlaywrightBrowserContext,
+  Page,
+  Locator,
+  FrameLocator,
+  ElementHandle,
+  Playwright,
+  Patchright,
+  PlaywrightOrPatchright,
+  ClientCertificate,
+  Geolocation,
+  HttpCredentials,
+  ProxySettings,
+  StorageState,
+  ViewportSize
+} from './types.js';
+
+// Re-export the async playwright loader
+export { async_playwright, async_patchright } from './types.js';

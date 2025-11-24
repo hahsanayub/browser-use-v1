@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
 import { createWriteStream, createReadStream } from 'node:fs';
 import { Readable } from 'node:stream';
+// @ts-ignore - extract-zip types may not be available
 import extract from 'extract-zip';
 import { createLogger } from '../logging-config.js';
 
@@ -209,8 +210,8 @@ export async function loadOrInstallExtension(
   }
 
   // Auto-detect ID and version
-  ext.id = getExtensionId(ext.unpacked_path);
-  ext.version = readVersion();
+  ext.id = getExtensionId(ext.unpacked_path) ?? undefined;
+  ext.version = readVersion() ?? undefined;
 
   if (!ext.version) {
     logger.warning(

@@ -539,6 +539,63 @@ export class BrowserProfile {
     return this.options;
   }
 
+  // Public getters for commonly accessed properties
+  public get allowed_domains() {
+    return this.options.allowed_domains;
+  }
+
+  public get cookies_file() {
+    return this.options.cookies_file;
+  }
+
+  public get default_navigation_timeout() {
+    return this.options.default_navigation_timeout;
+  }
+
+  public get downloads_path() {
+    return this.options.downloads_path;
+  }
+
+  public get highlight_elements() {
+    return this.options.highlight_elements;
+  }
+
+  public get keep_alive(): boolean | null {
+    return this.options.keep_alive;
+  }
+
+  public set keep_alive(value: boolean | null) {
+    this.options.keep_alive = value;
+  }
+
+  public get maximum_wait_page_load_time() {
+    return this.options.maximum_wait_page_load_time;
+  }
+
+  public get traces_dir() {
+    return this.options.traces_dir;
+  }
+
+  public get user_data_dir() {
+    return this.options.user_data_dir;
+  }
+
+  public get viewport_expansion() {
+    return this.options.viewport_expansion;
+  }
+
+  public get viewport() {
+    return this.options.viewport;
+  }
+
+  public get wait_for_network_idle_page_load_time() {
+    return this.options.wait_for_network_idle_page_load_time;
+  }
+
+  public get window_size() {
+    return this.options.window_size;
+  }
+
   private applyLegacyWindowSize() {
     const { window_width, window_height } = this.options;
     if (window_width || window_height) {

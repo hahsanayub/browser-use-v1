@@ -130,7 +130,7 @@ export class DeviceAuthClient {
     const response = await this.postForm('/api/v1/oauth/device/authorize', {
       client_id: this.clientId,
       scope: this.scope,
-      agent_session_id,
+      agent_session_id: agent_session_id ?? undefined,
       device_id: this.device_id,
     });
     return response.data as Record<string, any>;
