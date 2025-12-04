@@ -45,24 +45,34 @@ export class ChatAzure implements BaseChatModel {
     const openaiMessages = serializer.serialize(messages);
 
     let responseFormat: any = undefined;
-    if (output_format && 'schema' in output_format && output_format.schema) {
+    const schemaForJson =
+      output_format && 'schema' in output_format && (output_format as any).schema
+        ? (output_format as any).schema
+        : output_format;
+
+    if (schemaForJson) {
       try {
         const jsonSchema = zodToJsonSchema(
-          output_format as unknown as z.ZodType,
+          schemaForJson as unknown as z.ZodType,
           {
             name: 'Response',
             target: 'jsonSchema7',
           }
         );
 
-        responseFormat = {
-          type: 'json_schema',
-          json_schema: {
-            name: 'Response',
-            schema: jsonSchema,
-            strict: true,
-          },
-        };
+        if ((jsonSchema as any)?.type === 'object') {
+          responseFormat = {
+            type: 'json_schema',
+            json_schema: {
+              name: 'Response',
+              schema: jsonSchema,
+              strict: true,
+            },
+          };
+        } else {
+          // Fallback: skip structured response if schema is not an object
+          responseFormat = undefined;
+        }
       } catch (e) {
         console.warn(
           'Failed to convert output_format to JSON schema for Azure',
@@ -83,9 +93,22 @@ export class ChatAzure implements BaseChatModel {
     if (output_format) {
       try {
         if (responseFormat?.type === 'json_schema') {
-          completion = output_format.parse(JSON.parse(content));
+          let parsed: any = content;
+          let jsonText = content.trim();
+          const fencedMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/i);
+          if (fencedMatch && fencedMatch[1]) {
+            jsonText = fencedMatch[1].trim();
+          }
+          const firstBrace = jsonText.indexOf('{');
+          const lastBrace = jsonText.lastIndexOf('}');
+          if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+            jsonText = jsonText.slice(firstBrace, lastBrace + 1);
+          }
+          parsed = JSON.parse(jsonText);
+          completion = output_format.parse(parsed);
         } else {
-          completion = output_format.parse(content);
+          // If we didn't configure a structured response, return raw content
+          completion = content as any;
         }
       } catch (e) {
         console.error('Failed to parse completion', e);

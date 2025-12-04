@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import process from 'node:process';
 import { config as loadEnv } from 'dotenv';
+import { z } from 'zod';
 import { createLogger } from '../logging-config.js';
 import { CONFIG } from '../config.js';
 import { EventBus } from '../event-bus.js';
@@ -206,6 +207,14 @@ const defaultAgentOptions = () => ({
   vision_detail_level: 'auto' as const,
   llm_timeout: 60,
   step_timeout: 180,
+});
+
+const AgentLLMOutputSchema = z.object({
+  thinking: z.string().optional().nullable(),
+  evaluation_previous_goal: z.string().optional().nullable(),
+  memory: z.string().optional().nullable(),
+  next_goal: z.string().optional().nullable(),
+  action: z.array(z.record(z.string(), z.any())).optional().nullable().default([]),
 });
 
 export class Agent<
@@ -2030,16 +2039,46 @@ export class Agent<
   }
 
   private async _get_model_output_with_retry(messages: any[]) {
-    const completion = await this.llm.ainvoke(messages as any);
-    const action = Array.isArray((completion as any).completion?.action)
-      ? (completion as any).completion.action
+    const completion = await this.llm.ainvoke(
+      messages as any,
+      AgentLLMOutputSchema
+    );
+    let parsed_completion = (completion as any).completion;
+
+    if (typeof parsed_completion === 'string') {
+      let jsonText = parsed_completion.trim();
+
+      // Handle common markdown wrappers like ```json ... ```
+      const fencedMatch = jsonText.match(/```(?:json)?\\s*([\\s\\S]*?)```/i);
+      if (fencedMatch && fencedMatch[1]) {
+        jsonText = fencedMatch[1].trim();
+      }
+
+      // If extra text surrounds JSON, try to isolate the first JSON object
+      const firstBrace = jsonText.indexOf('{');
+      const lastBrace = jsonText.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        jsonText = jsonText.slice(firstBrace, lastBrace + 1);
+      }
+
+      try {
+        parsed_completion = JSON.parse(jsonText);
+      } catch (error) {
+        throw new Error(
+          `Failed to parse LLM completion as JSON: ${String(error)}`
+        );
+      }
+    }
+
+    const action = Array.isArray(parsed_completion?.action)
+      ? parsed_completion.action
       : [];
     return new AgentOutput({
-      thinking: (completion as any).completion?.thinking ?? null,
+      thinking: parsed_completion?.thinking ?? null,
       evaluation_previous_goal:
-        (completion as any).completion?.evaluation_previous_goal ?? null,
-      memory: (completion as any).completion?.memory ?? null,
-      next_goal: (completion as any).completion?.next_goal ?? null,
+        parsed_completion?.evaluation_previous_goal ?? null,
+      memory: parsed_completion?.memory ?? null,
+      next_goal: parsed_completion?.next_goal ?? null,
       action,
     });
   }
@@ -2111,7 +2150,8 @@ export class Agent<
     current_page: Page | null,
     browser_state_summary: BrowserStateSummary | null
   ) {
-    const url = current_page?.url ?? '';
+    const url =
+      typeof current_page?.url === 'function' ? current_page.url() : '';
     const url_short = url.length > 50 ? `${url.slice(0, 50)}...` : url;
     const interactive_count = browser_state_summary?.selector_map
       ? Object.keys(browser_state_summary.selector_map).length

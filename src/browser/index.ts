@@ -7,7 +7,12 @@ export * from './dvd-screensaver.js';
 export * from './playwright-manager.js';
 
 // Export from context.ts (primary aliases for Browser/BrowserContext)
-export { Browser, BrowserConfig, BrowserContext, BrowserContextConfig } from './context.js';
+export type {
+  Browser,
+  BrowserConfig,
+  BrowserContext,
+  BrowserContextConfig,
+} from './context.js';
 
 // Export Playwright types separately to avoid conflicts with context.ts
 export type {
@@ -25,7 +30,7 @@ export type {
   HttpCredentials,
   ProxySettings,
   StorageState,
-  ViewportSize
+  ViewportSize,
 } from './types.js';
 
 // Re-export the async playwright loader

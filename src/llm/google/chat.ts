@@ -14,9 +14,16 @@ export class ChatGoogle implements BaseChatModel {
   public provider = 'google';
   private client: GoogleGenAI;
 
-  constructor(model: string = 'gemini-1.5-pro') {
+  constructor(model: string = 'gemini-2.5-flash') {
     this.model = model;
-    this.client = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY || '' });
+    const apiVersion = process.env.GOOGLE_API_VERSION || 'v1';
+    const baseUrl = process.env.GOOGLE_API_BASE_URL;
+
+    this.client = new GoogleGenAI({
+      apiKey: process.env.GOOGLE_API_KEY || '',
+      ...(baseUrl ? { baseUrl } : {}),
+      ...(apiVersion ? { apiVersion } : {}),
+    });
   }
 
   get name(): string {
@@ -50,63 +57,72 @@ export class ChatGoogle implements BaseChatModel {
     let tools: Tool[] | undefined = undefined;
     let toolConfig: any = undefined;
 
-    if (output_format && 'schema' in output_format && output_format.schema) {
-      try {
-        const jsonSchema = zodToJsonSchema(
-          output_format as unknown as z.ZodType,
-          {
-            name: 'Response',
-            target: 'jsonSchema7',
-          }
-        );
+    const schemaForJson =
+      output_format && 'schema' in output_format && (output_format as any).schema
+        ? (output_format as any).schema
+        : output_format;
 
-        // Google GenAI uses a specific format for function calling or structured output
-        // For now, we'll use function calling to enforce structure if possible, or just prompt engineering.
-        // But Gemini 1.5 Pro supports responseSchema in generationConfig.
-      } catch (e) {
-        console.warn(
-          'Failed to convert output_format to JSON schema for Google',
-          e
-        );
-      }
-    }
-
-    const config: any = {
-      systemInstruction: systemInstruction,
+    const generationConfig: any = {
+      responseMimeType: 'application/json',
     };
 
-    if (output_format && 'schema' in output_format && output_format.schema) {
+    if (schemaForJson) {
       try {
         const jsonSchema = zodToJsonSchema(
-          output_format as unknown as z.ZodType
+          schemaForJson as unknown as z.ZodType
         );
-        config.responseMimeType = 'application/json';
-        config.responseSchema = jsonSchema;
+        generationConfig.responseMimeType = 'application/json';
+        generationConfig.responseSchema = jsonSchema;
       } catch (e) {
         console.warn('Failed to set responseSchema', e);
       }
     }
 
-    const result = await this.client.models.generateContent({
+    const request: any = {
       model: this.model,
       contents,
-      config,
-    });
+    };
+
+    if (systemInstruction) {
+      request.systemInstruction = {
+        role: 'system',
+        parts: [{ text: systemInstruction }],
+      };
+    }
+
+    if (Object.keys(generationConfig).length > 0) {
+      request.generationConfig = generationConfig;
+    }
+
+    const result = await this.client.models.generateContent(request);
 
     // Extract text from first candidate
     const candidate = result.candidates?.[0];
-    const textParts = candidate?.content?.parts?.filter((p: any) => p.text) || [];
+    const textParts =
+      candidate?.content?.parts?.filter((p: any) => p.text) || [];
     const text = textParts.map((p: any) => p.text).join('');
 
     let completion: T | string = text;
 
     if (output_format) {
       try {
-        if (config.responseMimeType === 'application/json') {
-          completion = output_format.parse(JSON.parse(text));
-        } else {
-          completion = output_format.parse(text);
+        let parsed: any = text;
+
+        if (generationConfig.responseMimeType === 'application/json') {
+          let jsonText = text.trim();
+          const fencedMatch = jsonText.match(/```(?:json)?\\s*([\\s\\S]*?)```/i);
+          if (fencedMatch && fencedMatch[1]) {
+            jsonText = fencedMatch[1].trim();
+          }
+          const firstBrace = jsonText.indexOf('{');
+          const lastBrace = jsonText.lastIndexOf('}');
+          if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+            jsonText = jsonText.slice(firstBrace, lastBrace + 1);
+          }
+          parsed = JSON.parse(jsonText);
         }
+
+        completion = output_format.parse(parsed);
       } catch (e) {
         console.error('Failed to parse completion', e);
         throw e;

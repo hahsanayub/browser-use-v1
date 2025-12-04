@@ -52,6 +52,7 @@
     "canvas": "^3.2.0",
     "dotenv": "^16.4.5",
     "eventemitter3": "^5.0.1",
+    "extract-zip": "^2.0.1",
     "gif-encoder-2": "^1.0.5",
     "googleapis": "^166.0.0",
     "gpt-tokenizer": "^3.4.0",

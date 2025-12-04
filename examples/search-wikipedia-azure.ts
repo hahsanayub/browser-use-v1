@@ -1,12 +1,29 @@
 import 'dotenv/config';
 import { chromium, type Browser, type BrowserContext } from 'playwright';
-import { ChatGoogle } from '../src/llm/google/chat.js';
+import { ChatAzure } from '../src/llm/azure/chat.js';
 import { UserMessage } from '../src/llm/messages.js';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const VIEWPORT = { width: 1440, height: 900 };
+const DEFAULT_AZURE_ENDPOINT =
+  'https://oai-ai4m-rnd-eastus-001.openai.azure.com';
+const DEFAULT_AZURE_API_VERSION = '2025-03-01-preview';
+const DEFAULT_AZURE_DEPLOYMENT =
+  'oai-ai4m-rnd-eastus-001-gpt-4-0125-Preview-001';
 
 async function main() {
-  const llm = new ChatGoogle('gemini-2.5-flash');
+  // Ensure the Azure client has the required env values
+  process.env.AZURE_OPENAI_ENDPOINT =
+    process.env.AZURE_OPENAI_ENDPOINT || DEFAULT_AZURE_ENDPOINT;
+  process.env.AZURE_OPENAI_API_VERSION =
+    process.env.AZURE_OPENAI_API_VERSION || DEFAULT_AZURE_API_VERSION;
+
+  const llm = new ChatAzure(DEFAULT_AZURE_DEPLOYMENT);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const logDir = path.join('logs', `azure-wiki-${timestamp}`);
+  fs.mkdirSync(logDir, { recursive: true });
+
   let browser: Browser | null = null;
   let context: BrowserContext | null = null;
 
@@ -49,11 +66,22 @@ async function main() {
       ),
     ]);
 
+    // Save summary to file
+    const summaryText = String(summaryResponse.completion ?? '').trim();
+    fs.writeFileSync(path.join(logDir, 'summary.txt'), summaryText || '(empty)', 'utf8');
+
+    // Save screenshot
+    await page.screenshot({
+      path: path.join(logDir, 'page.png'),
+      fullPage: true,
+    });
+
     console.log('Summary:');
-    console.log(summaryResponse.completion);
+    console.log(summaryText);
     console.log(`Final page: ${await page.title()} (${page.url()})`);
+    console.log(`Logs saved to: ${logDir}`);
   } catch (error) {
-    console.error('Wikipedia example failed:', error);
+    console.error('Wikipedia Azure example failed:', error);
   } finally {
     await context?.close().catch(() => {});
     await browser?.close().catch(() => {});
