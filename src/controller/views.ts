@@ -52,8 +52,8 @@ export const CloseTabActionSchema = z.object({
 export type CloseTabAction = z.infer<typeof CloseTabActionSchema>;
 
 export const ScrollActionSchema = z.object({
-  down: z.boolean(),
-  num_pages: z.number(),
+  down: z.boolean().default(true), // Default to scroll down
+  num_pages: z.number().default(1), // Default to 1 page
   index: z.number().int().optional(),
 });
 export type ScrollAction = z.infer<typeof ScrollActionSchema>;

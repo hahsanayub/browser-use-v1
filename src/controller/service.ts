@@ -101,7 +101,7 @@ export class Controller<Context = unknown> {
     type SearchGoogleAction = z.infer<typeof SearchGoogleActionSchema>;
     this.registry.action('Search the query in Google...', {
       param_model: SearchGoogleActionSchema,
-    })(async (params: SearchGoogleAction, { browser_session }) => {
+    })(async function search_google(params: SearchGoogleAction, { browser_session }) {
       if (!browser_session) throw new Error('Browser session missing');
       const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(params.query)}&udm=14`;
       const page = await browser_session.get_current_page();
@@ -122,7 +122,7 @@ export class Controller<Context = unknown> {
     type GoToUrlAction = z.infer<typeof GoToUrlActionSchema>;
     this.registry.action('Navigate to URL...', {
       param_model: GoToUrlActionSchema,
-    })(async (params: GoToUrlAction, { browser_session }) => {
+    })(async function go_to_url(params: GoToUrlAction, { browser_session }) {
       if (!browser_session) throw new Error('Browser session missing');
       try {
         if (params.new_tab) {
@@ -160,7 +160,7 @@ export class Controller<Context = unknown> {
     });
 
     this.registry.action('Go back', { param_model: NoParamsActionSchema })(
-      async (_params, { browser_session }) => {
+      async function go_back(_params, { browser_session }) {
         if (!browser_session) throw new Error('Browser session missing');
         await browser_session.go_back();
         const msg = '🔙  Navigated back';
@@ -170,7 +170,7 @@ export class Controller<Context = unknown> {
 
     this.registry.action(
       'Wait for x seconds default 3 (max 10 seconds). This can be used to wait until the page is fully loaded.'
-    )(async (seconds = 3) => {
+    )(async function wait(seconds = 3) {
       const actualSeconds = Math.min(
         Math.max(seconds - DEFAULT_WAIT_OFFSET, 0),
         MAX_WAIT_SECONDS
@@ -189,7 +189,7 @@ export class Controller<Context = unknown> {
     type ClickElementAction = z.infer<typeof ClickElementActionSchema>;
     this.registry.action('Click element by index', {
       param_model: ClickElementActionSchema,
-    })(async (params: ClickElementAction, { browser_session }) => {
+    })(async function click_element_by_index(params: ClickElementAction, { browser_session }) {
       if (!browser_session) throw new Error('Browser session missing');
       const element = await browser_session.get_dom_element_by_index(
         params.index
@@ -243,10 +243,10 @@ export class Controller<Context = unknown> {
       'Click and input text into an input interactive element',
       { param_model: InputTextActionSchema }
     )(
-      async (
+      async function input_text(
         params: InputTextAction,
         { browser_session, has_sensitive_data }
-      ) => {
+      ) {
         if (!browser_session) throw new Error('Browser session missing');
         const element = await browser_session.get_dom_element_by_index(
           params.index
@@ -272,10 +272,10 @@ export class Controller<Context = unknown> {
     this.registry.action('Upload file to interactive element with file path', {
       param_model: UploadFileActionSchema,
     })(
-      async (
+      async function upload_file(
         params: UploadFileAction,
         { browser_session, available_file_paths }
-      ) => {
+      ) {
         if (!browser_session) throw new Error('Browser session missing');
         if (!available_file_paths?.includes(params.path)) {
           throw new BrowserError(`File path ${params.path} is not available`);
@@ -316,7 +316,7 @@ export class Controller<Context = unknown> {
   private registerTabActions() {
     type SwitchTabAction = z.infer<typeof SwitchTabActionSchema>;
     this.registry.action('Switch tab', { param_model: SwitchTabActionSchema })(
-      async (params: SwitchTabAction, ctx) => {
+      async function switch_tab(params: SwitchTabAction, ctx) {
         const { browser_session } = ctx;
         if (!browser_session) throw new Error('Browser session missing');
         await browser_session.switch_to_tab(params.page_id);
@@ -340,7 +340,7 @@ export class Controller<Context = unknown> {
     type CloseTabAction = z.infer<typeof CloseTabActionSchema>;
     this.registry.action('Close an existing tab', {
       param_model: CloseTabActionSchema,
-    })(async (params: CloseTabAction, { browser_session }) => {
+    })(async function close_tab(params: CloseTabAction, { browser_session }) {
       if (!browser_session) throw new Error('Browser session missing');
       await browser_session.switch_to_tab(params.page_id);
       const page: Page | null = await browser_session.get_current_page();
@@ -367,10 +367,10 @@ export class Controller<Context = unknown> {
         param_model: ExtractStructuredDataActionSchema,
       }
     )(
-      async (
+      async function extract_structured_data(
         params: ExtractStructuredAction,
         { page, page_extraction_llm, file_system }
-      ) => {
+      ) {
         if (!page) {
           throw new BrowserError('No active page available for extraction.');
         }
@@ -471,7 +471,9 @@ ${content}`;
           }
           const saveResult =
             await fsInstance.save_extracted_content(extracted_content);
-          memory = `Extracted content from ${page.url}\n<query>${params.query}\n</query>\n<extracted_content>\n${display}${lines.length - count} more lines...\n</extracted_content>\n<file_system>${saveResult}</file_system>`;
+          // NOTE: Do NOT mention file_system tag here as it misleads LLM to use read_file action
+          // The extracted content preview above is sufficient for most tasks
+          memory = `Extracted content from ${page.url}\n<query>${params.query}</query>\n<extracted_content>\n${display}${lines.length - count} more lines (auto-saved, no need to read)...\n</extracted_content>`;
           includeOnce = true;
         }
 
@@ -485,11 +487,11 @@ ${content}`;
   }
 
   private registerScrollActions() {
+    const scrollLogger = this.logger; // Capture logger reference for use in named function
     type ScrollAction = z.infer<typeof ScrollActionSchema>;
-    this.registry.action(
-      'Scroll the page by specified number of pages (set down=True to scroll down, down=False to scroll up, num_pages=number of pages to scroll like 0.5 for half page, 1.0 for one page, etc.). Optional index parameter to scroll within a specific element or its scroll container (works well for dropdowns and custom UI components).',
-      { param_model: ScrollActionSchema }
-    )(async (params: ScrollAction, { browser_session }) => {
+    
+    // Define the scroll handler implementation (shared by multiple action names for LLM compatibility)
+    const scrollImpl = async (params: ScrollAction, { browser_session }: any) => {
       if (!browser_session) throw new Error('Browser session missing');
       const page: Page | null = await browser_session.get_current_page();
       if (!page || !page.evaluate) {
@@ -647,14 +649,14 @@ ${content}`;
             }
           } else {
             // Container scroll failed, need page-level scrolling
-            this.logger.debug(
+            scrollLogger.debug(
               `Container scroll failed for element ${params.index}: ${result.reason || 'Unknown'}`
             );
             scrollTarget = `the page (no container found for element ${params.index})`;
             // This will trigger page-level scrolling below
           }
         } catch (error) {
-          this.logger.debug(
+          scrollLogger.debug(
             `Element-specific scrolling failed for index ${params.index}: ${error}`
           );
           scrollTarget = `the page (fallback from element ${params.index})`;
@@ -669,7 +671,7 @@ ${content}`;
         scrollTarget.includes('no container found') ||
         scrollTarget.includes('mouse wheel failed')
       ) {
-        this.logger.debug(
+        scrollLogger.debug(
           `🔄 Performing page-level scrolling. Reason: ${scrollTarget}`
         );
         try {
@@ -677,7 +679,7 @@ ${content}`;
         } catch (error) {
           // Hard fallback: always works on root scroller
           await page.evaluate((y: number) => window.scrollBy(0, y), dy);
-          this.logger.debug(
+          scrollLogger.debug(
             'Smart scroll failed; used window.scrollBy fallback',
             error
           );
@@ -693,18 +695,39 @@ ${content}`;
       }
 
       const msg = `🔍 ${longTermMemory}`;
-      this.logger.info(msg);
+      scrollLogger.info(msg);
 
       return new ActionResult({
         extracted_content: msg,
         include_in_memory: true,
         long_term_memory: longTermMemory,
       });
-    });
+    };
+    
+    // Register scroll action with multiple names for LLM compatibility
+    // Different LLMs may use different names: scroll, scroll_page, scroll_down
+    const scrollDescription = 'Scroll the page by specified number of pages (set down=True to scroll down, down=False to scroll up, num_pages=number of pages to scroll like 0.5 for half page, 1.0 for one page, etc.). Optional index parameter to scroll within a specific element or its scroll container (works well for dropdowns and custom UI components).';
+    
+    // Create named functions that wrap the implementation
+    // Different LLMs may use different names: scroll, scroll_page, scroll_down, scroll_by, scroll_page_by, scroll_up
+    const scrollAction = async function scroll(p: ScrollAction, ctx: any) { return scrollImpl(p, ctx); };
+    const scrollPageAction = async function scroll_page(p: ScrollAction, ctx: any) { return scrollImpl(p, ctx); };
+    const scrollDownAction = async function scroll_down(p: ScrollAction, ctx: any) { return scrollImpl(p, ctx); };
+    const scrollByAction = async function scroll_by(p: ScrollAction, ctx: any) { return scrollImpl(p, ctx); };
+    const scrollPageByAction = async function scroll_page_by(p: ScrollAction, ctx: any) { return scrollImpl(p, ctx); };
+    const scrollUpAction = async function scroll_up(p: ScrollAction, ctx: any) { return scrollImpl(p, ctx); };
+    
+    this.registry.action(scrollDescription, { param_model: ScrollActionSchema })(scrollAction);
+    this.registry.action(scrollDescription, { param_model: ScrollActionSchema })(scrollPageAction);
+    this.registry.action(scrollDescription, { param_model: ScrollActionSchema })(scrollDownAction);
+    this.registry.action(scrollDescription, { param_model: ScrollActionSchema })(scrollByAction);
+    this.registry.action(scrollDescription, { param_model: ScrollActionSchema })(scrollPageByAction);
+    this.registry.action(scrollDescription, { param_model: ScrollActionSchema })(scrollUpAction);
+    
     type ScrollToTextAction = z.infer<typeof ScrollToTextActionSchema>;
     this.registry.action('Scroll to a text in the current page', {
       param_model: ScrollToTextActionSchema,
-    })(async (params: ScrollToTextAction, { browser_session }) => {
+    })(async function scroll_to_text(params: ScrollToTextAction, { browser_session }) {
       if (!browser_session) throw new Error('Browser session missing');
       const page: Page | null = await browser_session.get_current_page();
       if (!page?.evaluate) {
@@ -749,7 +772,7 @@ ${content}`;
     this.registry.action('Read file_name from file system', {
       param_model: ReadFileActionSchema,
     })(
-      async (params: ReadFileAction, { file_system, available_file_paths }) => {
+      async function read_file(params: ReadFileAction, { file_system, available_file_paths }) {
         const fsInstance = file_system ?? new FileSystem(process.cwd(), false);
         const allowed =
           Array.isArray(available_file_paths) &&
@@ -782,7 +805,7 @@ ${content}`;
     type WriteFileAction = z.infer<typeof WriteFileActionSchema>;
     this.registry.action('Write content to file', {
       param_model: WriteFileActionSchema,
-    })(async (params: WriteFileAction, { file_system }) => {
+    })(async function write_file(params: WriteFileAction, { file_system }) {
       const fsInstance = file_system ?? new FileSystem(process.cwd(), false);
       let content = params.content;
       const trailing = params.trailing_newline ?? true;
@@ -808,7 +831,7 @@ ${content}`;
     type ReplaceAction = z.infer<typeof ReplaceFileStrActionSchema>;
     this.registry.action('Replace text within an existing file', {
       param_model: ReplaceFileStrActionSchema,
-    })(async (params: ReplaceAction, { file_system }) => {
+    })(async function replace_file_str(params: ReplaceAction, { file_system }) {
       const fsInstance = file_system ?? new FileSystem(process.cwd(), false);
       const result = await fsInstance.replace_file_str(
         params.file_name,
@@ -827,7 +850,7 @@ ${content}`;
     type SendKeysAction = z.infer<typeof SendKeysActionSchema>;
     this.registry.action('Send keys to the active page', {
       param_model: SendKeysActionSchema,
-    })(async (params: SendKeysAction, { browser_session }) => {
+    })(async function send_keys(params: SendKeysAction, { browser_session }) {
       if (!browser_session) throw new Error('Browser session missing');
       const page: Page | null = await browser_session.get_current_page();
       const keyboard = page?.keyboard;
@@ -861,7 +884,7 @@ ${content}`;
     this.registry.action(
       'Get all options from a native dropdown or ARIA menu',
       { param_model: DropdownOptionsActionSchema }
-    )(async (params: DropdownAction, { browser_session }) => {
+    )(async function get_dropdown_options(params: DropdownAction, { browser_session }) {
       if (!browser_session) throw new Error('Browser session missing');
       const page: Page | null = await browser_session.get_current_page();
       const domElement = await browser_session.get_dom_element_by_index(
@@ -940,7 +963,7 @@ ${content}`;
     type SelectAction = z.infer<typeof SelectDropdownActionSchema>;
     this.registry.action('Select dropdown option or ARIA menu item by text', {
       param_model: SelectDropdownActionSchema,
-    })(async (params: SelectAction, { browser_session }) => {
+    })(async function select_dropdown_option(params: SelectAction, { browser_session }) {
       if (!browser_session) throw new Error('Browser session missing');
       const page: Page | null = await browser_session.get_current_page();
       const domElement = await browser_session.get_dom_element_by_index(
@@ -1038,7 +1061,7 @@ ${content}`;
       {
         domains: ['https://docs.google.com'],
       }
-    )(async (_params, { browser_session }) => {
+    )(async function sheets_get_contents(_params, { browser_session }) {
       if (!browser_session) throw new Error('Browser session missing');
       const page: Page | null = await browser_session.get_current_page();
       await page?.keyboard?.press('Enter');
@@ -1063,7 +1086,7 @@ ${content}`;
         domains: ['https://docs.google.com'],
         param_model: SheetsRangeActionSchema,
       }
-    )(async (params: SheetsRange, { browser_session }) => {
+    )(async function sheets_get_range(params: SheetsRange, { browser_session }) {
       if (!browser_session) throw new Error('Browser session missing');
       const page: Page | null = await browser_session.get_current_page();
       await this.gotoSheetsRange(page, params.cell_or_range);
@@ -1087,7 +1110,7 @@ ${content}`;
         domains: ['https://docs.google.com'],
         param_model: SheetsUpdateActionSchema,
       }
-    )(async (params: SheetsUpdate, { browser_session }) => {
+    )(async function sheets_update(params: SheetsUpdate, { browser_session }) {
       if (!browser_session) throw new Error('Browser session missing');
       const page: Page | null = await browser_session.get_current_page();
       await this.gotoSheetsRange(page, params.cell_or_range);
@@ -1110,7 +1133,7 @@ ${content}`;
         domains: ['https://docs.google.com'],
         param_model: SheetsRangeActionSchema,
       }
-    )(async (params: SheetsRange, { browser_session }) => {
+    )(async function sheets_clear(params: SheetsRange, { browser_session }) {
       if (!browser_session) throw new Error('Browser session missing');
       const page: Page | null = await browser_session.get_current_page();
       await this.gotoSheetsRange(page, params.cell_or_range);
@@ -1127,7 +1150,7 @@ ${content}`;
         domains: ['https://docs.google.com'],
         param_model: SheetsRangeActionSchema,
       }
-    )(async (params: SheetsRange, { browser_session }) => {
+    )(async function sheets_select(params: SheetsRange, { browser_session }) {
       if (!browser_session) throw new Error('Browser session missing');
       const page: Page | null = await browser_session.get_current_page();
       await this.gotoSheetsRange(page, params.cell_or_range);
@@ -1144,10 +1167,10 @@ ${content}`;
         param_model: SheetsInputActionSchema,
       }
     )(
-      async (
+      async function sheets_input(
         params: z.infer<typeof SheetsInputActionSchema>,
         { browser_session }
-      ) => {
+      ) {
         if (!browser_session) throw new Error('Browser session missing');
         const page: Page | null = await browser_session.get_current_page();
         await page?.keyboard?.type(params.text, { delay: 100 });
@@ -1188,7 +1211,7 @@ ${content}`;
       this.registry.action(
         'Complete task - with return text and success flag.',
         { param_model: structuredSchema }
-      )(async (params: StructuredParams) => {
+      )(async function done(params: StructuredParams) {
         const payload: Record<string, unknown> = { ...params.data };
         for (const key of Object.keys(payload)) {
           const value = payload[key];
@@ -1209,7 +1232,7 @@ ${content}`;
     type DoneAction = z.infer<typeof DoneActionSchema>;
     this.registry.action('Complete task - provide a summary to the user.', {
       param_model: DoneActionSchema,
-    })(async (params: DoneAction, { file_system }) => {
+    })(async function done(params: DoneAction, { file_system }) {
       const fsInstance = file_system ?? new FileSystem(process.cwd(), false);
       let userMessage = params.text;
       const lenMaxMemory = 100;

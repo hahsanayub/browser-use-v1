@@ -1,5 +1,4 @@
 import { AzureOpenAI } from 'openai';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { z } from 'zod';
 import type { BaseChatModel } from '../base.js';
 import { ChatInvokeCompletion } from '../views.js';
@@ -44,42 +43,11 @@ export class ChatAzure implements BaseChatModel {
     const serializer = new OpenAIMessageSerializer();
     const openaiMessages = serializer.serialize(messages);
 
-    let responseFormat: any = undefined;
-    const schemaForJson =
-      output_format && 'schema' in output_format && (output_format as any).schema
-        ? (output_format as any).schema
-        : output_format;
-
-    if (schemaForJson) {
-      try {
-        const jsonSchema = zodToJsonSchema(
-          schemaForJson as unknown as z.ZodType,
-          {
-            name: 'Response',
-            target: 'jsonSchema7',
-          }
-        );
-
-        if ((jsonSchema as any)?.type === 'object') {
-          responseFormat = {
-            type: 'json_schema',
-            json_schema: {
-              name: 'Response',
-              schema: jsonSchema,
-              strict: true,
-            },
-          };
-        } else {
-          // Fallback: skip structured response if schema is not an object
-          responseFormat = undefined;
-        }
-      } catch (e) {
-        console.warn(
-          'Failed to convert output_format to JSON schema for Azure',
-          e
-        );
-      }
-    }
+    // Use simple json_object format for better compatibility with Azure
+    // json_schema format may not be supported on all Azure API versions/deployments
+    const responseFormat = output_format
+      ? ({ type: 'json_object' } as const)
+      : undefined;
 
     const response = await this.client.chat.completions.create({
       model: this.model,
@@ -92,37 +60,52 @@ export class ChatAzure implements BaseChatModel {
     let completion: T | string = content;
     if (output_format) {
       try {
-        if (responseFormat?.type === 'json_schema') {
-          let parsed: any = content;
-          let jsonText = content.trim();
-          const fencedMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/i);
-          if (fencedMatch && fencedMatch[1]) {
-            jsonText = fencedMatch[1].trim();
-          }
-          const firstBrace = jsonText.indexOf('{');
-          const lastBrace = jsonText.lastIndexOf('}');
-          if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-            jsonText = jsonText.slice(firstBrace, lastBrace + 1);
-          }
-          parsed = JSON.parse(jsonText);
-          completion = output_format.parse(parsed);
-        } else {
-          // If we didn't configure a structured response, return raw content
-          completion = content as any;
+        // Extract JSON from the response
+        let jsonText = content.trim();
+
+        // Handle markdown fenced code blocks
+        const fencedMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (fencedMatch && fencedMatch[1]) {
+          jsonText = fencedMatch[1].trim();
         }
+
+        // Extract JSON object/array from the text
+        const firstBrace = jsonText.indexOf('{');
+        const firstBracket = jsonText.indexOf('[');
+        const lastBrace = jsonText.lastIndexOf('}');
+        const lastBracket = jsonText.lastIndexOf(']');
+
+        // Determine if it's an object or array
+        let startIdx = -1;
+        let endIdx = -1;
+
+        if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+          // It's an object
+          startIdx = firstBrace;
+          endIdx = lastBrace;
+        } else if (firstBracket !== -1) {
+          // It's an array
+          startIdx = firstBracket;
+          endIdx = lastBracket;
+        }
+
+        if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+          jsonText = jsonText.slice(startIdx, endIdx + 1);
+        }
+
+        const parsedJson = JSON.parse(jsonText);
+        completion = output_format.parse(parsedJson);
       } catch (e) {
-        console.error('Failed to parse completion', e);
-        throw e;
+        console.error('Failed to parse Azure completion:', e);
+        console.error('Raw content:', content.substring(0, 500));
+        throw new Error(`Failed to parse LLM completion as JSON: ${e}`);
       }
     }
 
-    return new ChatInvokeCompletion(
-      completion,
-      {
-        prompt_tokens: response.usage?.prompt_tokens ?? 0,
-        completion_tokens: response.usage?.completion_tokens ?? 0,
-        total_tokens: response.usage?.total_tokens ?? 0,
-      }
-    );
+    return new ChatInvokeCompletion(completion, {
+      prompt_tokens: response.usage?.prompt_tokens ?? 0,
+      completion_tokens: response.usage?.completion_tokens ?? 0,
+      total_tokens: response.usage?.total_tokens ?? 0,
+    });
   }
 }

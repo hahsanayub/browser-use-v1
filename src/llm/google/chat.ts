@@ -34,6 +34,45 @@ export class ChatGoogle implements BaseChatModel {
     return this.model;
   }
 
+  /**
+   * Clean up JSON schema for Google's format
+   * Google API has specific requirements for responseSchema
+   */
+  private _cleanSchemaForGoogle(schema: any): any {
+    if (!schema || typeof schema !== 'object') {
+      return schema;
+    }
+
+    const cleaned: any = {};
+
+    for (const [key, value] of Object.entries(schema)) {
+      // Skip unsupported keys
+      if (
+        key === '$schema' ||
+        key === 'additionalProperties' ||
+        key === '$ref' ||
+        key === 'definitions'
+      ) {
+        continue;
+      }
+
+      if (key === 'properties' && typeof value === 'object') {
+        cleaned.properties = {};
+        for (const [propKey, propValue] of Object.entries(value as object)) {
+          cleaned.properties[propKey] = this._cleanSchemaForGoogle(propValue);
+        }
+      } else if (key === 'items' && typeof value === 'object') {
+        cleaned.items = this._cleanSchemaForGoogle(value);
+      } else if (typeof value === 'object' && !Array.isArray(value)) {
+        cleaned[key] = this._cleanSchemaForGoogle(value);
+      } else {
+        cleaned[key] = value;
+      }
+    }
+
+    return cleaned;
+  }
+
   async ainvoke(
     messages: Message[],
     output_format?: undefined
@@ -57,22 +96,26 @@ export class ChatGoogle implements BaseChatModel {
     let tools: Tool[] | undefined = undefined;
     let toolConfig: any = undefined;
 
-    const schemaForJson =
-      output_format && 'schema' in output_format && (output_format as any).schema
-        ? (output_format as any).schema
-        : output_format;
-
+    // For Google, we need to be more explicit about JSON output
+    // The generationConfig with responseSchema helps enforce JSON structure
     const generationConfig: any = {
       responseMimeType: 'application/json',
     };
+
+    // Try to get schema from output_format
+    const schemaForJson =
+      output_format && 'schema' in output_format && (output_format as any).schema
+        ? (output_format as any).schema
+        : null;
 
     if (schemaForJson) {
       try {
         const jsonSchema = zodToJsonSchema(
           schemaForJson as unknown as z.ZodType
         );
-        generationConfig.responseMimeType = 'application/json';
-        generationConfig.responseSchema = jsonSchema;
+        // Clean up the schema for Google's format
+        const cleanSchema = this._cleanSchemaForGoogle(jsonSchema);
+        generationConfig.responseSchema = cleanSchema;
       } catch (e) {
         console.warn('Failed to set responseSchema', e);
       }
@@ -110,15 +153,30 @@ export class ChatGoogle implements BaseChatModel {
 
         if (generationConfig.responseMimeType === 'application/json') {
           let jsonText = text.trim();
-          const fencedMatch = jsonText.match(/```(?:json)?\\s*([\\s\\S]*?)```/i);
+
+          // Handle markdown code fences like ```json ... ```
+          const fencedMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/i);
           if (fencedMatch && fencedMatch[1]) {
             jsonText = fencedMatch[1].trim();
           }
+
+          // Try to extract JSON object from text
           const firstBrace = jsonText.indexOf('{');
           const lastBrace = jsonText.lastIndexOf('}');
           if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
             jsonText = jsonText.slice(firstBrace, lastBrace + 1);
+          } else {
+            // If no JSON object found, the model returned plain text
+            // Try to wrap it in a minimal valid structure
+            console.warn(
+              'Google LLM returned plain text instead of JSON. Raw response:',
+              text.slice(0, 200)
+            );
+            throw new Error(
+              `Expected JSON response but got plain text: "${text.slice(0, 50)}..."`
+            );
           }
+
           parsed = JSON.parse(jsonText);
         }
 
