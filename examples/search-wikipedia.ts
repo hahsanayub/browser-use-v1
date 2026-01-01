@@ -147,7 +147,7 @@ async function main() {
 
     // Navigate to the Wikipedia page first
     console.log('📄 Navigating to Wikipedia TDD page...');
-    await page.goto('https://en.wikipedia.org/wiki/Test-driven_development', {
+    await page.goto('https://en.wikipedia.org/', {
       waitUntil: 'domcontentloaded',
     });
 
@@ -166,15 +166,15 @@ async function main() {
     // Define the task for the Agent
     const task = `
       You are on the Wikipedia page for Test-driven Development.
-      
+
       Task: Find and summarize the section about "Refactor as needed while ensuring all tests continue to pass".
-      
+
       Steps:
       1. Use scroll_to_text to find the text "Refactor as needed" on the page
       2. Use extract_structured_data to extract the refactoring guidance content from that section
       3. Call done with success=true and include a 2-3 sentence summary of the refactoring guidance in the text field
-      
-      IMPORTANT: Do NOT use file system actions (read_file, write_file, replace_file_str). 
+
+      IMPORTANT: Do NOT use file system actions (read_file, write_file, replace_file_str).
       Complete this in 3 steps maximum using only browser actions and done.
     `;
 
