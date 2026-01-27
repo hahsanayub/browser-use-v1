@@ -1,0 +1,702 @@
+# API Reference
+
+Complete API documentation for Browser-Use.
+
+## Table of Contents
+
+- [Agent](#agent)
+- [BrowserSession](#browsersession)
+- [BrowserProfile](#browserprofile)
+- [Controller](#controller)
+- [Registry](#registry)
+- [LLM Providers](#llm-providers)
+- [Data Types](#data-types)
+- [Utility Functions](#utility-functions)
+
+---
+
+## Agent
+
+The main class for autonomous browser automation.
+
+### Import
+
+```typescript
+import { Agent } from 'browser-use';
+```
+
+### Constructor
+
+```typescript
+new Agent(options: AgentOptions)
+```
+
+#### AgentOptions
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `task` | `string` | Yes | - | The task description in natural language |
+| `llm` | `BaseChatModel` | Yes | - | LLM instance for decision making |
+| `browser_session` | `BrowserSession` | No | Auto-created | Browser session to use |
+| `browser_profile` | `BrowserProfile` | No | Default profile | Browser configuration |
+| `controller` | `Controller` | No | Default controller | Action controller |
+| `use_vision` | `boolean` | No | `true` | Enable screenshot analysis |
+| `vision_detail_level` | `'auto' \| 'low' \| 'high'` | No | `'auto'` | Screenshot detail level |
+| `use_thinking` | `boolean` | No | `false` | Enable extended thinking prompts |
+| `flash_mode` | `boolean` | No | `false` | Use optimized prompts for speed |
+| `max_failures` | `number` | No | `3` | Max consecutive failures before stopping |
+| `retry_delay` | `number` | No | `10` | Delay (seconds) between retries |
+| `max_actions_per_step` | `number` | No | `10` | Max actions per step |
+| `max_steps` | `number` | No | `100` | Default max steps |
+| `validate_output` | `boolean` | No | `false` | Validate LLM output strictly |
+| `generate_gif` | `boolean \| string` | No | `false` | Generate GIF of session |
+| `save_conversation_path` | `string` | No | `null` | Path to save conversation logs |
+| `override_system_message` | `string` | No | `null` | Replace system message |
+| `extend_system_message` | `string` | No | `null` | Append to system message |
+| `include_attributes` | `string[]` | No | `[]` | Additional HTML attributes to include |
+| `sensitive_data` | `SensitiveDataMap` | No | `null` | Credentials for auto-fill |
+| `llm_timeout` | `number` | No | `60000` | LLM call timeout (ms) |
+| `step_timeout` | `number` | No | `180000` | Step execution timeout (ms) |
+
+### Methods
+
+#### run
+
+Execute the agent's task.
+
+```typescript
+async run(max_steps?: number): Promise<AgentHistoryList>
+```
+
+**Parameters:**
+- `max_steps` (optional): Maximum steps to execute. Defaults to constructor value.
+
+**Returns:** `AgentHistoryList` containing the execution history.
+
+**Example:**
+```typescript
+const history = await agent.run(50);
+console.log('Success:', history.is_successful());
+```
+
+#### pause
+
+Pause agent execution.
+
+```typescript
+pause(): void
+```
+
+#### resume
+
+Resume paused execution.
+
+```typescript
+resume(): void
+```
+
+#### stop
+
+Stop agent execution.
+
+```typescript
+stop(): void
+```
+
+#### add_new_task
+
+Add a follow-up task without restarting.
+
+```typescript
+add_new_task(task: string): void
+```
+
+**Example:**
+```typescript
+agent.add_new_task('Now click the submit button');
+```
+
+#### rerun_history
+
+Replay recorded actions.
+
+```typescript
+async rerun_history(
+  history: AgentHistoryList,
+  options?: {
+    max_retries?: number;
+    skip_failures?: boolean;
+  }
+): Promise<AgentHistoryList>
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `state` | `AgentState` | Current agent state |
+| `history` | `AgentHistoryList` | Execution history |
+| `browser_session` | `BrowserSession` | Associated browser session |
+| `controller` | `Controller` | Action controller |
+
+### Events
+
+Agents emit events through the global event bus:
+
+```typescript
+import { eventBus } from 'browser-use';
+
+eventBus.on('CreateAgentStepEvent', (event) => {
+  console.log('Step:', event.step_id, event.model_output);
+});
+```
+
+---
+
+## BrowserSession
+
+Manages browser lifecycle and page interactions.
+
+### Import
+
+```typescript
+import { BrowserSession } from 'browser-use';
+```
+
+### Constructor
+
+```typescript
+new BrowserSession(options?: BrowserSessionOptions)
+```
+
+#### BrowserSessionOptions
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `browser` | `Browser` | No | - | Existing Playwright Browser |
+| `browser_context` | `BrowserContext` | No | - | Existing Playwright BrowserContext |
+| `page` | `Page` | No | - | Existing Playwright Page |
+| `browser_profile` | `BrowserProfile` | No | Default | Browser configuration |
+| `cdp_url` | `string` | No | - | CDP URL for remote browser |
+| `wss_url` | `string` | No | - | WebSocket URL for remote browser |
+
+### Methods
+
+#### start
+
+Initialize and start the browser session.
+
+```typescript
+async start(): Promise<void>
+```
+
+#### stop
+
+Close the browser session.
+
+```typescript
+async stop(): Promise<void>
+```
+
+#### get_current_page
+
+Get the currently active page.
+
+```typescript
+async get_current_page(): Promise<Page | null>
+```
+
+#### get_browser_state
+
+Get current browser state summary.
+
+```typescript
+async get_browser_state(use_vision?: boolean): Promise<BrowserStateSummary>
+```
+
+#### navigate
+
+Navigate to a URL.
+
+```typescript
+async navigate(url: string): Promise<void>
+```
+
+#### switch_to_tab
+
+Switch to a specific tab by page ID.
+
+```typescript
+async switch_to_tab(page_id: number): Promise<void>
+```
+
+#### get_tabs
+
+Get list of open tabs.
+
+```typescript
+get_tabs(): TabInfo[]
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `browser` | `Browser \| null` | Playwright Browser instance |
+| `browser_context` | `BrowserContext \| null` | Playwright BrowserContext |
+| `agent_current_page` | `Page \| null` | Currently active page |
+
+---
+
+## BrowserProfile
+
+Configuration for browser launch and behavior.
+
+### Import
+
+```typescript
+import { BrowserProfile } from 'browser-use';
+```
+
+### Constructor
+
+```typescript
+new BrowserProfile(options?: Partial<BrowserProfileOptions>)
+```
+
+#### Key Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `headless` | `boolean \| null` | `null` | Headless mode (null = auto-detect) |
+| `viewport` | `ViewportSize` | `null` | Browser viewport size |
+| `window_size` | `ViewportSize` | `null` | Browser window size |
+| `user_agent` | `string` | `null` | Custom user agent |
+| `user_data_dir` | `string` | Default path | User data directory for persistence |
+| `proxy` | `ProxySettings` | `null` | Proxy configuration |
+| `timeout` | `number` | `30000` | Default timeout (ms) |
+| `slow_mo` | `number` | `0` | Slow down operations (ms) |
+| `chromium_sandbox` | `boolean` | `true` | Enable Chromium sandbox |
+| `ignore_https_errors` | `boolean` | `false` | Ignore HTTPS certificate errors |
+| `locale` | `string` | `null` | Browser locale |
+| `timezone_id` | `string` | `null` | Timezone ID |
+| `geolocation` | `Geolocation` | `null` | Geolocation override |
+| `permissions` | `string[]` | Default set | Granted permissions |
+| `stealth` | `boolean` | `false` | Enable stealth mode |
+| `disable_security` | `boolean` | `false` | Disable web security |
+| `viewport_expansion` | `number` | `500` | Viewport expansion for scrolling |
+| `highlight_elements` | `boolean` | `true` | Highlight interactive elements |
+| `wait_for_network_idle_page_load_time` | `number` | `0.5` | Network idle wait (seconds) |
+| `maximum_wait_page_load_time` | `number` | `5.0` | Max page load wait (seconds) |
+| `enable_default_extensions` | `boolean` | `true` | Load default extensions |
+
+### Methods
+
+#### detect_display_configuration
+
+Auto-detect display settings.
+
+```typescript
+async detect_display_configuration(): Promise<void>
+```
+
+#### kwargs_for_launch
+
+Get Playwright launch arguments.
+
+```typescript
+async kwargs_for_launch(): Promise<BrowserLaunchArgs>
+```
+
+#### kwargs_for_new_context
+
+Get Playwright context arguments.
+
+```typescript
+kwargs_for_new_context(): BrowserNewContextArgs
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `config` | `BrowserProfileOptions` | Full configuration object |
+| `viewport` | `ViewportSize \| null` | Configured viewport |
+| `user_data_dir` | `string \| null` | User data directory |
+
+---
+
+## Controller
+
+Manages action registration and execution.
+
+### Import
+
+```typescript
+import { Controller } from 'browser-use/controller';
+```
+
+### Constructor
+
+```typescript
+new Controller(options?: ControllerOptions)
+```
+
+#### ControllerOptions
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `exclude_actions` | `string[]` | `[]` | Actions to exclude |
+| `output_model` | `ZodSchema` | `null` | Custom output schema |
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `registry` | `Registry` | Action registry instance |
+
+---
+
+## Registry
+
+Action registration and execution.
+
+### Import
+
+```typescript
+import { Registry } from 'browser-use/controller/registry';
+```
+
+### Methods
+
+#### action
+
+Register a new action using decorator pattern.
+
+```typescript
+action(
+  description: string,
+  options?: ActionOptions
+): (handler: ActionHandler) => ActionHandler
+```
+
+**ActionOptions:**
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `param_model` | `ZodSchema` | Parameter validation schema |
+| `allowed_domains` | `string[]` | Domain restrictions |
+| `page_filter` | `(page: Page) => boolean` | Page filter function |
+
+**Example:**
+```typescript
+const registry = new Registry();
+
+registry.action('Click a button', {
+  param_model: z.object({
+    selector: z.string().describe('CSS selector')
+  })
+})(async function click_button(params, ctx) {
+  await ctx.page.click(params.selector);
+  return new ActionResult({ success: true });
+});
+```
+
+#### execute_action
+
+Execute a registered action.
+
+```typescript
+async execute_action(
+  action_name: string,
+  params: Record<string, unknown>,
+  context?: ExecuteActionContext
+): Promise<ActionResult>
+```
+
+#### get_action
+
+Get a registered action by name.
+
+```typescript
+get_action(name: string): RegisteredAction | null
+```
+
+#### get_all_actions
+
+Get all registered actions.
+
+```typescript
+get_all_actions(): Map<string, RegisteredAction>
+```
+
+#### get_prompt_description
+
+Generate prompt description for available actions.
+
+```typescript
+get_prompt_description(page?: Page): string
+```
+
+---
+
+## LLM Providers
+
+### OpenAI
+
+```typescript
+import { ChatOpenAI } from 'browser-use/llm/openai';
+
+const llm = new ChatOpenAI({
+  model: 'gpt-4o',           // Model name
+  apiKey: 'sk-...',          // API key
+  temperature: 0.7,          // Temperature (0-2)
+  baseURL: '...',            // Optional base URL
+  reasoning_effort: 'medium' // For reasoning models
+});
+```
+
+### Anthropic
+
+```typescript
+import { ChatAnthropic } from 'browser-use/llm/anthropic';
+
+const llm = new ChatAnthropic({
+  model: 'claude-sonnet-4-20250514',
+  apiKey: 'sk-ant-...',
+  temperature: 0.7
+});
+```
+
+### Google Gemini
+
+```typescript
+import { ChatGoogle } from 'browser-use/llm/google';
+
+const llm = new ChatGoogle({
+  model: 'gemini-2.0-flash',
+  apiKey: '...',
+  temperature: 0.7
+});
+```
+
+### Azure OpenAI
+
+```typescript
+import { AzureChatOpenAI } from 'browser-use/llm/azure';
+
+const llm = new AzureChatOpenAI({
+  model: 'gpt-4o',
+  apiKey: '...',
+  endpoint: 'https://your-resource.openai.azure.com',
+  apiVersion: '2024-02-15-preview',
+  deploymentName: 'your-deployment'
+});
+```
+
+### AWS Bedrock
+
+```typescript
+import { ChatBedrock } from 'browser-use/llm/aws';
+
+const llm = new ChatBedrock({
+  model: 'anthropic.claude-3-sonnet-20240229-v1:0',
+  region: 'us-east-1',
+  credentials: {
+    accessKeyId: '...',
+    secretAccessKey: '...'
+  }
+});
+```
+
+### Groq
+
+```typescript
+import { ChatGroq } from 'browser-use/llm/groq';
+
+const llm = new ChatGroq({
+  model: 'llama-3.3-70b-versatile',
+  apiKey: '...'
+});
+```
+
+### Ollama
+
+```typescript
+import { ChatOllama } from 'browser-use/llm/ollama';
+
+const llm = new ChatOllama({
+  model: 'llama3',
+  baseUrl: 'http://localhost:11434'
+});
+```
+
+### DeepSeek
+
+```typescript
+import { ChatDeepSeek } from 'browser-use/llm/deepseek';
+
+const llm = new ChatDeepSeek({
+  model: 'deepseek-chat',
+  apiKey: '...'
+});
+```
+
+### OpenRouter
+
+```typescript
+import { ChatOpenRouter } from 'browser-use/llm/openrouter';
+
+const llm = new ChatOpenRouter({
+  model: 'anthropic/claude-3-opus',
+  apiKey: '...'
+});
+```
+
+---
+
+## Data Types
+
+### ActionResult
+
+Result of an action execution.
+
+```typescript
+class ActionResult {
+  is_done?: boolean;         // Task completed
+  success?: boolean;         // Action successful (only with is_done)
+  error?: string;            // Error message
+  extracted_content?: string; // Extracted data
+  long_term_memory?: string;  // Memory to persist
+  attachments?: string[];     // File attachments
+  include_in_memory?: boolean; // Include in history
+}
+```
+
+### AgentOutput
+
+LLM output structure.
+
+```typescript
+class AgentOutput {
+  thinking?: string;              // Internal reasoning
+  evaluation_previous_goal?: string; // Evaluation of last action
+  memory?: string;                // Working memory
+  next_goal?: string;             // Next goal
+  action: ActionModel[];          // Actions to execute
+}
+```
+
+### AgentHistory
+
+Single step history record.
+
+```typescript
+class AgentHistory {
+  model_output: AgentOutput;    // LLM output
+  result: ActionResult[];       // Action results
+  state: BrowserStateHistory;   // Browser state snapshot
+  metadata: StepMetadata;       // Step metadata
+}
+```
+
+### AgentHistoryList
+
+Complete execution history.
+
+```typescript
+class AgentHistoryList {
+  history: AgentHistory[];
+
+  is_done(): boolean;           // Check if task completed
+  is_successful(): boolean;     // Check if task succeeded
+  final_result(): string;       // Get final result
+  action_history(): any[];      // Get all actions
+  errors(): string[];           // Get all errors
+  model_actions(): any[];       // Get all model outputs
+  urls_visited(): string[];     // Get all URLs visited
+}
+```
+
+### BrowserStateSummary
+
+Current browser state.
+
+```typescript
+interface BrowserStateSummary {
+  url: string;                  // Current URL
+  title: string;                // Page title
+  tabs: TabInfo[];              // Open tabs
+  screenshot?: string;          // Base64 screenshot
+  element_tree: DOMElementNode; // DOM tree
+  selector_map: SelectorMap;    // Element index map
+  scroll_info: ScrollInfo;      // Scroll position
+}
+```
+
+### SensitiveDataMap
+
+Sensitive data configuration.
+
+```typescript
+interface SensitiveDataMap {
+  [domainOrKey: string]: string | Record<string, string>;
+}
+
+// Example
+const sensitiveData: SensitiveDataMap = {
+  // Domain-scoped
+  '*.example.com': {
+    username: 'user@example.com',
+    password: 'secret123'
+  },
+  // Global
+  'api_key': 'sk-...'
+};
+```
+
+---
+
+## Utility Functions
+
+### run
+
+Quick task execution function.
+
+```typescript
+import { run } from 'browser-use';
+
+const { controller, history } = await run(task, {
+  llmProvider: 'openai',
+  llmApiKey: 'sk-...',
+  llmModel: 'gpt-4o',
+  headless: true,
+  maxSteps: 50
+});
+```
+
+### createLogger
+
+Create a named logger.
+
+```typescript
+import { createLogger } from 'browser-use';
+
+const logger = createLogger('my-module');
+logger.info('Hello');
+logger.debug('Debug info');
+logger.warning('Warning');
+logger.error('Error');
+```
+
+### eventBus
+
+Global event bus for event subscription.
+
+```typescript
+import { eventBus } from 'browser-use';
+
+eventBus.on('CreateAgentStepEvent', handler);
+eventBus.off('CreateAgentStepEvent', handler);
+eventBus.emit('CustomEvent', data);
+```
