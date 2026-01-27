@@ -1056,6 +1056,9 @@ ${content}`;
   }
 
   private registerSheetsActions() {
+    // Capture 'this' for use in callbacks
+    const self = this;
+
     this.registry.action(
       'Google Sheets: Get the contents of the entire sheet',
       {
@@ -1089,7 +1092,7 @@ ${content}`;
     )(async function sheets_get_range(params: SheetsRange, { browser_session }) {
       if (!browser_session) throw new Error('Browser session missing');
       const page: Page | null = await browser_session.get_current_page();
-      await this.gotoSheetsRange(page, params.cell_or_range);
+      await self.gotoSheetsRange(page, params.cell_or_range);
       await page?.keyboard?.press('ControlOrMeta+C');
       await new Promise((resolve) => setTimeout(resolve, 100));
       const content = await page?.evaluate?.(() =>
@@ -1113,7 +1116,7 @@ ${content}`;
     )(async function sheets_update(params: SheetsUpdate, { browser_session }) {
       if (!browser_session) throw new Error('Browser session missing');
       const page: Page | null = await browser_session.get_current_page();
-      await this.gotoSheetsRange(page, params.cell_or_range);
+      await self.gotoSheetsRange(page, params.cell_or_range);
       await page?.evaluate?.((value: string) => {
         const clipboardData = new DataTransfer();
         clipboardData.setData('text/plain', value);
@@ -1136,7 +1139,7 @@ ${content}`;
     )(async function sheets_clear(params: SheetsRange, { browser_session }) {
       if (!browser_session) throw new Error('Browser session missing');
       const page: Page | null = await browser_session.get_current_page();
-      await this.gotoSheetsRange(page, params.cell_or_range);
+      await self.gotoSheetsRange(page, params.cell_or_range);
       await page?.keyboard?.press('Backspace');
       return new ActionResult({
         extracted_content: `Cleared cells: ${params.cell_or_range}`,
@@ -1153,7 +1156,7 @@ ${content}`;
     )(async function sheets_select(params: SheetsRange, { browser_session }) {
       if (!browser_session) throw new Error('Browser session missing');
       const page: Page | null = await browser_session.get_current_page();
-      await this.gotoSheetsRange(page, params.cell_or_range);
+      await self.gotoSheetsRange(page, params.cell_or_range);
       return new ActionResult({
         extracted_content: `Selected cells: ${params.cell_or_range}`,
         long_term_memory: `Selected cells ${params.cell_or_range}`,
@@ -1205,6 +1208,9 @@ ${content}`;
   }
 
   private registerDoneAction(outputModel: z.ZodTypeAny | null) {
+    // Capture 'this' for use in callbacks
+    const self = this;
+
     if (outputModel) {
       const structuredSchema = StructuredOutputActionSchema(outputModel);
       type StructuredParams = z.infer<typeof structuredSchema>;
@@ -1243,7 +1249,7 @@ ${content}`;
 
       const attachments: string[] = [];
       if (params.files_to_display) {
-        if (this.displayFilesInDoneText) {
+        if (self.displayFilesInDoneText) {
           let attachmentText = '';
           for (const fileName of params.files_to_display) {
             if (fileName === 'todo.md') {

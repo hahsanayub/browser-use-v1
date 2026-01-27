@@ -80,9 +80,9 @@ export class DomService {
   async get_cross_origin_iframes() {
     const hiddenFrameUrls = await this.page
       .locator('iframe')
-      .evaluateAll((elements) =>
+      .evaluateAll((elements: Element[]) =>
         elements
-          .filter((el) => {
+          .filter((el: Element) => {
             const element = el as HTMLElement;
             const style = window.getComputedStyle(element);
             const rect = element.getBoundingClientRect();
@@ -93,7 +93,7 @@ export class DomService {
               rect.height === 0
             );
           })
-          .map((el) => (el as HTMLIFrameElement).src)
+          .map((el: Element) => (el as HTMLIFrameElement).src)
       );
 
     const currentHost = this.safeHostname(this.getPageUrl());

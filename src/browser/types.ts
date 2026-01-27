@@ -8,6 +8,7 @@ import type {
 } from 'playwright';
 import type { BrowserContextOptions, LaunchOptions } from 'playwright-core';
 
+// Export Playwright types directly
 export type Browser = PlaywrightBrowser;
 export type BrowserContext = PlaywrightBrowserContext;
 export type Page = PlaywrightPage;
@@ -18,11 +19,9 @@ export type Locator = PlaywrightLocator;
 export type PlaywrightModule = typeof import('playwright');
 
 export type Playwright = PlaywrightModule;
-export type Patchright = PlaywrightModule;
 export type PlaywrightOrPatchright = PlaywrightModule;
 
 export const async_playwright = async () => import('playwright');
-export const async_patchright = async_playwright;
 
 export type ProxySettings = NonNullable<LaunchOptions['proxy']>;
 export type HttpCredentials = NonNullable<

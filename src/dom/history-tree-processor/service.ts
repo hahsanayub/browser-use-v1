@@ -34,11 +34,7 @@ export class HistoryTreeProcessor {
     const process_node = (node: DOMElementNode): DOMElementNode | null => {
       if (node.highlight_index !== null && node.highlight_index !== undefined) {
         const hashed_node = this._hash_dom_element(node);
-        if (
-          hashed_node.branch_path_hash === hashed.branch_path_hash &&
-          hashed_node.attributes_hash === hashed.attributes_hash &&
-          hashed_node.xpath_hash === hashed.xpath_hash
-        ) {
+        if (hashed_node.equals(hashed)) {
           return node;
         }
       }
@@ -64,11 +60,7 @@ export class HistoryTreeProcessor {
   ) {
     const hashed_history = this._hash_dom_history_element(dom_history_element);
     const hashed_dom = this._hash_dom_element(dom_element);
-    return (
-      hashed_history.branch_path_hash === hashed_dom.branch_path_hash &&
-      hashed_history.attributes_hash === hashed_dom.attributes_hash &&
-      hashed_history.xpath_hash === hashed_dom.xpath_hash
-    );
+    return hashed_history.equals(hashed_dom);
   }
 
   static _hash_dom_history_element(dom_history_element: DOMHistoryElement) {

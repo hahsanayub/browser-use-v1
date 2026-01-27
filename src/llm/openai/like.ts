@@ -15,6 +15,6 @@ export class ChatOpenAILike extends ChatOpenAI {
    * @param model - The name of the model to use (any OpenAI-compatible model)
    */
   constructor(model: string) {
-    super(model);
+    super({ model });
   }
 }

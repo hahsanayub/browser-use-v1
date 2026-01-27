@@ -23,7 +23,6 @@ export type {
   FrameLocator,
   ElementHandle,
   Playwright,
-  Patchright,
   PlaywrightOrPatchright,
   ClientCertificate,
   Geolocation,
@@ -34,4 +33,4 @@ export type {
 } from './types.js';
 
 // Re-export the async playwright loader
-export { async_playwright, async_patchright } from './types.js';
+export { async_playwright } from './types.js';

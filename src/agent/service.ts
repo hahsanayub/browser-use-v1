@@ -769,6 +769,150 @@ export class Agent<
     return this._message_manager;
   }
 
+  /**
+   * Get the browser instance from the browser session
+   */
+  get browser(): Browser {
+    if (!this.browser_session) {
+      throw new Error('BrowserSession is not set up');
+    }
+    if (!this.browser_session.browser) {
+      throw new Error('Browser is not set up');
+    }
+    return this.browser_session.browser;
+  }
+
+  /**
+   * Get the browser context from the browser session
+   */
+  get browserContext(): BrowserContext {
+    if (!this.browser_session) {
+      throw new Error('BrowserSession is not set up');
+    }
+    if (!this.browser_session.browser_context) {
+      throw new Error('BrowserContext is not set up');
+    }
+    return this.browser_session.browser_context;
+  }
+
+  /**
+   * Get the browser profile from the browser session
+   */
+  get browserProfile(): BrowserSession {
+    if (!this.browser_session) {
+      throw new Error('BrowserSession is not set up');
+    }
+    return this.browser_session.browser_profile;
+  }
+
+  /**
+   * Add a new task to the agent, keeping the same task_id as tasks are continuous
+   */
+  addNewTask(newTask: string): void {
+    // Simply delegate to message manager - no need for new task_id or events
+    // The task continues with new instructions, it doesn't end and start a new one
+    this.task = newTask;
+    this._message_manager.add_new_task(newTask);
+  }
+
+  /**
+   * Take a step and return whether the task is done and valid
+   * @returns Tuple of [is_done, is_valid]
+   */
+  async takeStep(stepInfo?: AgentStepInfo): Promise<[boolean, boolean]> {
+    await this._step(stepInfo ?? null);
+
+    if (this.history.is_done()) {
+      await this.log_completion();
+      if (this.register_done_callback) {
+        await this.register_done_callback(this.history);
+      }
+      return [true, true];
+    }
+
+    return [false, false];
+  }
+
+  /**
+   * Remove think tags from text
+   */
+  private _removeThinkTags(text: string): string {
+    const THINK_TAGS = /<think>.*?<\/think>/gs;
+    const STRAY_CLOSE_TAG = /.*?<\/think>/gs;
+    // Step 1: Remove well-formed <think>...</think>
+    text = text.replace(THINK_TAGS, '');
+    // Step 2: If there's an unmatched closing tag </think>,
+    //         remove everything up to and including that.
+    text = text.replace(STRAY_CLOSE_TAG, '');
+    return text.trim();
+  }
+
+  /**
+   * Log a comprehensive summary of the next action(s)
+   */
+  private _logNextActionSummary(parsed: AgentOutput): void {
+    if (!parsed.action || parsed.action.length === 0) {
+      return;
+    }
+
+    const actionCount = parsed.action.length;
+
+    // Collect action details
+    const actionDetails: string[] = [];
+    let lastActionName = 'unknown';
+    let lastParamStr = '';
+
+    for (const action of parsed.action) {
+      const actionData = action.model_dump();
+      const actionName = Object.keys(actionData)[0] || 'unknown';
+      const actionParams = actionData[actionName] || {};
+
+      // Format key parameters concisely
+      const paramSummary: string[] = [];
+      if (typeof actionParams === 'object' && actionParams !== null) {
+        for (const [key, value] of Object.entries(actionParams)) {
+          if (key === 'index') {
+            paramSummary.push(`#${value}`);
+          } else if (key === 'text' && typeof value === 'string') {
+            const textPreview =
+              value.length > 30 ? value.slice(0, 30) + '...' : value;
+            paramSummary.push(`text="${textPreview}"`);
+          } else if (key === 'url') {
+            paramSummary.push(`url="${value}"`);
+          } else if (key === 'success') {
+            paramSummary.push(`success=${value}`);
+          } else if (
+            typeof value === 'string' ||
+            typeof value === 'number' ||
+            typeof value === 'boolean'
+          ) {
+            const valStr = String(value);
+            const truncatedVal =
+              valStr.length > 30 ? valStr.slice(0, 30) + '...' : valStr;
+            paramSummary.push(`${key}=${truncatedVal}`);
+          }
+        }
+      }
+
+      const paramStr =
+        paramSummary.length > 0 ? `(${paramSummary.join(', ')})` : '';
+      actionDetails.push(`${actionName}${paramStr}`);
+      lastActionName = actionName;
+      lastParamStr = paramStr;
+    }
+
+    // Create summary based on single vs multi-action
+    if (actionCount === 1) {
+      this.logger.info(`☝️ Decided next action: ${lastActionName}${lastParamStr}`);
+    } else {
+      const summaryLines = [`✌️ Decided next ${actionCount} multi-actions:`];
+      for (let i = 0; i < actionDetails.length; i++) {
+        summaryLines.push(`          ${i + 1}. ${actionDetails[i]}`);
+      }
+      this.logger.info(summaryLines.join('\n'));
+    }
+  }
+
   private _set_browser_use_version_and_source(sourceOverride: string | null) {
     const version = get_browser_use_version();
     let source = 'npm';
@@ -1218,6 +1362,7 @@ export class Agent<
     this.state.last_model_output = model_output;
     let actions: Array<Record<string, Record<string, unknown>>> = [];
     if (model_output) {
+      this._logNextActionSummary(model_output);
       actions = model_output.action.map((a) => a.model_dump());
     }
     await this._raise_if_stopped_or_paused();

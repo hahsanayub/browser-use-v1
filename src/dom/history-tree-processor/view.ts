@@ -4,6 +4,17 @@ export class HashedDomElement {
     public attributes_hash: string,
     public xpath_hash: string
   ) {}
+
+  /**
+   * Check equality with another HashedDomElement
+   */
+  equals(other: HashedDomElement): boolean {
+    return (
+      this.branch_path_hash === other.branch_path_hash &&
+      this.attributes_hash === other.attributes_hash &&
+      this.xpath_hash === other.xpath_hash
+    );
+  }
 }
 
 export interface Coordinates {
