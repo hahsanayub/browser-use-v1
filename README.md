@@ -17,17 +17,17 @@ While the original [browser-use Python library](https://github.com/browser-use/b
 
 ### Python vs TypeScript: Which Should You Use?
 
-| Feature             | Python Version                                                        | TypeScript Version                                            |
-| ------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------- |
-| **Recommended for** | Python developers, Data scientists, AI/ML engineers                   | JavaScript/TypeScript developers, Full-stack engineers        |
-| **Ecosystem**       | PyPI, pip                                                             | npm, yarn, pnpm                                               |
-| **Type Safety**     | Optional (with type hints)                                            | Built-in (TypeScript)                                         |
-| **Runtime**         | Python 3.x                                                            | Node.js, Deno, Bun                                            |
-| **LLM Providers**   | 10+ providers                                                         | 10+ providers (same)                                          |
-| **Browser Support** | Playwright                                                            | Playwright (same)                                             |
-| **Documentation**   | ⭐ Original & Complete                                                | Port with TS-specific examples                                |
-| **Community**       | ⭐ Larger & More Established                                          | Growing                                                       |
-| **GitHub**          | [browser-use/browser-use](https://github.com/browser-use/browser-use) | [unadlib/browser-use](https://github.com/unadlib/browser-use) |
+| Feature             | Python Version                                                        | TypeScript Version                                          |
+| ------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **Recommended for** | Python developers, Data scientists, AI/ML engineers                   | JavaScript/TypeScript developers, Full-stack engineers      |
+| **Ecosystem**       | PyPI, pip                                                             | npm, yarn, pnpm                                             |
+| **Type Safety**     | Optional (with type hints)                                            | Built-in (TypeScript)                                       |
+| **Runtime**         | Python 3.x                                                            | Node.js, Deno, Bun                                          |
+| **LLM Providers**   | 10+ providers                                                         | 10+ providers (same)                                        |
+| **Browser Support** | Playwright                                                            | Playwright (same)                                           |
+| **Documentation**   | ⭐ Original & Complete                                                | Port with TS-specific examples                              |
+| **Community**       | ⭐ Larger & More Established                                          | Growing                                                     |
+| **GitHub**          | [browser-use/browser-use](https://github.com/browser-use/browser-use) | [webllm/browser-use](https://github.com/webllm/browser-use) |
 
 **👉 If you're working in Python, we highly recommend using the [original browser-use library](https://github.com/browser-use/browser-use).** This TypeScript port is specifically for those who need to work within the JavaScript/TypeScript ecosystem.
 
@@ -595,7 +595,7 @@ try {
 ### Building from Source
 
 ```bash
-git clone https://github.com/unadlib/browser-use.git
+git clone https://github.com/webllm/browser-use.git
 cd browser-use
 yarn install  # Automatically installs Playwright browsers
 yarn build
@@ -760,9 +760,9 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Support
 
-- 📚 [Documentation](https://github.com/unadlib/browser-use)
-- 🐛 [Issue Tracker](https://github.com/unadlib/browser-use/issues)
-- 💬 [Discussions](https://github.com/unadlib/browser-use/discussions)
+- 📚 [Documentation](https://github.com/webllm/browser-use)
+- 🐛 [Issue Tracker](https://github.com/webllm/browser-use/issues)
+- 💬 [Discussions](https://github.com/webllm/browser-use/discussions)
 
 ## Acknowledgments
 
@@ -797,7 +797,7 @@ This project is built with:
 ### Community
 
 - 🌟 **Star the original Python project**: [browser-use/browser-use](https://github.com/browser-use/browser-use)
-- 🌟 **Star this TypeScript port**: [unadlib/browser-use](https://github.com/unadlib/browser-use)
+- 🌟 **Star this TypeScript port**: [webllm/browser-use](https://github.com/webllm/browser-use)
 - 💬 **Join the community**: Share your use cases and contribute to both projects!
 
 ## Related Projects

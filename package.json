@@ -37,7 +37,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/unadlib/browser-use.git"
+    "url": "git+https://github.com/webllm/browser-use.git"
   },
   "author": "unadlib",
   "license": "MIT",
