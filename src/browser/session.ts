@@ -3,7 +3,7 @@ import path from 'node:path';
 import { spawn, exec, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createLogger } from '../logging-config.js';
-import { uuid7str } from '../utils.js';
+import { match_url_with_domain_pattern, uuid7str } from '../utils.js';
 import type { Browser, BrowserContext, Page, Locator } from './types.js';
 import {
   BrowserProfile,
@@ -2322,14 +2322,9 @@ export class BrowserSession {
     // Check against allowed domains
     for (const allowed_domain of this.browser_profile.allowed_domains) {
       try {
-        // Simple glob-like pattern matching
-        // TODO: Implement full match_url_with_domain_pattern logic
-        const pattern = allowed_domain
-          .replace(/\*/g, '.*')
-          .replace(/\./g, '\\.');
-
-        const regex = new RegExp(pattern, 'i');
-        if (regex.test(url)) {
+        if (
+          match_url_with_domain_pattern(url, allowed_domain, true)
+        ) {
           return true;
         }
       } catch (error) {

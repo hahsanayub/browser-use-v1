@@ -21,6 +21,7 @@ import {
   StructuredOutputActionSchema,
   SwitchTabActionSchema,
   UploadFileActionSchema,
+  WaitActionSchema,
   WriteFileActionSchema,
   SendKeysActionSchema,
   SheetsRangeActionSchema,
@@ -168,9 +169,12 @@ export class Controller<Context = unknown> {
       }
     );
 
+    type WaitAction = z.infer<typeof WaitActionSchema>;
     this.registry.action(
-      'Wait for x seconds default 3 (max 10 seconds). This can be used to wait until the page is fully loaded.'
-    )(async function wait(seconds = 3) {
+      'Wait for x seconds default 3 (max 10 seconds). This can be used to wait until the page is fully loaded.',
+      { param_model: WaitActionSchema }
+    )(async function wait(params: WaitAction) {
+      const seconds = params.seconds ?? 3;
       const actualSeconds = Math.min(
         Math.max(seconds - DEFAULT_WAIT_OFFSET, 0),
         MAX_WAIT_SECONDS

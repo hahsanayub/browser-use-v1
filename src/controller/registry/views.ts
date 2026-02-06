@@ -127,34 +127,67 @@ export class ActionRegistry {
     return Array.from(this.actions.values());
   }
 
+  get actionsMap() {
+    return new Map(this.actions);
+  }
+
   get actionEntries() {
     return Array.from(this.actions.values());
   }
 
-  get_prompt_description(page?: Page) {
-    if (!page) {
-      return this.actionEntries
-        .filter((action) => !action.pageFilter && !action.domains)
-        .map((action) => action.promptDescription())
-        .join('\n');
+  private _matchDomains(domains: string[] | null, pageUrl: string) {
+    if (!domains || domains.length === 0) {
+      return true;
     }
+    if (!pageUrl) {
+      return false;
+    }
+    return domains.some((pattern) => {
+      try {
+        return match_url_with_domain_pattern(pageUrl, pattern);
+      } catch {
+        return false;
+      }
+    });
+  }
 
-    const filtered = this.actionEntries.filter((action) => {
-      if (!action.domains && !action.pageFilter) {
+  private _matchPageFilter(
+    pageFilter: ((page: Page) => boolean) | null,
+    page: Page
+  ) {
+    if (!pageFilter) {
+      return true;
+    }
+    try {
+      return pageFilter(page);
+    } catch {
+      return false;
+    }
+  }
+
+  getAvailableActions(page?: Page | null, includeActions?: string[] | null) {
+    const include = includeActions ? new Set(includeActions) : null;
+
+    return this.actionEntries.filter((action) => {
+      if (include && !include.has(action.name)) {
         return false;
       }
 
+      if (!page) {
+        return !action.pageFilter && !action.domains;
+      }
+
       const pageUrl = getPageUrl(page);
-      const domainAllowed =
-        !action.domains ||
-        action.domains.some((pattern) =>
-          match_url_with_domain_pattern(pageUrl, pattern)
-        );
-      const pageAllowed = action.pageFilter ? action.pageFilter(page) : true;
+      const domainAllowed = this._matchDomains(action.domains, pageUrl);
+      const pageAllowed = this._matchPageFilter(action.pageFilter, page);
       return domainAllowed && pageAllowed;
     });
+  }
 
-    return filtered.map((action) => action.promptDescription()).join('\n');
+  get_prompt_description(page?: Page | null) {
+    return this.getAvailableActions(page)
+      .map((action) => action.promptDescription())
+      .join('\n');
   }
 }
 

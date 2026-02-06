@@ -39,7 +39,9 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import { createLogger } from '../logging-config.js';
 import type { Controller } from '../controller/service.js';
 import { Controller as DefaultController } from '../controller/service.js';
+import { Agent } from '../agent/service.js';
 import { BrowserSession } from '../browser/session.js';
+import { ChatOpenAI } from '../llm/openai/chat.js';
 import { productTelemetry } from '../telemetry/service.js';
 import { MCPServerTelemetryEvent } from '../telemetry/views.js';
 import { get_browser_use_version } from '../utils.js';
@@ -96,6 +98,9 @@ export class MCPServer {
     this.startTime = Date.now() / 1000;
     this.setupHandlers();
     this.registerDefaultPrompts();
+    this.controller = new DefaultController();
+    this.registerControllerActions(this.controller);
+    this.registerCoreBrowserTools();
   }
 
   private setupHandlers() {
@@ -197,6 +202,234 @@ export class MCPServer {
         ],
       };
     });
+  }
+
+  private async ensureController(): Promise<Controller<any>> {
+    if (!this.controller) {
+      this.controller = new DefaultController();
+      this.registerControllerActions(this.controller);
+    }
+    return this.controller;
+  }
+
+  private async ensureBrowserSession(): Promise<BrowserSession> {
+    if (!this.browserSession) {
+      this.browserSession = new BrowserSession();
+    }
+
+    if (!this.browserSession.initialized) {
+      await this.browserSession.start();
+    }
+
+    return this.browserSession;
+  }
+
+  private async executeControllerAction(
+    actionName: string,
+    args: Record<string, unknown>
+  ): Promise<unknown> {
+    const controller = await this.ensureController();
+    const browserSession = await this.ensureBrowserSession();
+
+    return await controller.registry.execute_action(actionName, args, {
+      browser_session: browserSession,
+      context: undefined,
+    });
+  }
+
+  private registerCoreBrowserTools() {
+    this.registerTool(
+      'browser_navigate',
+      'Navigate to a URL in the browser',
+      z.object({
+        url: z.string(),
+        new_tab: z.boolean().default(false),
+      }),
+      async (args) =>
+        this.executeControllerAction('go_to_url', {
+          url: String(args?.url ?? ''),
+          new_tab: Boolean(args?.new_tab),
+        })
+    );
+
+    this.registerTool(
+      'browser_click',
+      'Click an element on the page by index from browser_get_state',
+      z.object({
+        index: z.number().int(),
+        new_tab: z.boolean().optional().default(false),
+      }),
+      async (args) =>
+        this.executeControllerAction('click_element_by_index', {
+          index: Number(args?.index),
+        })
+    );
+
+    this.registerTool(
+      'browser_type',
+      'Type text into an input field by index from browser_get_state',
+      z.object({
+        index: z.number().int(),
+        text: z.string(),
+      }),
+      async (args) =>
+        this.executeControllerAction('input_text', {
+          index: Number(args?.index),
+          text: String(args?.text ?? ''),
+        })
+    );
+
+    this.registerTool(
+      'browser_get_state',
+      'Get the current state of the page including interactive elements',
+      z
+        .object({
+          include_screenshot: z.boolean().default(false),
+        })
+        .default({ include_screenshot: false }),
+      async (args) => {
+        const browserSession = await this.ensureBrowserSession();
+        const state = await browserSession.get_browser_state_with_recovery({
+          include_screenshot: Boolean(args?.include_screenshot),
+          cache_clickable_elements_hashes: true,
+        });
+
+        return {
+          url: state.url,
+          title: state.title,
+          tabs: state.tabs,
+          page_info: state.page_info,
+          pixels_above: state.pixels_above,
+          pixels_below: state.pixels_below,
+          browser_errors: state.browser_errors,
+          loading_status: state.loading_status,
+          screenshot: state.screenshot,
+          interactive_elements: state.element_tree.clickable_elements_to_string(),
+          interactive_count: Object.keys(state.selector_map ?? {}).length,
+        };
+      }
+    );
+
+    this.registerTool(
+      'browser_extract_content',
+      'Extract structured content from the current page',
+      z.object({
+        query: z.string(),
+        extract_links: z.boolean().default(false),
+      }),
+      async (args) =>
+        this.executeControllerAction('extract_structured_data', {
+          query: String(args?.query ?? ''),
+          extract_links: Boolean(args?.extract_links),
+        })
+    );
+
+    this.registerTool(
+      'browser_scroll',
+      'Scroll the page up or down',
+      z
+        .object({
+          direction: z.enum(['up', 'down']).default('down'),
+        })
+        .default({ direction: 'down' }),
+      async (args) =>
+        this.executeControllerAction('scroll', {
+          down: (args?.direction ?? 'down') !== 'up',
+          num_pages: 1,
+        })
+    );
+
+    this.registerTool(
+      'browser_go_back',
+      'Go back to the previous page',
+      z.object({}).strict(),
+      async () => this.executeControllerAction('go_back', {})
+    );
+
+    this.registerTool(
+      'browser_list_tabs',
+      'List all open tabs',
+      z.object({}).strict(),
+      async () => {
+        const browserSession = await this.ensureBrowserSession();
+        return browserSession.get_tabs_info();
+      }
+    );
+
+    this.registerTool(
+      'browser_switch_tab',
+      'Switch to a tab by index',
+      z.object({
+        tab_index: z.number().int(),
+      }),
+      async (args) =>
+        this.executeControllerAction('switch_tab', {
+          page_id: Number(args?.tab_index),
+        })
+    );
+
+    this.registerTool(
+      'browser_close_tab',
+      'Close a tab by index',
+      z.object({
+        tab_index: z.number().int(),
+      }),
+      async (args) =>
+        this.executeControllerAction('close_tab', {
+          page_id: Number(args?.tab_index),
+        })
+    );
+
+    this.registerTool(
+      'retry_with_browser_use_agent',
+      'Retry a complex task with the browser-use autonomous agent',
+      z.object({
+        task: z.string(),
+        max_steps: z.number().int().optional().default(100),
+        model: z.string().optional().default('gpt-4o'),
+        allowed_domains: z.array(z.string()).optional().default([]),
+        use_vision: z.boolean().optional().default(true),
+      }),
+      async (args) => {
+        const task = String(args?.task ?? '').trim();
+        if (!task) {
+          throw new Error('task is required');
+        }
+
+        const model = String(args?.model ?? 'gpt-4o');
+        const maxSteps = Number(args?.max_steps ?? 100);
+        const useVision = Boolean(args?.use_vision ?? true);
+        const allowedDomains = Array.isArray(args?.allowed_domains)
+          ? args.allowed_domains
+              .map((entry: unknown) => String(entry).trim())
+              .filter(Boolean)
+          : [];
+
+        const browserSession = await this.ensureBrowserSession();
+        const controller = await this.ensureController();
+
+        const previousAllowed =
+          browserSession.browser_profile.config.allowed_domains ?? null;
+        if (allowedDomains.length > 0) {
+          browserSession.browser_profile.config.allowed_domains = allowedDomains;
+        }
+
+        try {
+          const llm = new ChatOpenAI({ model });
+          const agent = new Agent({
+            task,
+            llm,
+            controller,
+            browser_session: browserSession,
+            use_vision: useVision,
+          });
+          const history = await agent.run(maxSteps);
+          return history.final_result() ?? 'Task completed with no final output';
+        } finally {
+          browserSession.browser_profile.config.allowed_domains = previousAllowed;
+        }
+      }
+    );
   }
 
   /**
@@ -303,37 +536,23 @@ export class MCPServer {
     // Get all registered actions from the controller
     const actions = controller.registry.get_all_actions();
 
-    for (const [actionName, actionInfo] of Object.entries(actions)) {
+    for (const [actionName, actionInfo] of actions.entries()) {
       // Create a wrapper for the action
       const handler = async (args: any) => {
-        if (!this.browserSession) {
-          throw new Error('Browser session not initialized');
-        }
-
-        // Execute the action through the controller
-        const result = await (controller.registry as any).execute_action(
-          actionName,
-          args,
-          {
-            browser_session: this.browserSession,
-            context: undefined,
-          }
-        );
-
-        return result;
+        return this.executeControllerAction(actionName, args || {});
       };
 
       // Register the action as a tool
       this.registerTool(
         actionName,
-        (actionInfo as any).description || `Execute ${actionName} action`,
-        {},
+        actionInfo.description || `Execute ${actionName} action`,
+        actionInfo.paramSchema ?? z.object({}).strict(),
         handler
       );
     }
 
     logger.info(
-      `✅ Registered ${Object.keys(actions).length} controller actions as MCP tools`
+      `✅ Registered ${actions.size} controller actions as MCP tools`
     );
   }
 

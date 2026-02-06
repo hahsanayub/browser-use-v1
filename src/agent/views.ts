@@ -313,21 +313,50 @@ export class AgentOutput {
   }
 
   static type_with_custom_actions<T extends ActionModel>(
-    _custom_actions: new (...args: any[]) => T
+    custom_actions: new (initialData?: Record<string, any>) => T
   ) {
-    return AgentOutput;
+    const CustomActionModel = custom_actions;
+
+    return class AgentOutputWithCustomActions extends AgentOutput {
+      constructor(init?: Partial<AgentOutput>) {
+        super(init);
+        this.action = (init?.action ?? []).map((entry) =>
+          entry instanceof CustomActionModel
+            ? entry
+            : new CustomActionModel(
+                (entry as any)?.model_dump?.() ?? (entry as any)
+              )
+        );
+      }
+    };
   }
 
   static type_with_custom_actions_no_thinking<T extends ActionModel>(
-    _custom_actions: new (...args: any[]) => T
+    custom_actions: new (initialData?: Record<string, any>) => T
   ) {
-    return AgentOutput;
+    const BaseModel = AgentOutput.type_with_custom_actions(custom_actions);
+
+    return class AgentOutputWithoutThinking extends BaseModel {
+      constructor(init?: Partial<AgentOutput>) {
+        super(init);
+        this.thinking = null;
+      }
+    };
   }
 
   static type_with_custom_actions_flash_mode<T extends ActionModel>(
-    _custom_actions: new (...args: any[]) => T
+    custom_actions: new (initialData?: Record<string, any>) => T
   ) {
-    return AgentOutput;
+    const BaseModel = AgentOutput.type_with_custom_actions(custom_actions);
+
+    return class AgentOutputFlashMode extends BaseModel {
+      constructor(init?: Partial<AgentOutput>) {
+        super(init);
+        this.thinking = null;
+        this.evaluation_previous_goal = null;
+        this.next_goal = null;
+      }
+    };
   }
 }
 

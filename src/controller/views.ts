@@ -11,6 +11,11 @@ export const GoToUrlActionSchema = z.object({
 });
 export type GoToUrlAction = z.infer<typeof GoToUrlActionSchema>;
 
+export const WaitActionSchema = z.object({
+  seconds: z.number().default(3),
+});
+export type WaitAction = z.infer<typeof WaitActionSchema>;
+
 export const ClickElementActionSchema = z.object({
   index: z.number().int(),
 });

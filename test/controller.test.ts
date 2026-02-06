@@ -43,6 +43,7 @@ vi.mock('../src/utils.js', () => {
 
 // Import after mocks
 import { Registry } from '../src/controller/registry/service.js';
+import { Controller } from '../src/controller/service.js';
 import { ActionResult } from '../src/agent/views.js';
 
 describe('Controller Registry Tests', () => {
@@ -565,5 +566,69 @@ describe('Sensitive Data Handling', () => {
     // Without URL match, placeholders remain unchanged
     expect(capturedParams.username).toBe('<secret>user</secret>');
     expect(capturedParams.password).toBe('<secret>pass</secret>');
+  });
+});
+
+describe('Regression Coverage', () => {
+  it('wait action uses object params and does not produce NaN', async () => {
+    const controller = new Controller();
+    const result = await controller.registry.execute_action('wait', {});
+    expect(result.extracted_content).toContain('Waiting for 3 seconds');
+    expect(result.extracted_content).not.toContain('NaN');
+  });
+
+  it('page prompt description includes unfiltered and page-filtered actions', async () => {
+    const registry = new Registry();
+
+    registry.action('Always available action', {
+      param_model: z.object({}),
+    })(async function base_action() {
+      return new ActionResult({});
+    });
+
+    registry.action('Only example.com action', {
+      param_model: z.object({}),
+      domains: ['https://example.com'],
+    })(async function domain_action() {
+      return new ActionResult({});
+    });
+
+    const prompt = registry.get_prompt_description({
+      url: () => 'https://example.com',
+    } as any);
+
+    expect(prompt).toContain('base_action');
+    expect(prompt).toContain('domain_action');
+  });
+
+  it('create_action_model filters by include_actions and page context', async () => {
+    const registry = new Registry();
+
+    registry.action('Always available action', {
+      param_model: z.object({}),
+    })(async function base_action() {
+      return new ActionResult({});
+    });
+
+    registry.action('Only example.com action', {
+      param_model: z.object({}),
+      domains: ['https://example.com'],
+    })(async function domain_action() {
+      return new ActionResult({});
+    });
+
+    const baseModel = registry.create_action_model();
+    const pageModel = registry.create_action_model({
+      page: { url: () => 'https://example.com' } as any,
+    });
+    const includedModel = registry.create_action_model({
+      include_actions: ['domain_action'],
+      page: { url: () => 'https://example.com' } as any,
+    });
+
+    expect((baseModel as any).available_actions).toContain('base_action');
+    expect((baseModel as any).available_actions).not.toContain('domain_action');
+    expect((pageModel as any).available_actions).toContain('domain_action');
+    expect((includedModel as any).available_actions).toEqual(['domain_action']);
   });
 });

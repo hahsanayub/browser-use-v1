@@ -33,6 +33,7 @@ import {
   type Tool,
   type Prompt,
 } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 import { createLogger } from '../logging-config.js';
 import type { Controller } from '../controller/service.js';
 import type { Registry } from '../controller/registry/service.js';
@@ -421,13 +422,200 @@ export class MCPClient {
     // Register the action with browser-use
     const description =
       tool.description || `MCP tool from ${this.serverName}: ${tool.name}`;
+    const paramModel = this._convertToolSchemaToParamModel(tool.inputSchema);
 
     // Use the registry's action decorator
-    registry.action(description)(mcpActionWrapper);
+    registry.action(description, {
+      param_model: paramModel,
+    })(mcpActionWrapper);
 
     logger.debug(
       `✅ Registered MCP tool '${tool.name}' as action '${actionName}'`
     );
+  }
+
+  private _convertToolSchemaToParamModel(inputSchema: unknown) {
+    if (!inputSchema || typeof inputSchema !== 'object') {
+      return z.object({}).strict();
+    }
+
+    const schemaObject = inputSchema as Record<string, unknown>;
+    if (Object.keys(schemaObject).length === 0) {
+      return z.object({}).strict();
+    }
+
+    const converted = this._jsonSchemaToZod(schemaObject, 'input');
+    if (converted instanceof z.ZodObject) {
+      return converted.strict();
+    }
+    return z.any();
+  }
+
+  private _jsonSchemaToZod(
+    schema: Record<string, unknown>,
+    path: string
+  ): z.ZodTypeAny {
+    const typeValue = schema.type;
+    const enumValues = Array.isArray(schema.enum) ? schema.enum : null;
+
+    if ('const' in schema) {
+      if (this._isLiteralPrimitive(schema.const)) {
+        return this._applySchemaMetadata(z.literal(schema.const), schema);
+      }
+      return this._applySchemaMetadata(z.any(), schema);
+    }
+
+    if (enumValues && enumValues.length > 0) {
+      const enumSchema = this._toLiteralUnion(enumValues);
+      return this._applySchemaMetadata(enumSchema, schema);
+    }
+
+    if (Array.isArray(schema.oneOf) && schema.oneOf.length > 0) {
+      const options = schema.oneOf.map((option, index) =>
+        this._jsonSchemaToZod(
+          this._toJsonSchemaObject(option),
+          `${path}.oneOf[${index}]`
+        )
+      );
+      const union = options.length === 1 ? options[0] : z.union(options as any);
+      return this._applySchemaMetadata(union, schema);
+    }
+
+    if (Array.isArray(schema.anyOf) && schema.anyOf.length > 0) {
+      const options = schema.anyOf.map((option, index) =>
+        this._jsonSchemaToZod(
+          this._toJsonSchemaObject(option),
+          `${path}.anyOf[${index}]`
+        )
+      );
+      const union = options.length === 1 ? options[0] : z.union(options as any);
+      return this._applySchemaMetadata(union, schema);
+    }
+
+    if (Array.isArray(typeValue)) {
+      const hasNull = typeValue.includes('null');
+      const nonNullTypes = typeValue.filter((entry) => entry !== 'null');
+
+      if (nonNullTypes.length === 1) {
+        const base = this._jsonSchemaToZod(
+          { ...schema, type: nonNullTypes[0] },
+          path
+        );
+        return hasNull ? base.nullable() : base;
+      }
+
+      if (nonNullTypes.length > 1) {
+        const options = nonNullTypes.map((entry) =>
+          this._jsonSchemaToZod({ ...schema, type: entry }, path)
+        );
+        const union = options.length === 1 ? options[0] : z.union(options as any);
+        return hasNull ? union.nullable() : union;
+      }
+    }
+
+    let zodSchema: z.ZodTypeAny;
+    if (typeValue === 'object' || schema.properties) {
+      const properties =
+        schema.properties && typeof schema.properties === 'object'
+          ? (schema.properties as Record<string, unknown>)
+          : {};
+      const required = new Set(
+        Array.isArray(schema.required)
+          ? schema.required.filter((entry) => typeof entry === 'string')
+          : []
+      );
+
+      const shape: Record<string, z.ZodTypeAny> = {};
+      for (const [key, value] of Object.entries(properties)) {
+        const propertySchema = this._toJsonSchemaObject(value);
+        const hasDefault = Object.prototype.hasOwnProperty.call(
+          propertySchema,
+          'default'
+        );
+
+        let field = this._jsonSchemaToZod(propertySchema, `${path}.${key}`);
+        if (hasDefault) {
+          field = this._applyDefault(field, propertySchema.default);
+        } else if (!required.has(key)) {
+          field = field.optional();
+        }
+        shape[key] = field;
+      }
+
+      zodSchema = z.object(shape);
+    } else if (typeValue === 'array') {
+      const itemsSchema = this._toJsonSchemaObject(schema.items);
+      zodSchema = z.array(this._jsonSchemaToZod(itemsSchema, `${path}[]`));
+    } else if (typeValue === 'string') {
+      zodSchema = z.string();
+    } else if (typeValue === 'integer') {
+      zodSchema = z.number().int();
+    } else if (typeValue === 'number') {
+      zodSchema = z.number();
+    } else if (typeValue === 'boolean') {
+      zodSchema = z.boolean();
+    } else if (typeValue === 'null') {
+      zodSchema = z.null();
+    } else {
+      zodSchema = z.any();
+    }
+
+    return this._applySchemaMetadata(zodSchema, schema);
+  }
+
+  private _toJsonSchemaObject(input: unknown): Record<string, unknown> {
+    if (!input || typeof input !== 'object') {
+      return {};
+    }
+    return input as Record<string, unknown>;
+  }
+
+  private _toLiteralUnion(values: unknown[]) {
+    const literalValues = values.filter((value) =>
+      this._isLiteralPrimitive(value)
+    );
+    if (!literalValues.length) {
+      return z.any();
+    }
+    if (literalValues.length === 1) {
+      return z.literal(literalValues[0]);
+    }
+
+    const literals = literalValues.map((value) => z.literal(value));
+    return z.union(literals as any);
+  }
+
+  private _isLiteralPrimitive(
+    value: unknown
+  ): value is string | number | boolean | null {
+    return (
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean' ||
+      value === null
+    );
+  }
+
+  private _applyDefault(schema: z.ZodTypeAny, value: unknown): z.ZodTypeAny {
+    try {
+      return (schema as any).default(value);
+    } catch {
+      return schema;
+    }
+  }
+
+  private _applySchemaMetadata(
+    schema: z.ZodTypeAny,
+    sourceSchema: Record<string, unknown>
+  ) {
+    let result = schema;
+    if (sourceSchema.nullable === true) {
+      result = result.nullable();
+    }
+    if (typeof sourceSchema.description === 'string') {
+      result = result.describe(sourceSchema.description);
+    }
+    return result;
   }
 
   private _formatMcpResult(result: any): string {

@@ -77,7 +77,7 @@ export class Registry<Context = unknown> {
   }
 
   public get_all_actions() {
-    return (this.registry as any).actions;
+    return this.registry.actionsMap;
   }
 
   public execute_action = observe_debug({
@@ -242,8 +242,25 @@ export class Registry<Context = unknown> {
     );
   }
 
-  create_action_model() {
-    return ActionModel;
+  create_action_model(options: {
+    include_actions?: string[] | null;
+    page?: Page | null;
+  } = {}) {
+    const { include_actions = null, page = null } = options;
+    const availableActions = this.registry.getAvailableActions(
+      page,
+      include_actions
+    );
+
+    class DynamicActionModel extends ActionModel {
+      static available_actions = availableActions.map((action) => action.name);
+    }
+
+    Object.defineProperty(DynamicActionModel, 'name', {
+      value: 'ActionModel',
+    });
+
+    return DynamicActionModel as typeof ActionModel;
   }
 
   get_prompt_description(page?: Page | null) {

@@ -490,9 +490,8 @@ export class Agent<
 
       try {
         // Get the parameter model for this action from registry
-        const actionInfo = this.controller.registry.get_all_actions()[
-          actionName
-        ];
+        const actionInfo =
+          this.controller.registry.get_all_actions().get(actionName) ?? null;
         if (!actionInfo) {
           this.logger.warning(
             `⚠️ Unknown action "${actionName}" in initial_actions, skipping`
@@ -500,7 +499,7 @@ export class Agent<
           continue;
         }
 
-        const paramModel = actionInfo.param_model;
+        const paramModel = actionInfo.paramSchema;
         if (!paramModel) {
           this.logger.warning(
             `⚠️ No parameter model for action "${actionName}", using raw params`
@@ -964,7 +963,9 @@ export class Agent<
     }
 
     // Used to force the done action when max_steps is reached
-    this.DoneActionModel = this.controller.registry.create_action_model();
+    this.DoneActionModel = this.controller.registry.create_action_model({
+      include_actions: ['done'],
+    });
     if (this.settings.flash_mode) {
       this.DoneAgentOutput = AgentOutput.type_with_custom_actions_flash_mode(
         this.DoneActionModel
@@ -986,7 +987,7 @@ export class Agent<
    */
   private async _updateActionModelsForPage(page: Page | null) {
     // Create new action model with current page's filtered actions
-    this.ActionModel = this.controller.registry.create_action_model();
+    this.ActionModel = this.controller.registry.create_action_model({ page });
 
     // Update output model with the new actions
     if (this.settings.flash_mode) {
@@ -1002,7 +1003,10 @@ export class Agent<
     }
 
     // Update done action model too
-    this.DoneActionModel = this.controller.registry.create_action_model();
+    this.DoneActionModel = this.controller.registry.create_action_model({
+      include_actions: ['done'],
+      page,
+    });
     if (this.settings.flash_mode) {
       this.DoneAgentOutput = AgentOutput.type_with_custom_actions_flash_mode(
         this.DoneActionModel
@@ -1289,7 +1293,7 @@ export class Agent<
     this.logger.debug(
       `📝 Step ${this.state.n_steps}: Updating action models...`
     );
-    await this._update_action_models_for_page(current_page);
+    await this._updateActionModelsForPage(current_page);
 
     const page_filtered_actions =
       this.controller.registry.get_prompt_description(current_page);
@@ -1792,7 +1796,21 @@ export class Agent<
   }
 
   async close() {
-    /* placeholder for browser cleanup */
+    if (!this.browser_session) {
+      return;
+    }
+
+    try {
+      if (typeof (this.browser_session as any).stop === 'function') {
+        await (this.browser_session as any).stop();
+      } else if (typeof (this.browser_session as any).close === 'function') {
+        await (this.browser_session as any).close();
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error during agent cleanup: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   }
 
   /**
@@ -2218,7 +2236,8 @@ export class Agent<
     const action = Array.isArray(parsed_completion?.action)
       ? parsed_completion.action
       : [];
-    return new AgentOutput({
+    const AgentOutputModel = this.AgentOutput ?? AgentOutput;
+    return new AgentOutputModel({
       thinking: parsed_completion?.thinking ?? null,
       evaluation_previous_goal:
         parsed_completion?.evaluation_previous_goal ?? null,
@@ -2228,8 +2247,8 @@ export class Agent<
     });
   }
 
-  private async _update_action_models_for_page(_page: Page | null) {
-    /* placeholder for page-specific actions */
+  private async _update_action_models_for_page(page: Page | null) {
+    await this._updateActionModelsForPage(page);
   }
 
   private async _check_and_update_downloads(context = '') {
