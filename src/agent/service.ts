@@ -167,6 +167,7 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
   display_files_in_done_text?: boolean;
   include_tool_call_examples?: boolean;
   vision_detail_level?: AgentSettings['vision_detail_level'];
+  session_attachment_mode?: AgentSettings['session_attachment_mode'];
   llm_timeout?: number;
   step_timeout?: number;
 }
@@ -207,6 +208,7 @@ const defaultAgentOptions = () => ({
   calculate_cost: false,
   display_files_in_done_text: true,
   include_tool_call_examples: false,
+  session_attachment_mode: 'copy' as const,
   vision_detail_level: 'auto' as const,
   llm_timeout: 60,
   step_timeout: 180,
@@ -290,6 +292,7 @@ export class Agent<
   _session_start_time = 0;
   _task_start_time = 0;
   _force_exit_telemetry_logged = false;
+  private _closePromise: Promise<void> | null = null;
   private _enforceDoneOnlyForCurrentStep = false;
   system_prompt_class: SystemPrompt;
   ActionModel: typeof ActionModel = ActionModel;
@@ -338,6 +341,7 @@ export class Agent<
       display_files_in_done_text = true,
       include_tool_call_examples = false,
       vision_detail_level = 'auto',
+      session_attachment_mode = 'copy',
       llm_timeout = 60,
       step_timeout = 180,
     } = { ...defaultAgentOptions(), ...params };
@@ -393,6 +397,7 @@ export class Agent<
       extend_planner_system_message: null,
       calculate_cost,
       include_tool_call_examples,
+      session_attachment_mode,
       llm_timeout,
       step_timeout,
     };
@@ -551,6 +556,11 @@ export class Agent<
     }
 
     const currentOwner = getAttachedAgentId(browser_session) ?? 'unknown';
+    if (this.settings.session_attachment_mode === 'strict') {
+      throw new Error(
+        `BrowserSession is already attached to Agent ${currentOwner}. Set session_attachment_mode='copy' to allow automatic isolation.`
+      );
+    }
     this.logger.warning(
       `⚠️ BrowserSession is already attached to Agent ${currentOwner}. Creating an isolated copy for this Agent.`
     );
@@ -1969,24 +1979,33 @@ export class Agent<
   }
 
   async close() {
+    if (this._closePromise) {
+      await this._closePromise;
+      return;
+    }
+
     const browser_session = this.browser_session;
     if (!browser_session) {
       return;
     }
 
-    try {
-      if (typeof (browser_session as any).stop === 'function') {
-        await (browser_session as any).stop();
-      } else if (typeof (browser_session as any).close === 'function') {
-        await (browser_session as any).close();
+    this._closePromise = (async () => {
+      try {
+        if (typeof (browser_session as any).stop === 'function') {
+          await (browser_session as any).stop();
+        } else if (typeof (browser_session as any).close === 'function') {
+          await (browser_session as any).close();
+        }
+      } catch (error) {
+        this.logger.error(
+          `Error during agent cleanup: ${error instanceof Error ? error.message : String(error)}`
+        );
+      } finally {
+        this._release_browser_session_claim(browser_session);
       }
-    } catch (error) {
-      this.logger.error(
-        `Error during agent cleanup: ${error instanceof Error ? error.message : String(error)}`
-      );
-    } finally {
-      this._release_browser_session_claim(browser_session);
-    }
+    })();
+
+    await this._closePromise;
   }
 
   /**

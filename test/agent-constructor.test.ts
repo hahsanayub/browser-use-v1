@@ -114,6 +114,48 @@ describe('Agent constructor browser session alignment', () => {
     expect(session.get_attached_agent_id()).toBeNull();
   });
 
+  it('deduplicates concurrent close calls and releases claim once', async () => {
+    const session = new BrowserSession({
+      browser_profile: new BrowserProfile({}),
+    });
+    const stopSpy = vi.spyOn(session as any, 'stop').mockImplementation(
+      async () =>
+        await new Promise((resolve) => {
+          setTimeout(resolve, 20);
+        })
+    );
+    const releaseSpy = vi.spyOn(session as any, 'release_agent');
+
+    const agent = new Agent({
+      task: 'test concurrent close',
+      llm: createLlm(),
+      browser_session: session,
+    });
+
+    expect(session.get_attached_agent_id()).toBe(agent.id);
+    await Promise.all([agent.close(), agent.close(), agent.close()]);
+    expect(stopSpy).toHaveBeenCalledTimes(1);
+    expect(releaseSpy).toHaveBeenCalledTimes(1);
+    expect(session.get_attached_agent_id()).toBeNull();
+  });
+
+  it('throws in strict attachment mode when BrowserSession is already attached', () => {
+    const sharedSession = new BrowserSession({
+      browser_profile: new BrowserProfile({}),
+    });
+    expect(sharedSession.claim_agent('existing-agent')).toBe(true);
+
+    expect(
+      () =>
+        new Agent({
+          task: 'strict attachment',
+          llm: createLlm(),
+          browser_session: sharedSession,
+          session_attachment_mode: 'strict',
+        })
+    ).toThrow(/already attached to Agent existing-agent/);
+  });
+
   it('defaults page_extraction_llm to the main llm when omitted', async () => {
     const llm = createLlm();
     const agent = new Agent({

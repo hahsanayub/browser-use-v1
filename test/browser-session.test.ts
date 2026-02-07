@@ -112,6 +112,23 @@ describe('BrowserSession Basic Operations', () => {
     expect(session.get_attached_agent_id()).toBeNull();
   });
 
+  it('deduplicates concurrent stop calls', async () => {
+    const session = new BrowserSession({
+      browser_profile: new BrowserProfile({}),
+    });
+    await session.start();
+
+    const shutdownSpy = vi
+      .spyOn(session as any, '_shutdown_browser_session')
+      .mockImplementation(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        (session as any).initialized = false;
+      });
+
+    await Promise.all([session.stop(), session.stop(), session.stop()]);
+    expect(shutdownSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('starts and stops browser session', async () => {
     const session = new BrowserSession({
       browser_profile: new BrowserProfile({

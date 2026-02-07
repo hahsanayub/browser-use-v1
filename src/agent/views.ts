@@ -99,6 +99,7 @@ export class ActionResult {
 }
 
 export interface AgentSettings {
+  session_attachment_mode: 'copy' | 'strict';
   use_vision: boolean;
   vision_detail_level: 'auto' | 'low' | 'high';
   use_vision_for_planner: boolean;
@@ -127,6 +128,7 @@ export interface AgentSettings {
 }
 
 export const defaultAgentSettings = (): AgentSettings => ({
+  session_attachment_mode: 'copy',
   use_vision: true,
   vision_detail_level: 'auto',
   use_vision_for_planner: false,

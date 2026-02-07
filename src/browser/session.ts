@@ -87,6 +87,7 @@ export class BrowserSession {
   private _subprocess: ChildProcess | null = null;
   private _childProcesses: Set<number> = new Set();
   private attachedAgentId: string | null = null;
+  private _stoppingPromise: Promise<void> | null = null;
 
   constructor(init: BrowserSessionInit = {}) {
     const sourceProfileConfig = init.browser_profile
@@ -2511,7 +2512,31 @@ export class BrowserSession {
       return;
     }
 
-    await this._shutdown_browser_session();
+    if (this._stoppingPromise) {
+      await this._stoppingPromise;
+      return;
+    }
+
+    const hasActiveResources =
+      this.initialized ||
+      Boolean(
+        this.browser ||
+          this.browser_context ||
+          this.browser_pid ||
+          this._subprocess ||
+          this._childProcesses.size > 0
+      );
+    if (!hasActiveResources) {
+      return;
+    }
+
+    this._stoppingPromise = this._shutdown_browser_session();
+
+    try {
+      await this._stoppingPromise;
+    } finally {
+      this._stoppingPromise = null;
+    }
   }
 
   /**

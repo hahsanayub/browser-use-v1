@@ -624,6 +624,114 @@ describe('Component Tests (Mocked Dependencies)', () => {
     expect(history.final_result()).toContain('Recovered after crash');
     expect(agent.state.consecutive_failures).toBe(0);
   });
+
+  it('recovers after multiple consecutive browser state failures', async () => {
+    const controller = createTestController();
+    const browser_session = createBrowserSessionStub();
+    const tempDir = createTempDir();
+
+    const originalGetState = browser_session.get_browser_state_with_recovery;
+    let failuresRemaining = 2;
+    let stateCallCount = 0;
+    browser_session.get_browser_state_with_recovery = async () => {
+      stateCallCount += 1;
+      if (failuresRemaining > 0) {
+        failuresRemaining -= 1;
+        throw new Error('Context closed');
+      }
+      return originalGetState.call(browser_session);
+    };
+
+    const llm = new MockLLM([
+      {
+        completion: {
+          action: [{ done: { success: true, text: 'Recovered after retries' } }],
+          thinking: 'retry until browser state is available',
+        },
+      },
+    ]);
+
+    const agent = new Agent({
+      task: 'Recover from repeated browser state failures',
+      llm,
+      browser_session,
+      controller,
+      file_system_path: tempDir,
+      use_vision: false,
+      max_failures: 4,
+    });
+
+    tempResources.push(agent.agent_directory);
+    const history = await agent.run(5);
+
+    expect(stateCallCount).toBeGreaterThanOrEqual(3);
+    expect(history.is_successful()).toBe(true);
+    expect(history.final_result()).toContain('Recovered after retries');
+    expect(agent.state.consecutive_failures).toBe(0);
+  });
+
+  it('keeps BrowserSession claims consistent when close races with run finalizer', async () => {
+    const controller = createTestController();
+    const tempDir = createTempDir();
+    const browser_session = createBrowserSessionStub() as any;
+
+    let attachedAgentId: string | null = null;
+    let stopCalls = 0;
+    browser_session.claim_agent = (agentId: string) => {
+      if (!agentId) {
+        return false;
+      }
+      if (attachedAgentId && attachedAgentId !== agentId) {
+        return false;
+      }
+      attachedAgentId = agentId;
+      return true;
+    };
+    browser_session.release_agent = (agentId?: string) => {
+      if (!attachedAgentId) {
+        return true;
+      }
+      if (agentId && attachedAgentId !== agentId) {
+        return false;
+      }
+      attachedAgentId = null;
+      return true;
+    };
+    browser_session.get_attached_agent_id = () => attachedAgentId;
+    browser_session.stop = async () => {
+      stopCalls += 1;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    };
+    const releaseSpy = vi.spyOn(browser_session, 'release_agent');
+
+    const llm = new MockLLM([
+      {
+        completion: {
+          action: [{ done: { success: true, text: 'Race-safe completion' } }],
+          thinking: 'done',
+        },
+      },
+    ]);
+
+    const agent = new Agent({
+      task: 'Race-safe close',
+      llm,
+      browser_session,
+      controller,
+      file_system_path: tempDir,
+      use_vision: false,
+    });
+
+    tempResources.push(agent.agent_directory);
+    const history = await agent.run(2, null, async () => {
+      await agent.close();
+    });
+
+    expect(history.is_done()).toBe(true);
+    expect(stopCalls).toBe(1);
+    expect(releaseSpy).toHaveBeenCalledTimes(1);
+    expect(browser_session.get_attached_agent_id()).toBeNull();
+  });
 });
 
 describe('Unit Tests', () => {
