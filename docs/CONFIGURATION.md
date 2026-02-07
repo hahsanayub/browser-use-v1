@@ -20,6 +20,7 @@ Configuration values are resolved in this order (highest priority first):
 | `BROWSER_USE_LOGGING_LEVEL` | `string` | `'info'` | Log level: `debug`, `info`, `warning`, `error` |
 | `BROWSER_USE_CONFIG_DIR` | `string` | `~/.config/browseruse` | Configuration directory path |
 | `BROWSER_USE_HEADLESS` | `boolean` | `false` | Run browser in headless mode |
+| `IN_DOCKER` | `boolean` | auto-detect | Force Docker mode behavior (sandbox defaults, launch args) |
 | `BROWSER_USE_ALLOWED_DOMAINS` | `string` | - | Comma-separated allowed domains |
 
 ### LLM Settings
@@ -504,7 +505,7 @@ For Docker environments, use these settings:
 ```typescript
 const profile = new BrowserProfile({
   headless: true,
-  chromium_sandbox: false,  // Required for Docker
+  chromium_sandbox: false,  // Recommended for containerized CI/Docker
   args: [
     '--no-sandbox',
     '--disable-gpu-sandbox',
@@ -514,9 +515,13 @@ const profile = new BrowserProfile({
 });
 ```
 
+If sandbox is enabled and Chromium launch fails with `No usable sandbox`, browser-use
+automatically retries once with no-sandbox flags and logs a warning. For deterministic
+behavior in CI, prefer setting `chromium_sandbox: false` explicitly in that environment.
+
 Or set environment variables:
 
 ```dockerfile
 ENV BROWSER_USE_HEADLESS=true
-ENV BROWSER_USE_IN_DOCKER=true
+ENV IN_DOCKER=true
 ```

@@ -276,7 +276,8 @@ new BrowserProfile(options?: Partial<BrowserProfileOptions>)
 | `proxy` | `ProxySettings` | `null` | Proxy configuration |
 | `timeout` | `number` | `30000` | Default timeout (ms) |
 | `slow_mo` | `number` | `0` | Slow down operations (ms) |
-| `chromium_sandbox` | `boolean` | `true` | Enable Chromium sandbox |
+| `args` | `string[]` | `[]` | Additional Chromium launch arguments |
+| `chromium_sandbox` | `boolean` | `!IN_DOCKER` | Enable Chromium sandbox. On sandbox launch failure, BrowserSession retries once with no-sandbox and warns |
 | `ignore_https_errors` | `boolean` | `false` | Ignore HTTPS certificate errors |
 | `locale` | `string` | `null` | Browser locale |
 | `timezone_id` | `string` | `null` | Timezone ID |

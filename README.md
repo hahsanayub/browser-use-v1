@@ -255,7 +255,8 @@ const profile = new BrowserProfile({
   window_size: { width: 1920, height: 1080 },
   disable_security: false,
   headless: true,
-  extra_chromium_args: ['--disable-blink-features=AutomationControlled'],
+  chromium_sandbox: true, // Keep enabled by default in production
+  args: ['--disable-blink-features=AutomationControlled'],
   wait_for_network_idle_page_load_time: 3, // seconds
   allowed_domains: ['example.com', '*.google.com'],
   cookies_file: './cookies.json',
@@ -270,6 +271,10 @@ const browserSession = new BrowserSession({
 
 await browserSession.start();
 ```
+
+If Chromium launch fails with `No usable sandbox` (common in restricted Linux CI),
+`BrowserSession` automatically retries once with `chromium_sandbox: false` and logs
+a warning. For deterministic CI behavior, set `chromium_sandbox: false` explicitly.
 
 ### MCP (Model Context Protocol) Integration
 

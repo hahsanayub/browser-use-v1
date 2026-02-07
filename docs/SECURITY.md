@@ -213,7 +213,11 @@ const profile = new BrowserProfile({
 });
 ```
 
-For Docker, you may need to disable it (with appropriate container security):
+If Chromium cannot launch with sandboxing (for example, restricted Linux CI/AppArmor
+environments), browser-use retries once with `chromium_sandbox: false` and logs a warning.
+Treat this warning as a deployment hardening signal, not as a normal steady state.
+
+For Docker/CI, you may need to disable sandboxing explicitly (with appropriate container security):
 
 ```typescript
 const profile = new BrowserProfile({
@@ -386,7 +390,7 @@ RUN apt-get update && apt-get install -y \
 
 # Set environment
 ENV BROWSER_USE_HEADLESS=true
-ENV BROWSER_USE_IN_DOCKER=true
+ENV IN_DOCKER=true
 
 # Copy application
 WORKDIR /app
