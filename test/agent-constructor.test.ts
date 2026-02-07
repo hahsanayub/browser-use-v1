@@ -187,6 +187,24 @@ describe('Agent constructor browser session alignment', () => {
     ).toThrow(/already attached to Agent existing-agent/);
   });
 
+  it('throws in strict attachment mode when BrowserSession does not support claims', () => {
+    const legacySession = new BrowserSession({
+      browser_profile: new BrowserProfile({}),
+    }) as any;
+    legacySession.claim_agent = undefined;
+    legacySession.claimAgent = undefined;
+
+    expect(
+      () =>
+        new Agent({
+          task: 'strict unsupported claims',
+          llm: createLlm(),
+          browser_session: legacySession,
+          session_attachment_mode: 'strict',
+        })
+    ).toThrow(/requires BrowserSession\.claim_agent\(\)\/release_agent\(\) support/);
+  });
+
   it('reuses BrowserSession in shared attachment mode and defers shutdown until last agent closes', async () => {
     const sharedSession = new BrowserSession({
       browser_profile: new BrowserProfile({}),
@@ -244,6 +262,24 @@ describe('Agent constructor browser session alignment', () => {
     ).toThrow(/already attached in exclusive mode/);
 
     await exclusiveAgent.close();
+  });
+
+  it('throws in shared attachment mode when BrowserSession does not support claims', () => {
+    const legacySession = new BrowserSession({
+      browser_profile: new BrowserProfile({}),
+    }) as any;
+    legacySession.claim_agent = undefined;
+    legacySession.claimAgent = undefined;
+
+    expect(
+      () =>
+        new Agent({
+          task: 'shared unsupported claims',
+          llm: createLlm(),
+          browser_session: legacySession,
+          session_attachment_mode: 'shared',
+        })
+    ).toThrow(/requires BrowserSession\.claim_agent\(\)\/release_agent\(\) support/);
   });
 
   it('defaults page_extraction_llm to the main llm when omitted', async () => {

@@ -594,6 +594,14 @@ export class Agent<
       const claimFn =
         (session as any).claim_agent ?? (session as any).claimAgent;
       if (typeof claimFn !== 'function') {
+        if (
+          this.settings.session_attachment_mode === 'strict' ||
+          this.settings.session_attachment_mode === 'shared'
+        ) {
+          throw new Error(
+            `session_attachment_mode='${this.settings.session_attachment_mode}' requires BrowserSession.claim_agent()/release_agent() support.`
+          );
+        }
         return 'noop';
       }
       const claimed = Boolean(claimFn.call(session, this.id, claimMode));
