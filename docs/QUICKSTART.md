@@ -87,11 +87,8 @@ Browser-Use includes a CLI for quick tasks:
 # Run a simple task
 npx browser-use "Go to example.com and extract the page title"
 
-# Run with specific provider
-npx browser-use --provider anthropic "Search for AI news"
-
-# Run in headless mode
-npx browser-use --headless "Check the weather"
+# Start MCP server mode
+npx browser-use --mcp
 ```
 
 ## Using with Claude Desktop (MCP)

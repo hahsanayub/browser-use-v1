@@ -5,6 +5,175 @@
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./agent": {
+      "types": "./dist/agent/index.d.ts",
+      "import": "./dist/agent/index.js",
+      "default": "./dist/agent/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser/index.d.ts",
+      "import": "./dist/browser/index.js",
+      "default": "./dist/browser/index.js"
+    },
+    "./controller": {
+      "types": "./dist/controller/index.d.ts",
+      "import": "./dist/controller/index.js",
+      "default": "./dist/controller/index.js"
+    },
+    "./filesystem": {
+      "types": "./dist/filesystem/index.d.ts",
+      "import": "./dist/filesystem/index.js",
+      "default": "./dist/filesystem/index.js"
+    },
+    "./integrations/gmail": {
+      "types": "./dist/integrations/gmail/index.d.ts",
+      "import": "./dist/integrations/gmail/index.js",
+      "default": "./dist/integrations/gmail/index.js"
+    },
+    "./llm/anthropic": {
+      "types": "./dist/llm/anthropic/index.d.ts",
+      "import": "./dist/llm/anthropic/index.js",
+      "default": "./dist/llm/anthropic/index.js"
+    },
+    "./llm/aws": {
+      "types": "./dist/llm/aws/index.d.ts",
+      "import": "./dist/llm/aws/index.js",
+      "default": "./dist/llm/aws/index.js"
+    },
+    "./llm/azure": {
+      "types": "./dist/llm/azure/index.d.ts",
+      "import": "./dist/llm/azure/index.js",
+      "default": "./dist/llm/azure/index.js"
+    },
+    "./llm/base": {
+      "types": "./dist/llm/base.d.ts",
+      "import": "./dist/llm/base.js",
+      "default": "./dist/llm/base.js"
+    },
+    "./llm/deepseek": {
+      "types": "./dist/llm/deepseek/index.d.ts",
+      "import": "./dist/llm/deepseek/index.js",
+      "default": "./dist/llm/deepseek/index.js"
+    },
+    "./llm/exceptions": {
+      "types": "./dist/llm/exceptions.d.ts",
+      "import": "./dist/llm/exceptions.js",
+      "default": "./dist/llm/exceptions.js"
+    },
+    "./llm/google": {
+      "types": "./dist/llm/google/index.d.ts",
+      "import": "./dist/llm/google/index.js",
+      "default": "./dist/llm/google/index.js"
+    },
+    "./llm/groq": {
+      "types": "./dist/llm/groq/index.d.ts",
+      "import": "./dist/llm/groq/index.js",
+      "default": "./dist/llm/groq/index.js"
+    },
+    "./llm/messages": {
+      "types": "./dist/llm/messages.d.ts",
+      "import": "./dist/llm/messages.js",
+      "default": "./dist/llm/messages.js"
+    },
+    "./llm/ollama": {
+      "types": "./dist/llm/ollama/index.d.ts",
+      "import": "./dist/llm/ollama/index.js",
+      "default": "./dist/llm/ollama/index.js"
+    },
+    "./llm/openai": {
+      "types": "./dist/llm/openai/index.d.ts",
+      "import": "./dist/llm/openai/index.js",
+      "default": "./dist/llm/openai/index.js"
+    },
+    "./llm/openrouter": {
+      "types": "./dist/llm/openrouter/index.d.ts",
+      "import": "./dist/llm/openrouter/index.js",
+      "default": "./dist/llm/openrouter/index.js"
+    },
+    "./llm/schema": {
+      "types": "./dist/llm/schema.d.ts",
+      "import": "./dist/llm/schema.js",
+      "default": "./dist/llm/schema.js"
+    },
+    "./llm/views": {
+      "types": "./dist/llm/views.d.ts",
+      "import": "./dist/llm/views.js",
+      "default": "./dist/llm/views.js"
+    },
+    "./mcp": {
+      "types": "./dist/mcp/index.d.ts",
+      "import": "./dist/mcp/index.js",
+      "default": "./dist/mcp/index.js"
+    },
+    "./screenshots": {
+      "types": "./dist/screenshots/index.d.ts",
+      "import": "./dist/screenshots/index.js",
+      "default": "./dist/screenshots/index.js"
+    },
+    "./sync": {
+      "types": "./dist/sync/index.d.ts",
+      "import": "./dist/sync/index.js",
+      "default": "./dist/sync/index.js"
+    },
+    "./telemetry": {
+      "types": "./dist/telemetry/index.d.ts",
+      "import": "./dist/telemetry/index.js",
+      "default": "./dist/telemetry/index.js"
+    },
+    "./tokens": {
+      "types": "./dist/tokens/index.d.ts",
+      "import": "./dist/tokens/index.js",
+      "default": "./dist/tokens/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js",
+      "default": "./dist/cli.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js",
+      "default": "./dist/config.js"
+    },
+    "./event-bus": {
+      "types": "./dist/event-bus.d.ts",
+      "import": "./dist/event-bus.js",
+      "default": "./dist/event-bus.js"
+    },
+    "./exceptions": {
+      "types": "./dist/exceptions.d.ts",
+      "import": "./dist/exceptions.js",
+      "default": "./dist/exceptions.js"
+    },
+    "./logging-config": {
+      "types": "./dist/logging-config.d.ts",
+      "import": "./dist/logging-config.js",
+      "default": "./dist/logging-config.js"
+    },
+    "./observability": {
+      "types": "./dist/observability.d.ts",
+      "import": "./dist/observability.js",
+      "default": "./dist/observability.js"
+    },
+    "./observability-decorators": {
+      "types": "./dist/observability-decorators.d.ts",
+      "import": "./dist/observability-decorators.js",
+      "default": "./dist/observability-decorators.js"
+    },
+    "./utils": {
+      "types": "./dist/utils.d.ts",
+      "import": "./dist/utils.js",
+      "default": "./dist/utils.js"
+    },
+    "./package.json": "./package.json",
+    "./dist/*": "./dist/*"
+  },
   "bin": {
     "browser-use": "./dist/cli.js"
   },
@@ -19,12 +188,19 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "build": "tsc && node scripts/copy-dom-tree.mjs",
+    "build": "node scripts/clean-dist.mjs && tsc && node scripts/copy-dom-tree.mjs",
+    "build:watch": "tsc --watch --preserveWatchOutput",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest --watch",
+    "test:pack": "node scripts/smoke-pack.mjs",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
     "prettier": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "commit": "yarn git-cz",
     "postinstall": "playwright install chromium",

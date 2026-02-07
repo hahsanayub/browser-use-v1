@@ -107,8 +107,9 @@ npm run build:watch    # Build with watch mode
 
 # Test
 npm test               # Run all tests
-npm run test:unit      # Run unit tests
+npm run test:coverage  # Run tests with coverage
 npm run test:watch     # Watch mode
+npm run test:pack      # Validate packaged public exports
 
 # Lint
 npm run lint           # Run ESLint
@@ -342,11 +343,11 @@ describe('Registry', () => {
 
 ### Test Categories
 
-| Category    | Location             | Purpose                           |
-| ----------- | -------------------- | --------------------------------- |
-| Unit        | `tests/unit/`        | Test individual functions/classes |
-| Integration | `tests/integration/` | Test component interactions       |
-| E2E         | `tests/e2e/`         | Test full workflows               |
+| Category    | Location                  | Purpose                           |
+| ----------- | ------------------------- | --------------------------------- |
+| Unit        | `test/*.test.ts`          | Test individual functions/classes |
+| Integration | `test/integration*.test.ts` | Test component interactions       |
+| Packaging   | `scripts/smoke-pack.mjs`  | Validate npm public entrypoints   |
 
 ### Running Tests
 
@@ -355,13 +356,16 @@ describe('Registry', () => {
 npm test
 
 # Specific file
-npm test -- tests/unit/controller/registry.test.ts
+npm test -- test/controller.test.ts
 
 # With coverage
 npm run test:coverage
 
 # Watch mode
 npm run test:watch
+
+# Validate published package exports
+npm run test:pack
 ```
 
 ### Writing Good Tests
@@ -433,6 +437,7 @@ it('should call LLM with correct parameters', async () => {
    npm run typecheck
    npm test
    npm run build
+   npm run test:pack
    ```
 
 4. **Commit with clear messages**
@@ -617,7 +622,7 @@ Follow [Semantic Versioning](https://semver.org/):
 1. Update version in `package.json`
 2. Update CHANGELOG.md
 3. Run full test suite
-4. Build and verify
+4. Build and verify package exports
 5. Create git tag
 6. Publish to npm
 7. Create GitHub release

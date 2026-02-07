@@ -74,6 +74,9 @@ pnpm add browser-use
 
 Playwright browsers will be installed automatically via postinstall hook.
 
+Use only documented public entrypoints such as `browser-use` and
+`browser-use/llm/openai`. Avoid deep imports like `browser-use/dist/...`.
+
 ### Basic Usage with Agent
 
 ```typescript
@@ -565,6 +568,9 @@ yarn test test/integration-advanced.test.ts
 
 # Watch mode
 yarn test:watch
+
+# Validate published package exports
+yarn test:pack
 ```
 
 ### Code Quality
@@ -577,7 +583,7 @@ yarn lint
 yarn prettier
 
 # Type check
-yarn build
+yarn typecheck
 ```
 
 ## Architecture

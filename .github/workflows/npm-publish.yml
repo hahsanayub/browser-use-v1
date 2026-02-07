@@ -19,6 +19,7 @@ jobs:
       - run: yarn
       - run: yarn build
       - run: yarn test
+      - run: yarn test:pack
       - run: npm publish --provenance
         env:
           NODE_AUTH_TOKEN: ${{secrets.NODE_AUTH_TOKEN}}
