@@ -20,7 +20,7 @@ const formatImageUrl = (url: string, maxLength = 50) => {
 };
 
 export class ContentPartTextParam {
-  type: 'text' = 'text';
+  readonly type = 'text' as const;
   constructor(public text: string) {}
 
   toString() {
@@ -29,7 +29,7 @@ export class ContentPartTextParam {
 }
 
 export class ContentPartRefusalParam {
-  type: 'refusal' = 'refusal';
+  readonly type = 'refusal' as const;
   constructor(public refusal: string) {}
 
   toString() {
@@ -55,7 +55,7 @@ export class ImageURL {
 }
 
 export class ContentPartImageParam {
-  type: 'image_url' = 'image_url';
+  readonly type = 'image_url' as const;
   constructor(public image_url: ImageURL) {}
 
   toString() {
@@ -80,7 +80,7 @@ export class FunctionCall {
 }
 
 export class ToolCall {
-  type: 'function' = 'function';
+  readonly type = 'function' as const;
   constructor(
     public id: string,
     public functionCall: FunctionCall

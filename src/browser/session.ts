@@ -3950,7 +3950,7 @@ export class BrowserSession {
    */
   private _escapeSelector(selector: string): string {
     // Escape special CSS characters
-    return selector.replace(/[!"#$%&'()*+,.\/:;<=>?@\[\\\]^`{|}~]/g, '\\$&');
+    return selector.replace(/[!"#$%&'()*+,./:;<=>?@[\\\]^`{|}~]/g, '\\$&');
   }
 
   // endregion

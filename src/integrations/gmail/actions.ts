@@ -16,7 +16,7 @@ const logger = createLogger('browser_use.gmail.actions');
 let _gmailService: GmailService | null = null;
 
 // Schema for get_recent_emails action
-const GetRecentEmailsParams = z.object({
+const GetRecentEmailsParamsSchema = z.object({
   keyword: z
     .string()
     .default('')
@@ -30,7 +30,7 @@ const GetRecentEmailsParams = z.object({
     .describe('Maximum number of emails to retrieve (1-50, default: 3)'),
 });
 
-type GetRecentEmailsParams = z.infer<typeof GetRecentEmailsParams>;
+type GetRecentEmailsParams = z.infer<typeof GetRecentEmailsParamsSchema>;
 
 /**
  * Register Gmail actions with the provided controller
@@ -52,7 +52,7 @@ export function registerGmailActions(
   // Register get_recent_emails action
   controller.registry.action(
     'Get recent emails from the mailbox with a keyword to retrieve verification codes, OTP, 2FA tokens, magic links, or any recent email content. Keep your query a single keyword.',
-    GetRecentEmailsParams as any
+    GetRecentEmailsParamsSchema as any
   )(async (params: GetRecentEmailsParams): Promise<ActionResult> => {
     try {
       if (!_gmailService) {

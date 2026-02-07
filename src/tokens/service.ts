@@ -186,17 +186,16 @@ export class TokenCost {
     this.registeredLlms.add(llm);
     const original = llm.ainvoke.bind(llm);
     this.originalAinvoke.set(llm, original);
-    const self = this;
 
-    (llm as BaseChatModel).ainvoke = async function (...args: any[]) {
+    (llm as BaseChatModel).ainvoke = (async (...args: any[]) => {
       // @ts-ignore - Spread operator type compatibility
       const result = await original(...args);
       if (result?.usage) {
-        const usageEntry = self.addUsage(llm.model, result.usage);
-        self.logUsage(llm.model, usageEntry).catch(() => undefined);
+        const usageEntry = this.addUsage(llm.model, result.usage);
+        this.logUsage(llm.model, usageEntry).catch(() => undefined);
       }
       return result;
-    } as BaseChatModel['ainvoke'];
+    }) as BaseChatModel['ainvoke'];
 
     return llm;
   }

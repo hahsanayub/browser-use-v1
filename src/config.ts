@@ -547,6 +547,7 @@ class ConfigCore {
 }
 
 type ConfigType = ConfigCore & OldConfig & FlatEnvConfig;
+type BoundMethod = (...args: any[]) => unknown;
 
 const config_handler: ProxyHandler<ConfigCore> = {
   get(target, prop, receiver) {
@@ -558,7 +559,7 @@ const config_handler: ProxyHandler<ConfigCore> = {
     if (prop in old) {
       const value = (old as any)[prop];
       return typeof value === 'function'
-        ? (value as Function).bind(old)
+        ? (value as BoundMethod).bind(old)
         : value;
     }
 
@@ -566,13 +567,13 @@ const config_handler: ProxyHandler<ConfigCore> = {
     if (prop in env) {
       const value = (env as any)[prop];
       return typeof value === 'function'
-        ? (value as Function).bind(env)
+        ? (value as BoundMethod).bind(env)
         : value;
     }
 
     const coreValue = (target as unknown as Record<string, unknown>)[prop];
     if (typeof coreValue === 'function') {
-      return (coreValue as Function).bind(target);
+      return (coreValue as BoundMethod).bind(target);
     }
     return coreValue;
   },

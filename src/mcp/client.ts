@@ -212,7 +212,7 @@ export class MCPClient {
     transport: StdioClientTransport,
     timeoutSeconds: number
   ): Promise<void> {
-    return new Promise(async (resolve, reject) => {
+    return new Promise((resolve, reject) => {
       const timeoutHandle = setTimeout(() => {
         reject(
           new Error(
@@ -221,14 +221,16 @@ export class MCPClient {
         );
       }, timeoutSeconds * 1000);
 
-      try {
-        await this.client.connect(transport);
-        clearTimeout(timeoutHandle);
-        resolve();
-      } catch (error) {
-        clearTimeout(timeoutHandle);
-        reject(error);
-      }
+      this.client
+        .connect(transport)
+        .then(() => {
+          clearTimeout(timeoutHandle);
+          resolve();
+        })
+        .catch((error) => {
+          clearTimeout(timeoutHandle);
+          reject(error);
+        });
     });
   }
 

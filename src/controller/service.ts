@@ -1274,15 +1274,12 @@ ${content}`;
   }
 
   private registerSheetsActions() {
-    // Capture 'this' for use in callbacks
-    const self = this;
-
     this.registry.action(
       'Google Sheets: Get the contents of the entire sheet',
       {
         domains: ['https://docs.google.com'],
       }
-    )(async function sheets_get_contents(_params, { browser_session, signal }) {
+    )(async (_params, { browser_session, signal }) => {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
       const page: Page | null = await browser_session.get_current_page();
@@ -1308,14 +1305,11 @@ ${content}`;
         domains: ['https://docs.google.com'],
         param_model: SheetsRangeActionSchema,
       }
-    )(async function sheets_get_range(
-      params: SheetsRange,
-      { browser_session, signal }
-    ) {
+    )(async (params: SheetsRange, { browser_session, signal }) => {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
       const page: Page | null = await browser_session.get_current_page();
-      await self.gotoSheetsRange(page, params.cell_or_range, signal);
+      await this.gotoSheetsRange(page, params.cell_or_range, signal);
       await page?.keyboard?.press('ControlOrMeta+C');
       await waitWithSignal(100, signal);
       const content = await page?.evaluate?.(() =>
@@ -1336,14 +1330,11 @@ ${content}`;
         domains: ['https://docs.google.com'],
         param_model: SheetsUpdateActionSchema,
       }
-    )(async function sheets_update(
-      params: SheetsUpdate,
-      { browser_session, signal }
-    ) {
+    )(async (params: SheetsUpdate, { browser_session, signal }) => {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
       const page: Page | null = await browser_session.get_current_page();
-      await self.gotoSheetsRange(page, params.cell_or_range, signal);
+      await this.gotoSheetsRange(page, params.cell_or_range, signal);
       await page?.evaluate?.((value: string) => {
         const clipboardData = new DataTransfer();
         clipboardData.setData('text/plain', value);
@@ -1363,14 +1354,11 @@ ${content}`;
         domains: ['https://docs.google.com'],
         param_model: SheetsRangeActionSchema,
       }
-    )(async function sheets_clear(
-      params: SheetsRange,
-      { browser_session, signal }
-    ) {
+    )(async (params: SheetsRange, { browser_session, signal }) => {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
       const page: Page | null = await browser_session.get_current_page();
-      await self.gotoSheetsRange(page, params.cell_or_range, signal);
+      await this.gotoSheetsRange(page, params.cell_or_range, signal);
       await page?.keyboard?.press('Backspace');
       return new ActionResult({
         extracted_content: `Cleared cells: ${params.cell_or_range}`,
@@ -1384,14 +1372,11 @@ ${content}`;
         domains: ['https://docs.google.com'],
         param_model: SheetsRangeActionSchema,
       }
-    )(async function sheets_select(
-      params: SheetsRange,
-      { browser_session, signal }
-    ) {
+    )(async (params: SheetsRange, { browser_session, signal }) => {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
       const page: Page | null = await browser_session.get_current_page();
-      await self.gotoSheetsRange(page, params.cell_or_range, signal);
+      await this.gotoSheetsRange(page, params.cell_or_range, signal);
       return new ActionResult({
         extracted_content: `Selected cells: ${params.cell_or_range}`,
         long_term_memory: `Selected cells ${params.cell_or_range}`,
@@ -1404,21 +1389,23 @@ ${content}`;
         domains: ['https://docs.google.com'],
         param_model: SheetsInputActionSchema,
       }
-    )(async function sheets_input(
-      params: z.infer<typeof SheetsInputActionSchema>,
-      { browser_session, signal }
-    ) {
-      if (!browser_session) throw new Error('Browser session missing');
-      throwIfAborted(signal);
-      const page: Page | null = await browser_session.get_current_page();
-      await page?.keyboard?.type(params.text, { delay: 100 });
-      await page?.keyboard?.press('Enter');
-      await page?.keyboard?.press('ArrowUp');
-      return new ActionResult({
-        extracted_content: `Inputted text ${params.text}`,
-        long_term_memory: `Inputted text '${params.text}' into cell`,
-      });
-    });
+    )(
+      async (
+        params: z.infer<typeof SheetsInputActionSchema>,
+        { browser_session, signal }
+      ) => {
+        if (!browser_session) throw new Error('Browser session missing');
+        throwIfAborted(signal);
+        const page: Page | null = await browser_session.get_current_page();
+        await page?.keyboard?.type(params.text, { delay: 100 });
+        await page?.keyboard?.press('Enter');
+        await page?.keyboard?.press('ArrowUp');
+        return new ActionResult({
+          extracted_content: `Inputted text ${params.text}`,
+          long_term_memory: `Inputted text '${params.text}' into cell`,
+        });
+      }
+    );
   }
 
   private async gotoSheetsRange(
@@ -1447,9 +1434,6 @@ ${content}`;
   }
 
   private registerDoneAction(outputModel: z.ZodTypeAny | null) {
-    // Capture 'this' for use in callbacks
-    const self = this;
-
     if (outputModel) {
       const structuredSchema = StructuredOutputActionSchema(outputModel);
       type StructuredParams = z.infer<typeof structuredSchema>;
@@ -1477,7 +1461,7 @@ ${content}`;
     type DoneAction = z.infer<typeof DoneActionSchema>;
     this.registry.action('Complete task - provide a summary to the user.', {
       param_model: DoneActionSchema,
-    })(async function done(params: DoneAction, { file_system }) {
+    })(async (params: DoneAction, { file_system }) => {
       const fsInstance = file_system ?? new FileSystem(process.cwd(), false);
       let userMessage = params.text;
       const lenMaxMemory = 100;
@@ -1488,7 +1472,7 @@ ${content}`;
 
       const attachments: string[] = [];
       if (params.files_to_display) {
-        if (self.displayFilesInDoneText) {
+        if (this.displayFilesInDoneText) {
           let attachmentText = '';
           for (const fileName of params.files_to_display) {
             if (fileName === 'todo.md') {
