@@ -42,6 +42,36 @@ export interface ActionOptions {
   page_filter?: ((page: Page) => boolean) | null;
 }
 
+const isAbortError = (error: unknown): boolean =>
+  error instanceof Error && error.name === 'AbortError';
+
+const createAbortError = (reason?: unknown): Error => {
+  if (isAbortError(reason)) {
+    return reason as Error;
+  }
+
+  const message =
+    reason instanceof Error ? reason.message : 'Operation aborted';
+  const error = new Error(message);
+  error.name = 'AbortError';
+  if (reason !== undefined) {
+    (error as Error & { cause?: unknown }).cause = reason;
+  }
+  return error;
+};
+
+const wrapActionExecutionError = (
+  actionName: string,
+  error: unknown
+): Error => {
+  const message = error instanceof Error ? error.message : String(error);
+  const wrapped = new Error(`Error executing action ${actionName}: ${message}`);
+  if (error !== undefined) {
+    (wrapped as Error & { cause?: unknown }).cause = error;
+  }
+  return wrapped;
+};
+
 export class Registry<Context = unknown> {
   private registry = new ActionRegistry();
   private excludeActions: Set<string>;
@@ -149,15 +179,17 @@ export class Registry<Context = unknown> {
             action_name === 'input_text' && Boolean(sensitive_data),
         };
 
+        if (signal?.aborted) {
+          throw createAbortError(signal.reason);
+        }
+
         try {
-          if (signal?.aborted) {
-            throw new Error('Operation aborted');
-          }
           return await action.handler(validatedParams, ctx);
         } catch (error) {
-          throw new Error(
-            `Error executing action ${action_name}: ${(error as Error).message}`
-          );
+          if (signal?.aborted || isAbortError(error)) {
+            throw createAbortError(signal?.reason ?? error);
+          }
+          throw wrapActionExecutionError(action_name, error);
         }
       }
     )

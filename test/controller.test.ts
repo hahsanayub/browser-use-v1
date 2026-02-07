@@ -179,6 +179,35 @@ describe('Controller Registry Tests', () => {
         })
       ).rejects.toThrow();
     });
+
+    it('preserves AbortError when signal is already aborted', async () => {
+      const registry = new Registry();
+
+      registry.action('Noop action')(async function noop_action() {
+        return new ActionResult({ extracted_content: 'noop' });
+      });
+
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        registry.execute_action('noop_action', {}, { signal: controller.signal })
+      ).rejects.toMatchObject({ name: 'AbortError' });
+    });
+
+    it('preserves AbortError thrown by action handlers', async () => {
+      const registry = new Registry();
+
+      registry.action('Abort from action')(async function aborting_action() {
+        const abortError = new Error('aborted by test');
+        abortError.name = 'AbortError';
+        throw abortError;
+      });
+
+      await expect(
+        registry.execute_action('aborting_action', {})
+      ).rejects.toMatchObject({ name: 'AbortError' });
+    });
   });
 
   describe('Action Result Handling', () => {
