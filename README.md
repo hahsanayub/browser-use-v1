@@ -166,6 +166,9 @@ npx browser-use --model claude-sonnet-4-20250514 -p "Summarize latest AI news"
 # Headless + custom browser profile settings
 npx browser-use --headless --window-width 1440 --window-height 900 -p "Check dashboard status"
 
+# Restrict navigation to trusted domains (recommended with secrets)
+npx browser-use --allowed-domains "example.com,*.example.org" -p "Log in and fetch account info"
+
 # Connect to existing Chromium via CDP
 npx browser-use --cdp-url http://localhost:9222 -p "Inspect the active tab"
 
@@ -177,6 +180,11 @@ Interactive mode commands:
 
 - `help`: show interactive usage
 - `exit`: quit interactive mode
+
+Security notes:
+
+- Prefer `--allowed-domains` whenever tasks involve credentials or sensitive data.
+- `--allow-insecure` disables domain-lockdown enforcement for sensitive data and is unsafe for production.
 
 ## Advanced Usage
 

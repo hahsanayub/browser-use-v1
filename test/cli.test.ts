@@ -13,6 +13,7 @@ import {
   normalizeCliHistory,
   parseCliArgs,
   saveCliHistory,
+  shouldStartInteractiveMode,
 } from '../src/cli.js';
 
 const MANAGED_ENV_KEYS = [
@@ -28,6 +29,7 @@ const MANAGED_ENV_KEYS = [
   'AWS_PROFILE',
   'OLLAMA_MODEL',
   'OLLAMA_HOST',
+  'BROWSER_USE_CLI_FORCE_INTERACTIVE',
   'HOME',
 ] as const;
 
@@ -82,6 +84,9 @@ describe('CLI argument parsing', () => {
       '~/chrome-data',
       '--profile-directory',
       'Profile 1',
+      '--allowed-domains',
+      'example.com,*.example.org',
+      '--allow-insecure',
       '--cdp-url',
       'http://localhost:9222',
       '-p',
@@ -94,6 +99,8 @@ describe('CLI argument parsing', () => {
     expect(parsed.window_height).toBe(900);
     expect(parsed.user_data_dir).toBe('/home/tester/chrome-data');
     expect(parsed.profile_directory).toBe('Profile 1');
+    expect(parsed.allowed_domains).toEqual(['example.com', '*.example.org']);
+    expect(parsed.allow_insecure).toBe(true);
     expect(parsed.cdp_url).toBe('http://localhost:9222');
     expect(parsed.prompt).toBe('Open docs and summarize');
     expect(parsed.positional).toEqual([]);
@@ -111,6 +118,12 @@ describe('CLI argument parsing', () => {
     );
   });
 
+  it('rejects empty --allowed-domains values', () => {
+    expect(() =>
+      parseCliArgs(['--allowed-domains', ' , ', '-p', 'task'])
+    ).toThrow('--allowed-domains must include at least one domain pattern');
+  });
+
   it('rejects mixed prompt and positional task input', () => {
     expect(() => parseCliArgs(['--prompt', 'task one', 'task two'])).toThrow(
       'Use either positional task text or --prompt, not both.'
@@ -122,6 +135,8 @@ describe('CLI argument parsing', () => {
     expect(usage).toContain('browser-use --mcp');
     expect(usage).toContain('--model <model>');
     expect(usage).toContain('--headless');
+    expect(usage).toContain('--allowed-domains <items>');
+    expect(usage).toContain('--allow-insecure');
   });
 });
 
@@ -176,6 +191,30 @@ describe('CLI interactive helpers', () => {
     expect(isInteractiveHelpCommand('help')).toBe(true);
     expect(isInteractiveHelpCommand('?')).toBe(true);
     expect(isInteractiveHelpCommand('run task')).toBe(false);
+  });
+
+  it('decides when interactive mode should start', () => {
+    expect(
+      shouldStartInteractiveMode(null, {
+        inputIsTTY: true,
+        outputIsTTY: true,
+      })
+    ).toBe(true);
+
+    expect(
+      shouldStartInteractiveMode(null, {
+        inputIsTTY: false,
+        outputIsTTY: false,
+      })
+    ).toBe(false);
+
+    expect(
+      shouldStartInteractiveMode(null, {
+        forceInteractive: true,
+        inputIsTTY: false,
+        outputIsTTY: false,
+      })
+    ).toBe(true);
   });
 });
 

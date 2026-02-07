@@ -2,7 +2,7 @@ name: Node.js Package
 
 on:
   release:
-    types: [created]
+    types: [published]
 
 jobs:
   publish-npm:
@@ -17,6 +17,7 @@ jobs:
           node-version: '22.x'
           registry-url: 'https://registry.npmjs.org'
       - run: yarn
+      - run: yarn typecheck
       - run: yarn build
       - run: yarn test
       - run: yarn test:pack

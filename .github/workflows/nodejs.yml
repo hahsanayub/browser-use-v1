@@ -1,10 +1,16 @@
 name: Node CI
 
-on: [push]
+on:
+  push:
+    branches:
+      - main
+      - stable
+      - 'releases/**'
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     strategy:
@@ -12,16 +18,17 @@ jobs:
         node-version: [22.x]
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-    - name: yarn install, build, test, and pack smoke-check
-      run: |
-        yarn install
-        yarn build
-        yarn test
-        yarn test:pack
-      env:
-        CI: true
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: yarn install and verify
+        run: |
+          yarn install --frozen-lockfile
+          yarn typecheck
+          yarn build
+          yarn test
+          yarn test:pack
+        env:
+          CI: true

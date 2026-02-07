@@ -123,9 +123,9 @@ describe('Agent constructor browser session alignment', () => {
     expect(agent.browser_session).toBeInstanceOf(BrowserSession);
     expect(agent.browser_session).not.toBe(sharedSession);
     expect(sharedSession.get_attached_agent_id()).toBe('existing-agent');
-    expect((agent.browser_session as BrowserSession).get_attached_agent_id()).toBe(
-      agent.id
-    );
+    expect(
+      (agent.browser_session as BrowserSession).get_attached_agent_id()
+    ).toBe(agent.id);
 
     await agent.close();
   });
@@ -203,7 +203,9 @@ describe('Agent constructor browser session alignment', () => {
           browser_session: legacySession,
           session_attachment_mode: 'strict',
         })
-    ).toThrow(/requires BrowserSession\.claim_agent\(\)\/release_agent\(\) support/);
+    ).toThrow(
+      /requires BrowserSession\.claim_agent\(\)\/release_agent\(\) support/
+    );
   });
 
   it('reuses BrowserSession in shared attachment mode and defers shutdown until last agent closes', async () => {
@@ -280,7 +282,9 @@ describe('Agent constructor browser session alignment', () => {
           browser_session: legacySession,
           session_attachment_mode: 'shared',
         })
-    ).toThrow(/requires BrowserSession\.claim_agent\(\)\/release_agent\(\) support/);
+    ).toThrow(
+      /requires BrowserSession\.claim_agent\(\)\/release_agent\(\) support/
+    );
   });
 
   it('defaults page_extraction_llm to the main llm when omitted', async () => {
@@ -311,7 +315,7 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
-  it('treats allowed_domains=[] as unlocked when sensitive_data is used', async () => {
+  it('throws when sensitive_data is used without allowed_domains lock-down', async () => {
     const agent = new Agent({
       task: 'test allowed domains empty',
       llm: createLlm(),
@@ -328,11 +332,8 @@ describe('Agent constructor browser session alignment', () => {
       },
     };
 
-    const errorSpy = vi.spyOn(agent.logger, 'error');
-    (agent as any)._validateSecuritySettings();
-
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('not locked down')
+    expect(() => (agent as any)._validateSecuritySettings()).toThrow(
+      /allowed_domains/
     );
 
     await agent.close();
@@ -342,6 +343,7 @@ describe('Agent constructor browser session alignment', () => {
     const agent = new Agent({
       task: 'test tty delay',
       llm: createLlm(),
+      allow_insecure_sensitive_data: true,
       browser_session: new BrowserSession({
         browser_profile: new BrowserProfile({
           allowed_domains: [],
@@ -370,6 +372,24 @@ describe('Agent constructor browser session alignment', () => {
     }
 
     await agent.close();
+  });
+
+  it('fails fast at construction when sensitive_data is provided without domain restrictions', () => {
+    expect(
+      () =>
+        new Agent({
+          task: 'constructor strict security',
+          llm: createLlm(),
+          sensitive_data: {
+            password: 'secret',
+          },
+          browser_session: new BrowserSession({
+            browser_profile: new BrowserProfile({
+              allowed_domains: [],
+            }),
+          }),
+        })
+    ).toThrow(/allowed_domains/);
   });
 
   it('passes signal through rerun_history to history step execution', async () => {

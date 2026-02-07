@@ -106,6 +106,8 @@ export default [
     ignores: [
       'build/**',
       'coverage/**',
+      'py-browser-use/**',
+      '**/.venv/**',
       '**/*.html',
       '**/.git/**',
       '**/.svn/**',

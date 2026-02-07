@@ -7,13 +7,7 @@ import { z } from 'zod';
 import { createLogger } from '../logging-config.js';
 import { CONFIG } from '../config.js';
 import { EventBus } from '../event-bus.js';
-import {
-  uuid7str,
-  time_execution_sync,
-  time_execution_async,
-  SignalHandler,
-  get_browser_use_version,
-} from '../utils.js';
+import { uuid7str, SignalHandler, get_browser_use_version } from '../utils.js';
 import type { Controller } from '../controller/service.js';
 import { Controller as DefaultController } from '../controller/service.js';
 import type { FileSystem } from '../filesystem/file-system.js';
@@ -26,17 +20,14 @@ import { MessageManager } from './message-manager/service.js';
 import type { MessageManagerState } from './message-manager/views.js';
 import { BrowserStateSummary, BrowserStateHistory } from '../browser/views.js';
 import { BrowserSession } from '../browser/session.js';
-import {
-  BrowserProfile,
-  DEFAULT_BROWSER_PROFILE,
-} from '../browser/profile.js';
+import { BrowserProfile, DEFAULT_BROWSER_PROFILE } from '../browser/profile.js';
 import type { Browser, BrowserContext, Page } from '../browser/types.js';
+import { InsecureSensitiveDataError } from '../exceptions.js';
 import { HistoryTreeProcessor } from '../dom/history-tree-processor/service.js';
 import { DOMHistoryElement } from '../dom/history-tree-processor/view.js';
 import type { BaseChatModel } from '../llm/base.js';
 import { UserMessage } from '../llm/messages.js';
 import type { UsageSummary } from '../tokens/views.js';
-import type { ActionResultInit } from './views.js';
 import {
   ActionResult,
   AgentHistory,
@@ -50,7 +41,6 @@ import {
   ActionModel,
 } from './views.js';
 import type { StructuredOutputParser } from './views.js';
-import { observe, observe_debug } from '../observability.js';
 import {
   CreateAgentOutputFileEvent,
   CreateAgentSessionEvent,
@@ -215,6 +205,7 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
   include_tool_call_examples?: boolean;
   vision_detail_level?: AgentSettings['vision_detail_level'];
   session_attachment_mode?: AgentSettings['session_attachment_mode'];
+  allow_insecure_sensitive_data?: boolean;
   llm_timeout?: number;
   step_timeout?: number;
 }
@@ -256,6 +247,7 @@ const defaultAgentOptions = () => ({
   display_files_in_done_text: true,
   include_tool_call_examples: false,
   session_attachment_mode: 'copy' as const,
+  allow_insecure_sensitive_data: false,
   vision_detail_level: 'auto' as const,
   llm_timeout: 60,
   step_timeout: 180,
@@ -266,12 +258,17 @@ const AgentLLMOutputSchema = z.object({
   evaluation_previous_goal: z.string().optional().nullable(),
   memory: z.string().optional().nullable(),
   next_goal: z.string().optional().nullable(),
-  action: z.array(z.record(z.string(), z.any())).optional().nullable().default([]),
+  action: z
+    .array(z.record(z.string(), z.any()))
+    .optional()
+    .nullable()
+    .default([]),
 });
 
-const AgentLLMOutputFormat = AgentLLMOutputSchema as typeof AgentLLMOutputSchema & {
-  schema: typeof AgentLLMOutputSchema;
-};
+const AgentLLMOutputFormat =
+  AgentLLMOutputSchema as typeof AgentLLMOutputSchema & {
+    schema: typeof AgentLLMOutputSchema;
+  };
 AgentLLMOutputFormat.schema = AgentLLMOutputSchema;
 
 export class Agent<
@@ -393,6 +390,7 @@ export class Agent<
       include_tool_call_examples = false,
       vision_detail_level = 'auto',
       session_attachment_mode = 'copy',
+      allow_insecure_sensitive_data = false,
       llm_timeout = 60,
       step_timeout = 180,
     } = { ...defaultAgentOptions(), ...params };
@@ -449,6 +447,7 @@ export class Agent<
       calculate_cost,
       include_tool_call_examples,
       session_attachment_mode,
+      allow_insecure_sensitive_data,
       llm_timeout,
       step_timeout,
     };
@@ -674,7 +673,9 @@ export class Agent<
     return isolated;
   }
 
-  private _release_browser_session_claim(browser_session: BrowserSession | null) {
+  private _release_browser_session_claim(
+    browser_session: BrowserSession | null
+  ) {
     if (!browser_session || !this._hasBrowserSessionClaim) {
       return;
     }
@@ -802,13 +803,8 @@ export class Agent<
     browser_profile: BrowserProfile | null;
     browser_session: BrowserSession | null;
   }): BrowserSession {
-    let {
-      page,
-      browser,
-      browser_context,
-      browser_profile,
-      browser_session,
-    } = init;
+    let { page, browser, browser_context, browser_profile, browser_session } =
+      init;
 
     if (browser instanceof BrowserSession) {
       browser_session = browser_session ?? browser;
@@ -988,6 +984,10 @@ export class Agent<
 
     // If no allowed_domains are configured, show a security warning
     if (!hasAllowedDomains) {
+      if (!this.settings.allow_insecure_sensitive_data) {
+        throw new InsecureSensitiveDataError();
+      }
+
       this.logger.error(
         '⚠️⚠️⚠️ Agent(sensitive_data=••••••••) was provided but BrowserSession(allowed_domains=[...]) is not locked down! ⚠️⚠️⚠️\n' +
           '          ☠️ If the agent visits a malicious website and encounters a prompt-injection attack, your sensitive_data may be exposed!\n\n' +
@@ -1281,7 +1281,9 @@ export class Agent<
 
     // Create summary based on single vs multi-action
     if (actionCount === 1) {
-      this.logger.info(`☝️ Decided next action: ${lastActionName}${lastParamStr}`);
+      this.logger.info(
+        `☝️ Decided next action: ${lastActionName}${lastParamStr}`
+      );
     } else {
       const summaryLines = [`✌️ Decided next ${actionCount} multi-actions:`];
       for (let i = 0; i < actionDetails.length; i++) {
@@ -1676,7 +1678,8 @@ export class Agent<
         await this._post_process();
       } catch (error) {
         if (signal?.aborted) {
-          const message = error instanceof Error ? error.message : String(error);
+          const message =
+            error instanceof Error ? error.message : String(error);
           this.logger.debug(`Step aborted before completion: ${message}`);
         } else {
           await this._handle_step_error(error as Error);
@@ -1784,10 +1787,7 @@ export class Agent<
 
     let model_output: AgentOutput;
     const llmAbortController = new AbortController();
-    const removeAbortRelay = this._relayAbortSignal(
-      signal,
-      llmAbortController
-    );
+    const removeAbortRelay = this._relayAbortSignal(signal, llmAbortController);
     try {
       model_output = await this._executeWithTimeout(
         this._get_model_output_with_retry(
@@ -2481,7 +2481,7 @@ export class Agent<
   private async _handle_post_llm_processing(
     browser_state_summary: BrowserStateSummary,
     input_messages: any[],
-    actions: Array<Record<string, Record<string, unknown>>> = []
+    _actions: Array<Record<string, Record<string, unknown>>> = []
   ) {
     if (this.register_new_step_callback && this.state.last_model_output) {
       await this.register_new_step_callback(
@@ -2761,7 +2761,9 @@ export class Agent<
     }
   }
 
-  private _parseCompletionPayload(rawCompletion: unknown): Record<string, unknown> {
+  private _parseCompletionPayload(
+    rawCompletion: unknown
+  ): Record<string, unknown> {
     let parsedCompletion = rawCompletion;
 
     if (typeof parsedCompletion === 'string') {
@@ -2809,7 +2811,11 @@ export class Agent<
           ? (entry as any).model_dump()
           : entry;
 
-      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      if (
+        !candidate ||
+        typeof candidate !== 'object' ||
+        Array.isArray(candidate)
+      ) {
         return false;
       }
 
@@ -2916,7 +2922,11 @@ export class Agent<
           ? (entry as any).model_dump()
           : entry;
 
-      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      if (
+        !candidate ||
+        typeof candidate !== 'object' ||
+        Array.isArray(candidate)
+      ) {
         throw new Error(
           `Invalid action at index ${i}: expected an object with exactly one action key`
         );

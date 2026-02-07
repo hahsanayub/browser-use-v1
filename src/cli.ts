@@ -33,11 +33,13 @@ export interface ParsedCliArgs {
   help: boolean;
   version: boolean;
   debug: boolean;
+  allow_insecure: boolean;
   headless: boolean | null;
   window_width: number | null;
   window_height: number | null;
   user_data_dir: string | null;
   profile_directory: string | null;
+  allowed_domains: string[] | null;
   cdp_url: string | null;
   model: string | null;
   prompt: string | null;
@@ -50,6 +52,19 @@ export const CLI_HISTORY_LIMIT = 100;
 const INTERACTIVE_EXIT_COMMANDS = new Set(['exit', 'quit', ':q', '/q', '.q']);
 
 const INTERACTIVE_HELP_COMMANDS = new Set(['help', '?', ':help']);
+
+const parseAllowedDomains = (value: string): string[] => {
+  const domains = value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  if (domains.length === 0) {
+    throw new Error(
+      '--allowed-domains must include at least one domain pattern'
+    );
+  }
+  return domains;
+};
 
 const parsePositiveInt = (name: string, value: string): number => {
   const parsed = Number.parseInt(value, 10);
@@ -102,11 +117,13 @@ export const parseCliArgs = (argv: string[]): ParsedCliArgs => {
     help: false,
     version: false,
     debug: false,
+    allow_insecure: false,
     headless: null,
     window_width: null,
     window_height: null,
     user_data_dir: null,
     profile_directory: null,
+    allowed_domains: null,
     cdp_url: null,
     model: null,
     prompt: null,
@@ -132,6 +149,10 @@ export const parseCliArgs = (argv: string[]): ParsedCliArgs => {
     }
     if (arg === '--debug') {
       parsed.debug = true;
+      continue;
+    }
+    if (arg === '--allow-insecure') {
+      parsed.allow_insecure = true;
       continue;
     }
     if (arg === '--headless') {
@@ -179,6 +200,13 @@ export const parseCliArgs = (argv: string[]): ParsedCliArgs => {
     ) {
       const { value, nextIndex } = takeOptionValue(arg, i, argv);
       parsed.profile_directory = value;
+      i = nextIndex;
+      continue;
+    }
+    if (arg === '--allowed-domains' || arg.startsWith('--allowed-domains=')) {
+      const { value, nextIndex } = takeOptionValue(arg, i, argv);
+      const domains = parseAllowedDomains(value);
+      parsed.allowed_domains = [...(parsed.allowed_domains ?? []), ...domains];
       i = nextIndex;
       continue;
     }
@@ -262,6 +290,22 @@ export const saveCliHistory = async (
   const normalized = normalizeCliHistory(history);
   await fs.mkdir(path.dirname(historyPath), { recursive: true });
   await fs.writeFile(historyPath, JSON.stringify(normalized, null, 2), 'utf-8');
+};
+
+export const shouldStartInteractiveMode = (
+  task: string | null,
+  options: {
+    forceInteractive?: boolean;
+    inputIsTTY?: boolean;
+    outputIsTTY?: boolean;
+  } = {}
+): boolean => {
+  const forceInteractive =
+    options.forceInteractive ??
+    process.env.BROWSER_USE_CLI_FORCE_INTERACTIVE === '1';
+  const inputIsTTY = options.inputIsTTY ?? Boolean(stdin.isTTY);
+  const outputIsTTY = options.outputIsTTY ?? Boolean(stdout.isTTY);
+  return !task && (forceInteractive || (inputIsTTY && outputIsTTY));
 };
 
 const requireEnv = (name: string) => {
@@ -489,6 +533,9 @@ const buildBrowserProfileFromCliArgs = (
   if (args.profile_directory) {
     profile.profile_directory = args.profile_directory;
   }
+  if (args.allowed_domains && args.allowed_domains.length > 0) {
+    profile.allowed_domains = args.allowed_domains;
+  }
 
   if (Object.keys(profile).length === 0) {
     return null;
@@ -502,6 +549,7 @@ interface RunAgentTaskOptions {
   browserProfile?: BrowserProfile | null;
   browserSession?: BrowserSession | null;
   sessionAttachmentMode?: 'copy' | 'strict' | 'shared';
+  allowInsecureSensitiveData?: boolean;
 }
 
 const runAgentTask = async ({
@@ -510,6 +558,7 @@ const runAgentTask = async ({
   browserProfile,
   browserSession,
   sessionAttachmentMode,
+  allowInsecureSensitiveData,
 }: RunAgentTaskOptions): Promise<void> => {
   const agent = new Agent({
     task,
@@ -518,6 +567,9 @@ const runAgentTask = async ({
     ...(browserSession ? { browser_session: browserSession } : {}),
     ...(sessionAttachmentMode
       ? { session_attachment_mode: sessionAttachmentMode }
+      : {}),
+    ...(allowInsecureSensitiveData
+      ? { allow_insecure_sensitive_data: true }
       : {}),
     source: 'cli',
   });
@@ -582,6 +634,7 @@ const runInteractiveMode = async (
           browserProfile,
           browserSession,
           sessionAttachmentMode: 'strict',
+          allowInsecureSensitiveData: args.allow_insecure,
         });
       } catch (error) {
         console.error('Error running agent:', error);
@@ -621,6 +674,8 @@ Options:
   --model <model>             Set model (e.g., gpt-4o, claude-sonnet-4-20250514, gemini-2.5-flash)
   -p, --prompt <task>         Run a single task
   --headless                  Run browser in headless mode
+  --allowed-domains <items>   Comma-separated allowlist (e.g., example.com,*.example.org)
+  --allow-insecure            Allow sensitive_data without domain restrictions (unsafe)
   --window-width <px>         Browser window width
   --window-height <px>        Browser window height
   --user-data-dir <path>      Chrome user data directory
@@ -675,7 +730,7 @@ export async function main(argv: string[] = process.argv.slice(2)) {
   }
 
   const task = resolveTask(args);
-  const shouldStartInteractive = !task && stdin.isTTY && stdout.isTTY;
+  const shouldStartInteractive = shouldStartInteractiveMode(task);
   if (!task && !shouldStartInteractive) {
     console.error(getCliUsage());
     process.exit(1);
@@ -712,7 +767,13 @@ export async function main(argv: string[] = process.argv.slice(2)) {
       })
     : null;
   try {
-    await runAgentTask({ task, llm, browserProfile, browserSession });
+    await runAgentTask({
+      task,
+      llm,
+      browserProfile,
+      browserSession,
+      allowInsecureSensitiveData: args.allow_insecure,
+    });
   } catch (error) {
     console.error('Error running agent:', error);
     process.exit(1);
