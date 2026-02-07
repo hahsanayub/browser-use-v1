@@ -211,9 +211,9 @@ src/controller/
 registry.action('Navigate to URL', {
   param_model: z.object({
     url: z.string().url().describe('The URL to navigate to'),
-    new_tab: z.boolean().optional().describe('Open in new tab')
+    new_tab: z.boolean().optional().describe('Open in new tab'),
   }),
-  allowed_domains: ['*.example.com']
+  allowed_domains: ['*.example.com'],
 })(async function go_to_url(params, ctx) {
   await ctx.page.goto(params.url);
   return new ActionResult({ success: true });
@@ -222,16 +222,16 @@ registry.action('Navigate to URL', {
 
 #### Built-in Actions (45+)
 
-| Category | Actions |
-|----------|---------|
-| Navigation | `go_to_url`, `go_back`, `search_google` |
-| Interaction | `click_element`, `input_text`, `send_keys` |
-| Scrolling | `scroll`, `scroll_to_text` |
-| Forms | `select_dropdown`, `upload_file` |
-| Tabs | `switch_tab`, `close_tab`, `open_tab` |
-| Content | `extract_structured_data`, `dropdown_options` |
-| Files | `read_file`, `write_file`, `replace_file_str` |
-| Control | `done`, `wait` |
+| Category    | Actions                                       |
+| ----------- | --------------------------------------------- |
+| Navigation  | `go_to_url`, `go_back`, `search_google`       |
+| Interaction | `click_element`, `input_text`, `send_keys`    |
+| Scrolling   | `scroll`, `scroll_to_text`                    |
+| Forms       | `select_dropdown`, `upload_file`              |
+| Tabs        | `switch_tab`, `close_tab`, `open_tab`         |
+| Content     | `extract_structured_data`, `dropdown_options` |
+| Files       | `read_file`, `write_file`, `replace_file_str` |
+| Control     | `done`, `wait`                                |
 
 ### 5. LLM Module (`src/llm/`)
 
@@ -421,12 +421,15 @@ Priority (highest to lowest):
 
 ```typescript
 // Unified CONFIG singleton combines multiple sources
-const CONFIG = new Proxy({}, {
-  get(_, prop) {
-    // Try each config source in order
-    return OldConfig[prop] ?? FlatEnvConfig[prop] ?? ConfigCore[prop];
+const CONFIG = new Proxy(
+  {},
+  {
+    get(_, prop) {
+      // Try each config source in order
+      return OldConfig[prop] ?? FlatEnvConfig[prop] ?? ConfigCore[prop];
+    },
   }
-});
+);
 ```
 
 ## Event System
@@ -452,7 +455,10 @@ CreateAgentStepEvent { step_id, task_id, model_output, result }
 import { Agent } from 'browser-use';
 import { ChatOpenAI } from 'browser-use/llm/openai';
 
-const llm = new ChatOpenAI({ model: 'gpt-4o', apiKey: process.env.OPENAI_API_KEY });
+const llm = new ChatOpenAI({
+  model: 'gpt-4o',
+  apiKey: process.env.OPENAI_API_KEY,
+});
 const agent = new Agent({ task: '...', llm });
 
 // Subscribe to events
@@ -466,27 +472,35 @@ agent.eventbus.on('CreateAgentStepEvent', (event) => {
 ## Design Patterns
 
 ### 1. Proxy Pattern
+
 Used in configuration system to combine multiple config sources transparently.
 
 ### 2. Registry Pattern
+
 Used for action registration with decorator-based API.
 
 ### 3. Observer Pattern
+
 Used in event bus for loose coupling between components.
 
 ### 4. Strategy Pattern
+
 Used for LLM providers - same interface, different implementations.
 
 ### 5. Template Method Pattern
-Used in Agent._step() to define the step execution workflow.
+
+Used in Agent.\_step() to define the step execution workflow.
 
 ### 6. Factory Pattern
+
 Used in Controller to create dynamic action models based on registered actions.
 
 ### 7. Singleton Pattern
+
 Used for Logger instances and ProductTelemetry.
 
 ### 8. Decorator Pattern
+
 Used for performance timing and observability wrappers.
 
 ## Error Handling
@@ -517,16 +531,19 @@ class ModelRateLimitError extends ModelProviderError {}
 ## Performance Considerations
 
 ### Token Optimization
+
 - Configurable history window (`max_history_items`)
 - Vision detail levels (low/auto/high)
 - DOM tree pruning for large pages
 
 ### Caching
+
 - Element selector maps cached per step
 - Screenshot caching when page hasn't changed
 - LLM response caching (provider-dependent)
 
 ### Parallel Execution
+
 - Multi-action execution within a step
 - Element freshness validation between actions
 - Network idle detection for reliable page loads

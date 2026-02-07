@@ -75,11 +75,13 @@ ANONYMIZED_TELEMETRY=false
 #### VS Code
 
 Recommended extensions:
+
 - ESLint
 - Prettier
 - TypeScript and JavaScript Language Features
 
 Settings (`.vscode/settings.json`):
+
 ```json
 {
   "editor.formatOnSave": true,
@@ -176,15 +178,15 @@ browser-use/
 
 ### Key Components
 
-| Component | Responsibility |
-|-----------|---------------|
-| `Agent` | Orchestrates browser automation with LLM |
-| `BrowserSession` | Manages Playwright browser lifecycle |
-| `BrowserProfile` | Browser configuration |
-| `Controller` | Manages and executes actions |
-| `Registry` | Action registration and lookup |
-| `DomService` | DOM extraction and processing |
-| `LLM providers` | Abstract LLM interactions |
+| Component        | Responsibility                           |
+| ---------------- | ---------------------------------------- |
+| `Agent`          | Orchestrates browser automation with LLM |
+| `BrowserSession` | Manages Playwright browser lifecycle     |
+| `BrowserProfile` | Browser configuration                    |
+| `Controller`     | Manages and executes actions             |
+| `Registry`       | Action registration and lookup           |
+| `DomService`     | DOM extraction and processing            |
+| `LLM providers`  | Abstract LLM interactions                |
 
 ---
 
@@ -221,13 +223,13 @@ async function fetchData(): Promise<Data> {
 
 ```typescript
 // Classes: PascalCase
-class BrowserSession { }
+class BrowserSession {}
 
 // Interfaces: PascalCase
-interface ActionResult { }
+interface ActionResult {}
 
 // Functions and variables: camelCase
-function executeAction() { }
+function executeAction() {}
 const browserContext = {};
 
 // Constants: UPPER_SNAKE_CASE
@@ -247,7 +249,10 @@ class Agent {
 ```typescript
 // Use custom error classes
 class BrowserError extends Error {
-  constructor(message: string, public code: string) {
+  constructor(
+    message: string,
+    public code: string
+  ) {
     super(message);
     this.name = 'BrowserError';
   }
@@ -274,7 +279,7 @@ async function myAction(params, ctx): Promise<ActionResult> {
 
 ### Documentation
 
-```typescript
+````typescript
 /**
  * Executes a browser action by its name.
  *
@@ -296,7 +301,7 @@ async execute_action(
 ): Promise<ActionResult> {
   // ...
 }
-```
+````
 
 ---
 
@@ -337,11 +342,11 @@ describe('Registry', () => {
 
 ### Test Categories
 
-| Category | Location | Purpose |
-|----------|----------|---------|
-| Unit | `tests/unit/` | Test individual functions/classes |
-| Integration | `tests/integration/` | Test component interactions |
-| E2E | `tests/e2e/` | Test full workflows |
+| Category    | Location             | Purpose                           |
+| ----------- | -------------------- | --------------------------------- |
+| Unit        | `tests/unit/`        | Test individual functions/classes |
+| Integration | `tests/integration/` | Test component interactions       |
+| E2E         | `tests/e2e/`         | Test full workflows               |
 
 ### Running Tests
 
@@ -391,15 +396,13 @@ import { vi } from 'vitest';
 
 it('should call LLM with correct parameters', async () => {
   const mockLLM = {
-    ainvoke: vi.fn().mockResolvedValue({ content: 'response' })
+    ainvoke: vi.fn().mockResolvedValue({ content: 'response' }),
   };
 
   await agent.executeStep(mockLLM);
 
   expect(mockLLM.ainvoke).toHaveBeenCalledWith(
-    expect.arrayContaining([
-      expect.objectContaining({ role: 'system' })
-    ])
+    expect.arrayContaining([expect.objectContaining({ role: 'system' })])
   );
 });
 ```
@@ -411,6 +414,7 @@ it('should call LLM with correct parameters', async () => {
 ### Before Submitting
 
 1. **Fork and branch**
+
    ```bash
    git checkout -b feature/my-feature
    # or
@@ -423,6 +427,7 @@ it('should call LLM with correct parameters', async () => {
    - Update documentation if needed
 
 3. **Run checks**
+
    ```bash
    npm run lint
    npm run typecheck
@@ -450,6 +455,7 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 ```
 
 Types:
+
 - `feat`: New feature
 - `fix`: Bug fix
 - `docs`: Documentation
@@ -485,26 +491,32 @@ Use the bug report template:
 
 ```markdown
 ## Bug Description
+
 A clear description of the bug.
 
 ## Steps to Reproduce
+
 1. Create agent with config...
 2. Run task "..."
 3. Observe error...
 
 ## Expected Behavior
+
 What should happen.
 
 ## Actual Behavior
+
 What actually happens.
 
 ## Environment
+
 - Browser-Use version: x.x.x
 - Node.js version: x.x.x
 - OS: macOS/Linux/Windows
 - LLM Provider: OpenAI/Anthropic/etc.
 
 ## Additional Context
+
 Any relevant logs, screenshots, etc.
 ```
 
@@ -512,15 +524,19 @@ Any relevant logs, screenshots, etc.
 
 ```markdown
 ## Feature Description
+
 What you'd like to see.
 
 ## Use Case
+
 Why this feature would be useful.
 
 ## Proposed Solution
+
 How you think it could be implemented.
 
 ## Alternatives Considered
+
 Other approaches you've thought about.
 ```
 
@@ -544,13 +560,13 @@ Not working
 
 ### Where to Document
 
-| Change Type | Documentation Location |
-|-------------|----------------------|
-| New feature | API Reference, Examples |
-| Configuration option | Configuration Guide |
-| Breaking change | Migration guide, CHANGELOG |
-| Bug fix | CHANGELOG |
-| New LLM provider | LLM Providers Guide |
+| Change Type          | Documentation Location     |
+| -------------------- | -------------------------- |
+| New feature          | API Reference, Examples    |
+| Configuration option | Configuration Guide        |
+| Breaking change      | Migration guide, CHANGELOG |
+| Bug fix              | CHANGELOG                  |
+| New LLM provider     | LLM Providers Guide        |
 
 ### Documentation Style
 
@@ -568,9 +584,9 @@ const result = await feature.use();
 
 ### Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `name` | `string` | Yes | Parameter description |
+| Parameter | Type     | Required | Description           |
+| --------- | -------- | -------- | --------------------- |
+| `name`    | `string` | Yes      | Parameter description |
 
 ### Example
 
@@ -612,22 +628,28 @@ Follow [Semantic Versioning](https://semver.org/):
 ## [1.2.0] - 2024-01-15
 
 ### Added
+
 - New feature description (#123)
 - Another new feature (#124)
 
 ### Changed
+
 - Modified behavior of X (#125)
 
 ### Fixed
+
 - Bug fix description (#126)
 
 ### Deprecated
+
 - Feature X will be removed in 2.0
 
 ### Removed
+
 - Removed deprecated feature Y
 
 ### Security
+
 - Fixed security issue (#127)
 ```
 

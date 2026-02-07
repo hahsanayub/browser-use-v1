@@ -31,11 +31,11 @@ const agent = new Agent({
     // Domain-scoped credentials
     '*.example.com': {
       username: 'user@example.com',
-      password: 'secure-password-123'
+      password: 'secure-password-123',
     },
     // Global credentials (available on all domains)
-    'api_key': 'sk-secret-key'
-  }
+    api_key: 'sk-secret-key',
+  },
 });
 ```
 
@@ -72,12 +72,12 @@ const sensitiveData = {
 controller.registry.action('Login with credentials', {
   param_model: z.object({
     username_field: z.number(),
-    password_field: z.number()
-  })
+    password_field: z.number(),
+  }),
 })(async function login(params, ctx) {
   if (!ctx.has_sensitive_data) {
     return new ActionResult({
-      error: 'No credentials configured for this domain'
+      error: 'No credentials configured for this domain',
     });
   }
 
@@ -85,7 +85,7 @@ controller.registry.action('Login with credentials', {
   // The LLM uses <secret>username</secret> pattern
 
   return new ActionResult({
-    extracted_content: 'Login attempted'
+    extracted_content: 'Login attempted',
   });
 });
 ```
@@ -111,7 +111,7 @@ import { ChatOpenAI } from 'browser-use/llm/openai';
 
 const llm = new ChatOpenAI({
   model: 'gpt-4o',
-  apiKey: process.env.OPENAI_API_KEY  // Never hardcode!
+  apiKey: process.env.OPENAI_API_KEY, // Never hardcode!
 });
 ```
 
@@ -120,6 +120,7 @@ const llm = new ChatOpenAI({
 If using the config file (`~/.config/browseruse/config.json`):
 
 1. **Set proper permissions**:
+
    ```bash
    chmod 600 ~/.config/browseruse/config.json
    ```
@@ -169,22 +170,18 @@ BROWSER_USE_ALLOWED_DOMAINS=*.example.com,*.trusted.org,api.mysite.com
 ```typescript
 // Programmatic configuration
 const profile = new BrowserProfile({
-  allowed_domains: [
-    '*.example.com',
-    '*.trusted.org',
-    'api.mysite.com'
-  ]
+  allowed_domains: ['*.example.com', '*.trusted.org', 'api.mysite.com'],
 });
 ```
 
 ### Domain Patterns
 
-| Pattern | Matches |
-|---------|---------|
-| `example.com` | Only example.com |
-| `*.example.com` | Any subdomain of example.com |
-| `*.*.example.com` | Two-level subdomains |
-| `*` | All domains (default) |
+| Pattern           | Matches                      |
+| ----------------- | ---------------------------- |
+| `example.com`     | Only example.com             |
+| `*.example.com`   | Any subdomain of example.com |
+| `*.*.example.com` | Two-level subdomains         |
+| `*`               | All domains (default)        |
 
 ### Action Domain Restrictions
 
@@ -209,7 +206,7 @@ Always enable the Chromium sandbox in production:
 
 ```typescript
 const profile = new BrowserProfile({
-  chromium_sandbox: true  // Default: true
+  chromium_sandbox: true, // Default: true
 });
 ```
 
@@ -221,11 +218,8 @@ For Docker/CI, you may need to disable sandboxing explicitly (with appropriate c
 
 ```typescript
 const profile = new BrowserProfile({
-  chromium_sandbox: false,  // Only in Docker
-  args: [
-    '--no-sandbox',
-    '--disable-setuid-sandbox'
-  ]
+  chromium_sandbox: false, // Only in Docker
+  args: ['--no-sandbox', '--disable-setuid-sandbox'],
 });
 ```
 
@@ -235,7 +229,7 @@ Use headless mode in production:
 
 ```typescript
 const profile = new BrowserProfile({
-  headless: true
+  headless: true,
 });
 ```
 
@@ -254,7 +248,7 @@ const profile = new BrowserProfile({
   ignore_https_errors: false,
 
   // Stealth mode (avoid detection but maintain security)
-  stealth: true
+  stealth: true,
 });
 ```
 
@@ -265,8 +259,8 @@ These options should only be used in development/testing:
 ```typescript
 // DANGEROUS - Only for testing!
 const profile = new BrowserProfile({
-  disable_security: true,      // Disables web security
-  ignore_https_errors: true    // Accepts invalid certificates
+  disable_security: true, // Disables web security
+  ignore_https_errors: true, // Accepts invalid certificates
 });
 ```
 
@@ -282,10 +276,10 @@ Use proxies for network isolation:
 const profile = new BrowserProfile({
   proxy: {
     server: 'http://proxy.internal:8080',
-    bypass: 'localhost,127.0.0.1',  // Bypass for local
+    bypass: 'localhost,127.0.0.1', // Bypass for local
     username: 'proxy-user',
-    password: 'proxy-pass'
-  }
+    password: 'proxy-pass',
+  },
 });
 ```
 
@@ -298,8 +292,8 @@ const profile = new BrowserProfile({
 
   // Custom headers for security
   extra_http_headers: {
-    'Strict-Transport-Security': 'max-age=31536000'
-  }
+    'Strict-Transport-Security': 'max-age=31536000',
+  },
 });
 ```
 
@@ -318,7 +312,7 @@ await page.route('**/*', (route) => {
   const url = new URL(route.request().url());
   const allowedDomains = ['example.com', 'trusted.org'];
 
-  if (allowedDomains.some(d => url.hostname.endsWith(d))) {
+  if (allowedDomains.some((d) => url.hostname.endsWith(d))) {
     route.continue();
   } else {
     route.abort();
@@ -359,12 +353,14 @@ ANONYMIZED_TELEMETRY=false
 ```
 
 Telemetry data collected (when enabled):
+
 - Tool usage counts
 - Session durations
 - Success/failure rates
 - Model/provider information (no content)
 
 **Not collected:**
+
 - URLs visited
 - Page content
 - Credentials or sensitive data
@@ -417,26 +413,26 @@ spec:
     runAsNonRoot: true
     runAsUser: 1000
   containers:
-  - name: browser-use
-    image: your-image
-    securityContext:
-      allowPrivilegeEscalation: false
-      readOnlyRootFilesystem: true
-      capabilities:
-        drop:
-          - ALL
-    env:
-    - name: OPENAI_API_KEY
-      valueFrom:
-        secretKeyRef:
-          name: api-keys
-          key: openai
-    - name: BROWSER_USE_HEADLESS
-      value: "true"
-    resources:
-      limits:
-        memory: "2Gi"
-        cpu: "1"
+    - name: browser-use
+      image: your-image
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      env:
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: api-keys
+              key: openai
+        - name: BROWSER_USE_HEADLESS
+          value: 'true'
+      resources:
+        limits:
+          memory: '2Gi'
+          cpu: '1'
 ```
 
 ### Secrets Management
@@ -449,14 +445,16 @@ import { SecretsManager } from '@aws-sdk/client-secrets-manager';
 
 async function getApiKey() {
   const client = new SecretsManager({ region: 'us-east-1' });
-  const secret = await client.getSecretValue({ SecretId: 'browser-use/api-keys' });
+  const secret = await client.getSecretValue({
+    SecretId: 'browser-use/api-keys',
+  });
   return JSON.parse(secret.SecretString!);
 }
 
 const secrets = await getApiKey();
 const llm = new ChatOpenAI({
   model: 'gpt-4o',
-  apiKey: secrets.OPENAI_API_KEY
+  apiKey: secrets.OPENAI_API_KEY,
 });
 ```
 

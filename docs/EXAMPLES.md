@@ -26,13 +26,13 @@ import { ChatOpenAI } from 'browser-use/llm/openai';
 async function webSearch() {
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   const agent = new Agent({
     task: 'Search Google for "TypeScript best practices 2024" and summarize the top 3 results',
     llm,
-    use_vision: true
+    use_vision: true,
   });
 
   const history = await agent.run(20);
@@ -53,21 +53,21 @@ import { ChatOpenAI } from 'browser-use/llm/openai';
 async function screenshotPage() {
   const profile = new BrowserProfile({
     headless: true,
-    viewport: { width: 1920, height: 1080 }
+    viewport: { width: 1920, height: 1080 },
   });
 
   const session = new BrowserSession({ browser_profile: profile });
 
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   const agent = new Agent({
     task: 'Go to https://news.ycombinator.com and take a screenshot',
     llm,
     browser_session: session,
-    generate_gif: './hacker-news-session.gif'
+    generate_gif: './hacker-news-session.gif',
   });
 
   try {
@@ -90,12 +90,12 @@ import { ChatOpenAI } from 'browser-use/llm/openai';
 async function quickTask() {
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   const agent = new Agent({
     task: 'Go to github.com and find the trending TypeScript repositories',
-    llm
+    llm,
   });
 
   const history = await agent.run(30);
@@ -120,7 +120,7 @@ import { ChatOpenAI } from 'browser-use/llm/openai';
 async function extractProducts() {
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   const agent = new Agent({
@@ -134,7 +134,7 @@ async function extractProducts() {
       Return as JSON.
     `,
     llm,
-    use_vision: true
+    use_vision: true,
   });
 
   const history = await agent.run(30);
@@ -161,7 +161,7 @@ import { ChatOpenAI } from 'browser-use/llm/openai';
 async function extractTableData() {
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   const agent = new Agent({
@@ -171,7 +171,7 @@ async function extractTableData() {
       Return as a JSON array with fields: rank, country, gdp_millions
     `,
     llm,
-    use_vision: true
+    use_vision: true,
   });
 
   const history = await agent.run();
@@ -191,14 +191,14 @@ import * as fs from 'fs';
 async function monitorPrice(productUrl: string) {
   const profile = new BrowserProfile({
     headless: true,
-    user_data_dir: './price-monitor-profile'  // Persist session
+    user_data_dir: './price-monitor-profile', // Persist session
   });
 
   const session = new BrowserSession({ browser_profile: profile });
 
   const llm = new ChatOpenAI({
-    model: 'gpt-4o-mini',  // Cost-effective for simple extraction
-    apiKey: process.env.OPENAI_API_KEY
+    model: 'gpt-4o-mini', // Cost-effective for simple extraction
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   const agent = new Agent({
@@ -208,7 +208,7 @@ async function monitorPrice(productUrl: string) {
       Return as JSON: { "product": "...", "price": "...", "timestamp": "..." }
     `,
     llm,
-    browser_session: session
+    browser_session: session,
   });
 
   try {
@@ -249,15 +249,15 @@ import { ChatOpenAI } from 'browser-use/llm/openai';
 
 async function loginToSite() {
   const profile = new BrowserProfile({
-    headless: false,  // Watch the login
-    user_data_dir: './my-profile'  // Persist cookies
+    headless: false, // Watch the login
+    user_data_dir: './my-profile', // Persist cookies
   });
 
   const session = new BrowserSession({ browser_profile: profile });
 
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   const agent = new Agent({
@@ -271,9 +271,9 @@ async function loginToSite() {
     sensitive_data: {
       '*.example.com': {
         username: process.env.SITE_USERNAME!,
-        password: process.env.SITE_PASSWORD!
-      }
-    }
+        password: process.env.SITE_PASSWORD!,
+      },
+    },
   });
 
   const history = await agent.run();
@@ -295,7 +295,7 @@ import { ChatOpenAI } from 'browser-use/llm/openai';
 async function fillApplicationForm() {
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   const formData = {
@@ -307,7 +307,7 @@ async function fillApplicationForm() {
     city: 'San Francisco',
     state: 'California',
     zip: '94105',
-    country: 'United States'
+    country: 'United States',
   };
 
   const agent = new Agent({
@@ -320,7 +320,7 @@ async function fillApplicationForm() {
       Confirm the submission was successful.
     `,
     llm,
-    use_vision: true
+    use_vision: true,
   });
 
   const history = await agent.run(40);
@@ -340,7 +340,7 @@ import * as path from 'path';
 async function uploadDocument() {
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   const filePath = path.resolve('./documents/report.pdf');
@@ -352,7 +352,7 @@ async function uploadDocument() {
       Wait for the upload to complete and confirm success.
     `,
     llm,
-    use_vision: true
+    use_vision: true,
   });
 
   const history = await agent.run();
@@ -377,7 +377,7 @@ async function compareProducts() {
 
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   const agent = new Agent({
@@ -392,7 +392,7 @@ async function compareProducts() {
     `,
     llm,
     browser_session: session,
-    use_vision: true
+    use_vision: true,
   });
 
   try {
@@ -417,7 +417,7 @@ async function researchTopic() {
 
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   const agent = new Agent({
@@ -436,7 +436,7 @@ async function researchTopic() {
     `,
     llm,
     browser_session: session,
-    use_vision: true
+    use_vision: true,
   });
 
   try {
@@ -471,11 +471,11 @@ async function withScreenshots() {
   controller.registry.action('Save screenshot to file', {
     param_model: z.object({
       filename: z.string().describe('Output filename (e.g., "screenshot.png")'),
-      fullPage: z.boolean().optional().describe('Capture full page')
-    })
+      fullPage: z.boolean().optional().describe('Capture full page'),
+    }),
   })(async function save_screenshot(params, ctx) {
     const screenshot = await ctx.page.screenshot({
-      fullPage: params.fullPage ?? false
+      fullPage: params.fullPage ?? false,
     });
 
     const outputPath = `./screenshots/${params.filename}`;
@@ -484,13 +484,13 @@ async function withScreenshots() {
 
     return new ActionResult({
       extracted_content: `Screenshot saved to ${outputPath}`,
-      attachments: [outputPath]
+      attachments: [outputPath],
     });
   });
 
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   const agent = new Agent({
@@ -501,7 +501,7 @@ async function withScreenshots() {
     `,
     llm,
     controller,
-    use_vision: true
+    use_vision: true,
   });
 
   await agent.run();
@@ -529,37 +529,37 @@ async function withDatabase() {
   controller.registry.action('Save extracted data to database', {
     param_model: z.object({
       collection: z.string().describe('Collection name'),
-      data: z.record(z.any()).describe('Data to save')
-    })
+      data: z.record(z.any()).describe('Data to save'),
+    }),
   })(async function save_to_db(params) {
     database.push({
       collection: params.collection,
       data: params.data,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     return new ActionResult({
       extracted_content: `Saved to ${params.collection}: ${JSON.stringify(params.data)}`,
-      include_in_memory: true
+      include_in_memory: true,
     });
   });
 
   // Query database action
   controller.registry.action('Query saved data from database', {
     param_model: z.object({
-      collection: z.string().describe('Collection to query')
-    })
+      collection: z.string().describe('Collection to query'),
+    }),
   })(async function query_db(params) {
-    const results = database.filter(r => r.collection === params.collection);
+    const results = database.filter((r) => r.collection === params.collection);
 
     return new ActionResult({
-      extracted_content: JSON.stringify(results, null, 2)
+      extracted_content: JSON.stringify(results, null, 2),
     });
   });
 
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   const agent = new Agent({
@@ -571,7 +571,7 @@ async function withDatabase() {
     `,
     llm,
     controller,
-    use_vision: true
+    use_vision: true,
   });
 
   await agent.run();
@@ -598,20 +598,22 @@ async function withNotifications() {
     param_model: z.object({
       channel: z.enum(['email', 'slack', 'console']),
       message: z.string(),
-      priority: z.enum(['low', 'medium', 'high']).optional()
-    })
+      priority: z.enum(['low', 'medium', 'high']).optional(),
+    }),
   })(async function send_notification(params) {
     // In production, integrate with actual notification services
-    console.log(`[${params.channel.toUpperCase()}] ${params.priority || 'medium'}: ${params.message}`);
+    console.log(
+      `[${params.channel.toUpperCase()}] ${params.priority || 'medium'}: ${params.message}`
+    );
 
     return new ActionResult({
-      extracted_content: `Notification sent via ${params.channel}`
+      extracted_content: `Notification sent via ${params.channel}`,
     });
   });
 
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   const agent = new Agent({
@@ -623,7 +625,7 @@ async function withNotifications() {
     `,
     llm,
     controller,
-    use_vision: true
+    use_vision: true,
   });
 
   await agent.run();
@@ -646,14 +648,14 @@ async function persistentSession() {
   // Use a dedicated profile directory for persistence
   const profile = new BrowserProfile({
     user_data_dir: './browser-profiles/main',
-    headless: false
+    headless: false,
   });
 
   const session = new BrowserSession({ browser_profile: profile });
 
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   // First run: Login and setup
@@ -664,9 +666,9 @@ async function persistentSession() {
     sensitive_data: {
       '*.github.com': {
         username: process.env.GITHUB_USER!,
-        password: process.env.GITHUB_PASS!
-      }
-    }
+        password: process.env.GITHUB_PASS!,
+      },
+    },
   });
 
   await agent1.run();
@@ -675,7 +677,7 @@ async function persistentSession() {
   const agent2 = new Agent({
     task: 'Go to my GitHub notifications and summarize unread items',
     llm,
-    browser_session: session  // Same session, preserves login
+    browser_session: session, // Same session, preserves login
   });
 
   const history = await agent2.run();
@@ -704,7 +706,10 @@ async function exportSession() {
   const context = session.browser_context!;
   const storageState = await context.storageState();
 
-  fs.writeFileSync('./session-state.json', JSON.stringify(storageState, null, 2));
+  fs.writeFileSync(
+    './session-state.json',
+    JSON.stringify(storageState, null, 2)
+  );
   console.log('Session exported');
 
   await session.stop();
@@ -712,7 +717,7 @@ async function exportSession() {
 
 async function importSession() {
   const profile = new BrowserProfile({
-    storage_state: './session-state.json'
+    storage_state: './session-state.json',
   });
 
   const session = new BrowserSession({ browser_profile: profile });
@@ -734,16 +739,20 @@ import { ChatOpenAI } from 'browser-use/llm/openai';
 async function parallelSessions() {
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   // Create independent sessions
   const session1 = new BrowserSession({
-    browser_profile: new BrowserProfile({ user_data_dir: './profiles/session1' })
+    browser_profile: new BrowserProfile({
+      user_data_dir: './profiles/session1',
+    }),
   });
 
   const session2 = new BrowserSession({
-    browser_profile: new BrowserProfile({ user_data_dir: './profiles/session2' })
+    browser_profile: new BrowserProfile({
+      user_data_dir: './profiles/session2',
+    }),
   });
 
   // Run tasks in parallel
@@ -752,7 +761,7 @@ async function parallelSessions() {
       const agent = new Agent({
         task: 'Search Google for "TypeScript 5.0 features"',
         llm,
-        browser_session: session1
+        browser_session: session1,
       });
       return agent.run();
     })(),
@@ -760,10 +769,10 @@ async function parallelSessions() {
       const agent = new Agent({
         task: 'Search Bing for "TypeScript 5.0 features"',
         llm,
-        browser_session: session2
+        browser_session: session2,
       });
       return agent.run();
-    })()
+    })(),
   ]);
 
   console.log('Google result:', result1.final_result());
@@ -788,14 +797,14 @@ import { ChatOpenAI } from 'browser-use/llm/openai';
 async function withRetry() {
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   const agent = new Agent({
     task: 'Go to flaky-website.com and extract the data',
     llm,
-    max_failures: 5,      // Allow up to 5 consecutive failures
-    retry_delay: 5       // Wait 5 seconds between retries
+    max_failures: 5, // Allow up to 5 consecutive failures
+    retry_delay: 5, // Wait 5 seconds between retries
   });
 
   const history = await agent.run(30);
@@ -826,7 +835,7 @@ async function withFallback() {
   try {
     llm = new ChatOpenAI({
       model: 'gpt-4o',
-      apiKey: process.env.OPENAI_API_KEY
+      apiKey: process.env.OPENAI_API_KEY,
     });
     // Test the connection
     await llm.ainvoke([{ role: 'user', content: 'test' }]);
@@ -839,7 +848,7 @@ async function withFallback() {
   const agent = new Agent({
     task: 'Search for the current weather in San Francisco',
     llm,
-    use_vision: !usedFallback  // Disable vision for local models
+    use_vision: !usedFallback, // Disable vision for local models
   });
 
   const history = await agent.run(usedFallback ? 20 : 30); // Fewer steps for fallback
@@ -858,18 +867,18 @@ import { ChatOpenAI } from 'browser-use/llm/openai';
 async function withTimeouts() {
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   const agent = new Agent({
     task: 'Complete a complex multi-step workflow',
     llm,
-    llm_timeout: 30,    // 30s timeout for LLM calls
-    step_timeout: 120   // 2min timeout per step
+    llm_timeout: 30, // 30s timeout for LLM calls
+    step_timeout: 120, // 2min timeout per step
   });
 
   try {
-    const history = await agent.run(50);  // Max 50 steps
+    const history = await agent.run(50); // Max 50 steps
     console.log('Completed:', history.is_successful());
   } catch (error) {
     if (error.message.includes('timeout')) {
@@ -896,12 +905,12 @@ import { ChatOpenAI } from 'browser-use/llm/openai';
 async function eventDrivenAgent() {
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   const agent = new Agent({
     task: 'Navigate through example.com and find the contact page',
-    llm
+    llm,
   });
 
   // Listen to per-agent events
@@ -925,7 +934,7 @@ async function agentWithMemory() {
   const session = new BrowserSession();
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   // First task
@@ -935,7 +944,7 @@ async function agentWithMemory() {
       Find the cheapest option and remember its name and price.
     `,
     llm,
-    browser_session: session
+    browser_session: session,
   });
 
   await agent1.run();
@@ -965,14 +974,14 @@ import * as fs from 'fs';
 async function recordAndReplay() {
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   // Record session
   const agent = new Agent({
     task: 'Login to example.com and navigate to settings',
     llm,
-    save_conversation_path: './recordings'
+    save_conversation_path: './recordings',
   });
 
   const history = await agent.run();
@@ -988,7 +997,7 @@ async function recordAndReplay() {
   const replayAgent = new Agent({
     task: 'Replay recorded actions',
     llm,
-    browser_session: newSession
+    browser_session: newSession,
   });
 
   const savedHistory = JSON.parse(
@@ -997,7 +1006,7 @@ async function recordAndReplay() {
 
   await replayAgent.rerun_history(savedHistory, {
     max_retries: 3,
-    skip_failures: true
+    skip_failures: true,
   });
 
   await newSession.stop();
@@ -1016,7 +1025,7 @@ async function conditionalWorkflow() {
   const session = new BrowserSession();
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   // Step 1: Check status
@@ -1027,7 +1036,7 @@ async function conditionalWorkflow() {
       Return "operational" if everything is green, otherwise "degraded".
     `,
     llm,
-    browser_session: session
+    browser_session: session,
   });
 
   const checkHistory = await checkAgent.run(10);
@@ -1040,7 +1049,7 @@ async function conditionalWorkflow() {
     const deployAgent = new Agent({
       task: 'Go to deploy.example.com and trigger the production deployment',
       llm,
-      browser_session: session
+      browser_session: session,
     });
 
     await deployAgent.run();
@@ -1050,7 +1059,7 @@ async function conditionalWorkflow() {
     const alertAgent = new Agent({
       task: 'Go to alerts.example.com and create a new incident report',
       llm,
-      browser_session: session
+      browser_session: session,
     });
 
     await alertAgent.run();

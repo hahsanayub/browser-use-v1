@@ -11,6 +11,7 @@ registry.action(description, options)(handler);
 ```
 
 The agent uses LLM to decide which actions to execute based on:
+
 1. Current page state
 2. Task description
 3. Available actions and their descriptions
@@ -371,15 +372,15 @@ const controller = new Controller();
 // Register a custom action
 controller.registry.action('Take a screenshot and save it', {
   param_model: z.object({
-    filename: z.string().describe('Output filename')
-  })
+    filename: z.string().describe('Output filename'),
+  }),
 })(async function save_screenshot(params, ctx) {
   const screenshot = await ctx.page.screenshot();
   await fs.writeFile(params.filename, screenshot);
 
   return new ActionResult({
     extracted_content: `Screenshot saved to ${params.filename}`,
-    success: true
+    success: true,
   });
 });
 ```
@@ -390,9 +391,9 @@ controller.registry.action('Take a screenshot and save it', {
 controller.registry.action('Login to example.com', {
   param_model: z.object({
     username: z.string(),
-    password: z.string()
+    password: z.string(),
   }),
-  allowed_domains: ['*.example.com', 'login.example.org']
+  allowed_domains: ['*.example.com', 'login.example.org'],
 })(async function example_login(params, ctx) {
   // This action only appears when on matching domains
   await ctx.page.fill('#username', params.username);
@@ -400,7 +401,7 @@ controller.registry.action('Login to example.com', {
   await ctx.page.click('#login-button');
 
   return new ActionResult({
-    extracted_content: 'Logged in successfully'
+    extracted_content: 'Logged in successfully',
   });
 });
 ```
@@ -410,7 +411,7 @@ controller.registry.action('Login to example.com', {
 ```typescript
 controller.registry.action('Submit the checkout form', {
   param_model: z.object({}),
-  page_filter: (page) => page.url().includes('/checkout')
+  page_filter: (page) => page.url().includes('/checkout'),
 })(async function submit_checkout(params, ctx) {
   // Only available on checkout pages
   await ctx.page.click('#submit-order');
@@ -418,7 +419,7 @@ controller.registry.action('Submit the checkout form', {
   return new ActionResult({
     extracted_content: 'Order submitted',
     is_done: true,
-    success: true
+    success: true,
   });
 });
 ```
@@ -428,8 +429,8 @@ controller.registry.action('Submit the checkout form', {
 ```typescript
 controller.registry.action('Open URL in new tab', {
   param_model: z.object({
-    url: z.string().url()
-  })
+    url: z.string().url(),
+  }),
 })(async function open_in_new_tab(params, ctx) {
   // Access the browser session
   const session = ctx.browser_session;
@@ -437,7 +438,7 @@ controller.registry.action('Open URL in new tab', {
   await newPage.goto(params.url);
 
   return new ActionResult({
-    extracted_content: `Opened ${params.url} in new tab`
+    extracted_content: `Opened ${params.url} in new tab`,
   });
 });
 ```
@@ -448,13 +449,13 @@ controller.registry.action('Open URL in new tab', {
 controller.registry.action('Fill login form with credentials', {
   param_model: z.object({
     username_field: z.number().int(),
-    password_field: z.number().int()
-  })
+    password_field: z.number().int(),
+  }),
 })(async function fill_login(params, ctx) {
   // ctx.has_sensitive_data indicates if sensitive data is available
   if (!ctx.has_sensitive_data) {
     return new ActionResult({
-      error: 'No credentials provided'
+      error: 'No credentials provided',
     });
   }
 
@@ -462,7 +463,7 @@ controller.registry.action('Fill login form with credentials', {
   // Use <secret>key</secret> pattern in text params
 
   return new ActionResult({
-    extracted_content: 'Login form filled'
+    extracted_content: 'Login form filled',
   });
 });
 ```
@@ -472,8 +473,8 @@ controller.registry.action('Fill login form with credentials', {
 ```typescript
 controller.registry.action('Process multiple items', {
   param_model: z.object({
-    items: z.array(z.string())
-  })
+    items: z.array(z.string()),
+  }),
 })(async function process_items(params, ctx) {
   const results = [];
 
@@ -489,7 +490,7 @@ controller.registry.action('Process multiple items', {
 
   return new ActionResult({
     extracted_content: JSON.stringify(results),
-    include_in_memory: true
+    include_in_memory: true,
   });
 });
 ```
@@ -498,48 +499,48 @@ controller.registry.action('Process multiple items', {
 
 ## ActionResult Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `is_done` | `boolean` | Marks task as complete |
-| `success` | `boolean` | Whether action succeeded (only with is_done) |
-| `error` | `string` | Error message if action failed |
-| `extracted_content` | `string` | Content to return to LLM |
-| `long_term_memory` | `string` | Persistent memory across steps |
-| `attachments` | `string[]` | File paths to attach |
-| `include_in_memory` | `boolean` | Include in LLM history |
+| Property            | Type       | Description                                  |
+| ------------------- | ---------- | -------------------------------------------- |
+| `is_done`           | `boolean`  | Marks task as complete                       |
+| `success`           | `boolean`  | Whether action succeeded (only with is_done) |
+| `error`             | `string`   | Error message if action failed               |
+| `extracted_content` | `string`   | Content to return to LLM                     |
+| `long_term_memory`  | `string`   | Persistent memory across steps               |
+| `attachments`       | `string[]` | File paths to attach                         |
+| `include_in_memory` | `boolean`  | Include in LLM history                       |
 
 ### Result Patterns
 
 ```typescript
 // Successful action
 return new ActionResult({
-  extracted_content: 'Action completed successfully'
+  extracted_content: 'Action completed successfully',
 });
 
 // Action with error
 return new ActionResult({
   error: 'Element not found',
-  include_in_memory: true
+  include_in_memory: true,
 });
 
 // Task completion
 return new ActionResult({
   extracted_content: 'Task finished',
   is_done: true,
-  success: true
+  success: true,
 });
 
 // Task failure
 return new ActionResult({
   extracted_content: 'Could not complete task',
   is_done: true,
-  success: false
+  success: false,
 });
 
 // With long-term memory
 return new ActionResult({
   extracted_content: 'Found user ID: 12345',
-  long_term_memory: 'User ID is 12345 for future reference'
+  long_term_memory: 'User ID is 12345 for future reference',
 });
 ```
 
@@ -551,11 +552,7 @@ To exclude specific built-in actions:
 
 ```typescript
 const controller = new Controller({
-  exclude_actions: [
-    'upload_file',
-    'write_file',
-    'read_file'
-  ]
+  exclude_actions: ['upload_file', 'write_file', 'read_file'],
 });
 ```
 
@@ -607,14 +604,14 @@ controller.registry.action('Submit', options)(handler);
 // Good
 param_model: z.object({
   search_query: z.string().describe('The text to search for'),
-  max_results: z.number().describe('Maximum number of results to return')
-})
+  max_results: z.number().describe('Maximum number of results to return'),
+});
 
 // Bad
 param_model: z.object({
   q: z.string(),
-  n: z.number()
-})
+  n: z.number(),
+});
 ```
 
 ### 3. Handle Errors Gracefully
@@ -627,7 +624,7 @@ async function my_action(params, ctx) {
   } catch (error) {
     return new ActionResult({
       error: `Failed to click: ${error.message}`,
-      include_in_memory: true
+      include_in_memory: true,
     });
   }
 }
@@ -638,7 +635,7 @@ async function my_action(params, ctx) {
 ```typescript
 // Restrict login actions to specific domains
 controller.registry.action('Login', {
-  allowed_domains: ['*.mysite.com']
+  allowed_domains: ['*.mysite.com'],
 })(login_handler);
 ```
 
@@ -647,11 +644,12 @@ controller.registry.action('Login', {
 ```typescript
 // Good - provides useful information
 return new ActionResult({
-  extracted_content: 'Found 15 search results. Top result: "TypeScript Handbook"'
+  extracted_content:
+    'Found 15 search results. Top result: "TypeScript Handbook"',
 });
 
 // Bad - not informative
 return new ActionResult({
-  extracted_content: 'Done'
+  extracted_content: 'Done',
 });
 ```

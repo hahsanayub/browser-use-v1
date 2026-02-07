@@ -15,40 +15,40 @@ Configuration values are resolved in this order (highest priority first):
 
 ### Core Settings
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `BROWSER_USE_LOGGING_LEVEL` | `string` | `'info'` | Log level: `debug`, `info`, `warning`, `error` |
-| `BROWSER_USE_CONFIG_DIR` | `string` | `~/.config/browseruse` | Configuration directory path |
-| `BROWSER_USE_HEADLESS` | `boolean` | `false` | Run browser in headless mode |
-| `IN_DOCKER` | `boolean` | auto-detect | Force Docker mode behavior (sandbox defaults, launch args) |
-| `BROWSER_USE_ALLOWED_DOMAINS` | `string` | - | Comma-separated allowed domains |
+| Variable                      | Type      | Default                | Description                                                |
+| ----------------------------- | --------- | ---------------------- | ---------------------------------------------------------- |
+| `BROWSER_USE_LOGGING_LEVEL`   | `string`  | `'info'`               | Log level: `debug`, `info`, `warning`, `error`             |
+| `BROWSER_USE_CONFIG_DIR`      | `string`  | `~/.config/browseruse` | Configuration directory path                               |
+| `BROWSER_USE_HEADLESS`        | `boolean` | `false`                | Run browser in headless mode                               |
+| `IN_DOCKER`                   | `boolean` | auto-detect            | Force Docker mode behavior (sandbox defaults, launch args) |
+| `BROWSER_USE_ALLOWED_DOMAINS` | `string`  | -                      | Comma-separated allowed domains                            |
 
 ### LLM Settings
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `BROWSER_USE_LLM_MODEL` | `string` | - | Default LLM model |
-| `OPENAI_API_KEY` | `string` | - | OpenAI API key |
-| `ANTHROPIC_API_KEY` | `string` | - | Anthropic API key |
-| `GOOGLE_API_KEY` | `string` | - | Google API key |
-| `AZURE_OPENAI_API_KEY` | `string` | - | Azure OpenAI API key |
-| `AZURE_OPENAI_ENDPOINT` | `string` | - | Azure OpenAI endpoint |
-| `GROQ_API_KEY` | `string` | - | Groq API key |
-| `DEEPSEEK_API_KEY` | `string` | - | DeepSeek API key |
-| `OPENROUTER_API_KEY` | `string` | - | OpenRouter API key |
+| Variable                | Type     | Default | Description           |
+| ----------------------- | -------- | ------- | --------------------- |
+| `BROWSER_USE_LLM_MODEL` | `string` | -       | Default LLM model     |
+| `OPENAI_API_KEY`        | `string` | -       | OpenAI API key        |
+| `ANTHROPIC_API_KEY`     | `string` | -       | Anthropic API key     |
+| `GOOGLE_API_KEY`        | `string` | -       | Google API key        |
+| `AZURE_OPENAI_API_KEY`  | `string` | -       | Azure OpenAI API key  |
+| `AZURE_OPENAI_ENDPOINT` | `string` | -       | Azure OpenAI endpoint |
+| `GROQ_API_KEY`          | `string` | -       | Groq API key          |
+| `DEEPSEEK_API_KEY`      | `string` | -       | DeepSeek API key      |
+| `OPENROUTER_API_KEY`    | `string` | -       | OpenRouter API key    |
 
 ### Display Settings
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `BROWSER_USE_SCREEN_WIDTH` | `number` | - | Override screen width |
-| `BROWSER_USE_SCREEN_HEIGHT` | `number` | - | Override screen height |
+| Variable                    | Type     | Default | Description            |
+| --------------------------- | -------- | ------- | ---------------------- |
+| `BROWSER_USE_SCREEN_WIDTH`  | `number` | -       | Override screen width  |
+| `BROWSER_USE_SCREEN_HEIGHT` | `number` | -       | Override screen height |
 
 ### Telemetry
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `ANONYMIZED_TELEMETRY` | `boolean` | `true` | Enable anonymous telemetry |
+| Variable               | Type      | Default | Description                |
+| ---------------------- | --------- | ------- | -------------------------- |
+| `ANONYMIZED_TELEMETRY` | `boolean` | `true`  | Enable anonymous telemetry |
 
 ## Configuration File
 
@@ -112,7 +112,7 @@ The configuration file is located at `~/.config/browseruse/config.json`.
       "timezone_id": "America/New_York",
       "geolocation": {
         "latitude": 40.7128,
-        "longitude": -74.0060
+        "longitude": -74.006
       }
     }
   }
@@ -170,7 +170,7 @@ The configuration file is located at `~/.config/browseruse/config.json`.
 ```typescript
 const profile = new BrowserProfile({
   // Headless mode
-  headless: true,  // true, false, or null for auto-detect
+  headless: true, // true, false, or null for auto-detect
 
   // Viewport (for headless or forced viewport mode)
   viewport: { width: 1280, height: 720 },
@@ -186,7 +186,7 @@ const profile = new BrowserProfile({
 
   // Mobile emulation
   is_mobile: false,
-  has_touch: false
+  has_touch: false,
 });
 ```
 
@@ -199,7 +199,7 @@ const profile = new BrowserProfile({
     server: 'http://proxy.example.com:8080',
     bypass: 'localhost',
     username: 'user',
-    password: 'pass'
+    password: 'pass',
   },
 
   // SSL/TLS
@@ -210,8 +210,8 @@ const profile = new BrowserProfile({
 
   // Extra HTTP headers
   extra_http_headers: {
-    'X-Custom-Header': 'value'
-  }
+    'X-Custom-Header': 'value',
+  },
 });
 ```
 
@@ -231,15 +231,15 @@ const profile = new BrowserProfile({
   // Geolocation
   geolocation: {
     latitude: 40.7128,
-    longitude: -74.0060,
-    accuracy: 100
+    longitude: -74.006,
+    accuracy: 100,
   },
 
   // Color scheme
-  color_scheme: 'light',  // 'light', 'dark', 'no-preference'
+  color_scheme: 'light', // 'light', 'dark', 'no-preference'
 
   // Reduced motion
-  reduced_motion: 'no-preference'
+  reduced_motion: 'no-preference',
 });
 ```
 
@@ -268,7 +268,7 @@ const profile = new BrowserProfile({
 ```typescript
 const profile = new BrowserProfile({
   // Slow down operations (debugging)
-  slow_mo: 100,  // milliseconds
+  slow_mo: 100, // milliseconds
 
   // Timeouts
   timeout: 30000,
@@ -276,12 +276,12 @@ const profile = new BrowserProfile({
   default_navigation_timeout: 30000,
 
   // Page load timing
-  minimum_wait_page_load_time: 0.25,    // seconds
+  minimum_wait_page_load_time: 0.25, // seconds
   wait_for_network_idle_page_load_time: 0.5,
   maximum_wait_page_load_time: 5.0,
 
   // Action timing
-  wait_between_actions: 0.5
+  wait_between_actions: 0.5,
 });
 ```
 
@@ -308,7 +308,7 @@ const profile = new BrowserProfile({
   disable_security: false,
 
   // Deterministic rendering (for consistent screenshots)
-  deterministic_rendering: false
+  deterministic_rendering: false,
 });
 ```
 
@@ -326,7 +326,7 @@ const agent = new Agent({
 
   // Failure handling
   max_failures: 3,
-  retry_delay: 10  // seconds
+  retry_delay: 10, // seconds
 });
 
 // Overall step cap is set when running:
@@ -347,7 +347,7 @@ const agent = new Agent({
   // 'auto' - Let the model decide
   // 'low' - Lower resolution, fewer tokens
   // 'high' - Higher resolution, more tokens
-  vision_detail_level: 'auto'
+  vision_detail_level: 'auto',
 });
 ```
 
@@ -368,7 +368,7 @@ const agent = new Agent({
   override_system_message: 'Custom system message...',
 
   // Extend system message
-  extend_system_message: 'Additional instructions...'
+  extend_system_message: 'Additional instructions...',
 });
 ```
 
@@ -388,7 +388,7 @@ const agent = new Agent({
   // Generate session GIF
   generate_gif: true,
   // or specify path
-  generate_gif: './recordings/session.gif'
+  generate_gif: './recordings/session.gif',
 });
 ```
 
@@ -400,10 +400,10 @@ const agent = new Agent({
   llm,
 
   // LLM call timeout
-  llm_timeout: 60,  // 60 seconds
+  llm_timeout: 60, // 60 seconds
 
   // Step execution timeout
-  step_timeout: 180  // 3 minutes
+  step_timeout: 180, // 3 minutes
 });
 ```
 
@@ -418,7 +418,7 @@ const agent = new Agent({
   include_attributes: ['data-testid', 'aria-label'],
 
   // Include tool call examples in prompts
-  include_tool_call_examples: true
+  include_tool_call_examples: true,
 });
 ```
 
@@ -435,19 +435,19 @@ const profile = new BrowserProfile({
   headless: false,
   viewport: { width: 1920, height: 1080 },
   user_data_dir: './my-profile',
-  highlight_elements: true
+  highlight_elements: true,
 });
 
 // Create session with profile
 const session = new BrowserSession({
-  browser_profile: profile
+  browser_profile: profile,
 });
 
 // Create LLM
 const llm = new ChatOpenAI({
   model: 'gpt-4o',
   apiKey: process.env.OPENAI_API_KEY,
-  temperature: 0.5
+  temperature: 0.5,
 });
 
 // Create agent with all options
@@ -456,7 +456,7 @@ const agent = new Agent({
   llm,
   browser_session: session,
   use_vision: true,
-  max_failures: 5
+  max_failures: 5,
 });
 
 const history = await agent.run(50);
@@ -491,8 +491,8 @@ import { ChatOpenAI } from 'browser-use/llm/openai';
 const agent = new Agent({
   task: 'Your task',
   llm: new ChatOpenAI({
-    model: process.env.BROWSER_USE_LLM_MODEL || 'gpt-4o'
-  })
+    model: process.env.BROWSER_USE_LLM_MODEL || 'gpt-4o',
+  }),
 });
 ```
 
@@ -503,13 +503,13 @@ For Docker environments, use these settings:
 ```typescript
 const profile = new BrowserProfile({
   headless: true,
-  chromium_sandbox: false,  // Recommended for containerized CI/Docker
+  chromium_sandbox: false, // Recommended for containerized CI/Docker
   args: [
     '--no-sandbox',
     '--disable-gpu-sandbox',
     '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage'
-  ]
+    '--disable-dev-shm-usage',
+  ],
 });
 ```
 

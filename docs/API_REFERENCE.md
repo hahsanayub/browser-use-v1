@@ -33,29 +33,29 @@ new Agent(options: AgentOptions)
 
 #### AgentOptions
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `task` | `string` | Yes | - | The task description in natural language |
-| `llm` | `BaseChatModel` | Yes | - | LLM instance for decision making |
-| `browser_session` | `BrowserSession` | No | Auto-created | Browser session to use |
-| `browser_profile` | `BrowserProfile` | No | Default profile | Browser configuration |
-| `controller` | `Controller` | No | Default controller | Action controller |
-| `use_vision` | `boolean` | No | `true` | Enable screenshot analysis |
-| `vision_detail_level` | `'auto' \| 'low' \| 'high'` | No | `'auto'` | Screenshot detail level |
-| `use_thinking` | `boolean` | No | `true` | Enable extended thinking prompts |
-| `flash_mode` | `boolean` | No | `false` | Use optimized prompts for speed |
-| `max_failures` | `number` | No | `3` | Max consecutive failures before stopping |
-| `retry_delay` | `number` | No | `10` | Delay (seconds) between retries |
-| `max_actions_per_step` | `number` | No | `10` | Max actions per step |
-| `validate_output` | `boolean` | No | `false` | Validate LLM output strictly |
-| `generate_gif` | `boolean \| string` | No | `false` | Generate GIF of session |
-| `save_conversation_path` | `string` | No | `null` | Path to save conversation logs |
-| `override_system_message` | `string` | No | `null` | Replace system message |
-| `extend_system_message` | `string` | No | `null` | Append to system message |
-| `include_attributes` | `string[]` | No | `['title', 'type', 'name']` | Additional HTML attributes to include |
-| `sensitive_data` | `SensitiveDataMap` | No | `null` | Credentials for auto-fill |
-| `llm_timeout` | `number` | No | `60` | LLM call timeout (seconds) |
-| `step_timeout` | `number` | No | `180` | Step execution timeout (seconds) |
+| Parameter                 | Type                        | Required | Default                     | Description                              |
+| ------------------------- | --------------------------- | -------- | --------------------------- | ---------------------------------------- |
+| `task`                    | `string`                    | Yes      | -                           | The task description in natural language |
+| `llm`                     | `BaseChatModel`             | Yes      | -                           | LLM instance for decision making         |
+| `browser_session`         | `BrowserSession`            | No       | Auto-created                | Browser session to use                   |
+| `browser_profile`         | `BrowserProfile`            | No       | Default profile             | Browser configuration                    |
+| `controller`              | `Controller`                | No       | Default controller          | Action controller                        |
+| `use_vision`              | `boolean`                   | No       | `true`                      | Enable screenshot analysis               |
+| `vision_detail_level`     | `'auto' \| 'low' \| 'high'` | No       | `'auto'`                    | Screenshot detail level                  |
+| `use_thinking`            | `boolean`                   | No       | `true`                      | Enable extended thinking prompts         |
+| `flash_mode`              | `boolean`                   | No       | `false`                     | Use optimized prompts for speed          |
+| `max_failures`            | `number`                    | No       | `3`                         | Max consecutive failures before stopping |
+| `retry_delay`             | `number`                    | No       | `10`                        | Delay (seconds) between retries          |
+| `max_actions_per_step`    | `number`                    | No       | `10`                        | Max actions per step                     |
+| `validate_output`         | `boolean`                   | No       | `false`                     | Validate LLM output strictly             |
+| `generate_gif`            | `boolean \| string`         | No       | `false`                     | Generate GIF of session                  |
+| `save_conversation_path`  | `string`                    | No       | `null`                      | Path to save conversation logs           |
+| `override_system_message` | `string`                    | No       | `null`                      | Replace system message                   |
+| `extend_system_message`   | `string`                    | No       | `null`                      | Append to system message                 |
+| `include_attributes`      | `string[]`                  | No       | `['title', 'type', 'name']` | Additional HTML attributes to include    |
+| `sensitive_data`          | `SensitiveDataMap`          | No       | `null`                      | Credentials for auto-fill                |
+| `llm_timeout`             | `number`                    | No       | `60`                        | LLM call timeout (seconds)               |
+| `step_timeout`            | `number`                    | No       | `180`                       | Step execution timeout (seconds)         |
 
 ### Methods
 
@@ -68,11 +68,13 @@ async run(max_steps?: number): Promise<AgentHistoryList>
 ```
 
 **Parameters:**
+
 - `max_steps` (optional): Maximum steps to execute. Defaults to `100`.
 
 **Returns:** `AgentHistoryList` containing the execution history.
 
 **Example:**
+
 ```typescript
 const history = await agent.run(50);
 console.log('Success:', history.is_successful());
@@ -111,6 +113,7 @@ add_new_task(task: string): void
 ```
 
 **Example:**
+
 ```typescript
 agent.add_new_task('Now click the submit button');
 ```
@@ -131,12 +134,12 @@ async rerun_history(
 
 ### Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `state` | `AgentState` | Current agent state |
-| `history` | `AgentHistoryList` | Execution history |
-| `browser_session` | `BrowserSession` | Associated browser session |
-| `controller` | `Controller` | Action controller |
+| Property          | Type               | Description                |
+| ----------------- | ------------------ | -------------------------- |
+| `state`           | `AgentState`       | Current agent state        |
+| `history`         | `AgentHistoryList` | Execution history          |
+| `browser_session` | `BrowserSession`   | Associated browser session |
+| `controller`      | `Controller`       | Action controller          |
 
 ### Events
 
@@ -170,14 +173,14 @@ new BrowserSession(options?: BrowserSessionOptions)
 
 #### BrowserSessionOptions
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `browser` | `Browser` | No | - | Existing Playwright Browser |
-| `browser_context` | `BrowserContext` | No | - | Existing Playwright BrowserContext |
-| `page` | `Page` | No | - | Existing Playwright Page |
-| `browser_profile` | `BrowserProfile` | No | Default | Browser configuration |
-| `cdp_url` | `string` | No | - | CDP URL for remote browser |
-| `wss_url` | `string` | No | - | WebSocket URL for remote browser |
+| Parameter         | Type             | Required | Default | Description                        |
+| ----------------- | ---------------- | -------- | ------- | ---------------------------------- |
+| `browser`         | `Browser`        | No       | -       | Existing Playwright Browser        |
+| `browser_context` | `BrowserContext` | No       | -       | Existing Playwright BrowserContext |
+| `page`            | `Page`           | No       | -       | Existing Playwright Page           |
+| `browser_profile` | `BrowserProfile` | No       | Default | Browser configuration              |
+| `cdp_url`         | `string`         | No       | -       | CDP URL for remote browser         |
+| `wss_url`         | `string`         | No       | -       | WebSocket URL for remote browser   |
 
 ### Methods
 
@@ -239,11 +242,11 @@ get_tabs(): TabInfo[]
 
 ### Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `browser` | `Browser \| null` | Playwright Browser instance |
-| `browser_context` | `BrowserContext \| null` | Playwright BrowserContext |
-| `agent_current_page` | `Page \| null` | Currently active page |
+| Property             | Type                     | Description                 |
+| -------------------- | ------------------------ | --------------------------- |
+| `browser`            | `Browser \| null`        | Playwright Browser instance |
+| `browser_context`    | `BrowserContext \| null` | Playwright BrowserContext   |
+| `agent_current_page` | `Page \| null`           | Currently active page       |
 
 ---
 
@@ -265,30 +268,30 @@ new BrowserProfile(options?: Partial<BrowserProfileOptions>)
 
 #### Key Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `headless` | `boolean \| null` | `null` | Headless mode (null = auto-detect) |
-| `viewport` | `ViewportSize` | `null` | Browser viewport size |
-| `window_size` | `ViewportSize` | `null` | Browser window size |
-| `user_agent` | `string` | `null` | Custom user agent |
-| `user_data_dir` | `string` | Default path | User data directory for persistence |
-| `proxy` | `ProxySettings` | `null` | Proxy configuration |
-| `timeout` | `number` | `30000` | Default timeout (ms) |
-| `slow_mo` | `number` | `0` | Slow down operations (ms) |
-| `args` | `string[]` | `[]` | Additional Chromium launch arguments |
-| `chromium_sandbox` | `boolean` | `!IN_DOCKER` | Enable Chromium sandbox. On sandbox launch failure, BrowserSession retries once with no-sandbox and warns |
-| `ignore_https_errors` | `boolean` | `false` | Ignore HTTPS certificate errors |
-| `locale` | `string` | `null` | Browser locale |
-| `timezone_id` | `string` | `null` | Timezone ID |
-| `geolocation` | `Geolocation` | `null` | Geolocation override |
-| `permissions` | `string[]` | Default set | Granted permissions |
-| `stealth` | `boolean` | `false` | Enable stealth mode |
-| `disable_security` | `boolean` | `false` | Disable web security |
-| `viewport_expansion` | `number` | `500` | Viewport expansion for scrolling |
-| `highlight_elements` | `boolean` | `true` | Highlight interactive elements |
-| `wait_for_network_idle_page_load_time` | `number` | `0.5` | Network idle wait (seconds) |
-| `maximum_wait_page_load_time` | `number` | `5.0` | Max page load wait (seconds) |
-| `enable_default_extensions` | `boolean` | `true` | Load default extensions |
+| Option                                 | Type              | Default      | Description                                                                                               |
+| -------------------------------------- | ----------------- | ------------ | --------------------------------------------------------------------------------------------------------- |
+| `headless`                             | `boolean \| null` | `null`       | Headless mode (null = auto-detect)                                                                        |
+| `viewport`                             | `ViewportSize`    | `null`       | Browser viewport size                                                                                     |
+| `window_size`                          | `ViewportSize`    | `null`       | Browser window size                                                                                       |
+| `user_agent`                           | `string`          | `null`       | Custom user agent                                                                                         |
+| `user_data_dir`                        | `string`          | Default path | User data directory for persistence                                                                       |
+| `proxy`                                | `ProxySettings`   | `null`       | Proxy configuration                                                                                       |
+| `timeout`                              | `number`          | `30000`      | Default timeout (ms)                                                                                      |
+| `slow_mo`                              | `number`          | `0`          | Slow down operations (ms)                                                                                 |
+| `args`                                 | `string[]`        | `[]`         | Additional Chromium launch arguments                                                                      |
+| `chromium_sandbox`                     | `boolean`         | `!IN_DOCKER` | Enable Chromium sandbox. On sandbox launch failure, BrowserSession retries once with no-sandbox and warns |
+| `ignore_https_errors`                  | `boolean`         | `false`      | Ignore HTTPS certificate errors                                                                           |
+| `locale`                               | `string`          | `null`       | Browser locale                                                                                            |
+| `timezone_id`                          | `string`          | `null`       | Timezone ID                                                                                               |
+| `geolocation`                          | `Geolocation`     | `null`       | Geolocation override                                                                                      |
+| `permissions`                          | `string[]`        | Default set  | Granted permissions                                                                                       |
+| `stealth`                              | `boolean`         | `false`      | Enable stealth mode                                                                                       |
+| `disable_security`                     | `boolean`         | `false`      | Disable web security                                                                                      |
+| `viewport_expansion`                   | `number`          | `500`        | Viewport expansion for scrolling                                                                          |
+| `highlight_elements`                   | `boolean`         | `true`       | Highlight interactive elements                                                                            |
+| `wait_for_network_idle_page_load_time` | `number`          | `0.5`        | Network idle wait (seconds)                                                                               |
+| `maximum_wait_page_load_time`          | `number`          | `5.0`        | Max page load wait (seconds)                                                                              |
+| `enable_default_extensions`            | `boolean`         | `true`       | Load default extensions                                                                                   |
 
 ### Methods
 
@@ -318,11 +321,11 @@ kwargs_for_new_context(): BrowserNewContextArgs
 
 ### Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `config` | `BrowserProfileOptions` | Full configuration object |
-| `viewport` | `ViewportSize \| null` | Configured viewport |
-| `user_data_dir` | `string \| null` | User data directory |
+| Property        | Type                    | Description               |
+| --------------- | ----------------------- | ------------------------- |
+| `config`        | `BrowserProfileOptions` | Full configuration object |
+| `viewport`      | `ViewportSize \| null`  | Configured viewport       |
+| `user_data_dir` | `string \| null`        | User data directory       |
 
 ---
 
@@ -344,15 +347,15 @@ new Controller(options?: ControllerOptions)
 
 #### ControllerOptions
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `exclude_actions` | `string[]` | `[]` | Actions to exclude |
-| `output_model` | `ZodSchema` | `null` | Custom output schema |
+| Option            | Type        | Default | Description          |
+| ----------------- | ----------- | ------- | -------------------- |
+| `exclude_actions` | `string[]`  | `[]`    | Actions to exclude   |
+| `output_model`    | `ZodSchema` | `null`  | Custom output schema |
 
 ### Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
+| Property   | Type       | Description              |
+| ---------- | ---------- | ------------------------ |
 | `registry` | `Registry` | Action registry instance |
 
 ---
@@ -382,20 +385,21 @@ action(
 
 **ActionOptions:**
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `param_model` | `ZodSchema` | Parameter validation schema |
-| `allowed_domains` | `string[]` | Domain restrictions |
-| `page_filter` | `(page: Page) => boolean` | Page filter function |
+| Option            | Type                      | Description                 |
+| ----------------- | ------------------------- | --------------------------- |
+| `param_model`     | `ZodSchema`               | Parameter validation schema |
+| `allowed_domains` | `string[]`                | Domain restrictions         |
+| `page_filter`     | `(page: Page) => boolean` | Page filter function        |
 
 **Example:**
+
 ```typescript
 const registry = new Registry();
 
 registry.action('Click a button', {
   param_model: z.object({
-    selector: z.string().describe('CSS selector')
-  })
+    selector: z.string().describe('CSS selector'),
+  }),
 })(async function click_button(params, ctx) {
   await ctx.page.click(params.selector);
   return new ActionResult({ success: true });
@@ -448,11 +452,11 @@ get_prompt_description(page?: Page): string
 import { ChatOpenAI } from 'browser-use/llm/openai';
 
 const llm = new ChatOpenAI({
-  model: 'gpt-4o',           // Model name
-  apiKey: 'sk-...',          // API key
-  temperature: 0.7,          // Temperature (0-2)
-  baseURL: '...',            // Optional base URL
-  reasoningEffort: 'medium'  // For reasoning models
+  model: 'gpt-4o', // Model name
+  apiKey: 'sk-...', // API key
+  temperature: 0.7, // Temperature (0-2)
+  baseURL: '...', // Optional base URL
+  reasoningEffort: 'medium', // For reasoning models
 });
 ```
 
@@ -464,7 +468,7 @@ import { ChatAnthropic } from 'browser-use/llm/anthropic';
 const llm = new ChatAnthropic({
   model: 'claude-sonnet-4-20250514',
   apiKey: 'sk-ant-...',
-  temperature: 0.7
+  temperature: 0.7,
 });
 ```
 
@@ -494,7 +498,7 @@ import { ChatAnthropicBedrock } from 'browser-use/llm/aws';
 const llm = new ChatAnthropicBedrock({
   model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
   region: 'us-east-1',
-  max_tokens: 4096
+  max_tokens: 4096,
 });
 ```
 
@@ -540,12 +544,12 @@ Result of an action execution.
 
 ```typescript
 class ActionResult {
-  is_done?: boolean;         // Task completed
-  success?: boolean;         // Action successful (only with is_done)
-  error?: string;            // Error message
+  is_done?: boolean; // Task completed
+  success?: boolean; // Action successful (only with is_done)
+  error?: string; // Error message
   extracted_content?: string; // Extracted data
-  long_term_memory?: string;  // Memory to persist
-  attachments?: string[];     // File attachments
+  long_term_memory?: string; // Memory to persist
+  attachments?: string[]; // File attachments
   include_in_memory?: boolean; // Include in history
 }
 ```
@@ -556,11 +560,11 @@ LLM output structure.
 
 ```typescript
 class AgentOutput {
-  thinking?: string;              // Internal reasoning
+  thinking?: string; // Internal reasoning
   evaluation_previous_goal?: string; // Evaluation of last action
-  memory?: string;                // Working memory
-  next_goal?: string;             // Next goal
-  action: ActionModel[];          // Actions to execute
+  memory?: string; // Working memory
+  next_goal?: string; // Next goal
+  action: ActionModel[]; // Actions to execute
 }
 ```
 
@@ -570,10 +574,10 @@ Single step history record.
 
 ```typescript
 class AgentHistory {
-  model_output: AgentOutput;    // LLM output
-  result: ActionResult[];       // Action results
-  state: BrowserStateHistory;   // Browser state snapshot
-  metadata: StepMetadata;       // Step metadata
+  model_output: AgentOutput; // LLM output
+  result: ActionResult[]; // Action results
+  state: BrowserStateHistory; // Browser state snapshot
+  metadata: StepMetadata; // Step metadata
 }
 ```
 
@@ -585,13 +589,13 @@ Complete execution history.
 class AgentHistoryList {
   history: AgentHistory[];
 
-  is_done(): boolean;           // Check if task completed
-  is_successful(): boolean;     // Check if task succeeded
-  final_result(): string;       // Get final result
-  action_history(): any[];      // Get all actions
-  errors(): string[];           // Get all errors
-  model_actions(): any[];       // Get all model outputs
-  urls_visited(): string[];     // Get all URLs visited
+  is_done(): boolean; // Check if task completed
+  is_successful(): boolean; // Check if task succeeded
+  final_result(): string; // Get final result
+  action_history(): any[]; // Get all actions
+  errors(): string[]; // Get all errors
+  model_actions(): any[]; // Get all model outputs
+  urls_visited(): string[]; // Get all URLs visited
 }
 ```
 
@@ -601,13 +605,13 @@ Current browser state.
 
 ```typescript
 interface BrowserStateSummary {
-  url: string;                  // Current URL
-  title: string;                // Page title
-  tabs: TabInfo[];              // Open tabs
-  screenshot?: string;          // Base64 screenshot
+  url: string; // Current URL
+  title: string; // Page title
+  tabs: TabInfo[]; // Open tabs
+  screenshot?: string; // Base64 screenshot
   element_tree: DOMElementNode; // DOM tree
-  selector_map: SelectorMap;    // Element index map
-  scroll_info: ScrollInfo;      // Scroll position
+  selector_map: SelectorMap; // Element index map
+  scroll_info: ScrollInfo; // Scroll position
 }
 ```
 
@@ -625,10 +629,10 @@ const sensitiveData: SensitiveDataMap = {
   // Domain-scoped
   '*.example.com': {
     username: 'user@example.com',
-    password: 'secret123'
+    password: 'secret123',
   },
   // Global
-  'api_key': 'sk-...'
+  api_key: 'sk-...',
 };
 ```
 

@@ -4,17 +4,17 @@ Browser-Use supports multiple LLM providers through a unified interface. This gu
 
 ## Supported Providers
 
-| Provider | Vision Support | Reasoning Models | Caching | Notes |
-|----------|---------------|------------------|---------|-------|
-| OpenAI | ✅ | ✅ (o1, o3, o4) | ❌ | Default provider |
-| Anthropic | ✅ | ❌ | ✅ | Best for complex tasks |
-| Google Gemini | ✅ | ✅ | ❌ | Extended thinking support |
-| Azure OpenAI | ✅ | ✅ | ❌ | Enterprise deployment |
-| AWS Bedrock | ✅ | ❌ | ❌ | Claude via AWS |
-| Groq | ❌ | ❌ | ❌ | Fastest inference |
-| Ollama | ❌ | ❌ | ❌ | Local models |
-| DeepSeek | ❌ | ❌ | ❌ | Cost-effective |
-| OpenRouter | Varies | Varies | ❌ | Multi-model routing |
+| Provider      | Vision Support | Reasoning Models | Caching | Notes                     |
+| ------------- | -------------- | ---------------- | ------- | ------------------------- |
+| OpenAI        | ✅             | ✅ (o1, o3, o4)  | ❌      | Default provider          |
+| Anthropic     | ✅             | ❌               | ✅      | Best for complex tasks    |
+| Google Gemini | ✅             | ✅               | ❌      | Extended thinking support |
+| Azure OpenAI  | ✅             | ✅               | ❌      | Enterprise deployment     |
+| AWS Bedrock   | ✅             | ❌               | ❌      | Claude via AWS            |
+| Groq          | ❌             | ❌               | ❌      | Fastest inference         |
+| Ollama        | ❌             | ❌               | ❌      | Local models              |
+| DeepSeek      | ❌             | ❌               | ❌      | Cost-effective            |
+| OpenRouter    | Varies         | Varies           | ❌      | Multi-model routing       |
 
 ## OpenAI
 
@@ -25,6 +25,7 @@ npm install openai  # Installed automatically with browser-use
 ```
 
 Set your API key:
+
 ```bash
 export OPENAI_API_KEY=sk-your-api-key
 ```
@@ -37,22 +38,22 @@ import { ChatOpenAI } from 'browser-use/llm/openai';
 const llm = new ChatOpenAI({
   model: 'gpt-4o',
   apiKey: process.env.OPENAI_API_KEY,
-  temperature: 0.7
+  temperature: 0.7,
 });
 ```
 
 ### Available Models
 
-| Model | Vision | Best For |
-|-------|--------|----------|
-| `gpt-4o` | ✅ | General tasks, best quality |
-| `gpt-4o-mini` | ✅ | Fast, cost-effective |
-| `gpt-4-turbo` | ✅ | Complex reasoning |
-| `o1` | ❌ | Advanced reasoning |
-| `o1-mini` | ❌ | Fast reasoning |
-| `o3` | ❌ | Next-gen reasoning |
-| `o3-mini` | ❌ | Fast next-gen reasoning |
-| `o4-mini` | ❌ | Latest reasoning |
+| Model         | Vision | Best For                    |
+| ------------- | ------ | --------------------------- |
+| `gpt-4o`      | ✅     | General tasks, best quality |
+| `gpt-4o-mini` | ✅     | Fast, cost-effective        |
+| `gpt-4-turbo` | ✅     | Complex reasoning           |
+| `o1`          | ❌     | Advanced reasoning          |
+| `o1-mini`     | ❌     | Fast reasoning              |
+| `o3`          | ❌     | Next-gen reasoning          |
+| `o3-mini`     | ❌     | Fast next-gen reasoning     |
+| `o4-mini`     | ❌     | Latest reasoning            |
 
 ### Reasoning Models
 
@@ -62,7 +63,7 @@ For reasoning models (o1, o3, o4 series), use the `reasoningEffort` parameter:
 const llm = new ChatOpenAI({
   model: 'o3-mini',
   apiKey: process.env.OPENAI_API_KEY,
-  reasoningEffort: 'medium'  // 'low', 'medium', 'high'
+  reasoningEffort: 'medium', // 'low', 'medium', 'high'
 });
 ```
 
@@ -73,8 +74,8 @@ const llm = new ChatOpenAI({
   model: 'gpt-4o',
   apiKey: process.env.OPENAI_API_KEY,
   temperature: 0.7,
-  baseURL: 'https://api.openai.com/v1',  // Custom endpoint
-  maxRetries: 3
+  baseURL: 'https://api.openai.com/v1', // Custom endpoint
+  maxRetries: 3,
 });
 ```
 
@@ -89,6 +90,7 @@ npm install @anthropic-ai/sdk
 ```
 
 Set your API key:
+
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-your-api-key
 ```
@@ -101,18 +103,18 @@ import { ChatAnthropic } from 'browser-use/llm/anthropic';
 const llm = new ChatAnthropic({
   model: 'claude-sonnet-4-20250514',
   apiKey: process.env.ANTHROPIC_API_KEY,
-  temperature: 0.7
+  temperature: 0.7,
 });
 ```
 
 ### Available Models
 
-| Model | Vision | Best For |
-|-------|--------|----------|
-| `claude-sonnet-4-20250514` | ✅ | Default, balanced |
-| `claude-opus-4-20250514` | ✅ | Complex tasks |
-| `claude-3-5-sonnet-20241022` | ✅ | Previous generation |
-| `claude-3-opus-20240229` | ✅ | Previous generation |
+| Model                        | Vision | Best For            |
+| ---------------------------- | ------ | ------------------- |
+| `claude-sonnet-4-20250514`   | ✅     | Default, balanced   |
+| `claude-opus-4-20250514`     | ✅     | Complex tasks       |
+| `claude-3-5-sonnet-20241022` | ✅     | Previous generation |
+| `claude-3-opus-20240229`     | ✅     | Previous generation |
 
 ### Cache Control
 
@@ -123,7 +125,7 @@ import { SystemMessage } from 'browser-use/llm/messages';
 
 // Mark messages for caching
 const systemMsg = new SystemMessage('Your system prompt...');
-systemMsg.cache = true;  // Enable caching
+systemMsg.cache = true; // Enable caching
 ```
 
 ### Advanced Options
@@ -134,7 +136,7 @@ const llm = new ChatAnthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
   temperature: 0.7,
   maxTokens: 4096,
-  baseURL: 'https://api.anthropic.com'
+  baseURL: 'https://api.anthropic.com',
 });
 ```
 
@@ -149,6 +151,7 @@ npm install @google/genai
 ```
 
 Set your API key:
+
 ```bash
 export GOOGLE_API_KEY=your-api-key
 ```
@@ -165,13 +168,13 @@ const llm = new ChatGoogle('gemini-2.5-flash');
 
 ### Available Models
 
-| Model | Vision | Best For |
-|-------|--------|----------|
-| `gemini-2.0-flash` | ✅ | Default, fast |
-| `gemini-2.0-flash-exp` | ✅ | Experimental features |
-| `gemini-exp-05-28` | ✅ | Latest experimental |
-| `gemini-1.5-pro` | ✅ | Complex tasks |
-| `gemini-1.5-flash` | ✅ | Cost-effective |
+| Model                  | Vision | Best For              |
+| ---------------------- | ------ | --------------------- |
+| `gemini-2.0-flash`     | ✅     | Default, fast         |
+| `gemini-2.0-flash-exp` | ✅     | Experimental features |
+| `gemini-exp-05-28`     | ✅     | Latest experimental   |
+| `gemini-1.5-pro`       | ✅     | Complex tasks         |
+| `gemini-1.5-flash`     | ✅     | Cost-effective        |
 
 ### Notes
 
@@ -185,6 +188,7 @@ Use `GOOGLE_API_KEY` plus optional `GOOGLE_API_BASE_URL` and `GOOGLE_API_VERSION
 ### Setup
 
 Set your credentials:
+
 ```bash
 export AZURE_OPENAI_API_KEY=your-api-key
 export AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
@@ -213,6 +217,7 @@ const llm = new ChatAzure('gpt-4o');
 ### Setup
 
 Configure AWS credentials:
+
 ```bash
 export AWS_ACCESS_KEY_ID=your-access-key
 export AWS_SECRET_ACCESS_KEY=your-secret-key
@@ -220,6 +225,7 @@ export AWS_REGION=us-east-1
 ```
 
 Or use AWS profiles:
+
 ```bash
 export AWS_PROFILE=your-profile
 ```
@@ -232,7 +238,7 @@ import { ChatAnthropicBedrock } from 'browser-use/llm/aws';
 const llm = new ChatAnthropicBedrock({
   model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
   region: 'us-east-1',
-  max_tokens: 4096
+  max_tokens: 4096,
 });
 ```
 
@@ -242,17 +248,17 @@ const llm = new ChatAnthropicBedrock({
 // Credentials are resolved from the AWS SDK environment/profile chain.
 const llm = new ChatAnthropicBedrock({
   model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-  region: 'us-east-1'
+  region: 'us-east-1',
 });
 ```
 
 ### Available Models
 
-| Model ID | Description |
-|----------|-------------|
-| `anthropic.claude-3-opus-20240229-v1:0` | Claude 3 Opus |
+| Model ID                                  | Description     |
+| ----------------------------------------- | --------------- |
+| `anthropic.claude-3-opus-20240229-v1:0`   | Claude 3 Opus   |
 | `anthropic.claude-3-sonnet-20240229-v1:0` | Claude 3 Sonnet |
-| `anthropic.claude-3-haiku-20240307-v1:0` | Claude 3 Haiku |
+| `anthropic.claude-3-haiku-20240307-v1:0`  | Claude 3 Haiku  |
 
 ---
 
@@ -261,6 +267,7 @@ const llm = new ChatAnthropicBedrock({
 ### Setup
 
 Set your API key:
+
 ```bash
 export GROQ_API_KEY=your-api-key
 ```
@@ -275,12 +282,12 @@ const llm = new ChatGroq('llama-3.3-70b-versatile');
 
 ### Available Models
 
-| Model | Speed | Best For |
-|-------|-------|----------|
-| `llama-3.3-70b-versatile` | Fast | General tasks |
-| `llama-3.1-70b-versatile` | Fast | General tasks |
-| `llama-3.1-8b-instant` | Fastest | Quick tasks |
-| `mixtral-8x7b-32768` | Fast | Long context |
+| Model                     | Speed   | Best For      |
+| ------------------------- | ------- | ------------- |
+| `llama-3.3-70b-versatile` | Fast    | General tasks |
+| `llama-3.1-70b-versatile` | Fast    | General tasks |
+| `llama-3.1-8b-instant`    | Fastest | Quick tasks   |
+| `mixtral-8x7b-32768`      | Fast    | Long context  |
 
 **Note:** Groq currently doesn't support vision. Use with `use_vision: false`.
 
@@ -291,6 +298,7 @@ const llm = new ChatGroq('llama-3.3-70b-versatile');
 ### Setup
 
 Install Ollama from [ollama.ai](https://ollama.ai):
+
 ```bash
 curl -fsSL https://ollama.ai/install.sh | sh
 ollama pull llama3
@@ -307,6 +315,7 @@ const llm = new ChatOllama('llama3', 'http://localhost:11434');
 ### Available Models
 
 Any model available in Ollama:
+
 - `llama3`, `llama3:70b`
 - `mistral`, `mixtral`
 - `codellama`
@@ -322,6 +331,7 @@ Any model available in Ollama:
 ### Setup
 
 Set your API key:
+
 ```bash
 export DEEPSEEK_API_KEY=your-api-key
 ```
@@ -336,10 +346,10 @@ const llm = new ChatDeepSeek('deepseek-chat');
 
 ### Available Models
 
-| Model | Best For |
-|-------|----------|
-| `deepseek-chat` | General conversation |
-| `deepseek-coder` | Code generation |
+| Model            | Best For             |
+| ---------------- | -------------------- |
+| `deepseek-chat`  | General conversation |
+| `deepseek-coder` | Code generation      |
 
 **Note:** DeepSeek doesn't support vision yet. Use with `use_vision: false`.
 
@@ -350,6 +360,7 @@ const llm = new ChatDeepSeek('deepseek-chat');
 ### Setup
 
 Set your API key:
+
 ```bash
 export OPENROUTER_API_KEY=your-api-key
 ```
@@ -366,12 +377,12 @@ const llm = new ChatOpenRouter('anthropic/claude-3-opus');
 
 OpenRouter provides access to multiple providers. Use provider/model format:
 
-| Model | Provider |
-|-------|----------|
-| `anthropic/claude-3-opus` | Anthropic |
-| `openai/gpt-4-turbo` | OpenAI |
-| `google/gemini-pro` | Google |
-| `meta-llama/llama-3-70b-instruct` | Meta |
+| Model                             | Provider  |
+| --------------------------------- | --------- |
+| `anthropic/claude-3-opus`         | Anthropic |
+| `openai/gpt-4-turbo`              | OpenAI    |
+| `google/gemini-pro`               | Google    |
+| `meta-llama/llama-3-70b-instruct` | Meta      |
 
 ---
 
@@ -387,18 +398,19 @@ Speed  ←───────────────────────�
 
 ### Cost Considerations
 
-| Provider | Input Tokens | Output Tokens | Notes |
-|----------|--------------|---------------|-------|
-| OpenAI GPT-4o | $2.50/1M | $10/1M | Standard pricing |
-| OpenAI GPT-4o-mini | $0.15/1M | $0.60/1M | Budget option |
-| Anthropic Claude | $3/1M | $15/1M | With caching discounts |
-| Google Gemini | $0.075/1M | $0.30/1M | Cost-effective |
-| Groq | Free tier | Free tier | Rate limited |
-| Ollama | Free | Free | Self-hosted |
+| Provider           | Input Tokens | Output Tokens | Notes                  |
+| ------------------ | ------------ | ------------- | ---------------------- |
+| OpenAI GPT-4o      | $2.50/1M     | $10/1M        | Standard pricing       |
+| OpenAI GPT-4o-mini | $0.15/1M     | $0.60/1M      | Budget option          |
+| Anthropic Claude   | $3/1M        | $15/1M        | With caching discounts |
+| Google Gemini      | $0.075/1M    | $0.30/1M      | Cost-effective         |
+| Groq               | Free tier    | Free tier     | Rate limited           |
+| Ollama             | Free         | Free          | Self-hosted            |
 
 ### Recommended Configurations
 
 **For Development:**
+
 ```typescript
 // Fast iteration, low cost
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini' });
@@ -407,6 +419,7 @@ const llm = new ChatGroq('llama-3.3-70b-versatile');
 ```
 
 **For Production:**
+
 ```typescript
 // Best quality
 const llm = new ChatOpenAI({ model: 'gpt-4o' });
@@ -415,14 +428,16 @@ const llm = new ChatAnthropic({ model: 'claude-sonnet-4-20250514' });
 ```
 
 **For Complex Reasoning:**
+
 ```typescript
 const llm = new ChatOpenAI({
   model: 'o3-mini',
-  reasoningEffort: 'high'
+  reasoningEffort: 'high',
 });
 ```
 
 **For Local/Privacy:**
+
 ```typescript
 const llm = new ChatOllama('llama3:70b');
 ```
@@ -451,14 +466,11 @@ class MyCustomLLM implements BaseChatModel {
     // Implement your LLM call here
     const response = await this.callMyAPI(messages);
 
-    return new ChatInvokeCompletion(
-      response.content,
-      {
-        prompt_tokens: response.usage.input,
-        completion_tokens: response.usage.output,
-        total_tokens: response.usage.total
-      }
-    );
+    return new ChatInvokeCompletion(response.content, {
+      prompt_tokens: response.usage.input,
+      completion_tokens: response.usage.output,
+      total_tokens: response.usage.total,
+    });
   }
 }
 ```

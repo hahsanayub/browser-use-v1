@@ -53,6 +53,7 @@ Execute an autonomous browser task.
 | `use_vision` | `boolean` | No | Enable screenshots (default: true) |
 
 **Example:**
+
 ```json
 {
   "task": "Go to amazon.com and search for 'wireless keyboard'",
@@ -71,6 +72,7 @@ Navigate to a specific URL.
 | `url` | `string` | Yes | URL to navigate to |
 
 **Example:**
+
 ```json
 {
   "url": "https://github.com"
@@ -87,6 +89,7 @@ Click an element on the page.
 | `index` | `number` | Yes | Element index from page state |
 
 **Example:**
+
 ```json
 {
   "index": 5
@@ -105,6 +108,7 @@ Type text into an input field.
 | `press_enter` | `boolean` | No | Press Enter after typing |
 
 **Example:**
+
 ```json
 {
   "index": 3,
@@ -124,6 +128,7 @@ Scroll the page.
 | `amount` | `number` | No | Pixels to scroll |
 
 **Example:**
+
 ```json
 {
   "direction": "down",
@@ -138,6 +143,7 @@ Get current browser state including interactive elements.
 **Parameters:** None
 
 **Returns:**
+
 - Current URL
 - Page title
 - Screenshot (base64)
@@ -154,6 +160,7 @@ Extract structured data from the page.
 | `schema` | `object` | No | Expected data structure |
 
 **Example:**
+
 ```json
 {
   "instruction": "Extract all product prices from the page",
@@ -253,6 +260,7 @@ Once configured, you can use natural language in Claude Desktop:
 > "Use browser-use to search for the latest TypeScript release notes on GitHub"
 
 Claude will:
+
 1. Call `browser_run_task` with the appropriate task
 2. Display progress and results
 3. Show screenshots if available
@@ -264,7 +272,7 @@ import { MCPServer } from 'browser-use/mcp';
 
 const server = new MCPServer({
   llm: yourLLMInstance,
-  browserProfile: yourProfile
+  browserProfile: yourProfile,
 });
 
 await server.start();
@@ -310,24 +318,31 @@ For multiple independent sessions, run multiple MCP server instances on differen
 ### Common Errors
 
 **Browser launch failed:**
+
 ```
 Error: Browser failed to launch
 ```
+
 Solution: Ensure Playwright browsers are installed:
+
 ```bash
 npx playwright install chromium
 ```
 
 **LLM API error:**
+
 ```
 Error: API key not configured
 ```
+
 Solution: Set the appropriate API key environment variable.
 
 **Timeout error:**
+
 ```
 Error: Operation timed out
 ```
+
 Solution: Increase timeout or simplify the task.
 
 ### Error Responses
@@ -352,6 +367,7 @@ The MCP server reports anonymous telemetry:
 - Session durations
 
 Disable with:
+
 ```bash
 ANONYMIZED_TELEMETRY=false
 ```
@@ -435,13 +451,13 @@ server.registerTool('my_custom_tool', {
   parameters: {
     type: 'object',
     properties: {
-      param1: { type: 'string' }
-    }
+      param1: { type: 'string' },
+    },
   },
   handler: async (params) => {
     // Implementation
     return { result: 'success' };
-  }
+  },
 });
 
 await server.start();

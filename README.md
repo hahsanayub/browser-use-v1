@@ -68,6 +68,8 @@ This is **not** a fork or competing project—it's a respectful port to serve a 
 npm install browser-use
 # or
 yarn add browser-use
+# or
+pnpm add browser-use
 ```
 
 Playwright browsers will be installed automatically via postinstall hook.

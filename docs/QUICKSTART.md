@@ -47,14 +47,14 @@ async function main() {
   // Initialize the LLM
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 
   // Create the agent with a task
   const agent = new Agent({
     task: 'Search for "browser automation" on Google and tell me the first result',
     llm,
-    use_vision: true  // Enable screenshot analysis
+    use_vision: true, // Enable screenshot analysis
   });
 
   // Run the agent
@@ -125,7 +125,7 @@ Run without displaying the browser:
 const agent = new Agent({
   task: 'Your task',
   llm,
-  browser_profile: new BrowserProfile({ headless: true })
+  browser_profile: new BrowserProfile({ headless: true }),
 });
 ```
 
@@ -144,13 +144,13 @@ const page = await context.newPage();
 const session = new BrowserSession({
   browser,
   browser_context: context,
-  page
+  page,
 });
 
 const agent = new Agent({
   task: 'Your task',
   llm,
-  browser_session: session
+  browser_session: session,
 });
 ```
 
@@ -162,8 +162,8 @@ Enable or disable screenshot-based understanding:
 const agent = new Agent({
   task: 'Your task',
   llm,
-  use_vision: true,           // Enable vision
-  vision_detail_level: 'high' // 'auto', 'low', or 'high'
+  use_vision: true, // Enable vision
+  vision_detail_level: 'high', // 'auto', 'low', or 'high'
 });
 ```
 
@@ -188,6 +188,7 @@ const history = await agent.run(20);
 ### Browser doesn't launch
 
 Ensure Playwright browsers are installed:
+
 ```bash
 npx playwright install chromium
 ```
@@ -201,11 +202,12 @@ npx playwright install chromium
 ### Timeout errors
 
 Increase timeouts in agent settings:
+
 ```typescript
 const agent = new Agent({
   task: 'Your task',
   llm,
-  llm_timeout: 120,  // 120 seconds for LLM calls
-  step_timeout: 300  // 300 seconds per step
+  llm_timeout: 120, // 120 seconds for LLM calls
+  step_timeout: 300, // 300 seconds per step
 });
 ```
