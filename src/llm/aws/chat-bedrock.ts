@@ -6,7 +6,7 @@ import {
 } from '@aws-sdk/client-bedrock-runtime';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { z } from 'zod';
-import type { BaseChatModel } from '../base.js';
+import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ChatInvokeCompletion } from '../views.js';
 import { type Message, SystemMessage } from '../messages.js';
 import { AWSBedrockMessageSerializer } from './serializer.js';
@@ -34,15 +34,18 @@ export class ChatBedrockConverse implements BaseChatModel {
 
   async ainvoke(
     messages: Message[],
-    output_format?: undefined
+    output_format?: undefined,
+    options?: ChatInvokeOptions
   ): Promise<ChatInvokeCompletion<string>>;
   async ainvoke<T>(
     messages: Message[],
-    output_format: { parse: (input: string) => T } | undefined
+    output_format: { parse: (input: string) => T } | undefined,
+    options?: ChatInvokeOptions
   ): Promise<ChatInvokeCompletion<T>>;
   async ainvoke<T>(
     messages: Message[],
-    output_format?: { parse: (input: string) => T } | undefined
+    output_format?: { parse: (input: string) => T } | undefined,
+    options: ChatInvokeOptions = {}
   ): Promise<ChatInvokeCompletion<T | string>> {
     const serializer = new AWSBedrockMessageSerializer();
     const bedrockMessages = serializer.serialize(messages);
@@ -95,7 +98,10 @@ export class ChatBedrockConverse implements BaseChatModel {
       toolConfig: toolConfig,
     });
 
-    const response = await this.client.send(command);
+    const response = await this.client.send(
+      command,
+      options.signal ? { abortSignal: options.signal } : undefined
+    );
 
     let completion: T | string = '';
 

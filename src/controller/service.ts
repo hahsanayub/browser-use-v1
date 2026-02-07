@@ -37,7 +37,9 @@ type BrowserSession = any;
 type Page = any;
 type BaseChatModel = {
   ainvoke: (
-    messages: Array<{ role?: string; content: string }>
+    messages: any[],
+    output_format?: undefined,
+    options?: { signal?: AbortSignal }
   ) => Promise<{ completion: string }>;
 };
 
@@ -58,6 +60,7 @@ export interface ActParams<Context = unknown> {
   available_file_paths?: string[] | null;
   file_system?: FileSystem | null;
   context?: Context | null;
+  signal?: AbortSignal | null;
 }
 
 const toActionEntries = (action: Record<string, unknown>) => {
@@ -373,13 +376,16 @@ export class Controller<Context = unknown> {
     )(
       async function extract_structured_data(
         params: ExtractStructuredAction,
-        { page, page_extraction_llm, file_system }
+        { page, page_extraction_llm, file_system, signal }
       ) {
         if (!page) {
           throw new BrowserError('No active page available for extraction.');
         }
         if (!page_extraction_llm) {
           throw new BrowserError('page_extraction_llm is not configured.');
+        }
+        if (signal?.aborted) {
+          throw new BrowserError('Operation aborted.');
         }
         const fsInstance = file_system ?? new FileSystem(process.cwd(), false);
         const html = await page.content?.();
@@ -455,9 +461,11 @@ Query: ${params.query}
 Website:
 ${content}`;
 
-        const extraction = await (page_extraction_llm as any).ainvoke([
-          new UserMessage(prompt),
-        ]);
+        const extraction = await (page_extraction_llm as any).ainvoke(
+          [new UserMessage(prompt)],
+          undefined,
+          { signal: signal ?? undefined }
+        );
         const completion = extraction?.completion ?? '';
         const extracted_content = `Page Link: ${page.url}\nQuery: ${params.query}\nExtracted Content:\n${completion}`;
 
@@ -1312,6 +1320,7 @@ ${content}`;
       available_file_paths = null,
       file_system = null,
       context = null,
+      signal = null,
     }: ActParams<Context>
   ) {
     const entries = toActionEntries(action);
@@ -1327,6 +1336,7 @@ ${content}`;
             available_file_paths,
             file_system,
             context,
+            signal,
           }
         );
         if (typeof result === 'string') {

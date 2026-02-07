@@ -201,7 +201,11 @@ class MockLLM implements BaseChatModel {
     return this.model;
   }
 
-  async ainvoke(messages: any[]) {
+  async ainvoke(
+    messages: any[],
+    _output_format?: unknown,
+    _options?: { signal?: AbortSignal }
+  ) {
     this.calls.push(messages);
     const idx = Math.min(this.calls.length - 1, this.responses.length - 1);
     return this.responses[idx] ?? { completion: { action: [] } };

@@ -24,7 +24,7 @@ import {
   ConverseCommand,
   type Tool as BedrockTool,
 } from '@aws-sdk/client-bedrock-runtime';
-import type { BaseChatModel } from '../base.js';
+import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ChatInvokeCompletion } from '../views.js';
 import { type Message, SystemMessage } from '../messages.js';
 import { AnthropicMessageSerializer } from '../anthropic/serializer.js';
@@ -99,15 +99,18 @@ export class ChatAnthropicBedrock implements BaseChatModel {
 
   async ainvoke(
     messages: Message[],
-    output_format?: undefined
+    output_format?: undefined,
+    options?: ChatInvokeOptions
   ): Promise<ChatInvokeCompletion<string>>;
   async ainvoke<T>(
     messages: Message[],
-    output_format: { parse: (input: string) => T }
+    output_format: { parse: (input: string) => T },
+    options?: ChatInvokeOptions
   ): Promise<ChatInvokeCompletion<T>>;
   async ainvoke<T>(
     messages: Message[],
-    output_format?: { parse: (input: string) => T }
+    output_format?: { parse: (input: string) => T },
+    options: ChatInvokeOptions = {}
   ): Promise<ChatInvokeCompletion<T | string>> {
     // Use Anthropic-specific message serializer
     const serializer = new AnthropicMessageSerializer();
@@ -185,7 +188,10 @@ export class ChatAnthropicBedrock implements BaseChatModel {
       inferenceConfig: this._getInferenceParams(),
     });
 
-    const response = await this.client.send(command);
+    const response = await this.client.send(
+      command,
+      options.signal ? { abortSignal: options.signal } : undefined
+    );
 
     let completion: T | string = '';
 

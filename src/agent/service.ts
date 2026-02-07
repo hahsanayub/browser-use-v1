@@ -1490,11 +1490,13 @@ export class Agent<
 
         this.logger.debug(`🚶 Starting step ${step + 1}/${max_steps}...`);
         const step_info = new AgentStepInfo(step, max_steps);
+        const stepAbortController = new AbortController();
 
         try {
           await this._executeWithTimeout(
-            this._step(step_info),
-            this.settings.step_timeout ?? 0
+            this._step(step_info, stepAbortController.signal),
+            this.settings.step_timeout ?? 0,
+            () => stepAbortController.abort()
           );
           this.logger.debug(`✅ Completed step ${step + 1}/${max_steps}`);
         } catch (error) {
@@ -1629,17 +1631,22 @@ export class Agent<
 
   private async _executeWithTimeout<T>(
     promise: Promise<T>,
-    timeoutSeconds: number
+    timeoutSeconds: number,
+    onTimeout?: () => void
   ) {
     if (!timeoutSeconds || timeoutSeconds <= 0) {
       return promise;
     }
     let timeoutHandle: NodeJS.Timeout | null = null;
     const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutHandle = setTimeout(
-        () => reject(new ExecutionTimeoutError()),
-        timeoutSeconds * 1000
-      );
+      timeoutHandle = setTimeout(() => {
+        try {
+          onTimeout?.();
+        } catch {
+          // Ignore timeout callback errors and preserve timeout semantics.
+        }
+        reject(new ExecutionTimeoutError());
+      }, timeoutSeconds * 1000);
     });
     try {
       return await Promise.race([promise, timeoutPromise]);
@@ -1650,30 +1657,46 @@ export class Agent<
     }
   }
 
-  async _step(step_info: AgentStepInfo | null = null) {
+  async _step(
+    step_info: AgentStepInfo | null = null,
+    signal: AbortSignal | null = null
+  ) {
     await this._run_with_shared_session_step_lock(async () => {
+      this._throwIfAborted(signal);
       this.step_start_time = Date.now() / 1000;
       let browser_state_summary: BrowserStateSummary | null = null;
 
       try {
-        browser_state_summary = await this._prepare_context(step_info);
-        await this._get_next_action(browser_state_summary);
-        await this._execute_actions();
+        browser_state_summary = await this._prepare_context(step_info, signal);
+        this._throwIfAborted(signal);
+        await this._get_next_action(browser_state_summary, signal);
+        this._throwIfAborted(signal);
+        await this._execute_actions(signal);
         await this._post_process();
       } catch (error) {
-        await this._handle_step_error(error as Error);
+        if (signal?.aborted) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.debug(`Step aborted before completion: ${message}`);
+        } else {
+          await this._handle_step_error(error as Error);
+        }
       } finally {
         await this._finalize(browser_state_summary);
       }
     });
   }
 
-  private async _prepare_context(step_info: AgentStepInfo | null = null) {
+  private async _prepare_context(
+    step_info: AgentStepInfo | null = null,
+    signal: AbortSignal | null = null
+  ) {
     if (!this.browser_session) {
       throw new Error('BrowserSession is not set up');
     }
 
+    this._throwIfAborted(signal);
     await this._restore_shared_pinned_tab_if_needed();
+    this._throwIfAborted(signal);
 
     this.logger.debug(
       `🌐 Step ${this.state.n_steps}: Getting browser state...`
@@ -1683,6 +1706,7 @@ export class Agent<
         cache_clickable_elements_hashes: true,
         include_screenshot: this.settings.use_vision,
       });
+    this._throwIfAborted(signal);
     const current_page = await this.browser_session.get_current_page?.();
 
     await this._check_and_update_downloads(
@@ -1696,6 +1720,7 @@ export class Agent<
     this.logger.debug(
       `📝 Step ${this.state.n_steps}: Updating action models...`
     );
+    this._throwIfAborted(signal);
     await this._updateActionModelsForPage(current_page);
 
     const page_filtered_actions =
@@ -1745,17 +1770,30 @@ export class Agent<
     }
   }
 
-  private async _get_next_action(browser_state_summary: BrowserStateSummary) {
+  private async _get_next_action(
+    browser_state_summary: BrowserStateSummary,
+    signal: AbortSignal | null = null
+  ) {
+    this._throwIfAborted(signal);
     const input_messages = this._message_manager.get_messages();
     this.logger.debug(
       `🤖 Step ${this.state.n_steps}: Calling LLM with ${input_messages.length} messages (model: ${this.llm.model})...`
     );
 
     let model_output: AgentOutput;
+    const llmAbortController = new AbortController();
+    const removeAbortRelay = this._relayAbortSignal(
+      signal,
+      llmAbortController
+    );
     try {
       model_output = await this._executeWithTimeout(
-        this._get_model_output_with_retry(input_messages),
-        this.settings.llm_timeout
+        this._get_model_output_with_retry(
+          input_messages,
+          llmAbortController.signal
+        ),
+        this.settings.llm_timeout,
+        () => llmAbortController.abort()
       );
     } catch (error) {
       if (error instanceof ExecutionTimeoutError) {
@@ -1764,8 +1802,11 @@ export class Agent<
         );
       }
       throw error;
+    } finally {
+      removeAbortRelay();
     }
 
+    this._throwIfAborted(signal);
     this.state.last_model_output = model_output;
     let actions: Array<Record<string, Record<string, unknown>>> = [];
     if (model_output) {
@@ -1781,7 +1822,7 @@ export class Agent<
     await this._raise_if_stopped_or_paused();
   }
 
-  private async _execute_actions() {
+  private async _execute_actions(signal: AbortSignal | null = null) {
     if (!this.state.last_model_output) {
       throw new Error('No model output to execute actions from');
     }
@@ -1790,7 +1831,8 @@ export class Agent<
       `⚡ Step ${this.state.n_steps}: Executing ${this.state.last_model_output.action.length} actions...`
     );
     const result = await this.multi_act(
-      this.state.last_model_output.action.map((a) => a.model_dump())
+      this.state.last_model_output.action.map((a) => a.model_dump()),
+      { signal }
     );
     this.logger.debug(`✅ Step ${this.state.n_steps}: Actions completed`);
     this.state.last_result = result;
@@ -1806,9 +1848,12 @@ export class Agent<
 
   async multi_act(
     actions: Array<Record<string, Record<string, unknown>>>,
-    options: { check_for_new_elements?: boolean } = {}
+    options: {
+      check_for_new_elements?: boolean;
+      signal?: AbortSignal | null;
+    } = {}
   ) {
-    const { check_for_new_elements = true } = options;
+    const { check_for_new_elements = true, signal = null } = options;
     const results: ActionResult[] = [];
 
     if (!this.browser_session) {
@@ -1841,6 +1886,7 @@ export class Agent<
 
     // ==================== Execute Actions ====================
     for (let i = 0; i < actions.length; i++) {
+      this._throwIfAborted(signal);
       const action = actions[i];
       const actionName = Object.keys(action)[0];
       const actionParams = action[actionName];
@@ -1857,6 +1903,7 @@ export class Agent<
       if (i > 0) {
         const currentIndex = (actionParams as any)?.index;
         if (currentIndex !== null && currentIndex !== undefined) {
+          this._throwIfAborted(signal);
           // Get new browser state after previous action
           const new_browser_state_summary =
             await this.browser_session.get_browser_state_with_recovery?.({
@@ -1916,12 +1963,13 @@ export class Agent<
           (this.browser_session as any)?.browser_profile
             ?.wait_between_actions || 0;
         if (wait_time > 0) {
-          await this._sleep(wait_time);
+          await this._sleep(wait_time, signal);
         }
       }
 
       // ==================== Execute Action ====================
       try {
+        this._throwIfAborted(signal);
         await this._raise_if_stopped_or_paused();
 
         const actResult = await (
@@ -1933,6 +1981,7 @@ export class Agent<
           available_file_paths: this.available_file_paths,
           file_system: this.file_system,
           context: this.context ?? undefined,
+          signal,
         });
         results.push(actResult);
 
@@ -2155,11 +2204,62 @@ export class Agent<
     );
   }
 
-  private async _sleep(seconds: number) {
+  private _createAbortError(): Error {
+    const error = new Error('Operation aborted');
+    error.name = 'AbortError';
+    return error;
+  }
+
+  private _throwIfAborted(signal: AbortSignal | null = null) {
+    if (signal?.aborted) {
+      throw this._createAbortError();
+    }
+  }
+
+  private _relayAbortSignal(
+    signal: AbortSignal | null,
+    controller: AbortController
+  ): () => void {
+    if (!signal) {
+      return () => {};
+    }
+    if (signal.aborted) {
+      controller.abort(signal.reason);
+      return () => {};
+    }
+    const handleAbort = () => controller.abort(signal.reason);
+    signal.addEventListener('abort', handleAbort, { once: true });
+    return () => signal.removeEventListener('abort', handleAbort);
+  }
+
+  private async _sleep(seconds: number, signal: AbortSignal | null = null) {
     if (seconds <= 0) {
       return;
     }
-    await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        cleanup();
+        resolve();
+      }, seconds * 1000);
+
+      const onAbort = () => {
+        clearTimeout(timeout);
+        cleanup();
+        reject(this._createAbortError());
+      };
+
+      const cleanup = () => {
+        signal?.removeEventListener('abort', onAbort);
+      };
+
+      if (signal) {
+        if (signal.aborted) {
+          onAbort();
+          return;
+        }
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+    });
   }
 
   async wait_until_resumed() {
@@ -2696,12 +2796,18 @@ export class Agent<
     });
   }
 
-  private async _get_model_output_with_retry(messages: any[]) {
+  private async _get_model_output_with_retry(
+    messages: any[],
+    signal: AbortSignal | null = null
+  ) {
     const invokeAndParse = async (inputMessages: any[]) => {
+      this._throwIfAborted(signal);
       const completion = await this.llm.ainvoke(
         inputMessages as any,
-        AgentLLMOutputFormat as any
+        AgentLLMOutputFormat as any,
+        { signal: signal ?? undefined }
       );
+      this._throwIfAborted(signal);
       return this._parseCompletionPayload((completion as any).completion);
     };
 
@@ -2716,6 +2822,7 @@ export class Agent<
     );
 
     if (this._isModelActionMissing(rawAction)) {
+      this._throwIfAborted(signal);
       this.logger.warning('Model returned empty action. Retrying...');
       const clarificationMessage = new UserMessage(
         'You forgot to return an action. Please respond only with a valid JSON action according to the expected format.'

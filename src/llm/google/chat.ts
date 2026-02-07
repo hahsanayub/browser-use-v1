@@ -4,7 +4,7 @@ import {
 } from '@google/genai';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { z } from 'zod';
-import type { BaseChatModel } from '../base.js';
+import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ChatInvokeCompletion } from '../views.js';
 import { type Message, SystemMessage } from '../messages.js';
 import { GoogleMessageSerializer } from './serializer.js';
@@ -75,15 +75,18 @@ export class ChatGoogle implements BaseChatModel {
 
   async ainvoke(
     messages: Message[],
-    output_format?: undefined
+    output_format?: undefined,
+    options?: ChatInvokeOptions
   ): Promise<ChatInvokeCompletion<string>>;
   async ainvoke<T>(
     messages: Message[],
-    output_format: { parse: (input: string) => T } | undefined
+    output_format: { parse: (input: string) => T } | undefined,
+    options?: ChatInvokeOptions
   ): Promise<ChatInvokeCompletion<T>>;
   async ainvoke<T>(
     messages: Message[],
-    output_format?: { parse: (input: string) => T } | undefined
+    output_format?: { parse: (input: string) => T } | undefined,
+    options: ChatInvokeOptions = {}
   ): Promise<ChatInvokeCompletion<T | string>> {
     const serializer = new GoogleMessageSerializer();
     const contents = serializer.serialize(messages);
@@ -137,7 +140,10 @@ export class ChatGoogle implements BaseChatModel {
       request.generationConfig = generationConfig;
     }
 
-    const result = await this.client.models.generateContent(request);
+    const result = await (this.client.models as any).generateContent(
+      request,
+      options.signal ? { signal: options.signal } : undefined
+    );
 
     // Extract text from first candidate
     const candidate = result.candidates?.[0];

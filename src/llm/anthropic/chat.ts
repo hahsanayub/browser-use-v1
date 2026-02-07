@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { z } from 'zod';
-import type { BaseChatModel } from '../base.js';
+import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ChatInvokeCompletion, ChatInvokeUsage } from '../views.js';
 import { type Message, SystemMessage } from '../messages.js';
 import { AnthropicMessageSerializer } from './serializer.js';
@@ -72,15 +72,18 @@ export class ChatAnthropic implements BaseChatModel {
 
   async ainvoke(
     messages: Message[],
-    output_format?: undefined
+    output_format?: undefined,
+    options?: ChatInvokeOptions
   ): Promise<ChatInvokeCompletion<string>>;
   async ainvoke<T>(
     messages: Message[],
-    output_format: { parse: (input: string) => T } | undefined
+    output_format: { parse: (input: string) => T } | undefined,
+    options?: ChatInvokeOptions
   ): Promise<ChatInvokeCompletion<T>>;
   async ainvoke<T>(
     messages: Message[],
-    output_format?: { parse: (input: string) => T } | undefined
+    output_format?: { parse: (input: string) => T } | undefined,
+    options: ChatInvokeOptions = {}
   ): Promise<ChatInvokeCompletion<T | string>> {
     const serializer = new AnthropicMessageSerializer();
     const [anthropicMessages] = serializer.serializeMessages(messages);
@@ -143,15 +146,18 @@ export class ChatAnthropic implements BaseChatModel {
     }
 
     try {
-      const response = await this.client.messages.create({
-        model: this.model,
-        max_tokens: this.maxTokens,
-        system: system,
-        messages: anthropicMessages,
-        tools: tools,
-        tool_choice: toolChoice,
-        ...modelParams,
-      });
+      const response = await this.client.messages.create(
+        {
+          model: this.model,
+          max_tokens: this.maxTokens,
+          system: system,
+          messages: anthropicMessages,
+          tools: tools,
+          tool_choice: toolChoice,
+          ...modelParams,
+        },
+        options.signal ? { signal: options.signal } : undefined
+      );
 
       let completion: T | string = '';
 

@@ -24,6 +24,7 @@ export interface ExecuteActionContext<Context> {
   file_system?: FileSystem | null;
   available_file_paths?: string[] | null;
   sensitive_data?: SensitiveDataMap | null;
+  signal?: AbortSignal | null;
 }
 
 export type RegistryActionHandler<Params = any, Context = unknown> = (
@@ -95,6 +96,7 @@ export class Registry<Context = unknown> {
           file_system = null,
           sensitive_data = null,
           available_file_paths = null,
+          signal = null,
           context = null as unknown as Context,
         }: ExecuteActionContext<Context> = {}
       ) => {
@@ -142,11 +144,15 @@ export class Registry<Context = unknown> {
           page_extraction_llm,
           file_system,
           available_file_paths,
+          signal,
           has_sensitive_data:
             action_name === 'input_text' && Boolean(sensitive_data),
         };
 
         try {
+          if (signal?.aborted) {
+            throw new Error('Operation aborted');
+          }
           return await action.handler(validatedParams, ctx);
         } catch (error) {
           throw new Error(

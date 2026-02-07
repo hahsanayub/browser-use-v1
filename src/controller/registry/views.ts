@@ -200,6 +200,7 @@ export class SpecialActionParameters {
   page_extraction_llm: BaseChatModel | null = null;
   file_system: FileSystem | null = null;
   available_file_paths: string[] | null = null;
+  signal: AbortSignal | null = null;
   has_sensitive_data = false;
 
   static get_browser_requiring_params(): Set<string> {

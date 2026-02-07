@@ -190,10 +190,24 @@ const { ActionModel: RegistryActionModel } = await import(
 class MockLLM implements BaseChatModel {
   model = 'mock-model';
   private readonly responses: Array<{ completion: any }>;
+  private readonly onInvoke?:
+    | ((
+        signal: AbortSignal | undefined
+      ) => void | Promise<void>)
+    | undefined;
   calls: any[][] = [];
+  signals: Array<AbortSignal | undefined> = [];
 
-  constructor(responses: Array<{ completion: any }>) {
+  constructor(
+    responses: Array<{ completion: any }>,
+    onInvoke?:
+      | ((
+          signal: AbortSignal | undefined
+        ) => void | Promise<void>)
+      | undefined
+  ) {
     this.responses = responses;
+    this.onInvoke = onInvoke;
   }
 
   get provider() {
@@ -206,8 +220,16 @@ class MockLLM implements BaseChatModel {
     return this.model;
   }
 
-  async ainvoke(messages: any[]) {
+  async ainvoke(
+    messages: any[],
+    _output_format?: unknown,
+    options?: { signal?: AbortSignal }
+  ) {
     this.calls.push(messages);
+    this.signals.push(options?.signal);
+    if (this.onInvoke) {
+      await this.onInvoke(options?.signal);
+    }
     const idx = Math.min(this.calls.length - 1, this.responses.length - 1);
     return this.responses[idx] ?? { completion: { action: [] } };
   }
@@ -566,6 +588,62 @@ describe('Component Tests (Mocked Dependencies)', () => {
     expect(agent.state.last_result?.[0]?.error).toContain(
       'timed out after 0.01 seconds'
     );
+    expect(history.is_done()).toBe(false);
+  });
+
+  it('aborts in-flight LLM call when step timeout is reached', async () => {
+    const controller = createTestController();
+    const browser_session = createBrowserSessionStub();
+    const tempDir = createTempDir();
+
+    let llmAbortObserved = false;
+    const llm = new MockLLM(
+      [
+        {
+          completion: {
+            action: [{ done: { success: true, text: 'done' } }],
+            thinking: 'done',
+          },
+        },
+      ],
+      async (signal) => {
+        if (!signal) {
+          return;
+        }
+        await new Promise<void>((resolve) => {
+          if (signal.aborted) {
+            llmAbortObserved = true;
+            resolve();
+            return;
+          }
+          const onAbort = () => {
+            llmAbortObserved = true;
+            resolve();
+          };
+          signal.addEventListener('abort', onAbort, { once: true });
+        });
+      }
+    );
+
+    const agent = new Agent({
+      task: 'Timeout should abort LLM',
+      llm,
+      browser_session,
+      controller,
+      file_system_path: tempDir,
+      use_vision: false,
+      step_timeout: 0.01,
+    });
+
+    tempResources.push(agent.agent_directory);
+    const history = await agent.run(3);
+
+    expect(agent.state.stopped).toBe(true);
+    expect(agent.state.last_result?.[0]?.error).toContain(
+      'timed out after 0.01 seconds'
+    );
+    expect(llmAbortObserved).toBe(true);
+    expect(llm.signals[0]?.aborted).toBe(true);
     expect(history.is_done()).toBe(false);
   });
 

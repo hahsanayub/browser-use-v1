@@ -1,6 +1,6 @@
 import { AzureOpenAI } from 'openai';
 import type { z } from 'zod';
-import type { BaseChatModel } from '../base.js';
+import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ChatInvokeCompletion } from '../views.js';
 import type { Message } from '../messages.js';
 import { OpenAIMessageSerializer } from '../openai/serializer.js';
@@ -30,15 +30,18 @@ export class ChatAzure implements BaseChatModel {
 
   async ainvoke(
     messages: Message[],
-    output_format?: undefined
+    output_format?: undefined,
+    options?: ChatInvokeOptions
   ): Promise<ChatInvokeCompletion<string>>;
   async ainvoke<T>(
     messages: Message[],
-    output_format: { parse: (input: string) => T } | undefined
+    output_format: { parse: (input: string) => T } | undefined,
+    options?: ChatInvokeOptions
   ): Promise<ChatInvokeCompletion<T>>;
   async ainvoke<T>(
     messages: Message[],
-    output_format?: { parse: (input: string) => T } | undefined
+    output_format?: { parse: (input: string) => T } | undefined,
+    options: ChatInvokeOptions = {}
   ): Promise<ChatInvokeCompletion<T | string>> {
     const serializer = new OpenAIMessageSerializer();
     const openaiMessages = serializer.serialize(messages);
@@ -49,11 +52,14 @@ export class ChatAzure implements BaseChatModel {
       ? ({ type: 'json_object' } as const)
       : undefined;
 
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages: openaiMessages,
-      response_format: responseFormat,
-    });
+    const response = await this.client.chat.completions.create(
+      {
+        model: this.model,
+        messages: openaiMessages,
+        response_format: responseFormat,
+      },
+      options.signal ? { signal: options.signal } : undefined
+    );
 
     const content = response.choices[0].message.content || '';
 

@@ -1,7 +1,7 @@
 import Groq from 'groq-sdk';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { z } from 'zod';
-import type { BaseChatModel } from '../base.js';
+import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ChatInvokeCompletion } from '../views.js';
 import type { Message } from '../messages.js';
 import { GroqMessageSerializer } from './serializer.js';
@@ -28,15 +28,18 @@ export class ChatGroq implements BaseChatModel {
 
   async ainvoke(
     messages: Message[],
-    output_format?: undefined
+    output_format?: undefined,
+    options?: ChatInvokeOptions
   ): Promise<ChatInvokeCompletion<string>>;
   async ainvoke<T>(
     messages: Message[],
-    output_format: { parse: (input: string) => T } | undefined
+    output_format: { parse: (input: string) => T } | undefined,
+    options?: ChatInvokeOptions
   ): Promise<ChatInvokeCompletion<T>>;
   async ainvoke<T>(
     messages: Message[],
-    output_format?: { parse: (input: string) => T } | undefined
+    output_format?: { parse: (input: string) => T } | undefined,
+    options: ChatInvokeOptions = {}
   ): Promise<ChatInvokeCompletion<T | string>> {
     const serializer = new GroqMessageSerializer();
     const groqMessages = serializer.serialize(messages);
@@ -51,11 +54,14 @@ export class ChatGroq implements BaseChatModel {
       responseFormat = { type: 'json_object' };
     }
 
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages: groqMessages,
-      response_format: responseFormat,
-    });
+    const response = await (this.client.chat.completions as any).create(
+      {
+        model: this.model,
+        messages: groqMessages,
+        response_format: responseFormat,
+      },
+      options.signal ? { signal: options.signal } : undefined
+    );
 
     const content = response.choices[0].message.content || '';
 
