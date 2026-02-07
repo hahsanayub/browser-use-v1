@@ -1,12 +1,91 @@
 import { describe, expect, it, vi } from 'vitest';
 
+const mockAgentInstances: any[] = [];
+
+vi.mock('../src/config.js', () => ({
+  CONFIG: {
+    BROWSER_USE_LOGGING_LEVEL: 'info',
+    BROWSER_USE_CONFIG_DIR: '/tmp/browser-use-test-config',
+    ANONYMIZED_TELEMETRY: false,
+  },
+  load_browser_use_config: () => ({
+    browser_profile: {
+      allowed_domains: ['config.example'],
+      file_system_path: '~/.browser-use-mcp-test',
+      keep_alive: null,
+    },
+    llm: {
+      api_key: 'test-openai-key',
+      model: 'gpt-4o-mini',
+      temperature: 0.5,
+    },
+  }),
+  get_default_profile: (config: any) => config.browser_profile ?? {},
+  get_default_llm: (config: any) => config.llm ?? {},
+}));
+
 vi.mock('../src/controller/service.js', () => {
   class Controller {
     registry = {
       get_all_actions: () => new Map(),
+      execute_action: vi.fn(async () => ({ ok: true })),
     };
   }
   return { Controller };
+});
+
+vi.mock('../src/browser/profile.js', () => {
+  class BrowserProfile {
+    config: Record<string, unknown>;
+    constructor(config: Record<string, unknown> = {}) {
+      this.config = config;
+    }
+  }
+  return { BrowserProfile };
+});
+
+vi.mock('../src/browser/session.js', () => {
+  class BrowserSession {
+    initialized = true;
+    browser_profile: any;
+    downloaded_files: string[] = [];
+    constructor(init: any = {}) {
+      this.browser_profile = init.browser_profile ?? { config: {} };
+    }
+    async start() {}
+  }
+  return { BrowserSession };
+});
+
+vi.mock('../src/filesystem/file-system.js', () => {
+  class FileSystem {
+    constructor(_baseDir: string) {}
+  }
+  return { FileSystem };
+});
+
+vi.mock('../src/agent/service.js', () => {
+  class Agent {
+    params: any;
+    constructor(params: any) {
+      this.params = params;
+      mockAgentInstances.push(this);
+    }
+
+    async run(_maxSteps: number) {
+      return {
+        history: [{}, {}],
+        number_of_steps: () => 2,
+        is_successful: () => true,
+        final_result: () => 'Retry completed',
+        errors: () => [null, null],
+        urls: () => ['https://example.com'],
+      };
+    }
+
+    async close() {}
+  }
+  return { Agent };
 });
 
 import { MCPServer } from '../src/mcp/server.js';
@@ -76,5 +155,69 @@ describe('MCPServer browser_click new_tab', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('MCPServer retry_with_browser_use_agent', () => {
+  it('runs retry tool with isolated session/profile and returns summary', async () => {
+    mockAgentInstances.length = 0;
+    const server = new MCPServer('test-mcp', '1.0.0');
+
+    const result = await (server as any).tools.retry_with_browser_use_agent.handler(
+      {
+        task: 'Try task again',
+        max_steps: 7,
+        model: 'gpt-4o',
+        allowed_domains: ['retry.example'],
+        use_vision: false,
+      }
+    );
+
+    expect(result).toContain('Task completed in 2 steps');
+    expect(result).toContain('Success: true');
+    expect(result).toContain('Final result');
+    expect(result).toContain('URLs visited: https://example.com');
+
+    expect(mockAgentInstances.length).toBe(1);
+    const instance = mockAgentInstances[0];
+    expect(instance.params.task).toBe('Try task again');
+    expect(instance.params.use_vision).toBe(false);
+    expect(instance.params.browser_session.browser_profile.config.allowed_domains).toEqual([
+      'retry.example',
+    ]);
+    expect(instance.params.browser_session.browser_profile.config.keep_alive).toBe(
+      false
+    );
+  });
+
+  it('defaults allowed_domains override to empty list when omitted', async () => {
+    mockAgentInstances.length = 0;
+    const server = new MCPServer('test-mcp', '1.0.0');
+
+    await (server as any).tools.retry_with_browser_use_agent.handler({
+      task: 'Retry without domain override input',
+    });
+
+    expect(mockAgentInstances.length).toBe(1);
+    const instance = mockAgentInstances[0];
+    expect(instance.params.browser_session.browser_profile.config.allowed_domains).toEqual(
+      []
+    );
+  });
+
+  it('returns explicit error when OpenAI key is missing', async () => {
+    const server = new MCPServer('test-mcp', '1.0.0');
+    (server as any).config = {
+      browser_profile: {},
+      llm: {},
+    };
+
+    const result = await (server as any).tools.retry_with_browser_use_agent.handler(
+      {
+        task: 'Try task again',
+      }
+    );
+
+    expect(result).toBe('Error: OPENAI_API_KEY not set in config or environment');
   });
 });

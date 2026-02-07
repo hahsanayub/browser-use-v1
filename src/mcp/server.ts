@@ -24,6 +24,8 @@
  *     }
  */
 
+import os from 'node:os';
+import path from 'node:path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -41,7 +43,14 @@ import type { Controller } from '../controller/service.js';
 import { Controller as DefaultController } from '../controller/service.js';
 import { Agent } from '../agent/service.js';
 import { BrowserSession } from '../browser/session.js';
+import { BrowserProfile } from '../browser/profile.js';
+import { FileSystem } from '../filesystem/file-system.js';
 import { ChatOpenAI } from '../llm/openai/chat.js';
+import {
+  load_browser_use_config,
+  get_default_llm,
+  get_default_profile,
+} from '../config.js';
 import { productTelemetry } from '../telemetry/service.js';
 import { MCPServerTelemetryEvent } from '../telemetry/views.js';
 import { get_browser_use_version } from '../utils.js';
@@ -73,8 +82,11 @@ export class MCPServer {
   private server: Server;
   private tools: Record<string, any> = {};
   private prompts: Map<string, MCPPromptTemplate> = new Map();
+  private config: Record<string, any>;
   private browserSession: BrowserSession | null = null;
   private controller: Controller<any> | null = null;
+  private llm: ChatOpenAI | null = null;
+  private fileSystem: FileSystem | null = null;
   private startTime: number;
   private isRunning = false;
   private toolExecutionCount = 0;
@@ -95,12 +107,176 @@ export class MCPServer {
       }
     );
 
+    this.config = load_browser_use_config();
     this.startTime = Date.now() / 1000;
     this.setupHandlers();
     this.registerDefaultPrompts();
     this.controller = new DefaultController();
     this.registerControllerActions(this.controller);
     this.registerCoreBrowserTools();
+  }
+
+  private resolvePath(input: string): string {
+    const expanded = input.replace(/^~(?=$|\/|\\)/, os.homedir());
+    return path.resolve(expanded);
+  }
+
+  private getDefaultProfileConfig(): Record<string, unknown> {
+    const profile = get_default_profile(this.config);
+    return profile && typeof profile === 'object' ? { ...profile } : {};
+  }
+
+  private getDefaultLlmConfig(): Record<string, unknown> {
+    const llm = get_default_llm(this.config);
+    return llm && typeof llm === 'object' ? { ...llm } : {};
+  }
+
+  private sanitizeProfileConfig(
+    profileConfig: Record<string, unknown>
+  ): Record<string, unknown> {
+    const sanitized = { ...profileConfig } as Record<string, unknown>;
+    delete sanitized.id;
+    delete sanitized.default;
+    delete sanitized.created_at;
+    return sanitized;
+  }
+
+  private buildDirectSessionProfile(
+    profileConfig: Record<string, unknown>
+  ): BrowserProfile {
+    const merged = {
+      downloads_path: '~/Downloads/browser-use-mcp',
+      wait_between_actions: 0.5,
+      keep_alive: true,
+      user_data_dir: '~/.config/browseruse/profiles/default',
+      is_mobile: false,
+      device_scale_factor: 1.0,
+      disable_security: false,
+      headless: false,
+      ...this.sanitizeProfileConfig(profileConfig),
+    } as Record<string, unknown>;
+
+    if (typeof merged.user_data_dir === 'string') {
+      merged.user_data_dir = this.resolvePath(merged.user_data_dir);
+    }
+    if (typeof merged.downloads_path === 'string') {
+      merged.downloads_path = this.resolvePath(merged.downloads_path);
+    }
+    if (Array.isArray(merged.allowed_domains)) {
+      merged.allowed_domains = merged.allowed_domains
+        .map((entry) => String(entry).trim())
+        .filter(Boolean);
+    }
+
+    return new BrowserProfile(merged as any);
+  }
+
+  private buildRetryProfile(
+    profileConfig: Record<string, unknown>,
+    allowedDomains: string[] | undefined
+  ): BrowserProfile {
+    const merged = {
+      ...this.sanitizeProfileConfig(profileConfig),
+    } as Record<string, unknown>;
+
+    if (allowedDomains !== undefined) {
+      merged.allowed_domains = allowedDomains;
+    }
+
+    if (merged.keep_alive == null) {
+      merged.keep_alive = false;
+    }
+
+    if (typeof merged.user_data_dir === 'string') {
+      merged.user_data_dir = this.resolvePath(merged.user_data_dir);
+    }
+    if (typeof merged.downloads_path === 'string') {
+      merged.downloads_path = this.resolvePath(merged.downloads_path);
+    }
+    if (Array.isArray(merged.allowed_domains)) {
+      merged.allowed_domains = merged.allowed_domains
+        .map((entry) => String(entry).trim())
+        .filter(Boolean);
+    }
+
+    return new BrowserProfile(merged as any);
+  }
+
+  private initializeLlmForDirectTools() {
+    if (this.llm) {
+      return;
+    }
+    const llmConfig = this.getDefaultLlmConfig();
+    const configuredApiKey =
+      typeof llmConfig.api_key === 'string' ? llmConfig.api_key.trim() : '';
+    const envApiKey =
+      typeof process.env.OPENAI_API_KEY === 'string'
+        ? process.env.OPENAI_API_KEY.trim()
+        : '';
+    const apiKey = configuredApiKey || envApiKey;
+    if (!apiKey) {
+      return;
+    }
+
+    const model =
+      typeof llmConfig.model === 'string' && llmConfig.model.trim()
+        ? llmConfig.model.trim()
+        : 'gpt-4o-mini';
+    const temperature =
+      typeof llmConfig.temperature === 'number' ? llmConfig.temperature : 0.7;
+
+    this.llm = new ChatOpenAI({
+      model,
+      apiKey,
+      temperature,
+    });
+  }
+
+  private initializeFileSystem(profileConfig: Record<string, unknown>) {
+    if (this.fileSystem) {
+      return;
+    }
+    const configuredPath =
+      typeof profileConfig.file_system_path === 'string'
+        ? profileConfig.file_system_path
+        : '~/.browser-use-mcp';
+    this.fileSystem = new FileSystem(this.resolvePath(configuredPath));
+  }
+
+  private formatRetryResult(history: any): string {
+    const results: string[] = [];
+    const steps =
+      Array.isArray(history?.history) || typeof history?.number_of_steps === 'function'
+        ? typeof history?.number_of_steps === 'function'
+          ? history.number_of_steps()
+          : history.history.length
+        : 0;
+    results.push(`Task completed in ${steps} steps`);
+    results.push(`Success: ${String(history?.is_successful?.())}`);
+
+    const finalResult = history?.final_result?.();
+    if (finalResult) {
+      results.push(`\nFinal result:\n${finalResult}`);
+    }
+
+    const errors = Array.isArray(history?.errors?.())
+      ? history.errors().filter((entry: unknown) => entry != null)
+      : [];
+    if (errors.length > 0) {
+      results.push(`\nErrors encountered:\n${JSON.stringify(errors, null, 2)}`);
+    }
+
+    const urls = Array.isArray(history?.urls?.())
+      ? history
+          .urls()
+          .filter((entry: unknown) => entry != null)
+          .map((entry: unknown) => String(entry))
+      : [];
+    if (urls.length > 0) {
+      results.push(`\nURLs visited: ${urls.join(', ')}`);
+    }
+
+    return results.join('\n');
   }
 
   private setupHandlers() {
@@ -214,7 +390,11 @@ export class MCPServer {
 
   private async ensureBrowserSession(): Promise<BrowserSession> {
     if (!this.browserSession) {
-      this.browserSession = new BrowserSession();
+      const profileConfig = this.getDefaultProfileConfig();
+      const profile = this.buildDirectSessionProfile(profileConfig);
+      this.browserSession = new BrowserSession({ browser_profile: profile });
+      this.initializeLlmForDirectTools();
+      this.initializeFileSystem(profileConfig);
     }
 
     if (!this.browserSession.initialized) {
@@ -230,9 +410,17 @@ export class MCPServer {
   ): Promise<unknown> {
     const controller = await this.ensureController();
     const browserSession = await this.ensureBrowserSession();
+    if (actionName === 'extract_structured_data' && !this.llm) {
+      throw new Error('LLM not initialized (set OPENAI_API_KEY)');
+    }
 
     return await controller.registry.execute_action(actionName, args, {
       browser_session: browserSession,
+      page_extraction_llm: this.llm,
+      file_system: this.fileSystem,
+      available_file_paths: Array.isArray(browserSession.downloaded_files)
+        ? [...browserSession.downloaded_files]
+        : null,
       context: undefined,
     });
   }
@@ -451,40 +639,61 @@ export class MCPServer {
           throw new Error('task is required');
         }
 
-        const model = String(args?.model ?? 'gpt-4o');
+        const model = String(args?.model ?? 'gpt-4o').trim();
         const maxSteps = Number(args?.max_steps ?? 100);
         const useVision = Boolean(args?.use_vision ?? true);
-        const hasAllowedDomainsArg =
-          args != null &&
-          Object.prototype.hasOwnProperty.call(args, 'allowed_domains');
         const allowedDomains = Array.isArray(args?.allowed_domains)
           ? args.allowed_domains
               .map((entry: unknown) => String(entry).trim())
               .filter(Boolean)
           : [];
 
-        const browserSession = await this.ensureBrowserSession();
-        const controller = await this.ensureController();
-
-        const previousAllowed =
-          browserSession.browser_profile.config.allowed_domains ?? null;
-        if (hasAllowedDomainsArg) {
-          browserSession.browser_profile.config.allowed_domains = allowedDomains;
+        const llmConfig = this.getDefaultLlmConfig();
+        const configuredApiKey =
+          typeof llmConfig.api_key === 'string' ? llmConfig.api_key.trim() : '';
+        const envApiKey =
+          typeof process.env.OPENAI_API_KEY === 'string'
+            ? process.env.OPENAI_API_KEY.trim()
+            : '';
+        const apiKey = configuredApiKey || envApiKey;
+        if (!apiKey) {
+          return 'Error: OPENAI_API_KEY not set in config or environment';
         }
 
+        const configuredModel =
+          typeof llmConfig.model === 'string' && llmConfig.model.trim()
+            ? llmConfig.model.trim()
+            : 'gpt-4o';
+        const llmModel = model || configuredModel;
+        const temperature =
+          typeof llmConfig.temperature === 'number' ? llmConfig.temperature : 0.7;
+
+        const llm = new ChatOpenAI({
+          model: llmModel,
+          apiKey,
+          temperature,
+        });
+
+        const profileConfig = this.getDefaultProfileConfig();
+        const profile = this.buildRetryProfile(profileConfig, allowedDomains);
+        const retryBrowserSession = new BrowserSession({
+          browser_profile: profile,
+        });
+        const agent = new Agent({
+          task,
+          llm,
+          browser_session: retryBrowserSession,
+          use_vision: useVision,
+        });
+
         try {
-          const llm = new ChatOpenAI({ model });
-          const agent = new Agent({
-            task,
-            llm,
-            controller,
-            browser_session: browserSession,
-            use_vision: useVision,
-          });
           const history = await agent.run(maxSteps);
-          return history.final_result() ?? 'Task completed with no final output';
+          return this.formatRetryResult(history);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return `Agent task failed: ${message}`;
         } finally {
-          browserSession.browser_profile.config.allowed_domains = previousAllowed;
+          await agent.close();
         }
       }
     );
