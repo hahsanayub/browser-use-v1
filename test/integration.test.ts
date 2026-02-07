@@ -529,6 +529,46 @@ describe('Component Tests (Mocked Dependencies)', () => {
     expect(history.number_of_steps()).toBeGreaterThanOrEqual(2);
   });
 
+  it('stops after step timeout to avoid overlapping step execution', async () => {
+    const controller = createTestController();
+    const browser_session = createBrowserSessionStub();
+    const tempDir = createTempDir();
+    const llm = new MockLLM([
+      {
+        completion: {
+          action: [{ done: { success: true, text: 'done' } }],
+          thinking: 'done',
+        },
+      },
+    ]);
+
+    const agent = new Agent({
+      task: 'Timeout safety',
+      llm,
+      browser_session,
+      controller,
+      file_system_path: tempDir,
+      use_vision: false,
+      step_timeout: 0.01,
+    });
+
+    tempResources.push(agent.agent_directory);
+    const stepSpy = vi
+      .spyOn(agent as any, '_step')
+      .mockImplementation(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+
+    const history = await agent.run(3);
+
+    expect(stepSpy).toHaveBeenCalledTimes(1);
+    expect(agent.state.stopped).toBe(true);
+    expect(agent.state.last_result?.[0]?.error).toContain(
+      'timed out after 0.01 seconds'
+    );
+    expect(history.is_done()).toBe(false);
+  });
+
   it('handles action failures', async () => {
     const controller = createTestController();
     const browser_session = createBrowserSessionStub();

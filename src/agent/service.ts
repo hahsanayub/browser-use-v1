@@ -1485,11 +1485,30 @@ export class Agent<
         } catch (error) {
           const message =
             error instanceof Error ? error.message : String(error);
-          const timeoutMessage = `Step ${step + 1} timed out after ${this.settings.step_timeout} seconds`;
-          this.logger.error(`⏰ ${timeoutMessage}`);
+          const isTimeout = message === 'timeout';
+
+          if (isTimeout) {
+            const timeoutMessage = `Step ${step + 1} timed out after ${this.settings.step_timeout} seconds`;
+            this.logger.error(`⏰ ${timeoutMessage}`);
+            this.state.consecutive_failures += 1;
+            this.state.last_result = [
+              new ActionResult({ error: timeoutMessage }),
+            ];
+            // JavaScript promises are not force-cancelable; stop the run loop
+            // immediately to avoid overlapping timed-out steps with new steps.
+            this.stop();
+            agent_run_error = timeoutMessage;
+            break;
+          }
+
+          this.logger.error(
+            `❌ Unhandled step error at step ${step + 1}: ${message}`
+          );
           this.state.consecutive_failures += 1;
           this.state.last_result = [
-            new ActionResult({ error: message || timeoutMessage }),
+            new ActionResult({
+              error: message || `Unhandled step error at step ${step + 1}`,
+            }),
           ];
         }
 
