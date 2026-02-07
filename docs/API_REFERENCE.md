@@ -42,21 +42,20 @@ new Agent(options: AgentOptions)
 | `controller` | `Controller` | No | Default controller | Action controller |
 | `use_vision` | `boolean` | No | `true` | Enable screenshot analysis |
 | `vision_detail_level` | `'auto' \| 'low' \| 'high'` | No | `'auto'` | Screenshot detail level |
-| `use_thinking` | `boolean` | No | `false` | Enable extended thinking prompts |
+| `use_thinking` | `boolean` | No | `true` | Enable extended thinking prompts |
 | `flash_mode` | `boolean` | No | `false` | Use optimized prompts for speed |
 | `max_failures` | `number` | No | `3` | Max consecutive failures before stopping |
 | `retry_delay` | `number` | No | `10` | Delay (seconds) between retries |
 | `max_actions_per_step` | `number` | No | `10` | Max actions per step |
-| `max_steps` | `number` | No | `100` | Default max steps |
 | `validate_output` | `boolean` | No | `false` | Validate LLM output strictly |
 | `generate_gif` | `boolean \| string` | No | `false` | Generate GIF of session |
 | `save_conversation_path` | `string` | No | `null` | Path to save conversation logs |
 | `override_system_message` | `string` | No | `null` | Replace system message |
 | `extend_system_message` | `string` | No | `null` | Append to system message |
-| `include_attributes` | `string[]` | No | `[]` | Additional HTML attributes to include |
+| `include_attributes` | `string[]` | No | `['title', 'type', 'name']` | Additional HTML attributes to include |
 | `sensitive_data` | `SensitiveDataMap` | No | `null` | Credentials for auto-fill |
-| `llm_timeout` | `number` | No | `60000` | LLM call timeout (ms) |
-| `step_timeout` | `number` | No | `180000` | Step execution timeout (ms) |
+| `llm_timeout` | `number` | No | `60` | LLM call timeout (seconds) |
+| `step_timeout` | `number` | No | `180` | Step execution timeout (seconds) |
 
 ### Methods
 
@@ -69,7 +68,7 @@ async run(max_steps?: number): Promise<AgentHistoryList>
 ```
 
 **Parameters:**
-- `max_steps` (optional): Maximum steps to execute. Defaults to constructor value.
+- `max_steps` (optional): Maximum steps to execute. Defaults to `100`.
 
 **Returns:** `AgentHistoryList` containing the execution history.
 
@@ -141,12 +140,12 @@ async rerun_history(
 
 ### Events
 
-Agents emit events through the global event bus:
+Agents expose a per-agent event bus on `agent.eventbus`:
 
 ```typescript
-import { eventBus } from 'browser-use';
+const agent = new Agent({ task: '...', llm });
 
-eventBus.on('CreateAgentStepEvent', (event) => {
+agent.eventbus.on('CreateAgentStepEvent', (event) => {
   console.log('Step:', event.step_id, event.model_output);
 });
 ```
@@ -453,7 +452,7 @@ const llm = new ChatOpenAI({
   apiKey: 'sk-...',          // API key
   temperature: 0.7,          // Temperature (0-2)
   baseURL: '...',            // Optional base URL
-  reasoning_effort: 'medium' // For reasoning models
+  reasoningEffort: 'medium'  // For reasoning models
 });
 ```
 
@@ -474,39 +473,28 @@ const llm = new ChatAnthropic({
 ```typescript
 import { ChatGoogle } from 'browser-use/llm/google';
 
-const llm = new ChatGoogle({
-  model: 'gemini-2.0-flash',
-  apiKey: '...',
-  temperature: 0.7
-});
+const llm = new ChatGoogle('gemini-2.5-flash');
+// Requires GOOGLE_API_KEY in env.
 ```
 
 ### Azure OpenAI
 
 ```typescript
-import { AzureChatOpenAI } from 'browser-use/llm/azure';
+import { ChatAzure } from 'browser-use/llm/azure';
 
-const llm = new AzureChatOpenAI({
-  model: 'gpt-4o',
-  apiKey: '...',
-  endpoint: 'https://your-resource.openai.azure.com',
-  apiVersion: '2024-02-15-preview',
-  deploymentName: 'your-deployment'
-});
+const llm = new ChatAzure('gpt-4o');
+// Requires AZURE_OPENAI_API_KEY + AZURE_OPENAI_ENDPOINT in env.
 ```
 
 ### AWS Bedrock
 
 ```typescript
-import { ChatBedrock } from 'browser-use/llm/aws';
+import { ChatAnthropicBedrock } from 'browser-use/llm/aws';
 
-const llm = new ChatBedrock({
-  model: 'anthropic.claude-3-sonnet-20240229-v1:0',
+const llm = new ChatAnthropicBedrock({
+  model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
   region: 'us-east-1',
-  credentials: {
-    accessKeyId: '...',
-    secretAccessKey: '...'
-  }
+  max_tokens: 4096
 });
 ```
 
@@ -515,10 +503,7 @@ const llm = new ChatBedrock({
 ```typescript
 import { ChatGroq } from 'browser-use/llm/groq';
 
-const llm = new ChatGroq({
-  model: 'llama-3.3-70b-versatile',
-  apiKey: '...'
-});
+const llm = new ChatGroq('llama-3.3-70b-versatile');
 ```
 
 ### Ollama
@@ -526,10 +511,7 @@ const llm = new ChatGroq({
 ```typescript
 import { ChatOllama } from 'browser-use/llm/ollama';
 
-const llm = new ChatOllama({
-  model: 'llama3',
-  baseUrl: 'http://localhost:11434'
-});
+const llm = new ChatOllama('llama3', 'http://localhost:11434');
 ```
 
 ### DeepSeek
@@ -537,10 +519,7 @@ const llm = new ChatOllama({
 ```typescript
 import { ChatDeepSeek } from 'browser-use/llm/deepseek';
 
-const llm = new ChatDeepSeek({
-  model: 'deepseek-chat',
-  apiKey: '...'
-});
+const llm = new ChatDeepSeek('deepseek-chat');
 ```
 
 ### OpenRouter
@@ -548,10 +527,7 @@ const llm = new ChatDeepSeek({
 ```typescript
 import { ChatOpenRouter } from 'browser-use/llm/openrouter';
 
-const llm = new ChatOpenRouter({
-  model: 'anthropic/claude-3-opus',
-  apiKey: '...'
-});
+const llm = new ChatOpenRouter('anthropic/claude-3-opus');
 ```
 
 ---
@@ -660,20 +636,20 @@ const sensitiveData: SensitiveDataMap = {
 
 ## Utility Functions
 
-### run
+### Quick Execution Pattern
 
-Quick task execution function.
+Use `Agent` directly for one-shot task execution:
 
 ```typescript
-import { run } from 'browser-use';
+import { Agent } from 'browser-use';
+import { ChatOpenAI } from 'browser-use/llm/openai';
 
-const { controller, history } = await run(task, {
-  llmProvider: 'openai',
-  llmApiKey: 'sk-...',
-  llmModel: 'gpt-4o',
-  headless: true,
-  maxSteps: 50
+const agent = new Agent({
+  task: 'Your task',
+  llm: new ChatOpenAI({ model: 'gpt-4o', apiKey: 'sk-...' }),
 });
+
+const history = await agent.run(50);
 ```
 
 ### createLogger
@@ -690,14 +666,14 @@ logger.warning('Warning');
 logger.error('Error');
 ```
 
-### eventBus
+### EventBus
 
-Global event bus for event subscription.
+Each `Agent` has an event bus available at `agent.eventbus`:
 
 ```typescript
-import { eventBus } from 'browser-use';
+const agent = new Agent({ task: '...', llm });
 
-eventBus.on('CreateAgentStepEvent', handler);
-eventBus.off('CreateAgentStepEvent', handler);
-eventBus.emit('CustomEvent', data);
+agent.eventbus.on('CreateAgentStepEvent', (event) => {
+  console.log(event.step_id);
+});
 ```

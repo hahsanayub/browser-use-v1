@@ -72,7 +72,7 @@ Playwright browsers will be installed automatically via postinstall hook.
 
 ```typescript
 import { Agent } from 'browser-use';
-import { ChatOpenAI } from 'browser-use';
+import { ChatOpenAI } from 'browser-use/llm/openai';
 
 async function main() {
   const llm = new ChatOpenAI({
@@ -98,51 +98,45 @@ async function main() {
 main();
 ```
 
-### Using Controller (Recommended)
+### Using Controller for Custom Actions
 
-The Controller provides higher-level abstractions and configuration management:
+Use `Controller` to register domain-specific actions, then pass it into `Agent`:
 
 ```typescript
-import { Controller } from 'browser-use';
+import { Agent, Controller, ActionResult } from 'browser-use';
+import { ChatOpenAI } from 'browser-use/llm/openai';
+import { z } from 'zod';
 
-async function main() {
-  const controller = new Controller({
-    config: {
-      llm: {
-        provider: 'openai',
-        model: 'gpt-4o',
-        apiKey: process.env.OPENAI_API_KEY,
-        temperature: 0.1,
-      },
-      browser: {
-        headless: false,
-        browserType: 'chromium',
-        viewport: { width: 1920, height: 1080 },
-      },
-    },
+const controller = new Controller();
+
+controller.registry.action('Extract product info from the current page', {
+  param_model: z.object({
+    include_price: z.boolean().default(true),
+    include_reviews: z.boolean().default(false),
+  }),
+})(async function extract_product_info(params, { page }) {
+  const productData = await page.evaluate(() => ({
+    title: document.querySelector('h1')?.textContent ?? null,
+    price: document.querySelector('.price')?.textContent ?? null,
+  }));
+
+  return new ActionResult({
+    extracted_content: JSON.stringify({ ...productData, ...params }),
+    include_in_memory: true,
   });
+});
 
-  await controller.initialize();
+const agent = new Agent({
+  task: 'Open product page and extract product info',
+  llm: new ChatOpenAI({
+    model: 'gpt-4o',
+    apiKey: process.env.OPENAI_API_KEY,
+  }),
+  controller,
+});
 
-  // Navigate to starting page
-  await controller.goto('https://google.com');
-
-  // Run automation with agent configuration
-  const history = await controller.run(
-    'Search for TypeScript and click the first result',
-    {
-      maxSteps: 10,
-      useVision: true,
-      continueOnFailure: true,
-    }
-  );
-
-  console.log(`Completed ${history.length} steps`);
-
-  await controller.cleanup();
-}
-
-main();
+const history = await agent.run(10);
+console.log(history.final_result());
 ```
 
 ## Advanced Usage
@@ -152,77 +146,47 @@ main();
 Enable vision capabilities to let the AI analyze screenshots:
 
 ```typescript
-import { Controller, ChatGoogle } from 'browser-use';
+import { Agent } from 'browser-use';
+import { ChatGoogle } from 'browser-use/llm/google';
 
-const controller = new Controller({
-  config: {
-    llm: {
-      provider: 'google',
-      model: 'gemini-2.0-flash-exp',
-      apiKey: process.env.GOOGLE_API_KEY,
-    },
-  },
+const llm = new ChatGoogle('gemini-2.5-flash');
+
+const agent = new Agent({
+  task: 'Describe what you see on this page and identify main visual elements',
+  llm,
+  use_vision: true,
+  vision_detail_level: 'high', // 'auto' | 'low' | 'high'
 });
 
-await controller.initialize();
-await controller.goto('https://www.wikipedia.org');
-
-const history = await controller.run(
-  'Describe what you see on this page and identify the main visual elements',
-  {
-    useVision: true, // Enable vision
-    visionDetailLevel: 'high', // 'low' | 'high' | 'auto'
-    maxSteps: 5,
-  }
-);
+const history = await agent.run(5);
 ```
 
-### Custom Actions with Decorators
+### Custom Actions with Controller Registry
 
 Extend the agent's capabilities with custom actions:
 
 ```typescript
-import { action } from 'browser-use';
+import { Controller, ActionResult } from 'browser-use';
 import { z } from 'zod';
-import type { ActionResult, Page } from 'browser-use';
 
-export class CustomActions {
-  @action(
-    'extract_product_info',
-    'Extract product information from e-commerce page',
-    z.object({
-      includePrice: z.boolean().default(true),
-      includeReviews: z.boolean().default(false),
-    }),
-    { isAvailableForPage: (page) => page && !page.isClosed() }
-  )
-  static async extractProductInfo({
-    params,
-    page,
-    context,
-  }: {
-    params: { includePrice: boolean; includeReviews: boolean };
-    page: Page;
-    context: any;
-  }): Promise<ActionResult> {
-    // Your custom implementation
-    const productData = await page.evaluate(() => {
-      return {
-        title: document.querySelector('h1')?.textContent,
-        price: document.querySelector('.price')?.textContent,
-      };
-    });
+const controller = new Controller();
 
-    return {
-      success: true,
-      message: `Extracted product: ${productData.title}`,
-      extracted_content: JSON.stringify(productData),
-    };
-  }
-}
+controller.registry.action('Extract product information', {
+  param_model: z.object({
+    include_price: z.boolean().default(true),
+    include_reviews: z.boolean().default(false),
+  }),
+})(async function extract_product_info(params, { page }) {
+  const productData = await page.evaluate(() => ({
+    title: document.querySelector('h1')?.textContent ?? null,
+    price: document.querySelector('.price')?.textContent ?? null,
+  }));
 
-// Register with controller
-controller.registry.registerActions(CustomActions);
+  return new ActionResult({
+    extracted_content: JSON.stringify({ ...productData, ...params }),
+    include_in_memory: true,
+  });
+});
 ```
 
 ### FileSystem Operations
@@ -230,7 +194,8 @@ controller.registry.registerActions(CustomActions);
 Built-in file system support with PDF parsing:
 
 ```typescript
-import { Agent, FileSystem } from 'browser-use';
+import { Agent } from 'browser-use';
+import { ChatOpenAI } from 'browser-use/llm/openai';
 
 const agent = new Agent({
   task: 'Download the PDF and extract text from page 1',
@@ -311,7 +276,7 @@ import { GmailService } from 'browser-use';
 const agent = new Agent({
   task: 'Check my last 5 emails and summarize them',
   llm: new ChatOpenAI(),
-  // Gmail credentials automatically loaded from environment
+  // Gmail credentials loaded from config files (or explicit GmailService options)
 });
 ```
 
@@ -332,51 +297,46 @@ GROQ_API_KEY=your-groq-key
 DEEPSEEK_API_KEY=your-deepseek-key
 
 # Browser Configuration
-HEADLESS=true
-BROWSER_TYPE=chromium  # chromium, firefox, webkit
+BROWSER_USE_HEADLESS=true
+BROWSER_USE_ALLOWED_DOMAINS=example.com,*.trusted.org
+IN_DOCKER=true
 
 # Logging Configuration
-LOG_LEVEL=info  # debug, info, warn, error
+BROWSER_USE_LOGGING_LEVEL=info  # debug, info, warning, error
 
 # Telemetry (optional)
-POSTHOG_API_KEY=your-posthog-key
-POSTHOG_HOST=https://app.posthog.com
+ANONYMIZED_TELEMETRY=false
 
 # Observability (optional)
 LMNR_API_KEY=your-lmnr-key
-
-# Gmail Integration (optional)
-GMAIL_CREDENTIALS_PATH=./credentials.json
-GMAIL_TOKEN_PATH=./token.json
 ```
 
 ### Agent Configuration
 
 ```typescript
-interface AgentConfig {
-  // Execution limits
-  maxSteps?: number; // Max steps before stopping (default: 100)
-  actionTimeout?: number; // Timeout per action in ms (default: 5000)
-
+interface AgentOptions {
   // Vision/multimodal
-  useVision?: boolean; // Enable screenshot analysis (default: false)
-  visionDetailLevel?: 'low' | 'high' | 'auto'; // Vision detail (default: 'auto')
+  use_vision?: boolean;
+  vision_detail_level?: 'low' | 'high' | 'auto';
 
   // Error handling
-  continueOnFailure?: boolean; // Continue on action failure (default: false)
-  maxRetryChain?: number; // Max consecutive failures (default: 3)
+  max_failures?: number; // default: 3
+  retry_delay?: number; // seconds, default: 10
+  max_actions_per_step?: number; // default: 10
 
-  // Custom behavior
-  customInstructions?: string; // Additional system instructions
+  // Persistence / output
+  save_conversation_path?: string | null;
+  file_system_path?: string | null;
+  validate_output?: boolean;
+  include_attributes?: string[];
 
-  // Persistence
-  saveConversationPath?: string; // Save conversation history
-  fileSystemPath?: string; // FileSystem workspace path
-
-  // Advanced
-  validateOutput?: boolean; // Validate structured outputs (default: false)
-  includeAttributes?: string[]; // DOM attributes to include
+  // Runtime limits (seconds)
+  llm_timeout?: number; // default: 60
+  step_timeout?: number; // default: 180
 }
+
+// Max step count is configured per run call:
+await agent.run(100);
 ```
 
 ## Supported LLM Providers
@@ -384,7 +344,7 @@ interface AgentConfig {
 ### OpenAI
 
 ```typescript
-import { ChatOpenAI } from 'browser-use';
+import { ChatOpenAI } from 'browser-use/llm/openai';
 
 const llm = new ChatOpenAI({
   model: 'gpt-4o', // or 'gpt-4', 'gpt-3.5-turbo'
@@ -397,7 +357,7 @@ const llm = new ChatOpenAI({
 ### Anthropic Claude
 
 ```typescript
-import { ChatAnthropic } from 'browser-use';
+import { ChatAnthropic } from 'browser-use/llm/anthropic';
 
 const llm = new ChatAnthropic({
   model: 'claude-3-5-sonnet-20241022', // or other Claude models
@@ -409,82 +369,64 @@ const llm = new ChatAnthropic({
 ### Google Gemini
 
 ```typescript
-import { ChatGoogle } from 'browser-use';
+import { ChatGoogle } from 'browser-use/llm/google';
 
-const llm = new ChatGoogle({
-  model: 'gemini-2.0-flash-exp', // or 'gemini-pro', 'gemini-pro-vision'
-  apiKey: process.env.GOOGLE_API_KEY,
-  baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-});
+const llm = new ChatGoogle('gemini-2.5-flash');
+// Configure GOOGLE_API_KEY in env. Optional:
+// GOOGLE_API_BASE_URL / GOOGLE_API_VERSION
 ```
 
 ### AWS Bedrock
 
 ```typescript
-import { ChatBedrockAnthropic } from 'browser-use';
+import { ChatAnthropicBedrock } from 'browser-use/llm/aws';
 
-const llm = new ChatBedrockAnthropic({
-  model: 'anthropic.claude-3-sonnet-20240229-v1:0',
+const llm = new ChatAnthropicBedrock({
+  model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
   region: 'us-east-1',
-  // AWS credentials from environment
+  max_tokens: 4096,
 });
 ```
 
 ### Azure OpenAI
 
 ```typescript
-import { ChatAzure } from 'browser-use';
+import { ChatAzure } from 'browser-use/llm/azure';
 
-const llm = new ChatAzure({
-  azureEndpoint: process.env.AZURE_OPENAI_ENDPOINT,
-  azureDeployment: 'your-deployment-name',
-  apiVersion: '2024-02-15-preview',
-  apiKey: process.env.AZURE_OPENAI_API_KEY,
-});
+const llm = new ChatAzure('gpt-4o');
+// Configure AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_VERSION in env.
 ```
 
 ### DeepSeek
 
 ```typescript
-import { ChatDeepSeek } from 'browser-use';
+import { ChatDeepSeek } from 'browser-use/llm/deepseek';
 
-const llm = new ChatDeepSeek({
-  model: 'deepseek-chat',
-  apiKey: process.env.DEEPSEEK_API_KEY,
-});
+const llm = new ChatDeepSeek('deepseek-chat');
 ```
 
 ### Groq
 
 ```typescript
-import { ChatGroq } from 'browser-use';
+import { ChatGroq } from 'browser-use/llm/groq';
 
-const llm = new ChatGroq({
-  model: 'mixtral-8x7b-32768',
-  apiKey: process.env.GROQ_API_KEY,
-});
+const llm = new ChatGroq('mixtral-8x7b-32768');
 ```
 
 ### Ollama (Local)
 
 ```typescript
-import { ChatOllama } from 'browser-use';
+import { ChatOllama } from 'browser-use/llm/ollama';
 
-const llm = new ChatOllama({
-  model: 'llama3.1',
-  baseUrl: 'http://localhost:11434', // default
-});
+const llm = new ChatOllama('llama3.1', 'http://localhost:11434');
 ```
 
 ### OpenRouter
 
 ```typescript
-import { ChatOpenRouter } from 'browser-use';
+import { ChatOpenRouter } from 'browser-use/llm/openrouter';
 
-const llm = new ChatOpenRouter({
-  model: 'anthropic/claude-3-opus',
-  apiKey: process.env.OPENROUTER_API_KEY,
-});
+const llm = new ChatOpenRouter('anthropic/claude-3-opus');
 ```
 
 ## Available Actions

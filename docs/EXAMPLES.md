@@ -32,11 +32,10 @@ async function webSearch() {
   const agent = new Agent({
     task: 'Search Google for "TypeScript best practices 2024" and summarize the top 3 results',
     llm,
-    use_vision: true,
-    max_steps: 20
+    use_vision: true
   });
 
-  const history = await agent.run();
+  const history = await agent.run(20);
 
   console.log('Success:', history.is_successful());
   console.log('Result:', history.final_result());
@@ -85,19 +84,21 @@ screenshotPage();
 ### Quick Task Execution
 
 ```typescript
-import { run } from 'browser-use';
+import { Agent } from 'browser-use';
+import { ChatOpenAI } from 'browser-use/llm/openai';
 
 async function quickTask() {
-  const { history } = await run(
-    'Go to github.com and find the trending TypeScript repositories',
-    {
-      llmProvider: 'openai',
-      llmApiKey: process.env.OPENAI_API_KEY,
-      llmModel: 'gpt-4o',
-      headless: true,
-      maxSteps: 30
-    }
-  );
+  const llm = new ChatOpenAI({
+    model: 'gpt-4o',
+    apiKey: process.env.OPENAI_API_KEY
+  });
+
+  const agent = new Agent({
+    task: 'Go to github.com and find the trending TypeScript repositories',
+    llm
+  });
+
+  const history = await agent.run(30);
 
   console.log('URLs visited:', history.urls_visited());
   console.log('Result:', history.final_result());
@@ -133,11 +134,10 @@ async function extractProducts() {
       Return as JSON.
     `,
     llm,
-    use_vision: true,
-    max_steps: 30
+    use_vision: true
   });
 
-  const history = await agent.run();
+  const history = await agent.run(30);
   const result = history.final_result();
 
   // Parse the extracted JSON
@@ -208,12 +208,11 @@ async function monitorPrice(productUrl: string) {
       Return as JSON: { "product": "...", "price": "...", "timestamp": "..." }
     `,
     llm,
-    browser_session: session,
-    max_steps: 10
+    browser_session: session
   });
 
   try {
-    const history = await agent.run();
+    const history = await agent.run(10);
     const result = history.final_result();
 
     // Append to price history file
@@ -321,11 +320,10 @@ async function fillApplicationForm() {
       Confirm the submission was successful.
     `,
     llm,
-    use_vision: true,
-    max_steps: 40
+    use_vision: true
   });
 
-  const history = await agent.run();
+  const history = await agent.run(40);
   console.log('Form submitted:', history.is_successful());
 }
 
@@ -394,12 +392,11 @@ async function compareProducts() {
     `,
     llm,
     browser_session: session,
-    use_vision: true,
-    max_steps: 50
+    use_vision: true
   });
 
   try {
-    const history = await agent.run();
+    const history = await agent.run(50);
     console.log('Price Comparison:', history.final_result());
   } finally {
     await session.stop();
@@ -439,12 +436,11 @@ async function researchTopic() {
     `,
     llm,
     browser_session: session,
-    use_vision: true,
-    max_steps: 60
+    use_vision: true
   });
 
   try {
-    const history = await agent.run();
+    const history = await agent.run(60);
     console.log('Research Summary:', history.final_result());
   } finally {
     await session.stop();
@@ -799,11 +795,10 @@ async function withRetry() {
     task: 'Go to flaky-website.com and extract the data',
     llm,
     max_failures: 5,      // Allow up to 5 consecutive failures
-    retry_delay: 5,       // Wait 5 seconds between retries
-    max_steps: 30
+    retry_delay: 5       // Wait 5 seconds between retries
   });
 
-  const history = await agent.run();
+  const history = await agent.run(30);
 
   if (history.is_successful()) {
     console.log('Success:', history.final_result());
@@ -837,21 +832,17 @@ async function withFallback() {
     await llm.ainvoke([{ role: 'user', content: 'test' }]);
   } catch (error) {
     console.log('Primary LLM unavailable, using fallback');
-    llm = new ChatOllama({
-      model: 'llama3',
-      baseUrl: 'http://localhost:11434'
-    });
+    llm = new ChatOllama('llama3', 'http://localhost:11434');
     usedFallback = true;
   }
 
   const agent = new Agent({
     task: 'Search for the current weather in San Francisco',
     llm,
-    use_vision: !usedFallback,  // Disable vision for local models
-    max_steps: usedFallback ? 20 : 30  // Fewer steps for fallback
+    use_vision: !usedFallback  // Disable vision for local models
   });
 
-  const history = await agent.run();
+  const history = await agent.run(usedFallback ? 20 : 30); // Fewer steps for fallback
   console.log('Result:', history.final_result());
 }
 
@@ -873,8 +864,8 @@ async function withTimeouts() {
   const agent = new Agent({
     task: 'Complete a complex multi-step workflow',
     llm,
-    llm_timeout: 30000,    // 30s timeout for LLM calls
-    step_timeout: 120000   // 2min timeout per step
+    llm_timeout: 30,    // 30s timeout for LLM calls
+    step_timeout: 120   // 2min timeout per step
   });
 
   try {
@@ -899,19 +890,10 @@ withTimeouts();
 ### Event-Driven Monitoring
 
 ```typescript
-import { Agent, BrowserSession, eventBus } from 'browser-use';
+import { Agent } from 'browser-use';
 import { ChatOpenAI } from 'browser-use/llm/openai';
 
 async function eventDrivenAgent() {
-  // Listen to agent events
-  eventBus.on('CreateAgentStepEvent', (event) => {
-    console.log(`Step ${event.step_id}:`, event.model_output?.next_goal);
-  });
-
-  eventBus.on('CreateAgentStepActionEvent', (event) => {
-    console.log('Action:', event.action_name, event.params);
-  });
-
   const llm = new ChatOpenAI({
     model: 'gpt-4o',
     apiKey: process.env.OPENAI_API_KEY
@@ -920,6 +902,11 @@ async function eventDrivenAgent() {
   const agent = new Agent({
     task: 'Navigate through example.com and find the contact page',
     llm
+  });
+
+  // Listen to per-agent events
+  agent.eventbus.on('CreateAgentStepEvent', (event) => {
+    console.log(`Step ${event.step_id}:`, event.model_output?.next_goal);
   });
 
   await agent.run();
@@ -1040,11 +1027,10 @@ async function conditionalWorkflow() {
       Return "operational" if everything is green, otherwise "degraded".
     `,
     llm,
-    browser_session: session,
-    max_steps: 10
+    browser_session: session
   });
 
-  const checkHistory = await checkAgent.run();
+  const checkHistory = await checkAgent.run(10);
   const status = checkHistory.final_result().toLowerCase();
 
   // Step 2: Conditional action

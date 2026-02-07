@@ -56,13 +56,13 @@ const llm = new ChatOpenAI({
 
 ### Reasoning Models
 
-For reasoning models (o1, o3, o4 series), use the `reasoning_effort` parameter:
+For reasoning models (o1, o3, o4 series), use the `reasoningEffort` parameter:
 
 ```typescript
 const llm = new ChatOpenAI({
   model: 'o3-mini',
   apiKey: process.env.OPENAI_API_KEY,
-  reasoning_effort: 'medium'  // 'low', 'medium', 'high'
+  reasoningEffort: 'medium'  // 'low', 'medium', 'high'
 });
 ```
 
@@ -74,8 +74,7 @@ const llm = new ChatOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
   temperature: 0.7,
   baseURL: 'https://api.openai.com/v1',  // Custom endpoint
-  maxRetries: 3,
-  timeout: 60000
+  maxRetries: 3
 });
 ```
 
@@ -146,7 +145,7 @@ const llm = new ChatAnthropic({
 ### Setup
 
 ```bash
-npm install @google/generative-ai
+npm install @google/genai
 ```
 
 Set your API key:
@@ -159,11 +158,9 @@ export GOOGLE_API_KEY=your-api-key
 ```typescript
 import { ChatGoogle } from 'browser-use/llm/google';
 
-const llm = new ChatGoogle({
-  model: 'gemini-2.0-flash',
-  apiKey: process.env.GOOGLE_API_KEY,
-  temperature: 0.7
-});
+const llm = new ChatGoogle('gemini-2.5-flash');
+// Configure GOOGLE_API_KEY in env.
+// Optional env overrides: GOOGLE_API_BASE_URL, GOOGLE_API_VERSION.
 ```
 
 ### Available Models
@@ -176,17 +173,10 @@ const llm = new ChatGoogle({
 | `gemini-1.5-pro` | ✅ | Complex tasks |
 | `gemini-1.5-flash` | ✅ | Cost-effective |
 
-### Extended Thinking
+### Notes
 
-Gemini supports extended thinking for complex reasoning:
-
-```typescript
-const llm = new ChatGoogle({
-  model: 'gemini-2.0-flash',
-  apiKey: process.env.GOOGLE_API_KEY,
-  thinking: true  // Enable extended thinking
-});
-```
+Google provider configuration is environment-driven in this implementation.
+Use `GOOGLE_API_KEY` plus optional `GOOGLE_API_BASE_URL` and `GOOGLE_API_VERSION`.
 
 ---
 
@@ -203,29 +193,17 @@ export AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
 ### Usage
 
 ```typescript
-import { AzureChatOpenAI } from 'browser-use/llm/azure';
+import { ChatAzure } from 'browser-use/llm/azure';
 
-const llm = new AzureChatOpenAI({
-  model: 'gpt-4o',
-  apiKey: process.env.AZURE_OPENAI_API_KEY,
-  endpoint: process.env.AZURE_OPENAI_ENDPOINT,
-  apiVersion: '2024-02-15-preview',
-  deploymentName: 'your-deployment-name'
-});
+const llm = new ChatAzure('gpt-4o');
+// Configure AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_VERSION in env.
 ```
 
-### Options
+### Notes
 
 ```typescript
-const llm = new AzureChatOpenAI({
-  model: 'gpt-4o',
-  apiKey: process.env.AZURE_OPENAI_API_KEY,
-  endpoint: process.env.AZURE_OPENAI_ENDPOINT,
-  apiVersion: '2024-02-15-preview',
-  deploymentName: 'gpt-4o-deployment',
-  temperature: 0.7,
-  maxTokens: 4096
-});
+// Constructor currently accepts only the deployment/model name:
+const llm = new ChatAzure('gpt-4o');
 ```
 
 ---
@@ -249,24 +227,22 @@ export AWS_PROFILE=your-profile
 ### Usage
 
 ```typescript
-import { ChatBedrock } from 'browser-use/llm/aws';
+import { ChatAnthropicBedrock } from 'browser-use/llm/aws';
 
-const llm = new ChatBedrock({
-  model: 'anthropic.claude-3-sonnet-20240229-v1:0',
-  region: 'us-east-1'
+const llm = new ChatAnthropicBedrock({
+  model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+  region: 'us-east-1',
+  max_tokens: 4096
 });
 ```
 
 ### With Explicit Credentials
 
 ```typescript
-const llm = new ChatBedrock({
-  model: 'anthropic.claude-3-sonnet-20240229-v1:0',
-  region: 'us-east-1',
-  credentials: {
-    accessKeyId: 'your-access-key',
-    secretAccessKey: 'your-secret-key'
-  }
+// Credentials are resolved from the AWS SDK environment/profile chain.
+const llm = new ChatAnthropicBedrock({
+  model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+  region: 'us-east-1'
 });
 ```
 
@@ -294,11 +270,7 @@ export GROQ_API_KEY=your-api-key
 ```typescript
 import { ChatGroq } from 'browser-use/llm/groq';
 
-const llm = new ChatGroq({
-  model: 'llama-3.3-70b-versatile',
-  apiKey: process.env.GROQ_API_KEY,
-  temperature: 0.7
-});
+const llm = new ChatGroq('llama-3.3-70b-versatile');
 ```
 
 ### Available Models
@@ -329,10 +301,7 @@ ollama pull llama3
 ```typescript
 import { ChatOllama } from 'browser-use/llm/ollama';
 
-const llm = new ChatOllama({
-  model: 'llama3',
-  baseUrl: 'http://localhost:11434'
-});
+const llm = new ChatOllama('llama3', 'http://localhost:11434');
 ```
 
 ### Available Models
@@ -362,11 +331,7 @@ export DEEPSEEK_API_KEY=your-api-key
 ```typescript
 import { ChatDeepSeek } from 'browser-use/llm/deepseek';
 
-const llm = new ChatDeepSeek({
-  model: 'deepseek-chat',
-  apiKey: process.env.DEEPSEEK_API_KEY,
-  temperature: 0.7
-});
+const llm = new ChatDeepSeek('deepseek-chat');
 ```
 
 ### Available Models
@@ -394,11 +359,7 @@ export OPENROUTER_API_KEY=your-api-key
 ```typescript
 import { ChatOpenRouter } from 'browser-use/llm/openrouter';
 
-const llm = new ChatOpenRouter({
-  model: 'anthropic/claude-3-opus',
-  apiKey: process.env.OPENROUTER_API_KEY,
-  temperature: 0.7
-});
+const llm = new ChatOpenRouter('anthropic/claude-3-opus');
 ```
 
 ### Model Selection
@@ -442,7 +403,7 @@ Speed  ←───────────────────────�
 // Fast iteration, low cost
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini' });
 // or
-const llm = new ChatGroq({ model: 'llama-3.3-70b-versatile' });
+const llm = new ChatGroq('llama-3.3-70b-versatile');
 ```
 
 **For Production:**
@@ -457,13 +418,13 @@ const llm = new ChatAnthropic({ model: 'claude-sonnet-4-20250514' });
 ```typescript
 const llm = new ChatOpenAI({
   model: 'o3-mini',
-  reasoning_effort: 'high'
+  reasoningEffort: 'high'
 });
 ```
 
 **For Local/Privacy:**
 ```typescript
-const llm = new ChatOllama({ model: 'llama3:70b' });
+const llm = new ChatOllama('llama3:70b');
 ```
 
 ---

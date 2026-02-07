@@ -213,7 +213,6 @@ Extract {data_type} from {url}
 # LLM Configuration
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
-BROWSER_USE_LLM_PROVIDER=openai
 BROWSER_USE_LLM_MODEL=gpt-4o
 
 # Browser Configuration

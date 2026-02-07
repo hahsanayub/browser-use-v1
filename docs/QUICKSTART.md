@@ -205,7 +205,7 @@ Increase timeouts in agent settings:
 const agent = new Agent({
   task: 'Your task',
   llm,
-  llm_timeout: 120000,  // 2 minutes for LLM calls
-  step_timeout: 300000  // 5 minutes per step
+  llm_timeout: 120,  // 120 seconds for LLM calls
+  step_timeout: 300  // 300 seconds per step
 });
 ```

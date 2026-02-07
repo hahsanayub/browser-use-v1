@@ -449,10 +449,14 @@ CreateAgentStepEvent { step_id, task_id, model_output, result }
 ### Event Bus
 
 ```typescript
-import { eventBus } from 'browser-use';
+import { Agent } from 'browser-use';
+import { ChatOpenAI } from 'browser-use/llm/openai';
+
+const llm = new ChatOpenAI({ model: 'gpt-4o', apiKey: process.env.OPENAI_API_KEY });
+const agent = new Agent({ task: '...', llm });
 
 // Subscribe to events
-eventBus.on('CreateAgentStepEvent', (event) => {
+agent.eventbus.on('CreateAgentStepEvent', (event) => {
   console.log('Step completed:', event.step_id);
 });
 

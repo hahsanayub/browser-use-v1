@@ -28,7 +28,6 @@ Configuration values are resolved in this order (highest priority first):
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
 | `BROWSER_USE_LLM_MODEL` | `string` | - | Default LLM model |
-| `BROWSER_USE_LLM_PROVIDER` | `string` | - | Default LLM provider |
 | `OPENAI_API_KEY` | `string` | - | OpenAI API key |
 | `ANTHROPIC_API_KEY` | `string` | - | Anthropic API key |
 | `GOOGLE_API_KEY` | `string` | - | Google API key |
@@ -75,7 +74,6 @@ The configuration file is located at `~/.config/browseruse/config.json`.
     "default-llm-id": {
       "id": "default-llm-id",
       "default": true,
-      "provider": "openai",
       "model": "gpt-4o",
       "api_key": "sk-...",
       "temperature": 0.7
@@ -129,15 +127,12 @@ The configuration file is located at `~/.config/browseruse/config.json`.
     "openai-gpt4": {
       "id": "openai-gpt4",
       "default": true,
-      "provider": "openai",
       "model": "gpt-4o",
       "api_key": "sk-...",
-      "temperature": 0.7,
-      "base_url": "https://api.openai.com/v1"
+      "temperature": 0.7
     },
     "anthropic-claude": {
       "id": "anthropic-claude",
-      "provider": "anthropic",
       "model": "claude-sonnet-4-20250514",
       "api_key": "sk-ant-...",
       "temperature": 0.7
@@ -160,7 +155,7 @@ The configuration file is located at `~/.config/browseruse/config.json`.
       "max_failures": 3,
       "retry_delay": 10,
       "max_actions_per_step": 10,
-      "use_thinking": false,
+      "use_thinking": true,
       "flash_mode": false,
       "validate_output": false
     }
@@ -326,14 +321,16 @@ const agent = new Agent({
   task: 'Your task',
   llm,
 
-  // Step limits
-  max_steps: 100,
+  // Per-step limits
   max_actions_per_step: 10,
 
   // Failure handling
   max_failures: 3,
   retry_delay: 10  // seconds
 });
+
+// Overall step cap is set when running:
+const history = await agent.run(100);
 ```
 
 ### Vision Settings
@@ -403,10 +400,10 @@ const agent = new Agent({
   llm,
 
   // LLM call timeout
-  llm_timeout: 60000,  // 60 seconds
+  llm_timeout: 60,  // 60 seconds
 
   // Step execution timeout
-  step_timeout: 180000  // 3 minutes
+  step_timeout: 180  // 3 minutes
 });
 ```
 
@@ -459,9 +456,10 @@ const agent = new Agent({
   llm,
   browser_session: session,
   use_vision: true,
-  max_steps: 50,
   max_failures: 5
 });
+
+const history = await agent.run(50);
 ```
 
 ### Using .env Files
