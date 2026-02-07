@@ -137,9 +137,13 @@ describe('BrowserSession Basic Operations', () => {
     });
 
     await session.start();
-    expect(session.browser).toBeDefined();
+    expect(session.browser).toBeTruthy();
+    expect(session.browser_context).toBeTruthy();
+    expect(await session.get_current_page()).toBeTruthy();
 
     await session.stop();
+    expect(session.browser).toBeNull();
+    expect(session.browser_context).toBeNull();
   });
 });
 

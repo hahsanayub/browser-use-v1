@@ -4,7 +4,13 @@ import { spawn, exec, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createLogger } from '../logging-config.js';
 import { match_url_with_domain_pattern, uuid7str } from '../utils.js';
-import type { Browser, BrowserContext, Page, Locator } from './types.js';
+import {
+  async_playwright,
+  type Browser,
+  type BrowserContext,
+  type Page,
+  type Locator,
+} from './types.js';
 import {
   BrowserProfile,
   type BrowserProfileOptions,
@@ -409,6 +415,41 @@ export class BrowserSession {
     return true;
   }
 
+  private _toPlaywrightOptions(value: unknown): unknown {
+    if (value === null || value === undefined) {
+      return undefined;
+    }
+    if (Array.isArray(value)) {
+      const converted = value
+        .map((item) => this._toPlaywrightOptions(item))
+        .filter((item) => item !== undefined);
+      return converted;
+    }
+    if (
+      typeof value !== 'object' ||
+      value instanceof Date ||
+      Buffer.isBuffer(value)
+    ) {
+      return value;
+    }
+
+    const result: Record<string, unknown> = {};
+    for (const [rawKey, rawVal] of Object.entries(
+      value as Record<string, unknown>
+    )) {
+      const convertedValue = this._toPlaywrightOptions(rawVal);
+      if (convertedValue === undefined) {
+        continue;
+      }
+      const normalizedKey = rawKey.replace(
+        /_([a-z])/g,
+        (_, letter: string) => letter.toUpperCase()
+      );
+      result[normalizedKey] = convertedValue;
+    }
+    return result;
+  }
+
   private _connectionDescriptor() {
     const source =
       this.cdp_url ||
@@ -434,6 +475,118 @@ export class BrowserSession {
   }
 
   async start() {
+    if (this.initialized) {
+      return this;
+    }
+
+    const ensurePage = async () => {
+      const current = this.agent_current_page;
+      if (current && !(current as any).isClosed?.()) {
+        this._setActivePage(current);
+        return;
+      }
+
+      const existingPages =
+        (typeof this.browser_context?.pages === 'function'
+          ? this.browser_context.pages()
+          : []) ?? [];
+      const firstOpenPage =
+        existingPages.find((page) => !(page as any).isClosed?.()) ?? null;
+
+      if (firstOpenPage) {
+        this._setActivePage(firstOpenPage);
+        return;
+      }
+
+      if (typeof this.browser_context?.newPage === 'function') {
+        const created = await this.browser_context.newPage();
+        this._setActivePage(created ?? null);
+        return;
+      }
+
+      this._setActivePage(null);
+    };
+
+    if (!this.browser_context) {
+      if (!this.browser) {
+        const playwright = (this.playwright as any) ?? (await async_playwright());
+        this.playwright = playwright;
+
+        if (this.cdp_url) {
+          this.browser = await playwright.chromium.connectOverCDP(this.cdp_url);
+          this.ownsBrowserResources = false;
+        } else if (this.wss_url) {
+          const connectOptions = this._toPlaywrightOptions(
+            this.browser_profile.kwargs_for_connect()
+          );
+          this.browser = await playwright.chromium.connect(
+            this.wss_url,
+            (connectOptions as Record<string, unknown>) ?? {}
+          );
+          this.ownsBrowserResources = false;
+        } else {
+          const launchOptions = this._toPlaywrightOptions(
+            await this.browser_profile.kwargs_for_launch()
+          );
+          this.browser = await playwright.chromium.launch(
+            (launchOptions as Record<string, unknown>) ?? {}
+          );
+          this.ownsBrowserResources = true;
+
+          const processGetter = (this.browser as any)?.process;
+          if (typeof processGetter === 'function') {
+            const processRef = processGetter.call(this.browser) as
+              | { pid?: number }
+              | undefined;
+            if (typeof processRef?.pid === 'number') {
+              this.browser_pid = processRef.pid;
+            }
+          }
+        }
+      }
+
+      const existingContexts =
+        (typeof this.browser?.contexts === 'function'
+          ? this.browser.contexts()
+          : []) ?? [];
+      if (existingContexts.length > 0) {
+        this.browser_context = existingContexts[0] ?? null;
+      } else if (typeof this.browser?.newContext === 'function') {
+        const contextOptions = this._toPlaywrightOptions(
+          this.browser_profile.kwargs_for_new_context()
+        );
+        this.browser_context = await this.browser.newContext(
+          (contextOptions as Record<string, unknown>) ?? {}
+        );
+      } else {
+        this.browser_context = null;
+      }
+    }
+
+    await ensurePage();
+    if (
+      !this.human_current_page ||
+      (this.human_current_page as any).isClosed?.()
+    ) {
+      this.human_current_page = this.agent_current_page;
+    }
+
+    const activePage = await this.get_current_page();
+    if (activePage) {
+      try {
+        this.currentUrl = normalize_url(activePage.url());
+      } catch {
+        // Ignore url read errors from transient pages.
+      }
+      if (typeof activePage.title === 'function') {
+        try {
+          this.currentTitle = await activePage.title();
+        } catch {
+          // Ignore title read errors from transient pages.
+        }
+      }
+    }
+
     this.initialized = true;
     this.logger.debug(
       `Started ${this.describe()} with profile ${this.browser_profile.toString()}`
@@ -544,6 +697,28 @@ export class BrowserSession {
     this.initialized = false;
     this.attachedAgentId = null;
 
+    if (this.ownsBrowserResources) {
+      if (typeof this.browser_context?.close === 'function') {
+        try {
+          await this.browser_context.close();
+        } catch (error) {
+          this.logger.debug(
+            `Failed to close browser context: ${(error as Error).message}`
+          );
+        }
+      }
+
+      if (typeof this.browser?.close === 'function') {
+        try {
+          await this.browser.close();
+        } catch (error) {
+          this.logger.debug(
+            `Failed to close browser instance: ${(error as Error).message}`
+          );
+        }
+      }
+    }
+
     // Kill child processes first
     await this._killChildProcesses();
 
@@ -556,6 +731,10 @@ export class BrowserSession {
     this.browser_context = null;
     this.agent_current_page = null;
     this.human_current_page = null;
+    this.browser_pid = null;
+    this.cdp_url = null;
+    this.wss_url = null;
+    this.playwright = null;
     this.cachedBrowserState = null;
     this._tabs = [];
     this.downloaded_files = [];
