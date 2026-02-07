@@ -582,6 +582,48 @@ describe('Component Tests (Mocked Dependencies)', () => {
     // First call failed, second succeeded
     expect(browser_session.navigateCalls).toContain('https://working.com');
   });
+
+  it('recovers from transient browser state failures across steps', async () => {
+    const controller = createTestController();
+    const browser_session = createBrowserSessionStub();
+    const tempDir = createTempDir();
+
+    const originalGetState = browser_session.get_browser_state_with_recovery;
+    let stateCallCount = 0;
+    browser_session.get_browser_state_with_recovery = async () => {
+      if (stateCallCount++ === 0) {
+        throw new Error('Target page crashed');
+      }
+      return originalGetState.call(browser_session);
+    };
+
+    const llm = new MockLLM([
+      {
+        completion: {
+          action: [{ done: { success: true, text: 'Recovered after crash' } }],
+          thinking: 'recover and finish',
+        },
+      },
+    ]);
+
+    const agent = new Agent({
+      task: 'Recover from transient browser state failure',
+      llm,
+      browser_session,
+      controller,
+      file_system_path: tempDir,
+      use_vision: false,
+      max_failures: 3,
+    });
+
+    tempResources.push(agent.agent_directory);
+    const history = await agent.run(3);
+
+    expect(stateCallCount).toBeGreaterThanOrEqual(2);
+    expect(history.is_successful()).toBe(true);
+    expect(history.final_result()).toContain('Recovered after crash');
+    expect(agent.state.consecutive_failures).toBe(0);
+  });
 });
 
 describe('Unit Tests', () => {

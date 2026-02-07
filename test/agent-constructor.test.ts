@@ -76,6 +76,44 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('creates isolated copy when BrowserSession is already attached to another agent', async () => {
+    const sharedSession = new BrowserSession({
+      browser_profile: new BrowserProfile({}),
+    });
+    expect(sharedSession.claim_agent('existing-agent')).toBe(true);
+
+    const agent = new Agent({
+      task: 'test attached session isolation',
+      llm: createLlm(),
+      browser_session: sharedSession,
+    });
+
+    expect(agent.browser_session).toBeInstanceOf(BrowserSession);
+    expect(agent.browser_session).not.toBe(sharedSession);
+    expect(sharedSession.get_attached_agent_id()).toBe('existing-agent');
+    expect((agent.browser_session as BrowserSession).get_attached_agent_id()).toBe(
+      agent.id
+    );
+
+    await agent.close();
+  });
+
+  it('releases BrowserSession claim on close', async () => {
+    const session = new BrowserSession({
+      browser_profile: new BrowserProfile({}),
+    });
+
+    const agent = new Agent({
+      task: 'test claim release',
+      llm: createLlm(),
+      browser_session: session,
+    });
+
+    expect(session.get_attached_agent_id()).toBe(agent.id);
+    await agent.close();
+    expect(session.get_attached_agent_id()).toBeNull();
+  });
+
   it('defaults page_extraction_llm to the main llm when omitted', async () => {
     const llm = createLlm();
     const agent = new Agent({

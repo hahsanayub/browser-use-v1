@@ -86,6 +86,7 @@ export class BrowserSession {
   private currentPageLoadingStatus: string | null = null;
   private _subprocess: ChildProcess | null = null;
   private _childProcesses: Set<number> = new Set();
+  private attachedAgentId: string | null = null;
 
   constructor(init: BrowserSessionInit = {}) {
     const sourceProfileConfig = init.browser_profile
@@ -362,6 +363,44 @@ export class BrowserSession {
     return this.ownsBrowserResources;
   }
 
+  claim_agent(agentId: string): boolean {
+    if (!agentId) {
+      return false;
+    }
+    if (this.attachedAgentId && this.attachedAgentId !== agentId) {
+      return false;
+    }
+    this.attachedAgentId = agentId;
+    return true;
+  }
+
+  claimAgent(agentId: string): boolean {
+    return this.claim_agent(agentId);
+  }
+
+  release_agent(agentId?: string): boolean {
+    if (!this.attachedAgentId) {
+      return true;
+    }
+    if (agentId && this.attachedAgentId !== agentId) {
+      return false;
+    }
+    this.attachedAgentId = null;
+    return true;
+  }
+
+  releaseAgent(agentId?: string): boolean {
+    return this.release_agent(agentId);
+  }
+
+  get_attached_agent_id(): string | null {
+    return this.attachedAgentId;
+  }
+
+  getAttachedAgentId(): string | null {
+    return this.get_attached_agent_id();
+  }
+
   private _determineOwnership() {
     if (this.cdp_url || this.wss_url || this.browser || this.browser_context) {
       return false;
@@ -502,6 +541,7 @@ export class BrowserSession {
 
   private async _shutdown_browser_session() {
     this.initialized = false;
+    this.attachedAgentId = null;
 
     // Kill child processes first
     await this._killChildProcesses();

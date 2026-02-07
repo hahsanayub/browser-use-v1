@@ -95,6 +95,23 @@ describe('BrowserSession Basic Operations', () => {
     expect(copied).not.toBe(session);
   });
 
+  it('enforces single-agent attachment claims', () => {
+    const session = new BrowserSession({
+      browser_profile: new BrowserProfile({}),
+    });
+
+    expect(session.claim_agent('agent-a')).toBe(true);
+    expect(session.claim_agent('agent-a')).toBe(true);
+    expect(session.claim_agent('agent-b')).toBe(false);
+    expect(session.get_attached_agent_id()).toBe('agent-a');
+
+    expect(session.release_agent('agent-b')).toBe(false);
+    expect(session.get_attached_agent_id()).toBe('agent-a');
+
+    expect(session.release_agent('agent-a')).toBe(true);
+    expect(session.get_attached_agent_id()).toBeNull();
+  });
+
   it('starts and stops browser session', async () => {
     const session = new BrowserSession({
       browser_profile: new BrowserProfile({
