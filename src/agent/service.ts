@@ -767,6 +767,18 @@ export class Agent<
     }
   }
 
+  private _cleanup_shared_session_step_lock_if_unused(
+    browser_session: BrowserSession | null
+  ) {
+    if (!browser_session) {
+      return;
+    }
+    if (this._has_any_browser_session_attachments(browser_session)) {
+      return;
+    }
+    Agent._sharedSessionStepLocks.delete(browser_session.id);
+  }
+
   private _init_browser_session(init: {
     page: Page | null;
     browser: Browser | BrowserSession | null;
@@ -789,9 +801,12 @@ export class Agent<
 
     if (browser_session) {
       const ownsResources = (browser_session as any)._owns_browser_resources;
-      if (ownsResources === false) {
+      if (
+        ownsResources === false &&
+        this.settings.session_attachment_mode === 'copy'
+      ) {
         this.logger.warning(
-          '⚠️ Attempting to use multiple Agents with the same BrowserSession! This is not supported yet and will likely lead to strange behavior, use separate BrowserSessions for each Agent.'
+          "⚠️ Non-owning BrowserSession detected. session_attachment_mode='copy' will isolate this Agent with a cloned BrowserSession."
         );
         const modelCopyFn =
           (browser_session as any).model_copy ??
@@ -2172,6 +2187,8 @@ export class Agent<
         );
         return;
       }
+
+      this._cleanup_shared_session_step_lock_if_unused(browser_session);
 
       try {
         if (typeof (browser_session as any).stop === 'function') {

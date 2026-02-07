@@ -1005,6 +1005,11 @@ describe('Component Tests (Mocked Dependencies)', () => {
     expect(maxConcurrentStateCalls).toBe(1);
     expect(history1.history[0]?.state?.url).toBe('https://tab-a.test');
     expect(history2.history[0]?.state?.url).toBe('https://tab-b.test');
+    expect(
+      ((Agent as any)._sharedSessionStepLocks as Map<string, unknown>).has(
+        'shared-pin-stub'
+      )
+    ).toBe(false);
   });
 });
 

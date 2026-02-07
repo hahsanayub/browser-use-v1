@@ -76,6 +76,37 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('reuses non-owning BrowserSession in shared attachment mode without cloning', async () => {
+    const sharedSession = new BrowserSession({
+      browser_profile: new BrowserProfile({}),
+      browser: {} as any,
+    });
+    const copySpy = vi.spyOn(sharedSession, 'model_copy');
+
+    const agent1 = new Agent({
+      task: 'shared non-owning agent 1',
+      llm: createLlm(),
+      browser_session: sharedSession,
+      session_attachment_mode: 'shared',
+    });
+    const agent2 = new Agent({
+      task: 'shared non-owning agent 2',
+      llm: createLlm(),
+      browser_session: sharedSession,
+      session_attachment_mode: 'shared',
+    });
+
+    expect(copySpy).toHaveBeenCalledTimes(0);
+    expect(agent1.browser_session).toBe(sharedSession);
+    expect(agent2.browser_session).toBe(sharedSession);
+    expect(sharedSession.get_attached_agent_ids().sort()).toEqual(
+      [agent1.id, agent2.id].sort()
+    );
+
+    await agent1.close();
+    await agent2.close();
+  });
+
   it('creates isolated copy when BrowserSession is already attached to another agent', async () => {
     const sharedSession = new BrowserSession({
       browser_profile: new BrowserProfile({}),
