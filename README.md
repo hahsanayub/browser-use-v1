@@ -47,6 +47,15 @@ We are committed to:
 
 This is **not** a fork or competing project—it's a respectful port to serve a different programming language community.
 
+### Upstream Parity Status
+
+This Node.js/TypeScript implementation is currently **strictly aligned** with the Python `browser-use` release
+[`v0.5.11`](https://github.com/browser-use/browser-use/releases/tag/0.5.11), published on **August 10, 2025**.
+
+- Core features and behavior are aligned against that upstream tag baseline.
+- Our test strategy is maintained to be as equivalent as practical to the Python coverage and behavior checks.
+- We expect to move this parity baseline forward to the Python **January 2026** release line very soon.
+
 ## Features
 
 - 🤖 **AI-Powered**: Built specifically for LLM-driven web automation with structured output support
