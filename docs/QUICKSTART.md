@@ -96,6 +96,9 @@ npx browser-use -p "Go to example.com and extract the page title"
 # Select model/provider by model name prefix
 npx browser-use --model claude-sonnet-4-20250514 -p "Search for AI news"
 
+# Select provider explicitly (uses provider default model)
+npx browser-use --provider anthropic -p "Search for AI news"
+
 # Headless mode
 npx browser-use --headless -p "Check the weather"
 
@@ -117,6 +120,7 @@ Interactive mode commands:
 Supported CLI options:
 
 - `--version`: print package version
+- `--provider <name>`: force provider (`openai|anthropic|google|deepseek|groq|openrouter|azure|ollama|aws|aws-anthropic`)
 - `--model <name>`: choose model/provider (for example `gpt-*`, `claude-*`, `gemini-*`)
 - `-p, --prompt <task>`: one-shot task
 - `--headless`: headless browser mode

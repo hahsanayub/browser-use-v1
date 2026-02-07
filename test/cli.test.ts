@@ -74,6 +74,8 @@ describe('CLI argument parsing', () => {
 
   it('parses prompt mode and browser options', () => {
     const parsed = parseCliArgs([
+      '--provider',
+      'anthropic',
       '--model',
       'claude-sonnet-4-20250514',
       '--headless',
@@ -93,6 +95,7 @@ describe('CLI argument parsing', () => {
       'Open docs and summarize',
     ]);
 
+    expect(parsed.provider).toBe('anthropic');
     expect(parsed.model).toBe('claude-sonnet-4-20250514');
     expect(parsed.headless).toBe(true);
     expect(parsed.window_width).toBe(1440);
@@ -133,6 +136,7 @@ describe('CLI argument parsing', () => {
   it('renders usage help text', () => {
     const usage = getCliUsage();
     expect(usage).toContain('browser-use --mcp');
+    expect(usage).toContain('--provider <name>');
     expect(usage).toContain('--model <model>');
     expect(usage).toContain('--headless');
     expect(usage).toContain('--allowed-domains <items>');
@@ -246,6 +250,34 @@ describe('CLI model routing', () => {
     const llm = getLlmFromCliArgs(args);
     expect(llm.provider).toBe('openai');
     expect(llm.model).toBe('gpt-4o');
+  });
+
+  it('supports --provider without --model using provider defaults', () => {
+    process.env.ANTHROPIC_API_KEY = 'test-anthropic';
+    const args = parseCliArgs(['--provider', 'anthropic', '-p', 'x']);
+    const llm = getLlmFromCliArgs(args);
+    expect(llm.provider).toBe('anthropic');
+    expect(llm.model).toBe('claude-sonnet-4-20250514');
+  });
+
+  it('rejects conflicting --provider and --model combinations', () => {
+    process.env.OPENAI_API_KEY = 'test-openai';
+    const args = parseCliArgs([
+      '--provider',
+      'anthropic',
+      '--model',
+      'gpt-4o',
+      '-p',
+      'x',
+    ]);
+    expect(() => getLlmFromCliArgs(args)).toThrow('Provider mismatch:');
+  });
+
+  it('requires --model when provider is aws', () => {
+    const args = parseCliArgs(['--provider', 'aws', '-p', 'x']);
+    expect(() => getLlmFromCliArgs(args)).toThrow(
+      'Provider "aws" requires --model.'
+    );
   });
 
   it('auto-detects OpenAI first when no model is specified', () => {

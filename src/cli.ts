@@ -29,6 +29,34 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+type CliModelProvider =
+  | 'openai'
+  | 'anthropic'
+  | 'google'
+  | 'deepseek'
+  | 'groq'
+  | 'openrouter'
+  | 'azure'
+  | 'aws-anthropic'
+  | 'aws'
+  | 'ollama';
+
+const CLI_PROVIDER_ALIASES: Record<string, CliModelProvider> = {
+  openai: 'openai',
+  anthropic: 'anthropic',
+  google: 'google',
+  gemini: 'google',
+  deepseek: 'deepseek',
+  groq: 'groq',
+  openrouter: 'openrouter',
+  azure: 'azure',
+  ollama: 'ollama',
+  bedrock: 'aws',
+  aws: 'aws',
+  'aws-anthropic': 'aws-anthropic',
+  'bedrock-anthropic': 'aws-anthropic',
+};
+
 export interface ParsedCliArgs {
   help: boolean;
   version: boolean;
@@ -42,6 +70,7 @@ export interface ParsedCliArgs {
   allowed_domains: string[] | null;
   cdp_url: string | null;
   model: string | null;
+  provider: CliModelProvider | null;
   prompt: string | null;
   mcp: boolean;
   positional: string[];
@@ -72,6 +101,17 @@ const parsePositiveInt = (name: string, value: string): number => {
     throw new Error(`${name} must be a positive integer, got "${value}"`);
   }
   return parsed;
+};
+
+const parseProvider = (value: string): CliModelProvider => {
+  const normalized = value.trim().toLowerCase();
+  const provider = CLI_PROVIDER_ALIASES[normalized];
+  if (!provider) {
+    throw new Error(
+      `Unsupported provider "${value}". Supported values: openai, anthropic, google, deepseek, groq, openrouter, azure, ollama, aws, aws-anthropic.`
+    );
+  }
+  return provider;
 };
 
 const takeOptionValue = (
@@ -126,6 +166,7 @@ export const parseCliArgs = (argv: string[]): ParsedCliArgs => {
     allowed_domains: null,
     cdp_url: null,
     model: null,
+    provider: null,
     prompt: null,
     mcp: false,
     positional: [],
@@ -173,6 +214,12 @@ export const parseCliArgs = (argv: string[]): ParsedCliArgs => {
     if (arg === '--model' || arg.startsWith('--model=')) {
       const { value, nextIndex } = takeOptionValue(arg, i, argv);
       parsed.model = value;
+      i = nextIndex;
+      continue;
+    }
+    if (arg === '--provider' || arg.startsWith('--provider=')) {
+      const { value, nextIndex } = takeOptionValue(arg, i, argv);
+      parsed.provider = parseProvider(value);
       i = nextIndex;
       continue;
     }
@@ -316,20 +363,7 @@ const requireEnv = (name: string) => {
   return value;
 };
 
-const inferProviderFromModel = (
-  model: string
-):
-  | 'openai'
-  | 'anthropic'
-  | 'google'
-  | 'deepseek'
-  | 'groq'
-  | 'openrouter'
-  | 'azure'
-  | 'aws-anthropic'
-  | 'aws'
-  | 'ollama'
-  | null => {
+const inferProviderFromModel = (model: string): CliModelProvider | null => {
   const lower = model.toLowerCase();
 
   if (
@@ -383,17 +417,7 @@ const inferProviderFromModel = (
 
 const normalizeModelValue = (
   model: string,
-  provider:
-    | 'openai'
-    | 'anthropic'
-    | 'google'
-    | 'deepseek'
-    | 'groq'
-    | 'openrouter'
-    | 'azure'
-    | 'aws-anthropic'
-    | 'aws'
-    | 'ollama'
+  provider: CliModelProvider
 ): string => {
   const lower = model.toLowerCase();
   if (provider === 'groq' && lower.startsWith('groq:')) {
@@ -417,60 +441,132 @@ const normalizeModelValue = (
   return model;
 };
 
+const providersAreCompatible = (
+  explicitProvider: CliModelProvider,
+  inferredProvider: CliModelProvider
+): boolean => {
+  if (explicitProvider === inferredProvider) {
+    return true;
+  }
+  if (
+    (explicitProvider === 'aws' && inferredProvider === 'aws-anthropic') ||
+    (explicitProvider === 'aws-anthropic' && inferredProvider === 'aws')
+  ) {
+    return true;
+  }
+  return false;
+};
+
+const getDefaultModelForProvider = (
+  provider: CliModelProvider
+): string | null => {
+  switch (provider) {
+    case 'openai':
+      return 'gpt-4o';
+    case 'anthropic':
+      return 'claude-sonnet-4-20250514';
+    case 'google':
+      return 'gemini-2.5-flash';
+    case 'deepseek':
+      return 'deepseek-chat';
+    case 'groq':
+      return 'llama-3.1-70b-versatile';
+    case 'openrouter':
+      return 'openai/gpt-4o';
+    case 'azure':
+      return 'gpt-4o';
+    case 'aws-anthropic':
+      return 'anthropic.claude-3-5-sonnet-20241022-v2:0';
+    case 'ollama':
+      return process.env.OLLAMA_MODEL || 'qwen2.5:latest';
+    case 'aws':
+      return null;
+    default:
+      return null;
+  }
+};
+
+const createLlmForProvider = (
+  provider: CliModelProvider,
+  model: string
+): BaseChatModel => {
+  switch (provider) {
+    case 'openai':
+      return new ChatOpenAI({
+        model,
+        apiKey: requireEnv('OPENAI_API_KEY'),
+      });
+    case 'anthropic':
+      return new ChatAnthropic({
+        model,
+        apiKey: requireEnv('ANTHROPIC_API_KEY'),
+      });
+    case 'google':
+      requireEnv('GOOGLE_API_KEY');
+      return new ChatGoogle(model);
+    case 'deepseek':
+      requireEnv('DEEPSEEK_API_KEY');
+      return new ChatDeepSeek(model);
+    case 'groq':
+      requireEnv('GROQ_API_KEY');
+      return new ChatGroq(model);
+    case 'openrouter':
+      requireEnv('OPENROUTER_API_KEY');
+      return new ChatOpenRouter(model);
+    case 'azure':
+      requireEnv('AZURE_OPENAI_API_KEY');
+      requireEnv('AZURE_OPENAI_ENDPOINT');
+      return new ChatAzure(model);
+    case 'ollama': {
+      const host = process.env.OLLAMA_HOST || 'http://localhost:11434';
+      return new ChatOllama(model, host);
+    }
+    case 'aws-anthropic':
+      return new ChatAnthropicBedrock({
+        model,
+        region: process.env.AWS_REGION || 'us-east-1',
+      });
+    case 'aws':
+      return new ChatBedrockConverse(
+        model,
+        process.env.AWS_REGION || 'us-east-1'
+      );
+    default:
+      throw new Error(`Unsupported provider "${provider}"`);
+  }
+};
+
 export const getLlmFromCliArgs = (args: ParsedCliArgs): BaseChatModel => {
   if (args.model) {
-    const provider = inferProviderFromModel(args.model);
+    const inferredProvider = inferProviderFromModel(args.model);
+    if (
+      args.provider &&
+      inferredProvider &&
+      !providersAreCompatible(args.provider, inferredProvider)
+    ) {
+      throw new Error(
+        `Provider mismatch: --provider ${args.provider} conflicts with model "${args.model}" (inferred: ${inferredProvider}).`
+      );
+    }
+
+    const provider = args.provider ?? inferredProvider;
     if (!provider) {
       throw new Error(
-        `Cannot infer provider from model "${args.model}". Supported prefixes: gpt*/o*, claude*, gemini*, deepseek*, groq:, openrouter:, azure:, ollama:, bedrock:.`
+        `Cannot infer provider from model "${args.model}". Provide --provider or use a supported model prefix: gpt*/o*, claude*, gemini*, deepseek*, groq:, openrouter:, azure:, ollama:, bedrock:.`
       );
     }
     const normalizedModel = normalizeModelValue(args.model, provider);
+    return createLlmForProvider(provider, normalizedModel);
+  }
 
-    switch (provider) {
-      case 'openai':
-        return new ChatOpenAI({
-          model: normalizedModel,
-          apiKey: requireEnv('OPENAI_API_KEY'),
-        });
-      case 'anthropic':
-        return new ChatAnthropic({
-          model: normalizedModel,
-          apiKey: requireEnv('ANTHROPIC_API_KEY'),
-        });
-      case 'google':
-        requireEnv('GOOGLE_API_KEY');
-        return new ChatGoogle(normalizedModel);
-      case 'deepseek':
-        requireEnv('DEEPSEEK_API_KEY');
-        return new ChatDeepSeek(normalizedModel);
-      case 'groq':
-        requireEnv('GROQ_API_KEY');
-        return new ChatGroq(normalizedModel);
-      case 'openrouter':
-        requireEnv('OPENROUTER_API_KEY');
-        return new ChatOpenRouter(normalizedModel);
-      case 'azure':
-        requireEnv('AZURE_OPENAI_API_KEY');
-        requireEnv('AZURE_OPENAI_ENDPOINT');
-        return new ChatAzure(normalizedModel);
-      case 'ollama': {
-        const host = process.env.OLLAMA_HOST || 'http://localhost:11434';
-        return new ChatOllama(normalizedModel, host);
-      }
-      case 'aws-anthropic':
-        return new ChatAnthropicBedrock({
-          model: normalizedModel,
-          region: process.env.AWS_REGION || 'us-east-1',
-        });
-      case 'aws':
-        return new ChatBedrockConverse(
-          normalizedModel,
-          process.env.AWS_REGION || 'us-east-1'
-        );
-      default:
-        throw new Error(`Unsupported model provider for "${args.model}"`);
+  if (args.provider) {
+    const defaultModel = getDefaultModelForProvider(args.provider);
+    if (!defaultModel) {
+      throw new Error(
+        `Provider "${args.provider}" requires --model. Example: --provider aws --model bedrock:us.amazon.nova-lite-v1:0`
+      );
     }
+    return createLlmForProvider(args.provider, defaultModel);
   }
 
   if (process.env.OPENAI_API_KEY) {
@@ -671,6 +767,7 @@ Options:
   -h, --help                  Show this help message
   --version                   Print version and exit
   --mcp                       Run as MCP server
+  --provider <name>           Force provider (openai|anthropic|google|deepseek|groq|openrouter|azure|ollama|aws|aws-anthropic)
   --model <model>             Set model (e.g., gpt-4o, claude-sonnet-4-20250514, gemini-2.5-flash)
   -p, --prompt <task>         Run a single task
   --headless                  Run browser in headless mode

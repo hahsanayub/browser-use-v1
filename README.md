@@ -163,6 +163,9 @@ npx browser-use "Search for TypeScript browser automation"
 # Pick model/provider by model name
 npx browser-use --model claude-sonnet-4-20250514 -p "Summarize latest AI news"
 
+# Pick provider explicitly (uses provider default model)
+npx browser-use --provider anthropic -p "Summarize latest AI news"
+
 # Headless + custom browser profile settings
 npx browser-use --headless --window-width 1440 --window-height 900 -p "Check dashboard status"
 
