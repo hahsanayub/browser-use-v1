@@ -13,6 +13,7 @@ import {
 } from './types.js';
 import {
   BrowserProfile,
+  CHROME_DOCKER_ARGS,
   type BrowserProfileOptions,
   DEFAULT_BROWSER_PROFILE,
 } from './profile.js';
@@ -615,6 +616,58 @@ export class BrowserSession {
     return result;
   }
 
+  private _isSandboxLaunchError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return (
+      /no usable sandbox/i.test(message) ||
+      /chromium sandboxing failed/i.test(message) ||
+      /zygote_host_impl_linux\.cc/i.test(message)
+    );
+  }
+
+  private _createNoSandboxLaunchOptions(
+    launchOptions: Record<string, unknown>
+  ): Record<string, unknown> {
+    const rawArgs = Array.isArray(launchOptions.args)
+      ? launchOptions.args.filter((arg): arg is string => typeof arg === 'string')
+      : [];
+    const mergedArgs = [...rawArgs];
+    for (const arg of CHROME_DOCKER_ARGS) {
+      if (!mergedArgs.includes(arg)) {
+        mergedArgs.push(arg);
+      }
+    }
+
+    return {
+      ...launchOptions,
+      chromiumSandbox: false,
+      args: mergedArgs,
+    };
+  }
+
+  private async _launchChromiumWithSandboxFallback(
+    playwright: any,
+    launchOptions: Record<string, unknown>
+  ): Promise<Browser> {
+    try {
+      return await playwright.chromium.launch(launchOptions);
+    } catch (error) {
+      const sandboxEnabled = this.browser_profile.config.chromium_sandbox;
+      if (
+        !sandboxEnabled ||
+        !this._isSandboxLaunchError(error)
+      ) {
+        throw error;
+      }
+
+      this.logger.warning(
+        'Chromium sandbox is unavailable in this environment. Retrying launch with chromium_sandbox=false (--no-sandbox).'
+      );
+      const fallbackOptions = this._createNoSandboxLaunchOptions(launchOptions);
+      return await playwright.chromium.launch(fallbackOptions);
+    }
+  }
+
   private _connectionDescriptor() {
     const source =
       this.cdp_url ||
@@ -693,7 +746,8 @@ export class BrowserSession {
           const launchOptions = this._toPlaywrightOptions(
             await this.browser_profile.kwargs_for_launch()
           );
-          this.browser = await playwright.chromium.launch(
+          this.browser = await this._launchChromiumWithSandboxFallback(
+            playwright,
             (launchOptions as Record<string, unknown>) ?? {}
           );
           this.ownsBrowserResources = true;

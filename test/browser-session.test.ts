@@ -204,6 +204,55 @@ describe('BrowserSession Basic Operations', () => {
     expect(session.browser).toBeNull();
     expect(session.browser_context).toBeNull();
   });
+
+  it('retries chromium launch without sandbox when sandbox is unavailable', async () => {
+    const launch = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new Error('Chromium sandboxing failed! No usable sandbox.')
+      );
+    const fakePage = {
+      url: () => 'about:blank',
+      title: vi.fn(async () => 'about:blank'),
+      isClosed: vi.fn(() => false),
+    };
+    const fakeContext = {
+      pages: vi.fn(() => []),
+      newPage: vi.fn(async () => fakePage),
+      close: vi.fn(async () => {}),
+    };
+    const fakeBrowser = {
+      contexts: vi.fn(() => []),
+      newContext: vi.fn(async () => fakeContext),
+      close: vi.fn(async () => {}),
+      process: vi.fn(() => ({ pid: 12345 })),
+    };
+    launch.mockResolvedValueOnce(fakeBrowser);
+
+    const session = new BrowserSession({
+      browser_profile: new BrowserProfile({
+        headless: true,
+        chromium_sandbox: true,
+      }),
+      playwright: {
+        chromium: {
+          launch,
+        },
+      } as any,
+    });
+
+    await session.start();
+
+    expect(launch).toHaveBeenCalledTimes(2);
+    const secondLaunchOptions = launch.mock.calls[1]?.[0] as
+      | Record<string, unknown>
+      | undefined;
+    expect(secondLaunchOptions?.chromiumSandbox).toBe(false);
+    expect(Array.isArray(secondLaunchOptions?.args)).toBe(true);
+    expect((secondLaunchOptions?.args as string[])).toContain('--no-sandbox');
+
+    await session.stop();
+  });
 });
 
 describe('BrowserProfile Configuration', () => {
