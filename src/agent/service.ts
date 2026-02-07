@@ -1626,11 +1626,13 @@ export class Agent<
         timeoutSeconds * 1000
       );
     });
-    const result = await Promise.race([promise, timeoutPromise]);
-    if (timeoutHandle) {
-      clearTimeout(timeoutHandle);
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
     }
-    return result;
   }
 
   async _step(step_info: AgentStepInfo | null = null) {

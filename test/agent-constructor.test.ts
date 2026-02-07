@@ -258,6 +258,22 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('clears timeout handles when timed execution rejects early', async () => {
+    const agent = new Agent({
+      task: 'test timeout cleanup',
+      llm: createLlm(),
+    });
+
+    const clearSpy = vi.spyOn(global, 'clearTimeout');
+    await expect(
+      (agent as any)._executeWithTimeout(Promise.reject(new Error('boom')), 5)
+    ).rejects.toThrow('boom');
+    expect(clearSpy).toHaveBeenCalled();
+    clearSpy.mockRestore();
+
+    await agent.close();
+  });
+
   it('treats allowed_domains=[] as unlocked when sensitive_data is used', async () => {
     const agent = new Agent({
       task: 'test allowed domains empty',
