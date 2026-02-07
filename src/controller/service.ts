@@ -227,7 +227,10 @@ export class Controller<Context = unknown> {
     type SearchGoogleAction = z.infer<typeof SearchGoogleActionSchema>;
     this.registry.action('Search the query in Google...', {
       param_model: SearchGoogleActionSchema,
-    })(async function search_google(params: SearchGoogleAction, { browser_session, signal }) {
+    })(async function search_google(
+      params: SearchGoogleAction,
+      { browser_session, signal }
+    ) {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
       const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(params.query)}&udm=14`;
@@ -249,7 +252,10 @@ export class Controller<Context = unknown> {
     type GoToUrlAction = z.infer<typeof GoToUrlActionSchema>;
     this.registry.action('Navigate to URL...', {
       param_model: GoToUrlActionSchema,
-    })(async function go_to_url(params: GoToUrlAction, { browser_session, signal }) {
+    })(async function go_to_url(
+      params: GoToUrlAction,
+      { browser_session, signal }
+    ) {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
       try {
@@ -319,7 +325,10 @@ export class Controller<Context = unknown> {
     type ClickElementAction = z.infer<typeof ClickElementActionSchema>;
     this.registry.action('Click element by index', {
       param_model: ClickElementActionSchema,
-    })(async function click_element_by_index(params: ClickElementAction, { browser_session, signal }) {
+    })(async function click_element_by_index(
+      params: ClickElementAction,
+      { browser_session, signal }
+    ) {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
       const element = await browser_session.get_dom_element_by_index(
@@ -376,81 +385,77 @@ export class Controller<Context = unknown> {
     this.registry.action(
       'Click and input text into an input interactive element',
       { param_model: InputTextActionSchema }
-    )(
-      async function input_text(
-        params: InputTextAction,
-        { browser_session, has_sensitive_data, signal }
-      ) {
-        if (!browser_session) throw new Error('Browser session missing');
-        throwIfAborted(signal);
-        const element = await browser_session.get_dom_element_by_index(
-          params.index,
-          { signal }
+    )(async function input_text(
+      params: InputTextAction,
+      { browser_session, has_sensitive_data, signal }
+    ) {
+      if (!browser_session) throw new Error('Browser session missing');
+      throwIfAborted(signal);
+      const element = await browser_session.get_dom_element_by_index(
+        params.index,
+        { signal }
+      );
+      if (!element) {
+        throw new BrowserError(
+          `Element index ${params.index} does not exist - retry or use alternative actions`
         );
-        if (!element) {
-          throw new BrowserError(
-            `Element index ${params.index} does not exist - retry or use alternative actions`
-          );
-        }
-        await browser_session._input_text_element_node(element, params.text, {
-          signal,
-        });
-        const msg = has_sensitive_data
-          ? `⌨️  Input sensitive data into index ${params.index}`
-          : `⌨️  Input ${params.text} into index ${params.index}`;
-        return new ActionResult({
-          extracted_content: msg,
-          include_in_memory: true,
-          long_term_memory: `Input '${params.text}' into element ${params.index}.`,
-        });
       }
-    );
+      await browser_session._input_text_element_node(element, params.text, {
+        signal,
+      });
+      const msg = has_sensitive_data
+        ? `⌨️  Input sensitive data into index ${params.index}`
+        : `⌨️  Input ${params.text} into index ${params.index}`;
+      return new ActionResult({
+        extracted_content: msg,
+        include_in_memory: true,
+        long_term_memory: `Input '${params.text}' into element ${params.index}.`,
+      });
+    });
 
     type UploadFileAction = z.infer<typeof UploadFileActionSchema>;
     this.registry.action('Upload file to interactive element with file path', {
       param_model: UploadFileActionSchema,
-    })(
-      async function upload_file(
-        params: UploadFileAction,
-        { browser_session, available_file_paths, signal }
-      ) {
-        if (!browser_session) throw new Error('Browser session missing');
-        throwIfAborted(signal);
-        if (!available_file_paths?.includes(params.path)) {
-          throw new BrowserError(`File path ${params.path} is not available`);
-        }
-        if (!fs.existsSync(params.path)) {
-          throw new BrowserError(`File ${params.path} does not exist`);
-        }
-
-        const node = await browser_session.find_file_upload_element_by_index(
-          params.index,
-          3,
-          3,
-          { signal }
-        );
-        if (!node) {
-          throw new BrowserError(
-            `No file upload element found at index ${params.index}`
-          );
-        }
-
-        const locator = await browser_session.get_locate_element(node);
-        if (!locator) {
-          throw new BrowserError(
-            `No file upload element found at index ${params.index}`
-          );
-        }
-
-        await locator.setInputFiles(params.path);
-        const msg = `📁 Successfully uploaded file to index ${params.index}`;
-        return new ActionResult({
-          extracted_content: msg,
-          include_in_memory: true,
-          long_term_memory: `Uploaded file ${params.path} to element ${params.index}`,
-        });
+    })(async function upload_file(
+      params: UploadFileAction,
+      { browser_session, available_file_paths, signal }
+    ) {
+      if (!browser_session) throw new Error('Browser session missing');
+      throwIfAborted(signal);
+      if (!available_file_paths?.includes(params.path)) {
+        throw new BrowserError(`File path ${params.path} is not available`);
       }
-    );
+      if (!fs.existsSync(params.path)) {
+        throw new BrowserError(`File ${params.path} does not exist`);
+      }
+
+      const node = await browser_session.find_file_upload_element_by_index(
+        params.index,
+        3,
+        3,
+        { signal }
+      );
+      if (!node) {
+        throw new BrowserError(
+          `No file upload element found at index ${params.index}`
+        );
+      }
+
+      const locator = await browser_session.get_locate_element(node);
+      if (!locator) {
+        throw new BrowserError(
+          `No file upload element found at index ${params.index}`
+        );
+      }
+
+      await locator.setInputFiles(params.path);
+      const msg = `📁 Successfully uploaded file to index ${params.index}`;
+      return new ActionResult({
+        extracted_content: msg,
+        include_in_memory: true,
+        long_term_memory: `Uploaded file ${params.path} to element ${params.index}`,
+      });
+    });
   }
 
   private registerTabActions() {
@@ -481,7 +486,10 @@ export class Controller<Context = unknown> {
     type CloseTabAction = z.infer<typeof CloseTabActionSchema>;
     this.registry.action('Close an existing tab', {
       param_model: CloseTabActionSchema,
-    })(async function close_tab(params: CloseTabAction, { browser_session, signal }) {
+    })(async function close_tab(
+      params: CloseTabAction,
+      { browser_session, signal }
+    ) {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
       await browser_session.switch_to_tab(params.page_id, { signal });
@@ -508,95 +516,94 @@ export class Controller<Context = unknown> {
       {
         param_model: ExtractStructuredDataActionSchema,
       }
-    )(
-      async function extract_structured_data(
-        params: ExtractStructuredAction,
-        { page, page_extraction_llm, file_system, signal }
-      ) {
+    )(async function extract_structured_data(
+      params: ExtractStructuredAction,
+      { page, page_extraction_llm, file_system, signal }
+    ) {
+      throwIfAborted(signal);
+      if (!page) {
+        throw new BrowserError('No active page available for extraction.');
+      }
+      if (!page_extraction_llm) {
+        throw new BrowserError('page_extraction_llm is not configured.');
+      }
+      const fsInstance = file_system ?? new FileSystem(process.cwd(), false);
+      const html = await page.content?.();
+      if (!html) {
+        throw new BrowserError('Unable to extract page content.');
+      }
+
+      const turndown = new TurndownService({
+        headingStyle: 'atx',
+        codeBlockStyle: 'fenced',
+      });
+      let rawHtml = html;
+      if (!params.extract_links) {
+        rawHtml = rawHtml.replace(/<a\b[^>]*>/gi, '').replace(/<\/a>/gi, '');
+      }
+      let content = turndown.turndown(rawHtml);
+      content = content.replace(/\n+/g, '\n');
+
+      // Manually append iframe text into the content so it's readable by the LLM (includes cross-origin iframes)
+      const frames = page.frames?.() || [];
+      for (const iframe of frames) {
         throwIfAborted(signal);
-        if (!page) {
-          throw new BrowserError('No active page available for extraction.');
-        }
-        if (!page_extraction_llm) {
-          throw new BrowserError('page_extraction_llm is not configured.');
-        }
-        const fsInstance = file_system ?? new FileSystem(process.cwd(), false);
-        const html = await page.content?.();
-        if (!html) {
-          throw new BrowserError('Unable to extract page content.');
+        try {
+          // Wait for iframe to load with aggressive timeout
+          await runWithTimeoutAndSignal(
+            async () => {
+              await iframe.waitForLoadState?.('load');
+            },
+            2000,
+            signal,
+            'Iframe load timeout'
+          );
+        } catch (error) {
+          if (isAbortError(error)) {
+            throw error;
+          }
+          // Ignore iframe load errors
         }
 
-        const turndown = new TurndownService({
-          headingStyle: 'atx',
-          codeBlockStyle: 'fenced',
-        });
-        let rawHtml = html;
-        if (!params.extract_links) {
-          rawHtml = rawHtml.replace(/<a\b[^>]*>/gi, '').replace(/<\/a>/gi, '');
-        }
-        let content = turndown.turndown(rawHtml);
-        content = content.replace(/\n+/g, '\n');
-
-        // Manually append iframe text into the content so it's readable by the LLM (includes cross-origin iframes)
-        const frames = page.frames?.() || [];
-        for (const iframe of frames) {
-          throwIfAborted(signal);
+        const iframeUrl = iframe.url?.();
+        const pageUrl = page.url?.();
+        if (
+          iframeUrl &&
+          pageUrl &&
+          iframeUrl !== pageUrl &&
+          !iframeUrl.startsWith('data:') &&
+          !iframeUrl.startsWith('about:')
+        ) {
+          content += `\n\nIFRAME ${iframeUrl}:\n`;
           try {
-            // Wait for iframe to load with aggressive timeout
-            await runWithTimeoutAndSignal(
-              async () => {
-                await iframe.waitForLoadState?.('load');
-              },
+            const iframeHtml = await runWithTimeoutAndSignal(
+              async () => (await iframe.content?.()) ?? '',
               2000,
               signal,
-              'Iframe load timeout'
+              'Iframe content extraction timeout'
             );
+            const iframeMarkdown = turndown.turndown(iframeHtml || '');
+            content += iframeMarkdown;
           } catch (error) {
             if (isAbortError(error)) {
               throw error;
             }
-            // Ignore iframe load errors
-          }
-
-          const iframeUrl = iframe.url?.();
-          const pageUrl = page.url?.();
-          if (
-            iframeUrl &&
-            pageUrl &&
-            iframeUrl !== pageUrl &&
-            !iframeUrl.startsWith('data:') &&
-            !iframeUrl.startsWith('about:')
-          ) {
-            content += `\n\nIFRAME ${iframeUrl}:\n`;
-            try {
-              const iframeHtml = await runWithTimeoutAndSignal(
-                async () => (await iframe.content?.()) ?? '',
-                2000,
-                signal,
-                'Iframe content extraction timeout'
-              );
-              const iframeMarkdown = turndown.turndown(iframeHtml || '');
-              content += iframeMarkdown;
-            } catch (error) {
-              if (isAbortError(error)) {
-                throw error;
-              }
-              // Skip failed iframes
-            }
+            // Skip failed iframes
           }
         }
+      }
 
-        // Replace multiple sequential \n with a single \n
-        content = content.replace(/\n+/g, '\n');
+      // Replace multiple sequential \n with a single \n
+      content = content.replace(/\n+/g, '\n');
 
-        const maxChars = 30000;
-        if (content.length > maxChars) {
-          const head = content.slice(0, maxChars / 2);
-          const tail = content.slice(-maxChars / 2);
-          content = `${head}\n... left out the middle because it was too long ...\n${tail}`;
-        }
+      const maxChars = 30000;
+      if (content.length > maxChars) {
+        const head = content.slice(0, maxChars / 2);
+        const tail = content.slice(-maxChars / 2);
+        content = `${head}\n... left out the middle because it was too long ...\n${tail}`;
+      }
 
-        const prompt = `You convert websites into structured information. Extract information from this webpage based on the query. Focus only on content relevant to the query. If 
+      const prompt = `You convert websites into structured information. Extract information from this webpage based on the query. Focus only on content relevant to the query. If 
 1. The query is vague
 2. Does not make sense for the page
 3. Some/all of the information is not available
@@ -606,48 +613,47 @@ Query: ${params.query}
 Website:
 ${content}`;
 
-        const extraction = await (page_extraction_llm as any).ainvoke(
-          [new UserMessage(prompt)],
-          undefined,
-          { signal: signal ?? undefined }
-        );
-        throwIfAborted(signal);
-        const completion = extraction?.completion ?? '';
-        const extracted_content = `Page Link: ${page.url}\nQuery: ${params.query}\nExtracted Content:\n${completion}`;
+      const extraction = await (page_extraction_llm as any).ainvoke(
+        [new UserMessage(prompt)],
+        undefined,
+        { signal: signal ?? undefined }
+      );
+      throwIfAborted(signal);
+      const completion = extraction?.completion ?? '';
+      const extracted_content = `Page Link: ${page.url}\nQuery: ${params.query}\nExtracted Content:\n${completion}`;
 
-        let includeOnce = false;
-        let memory = extracted_content;
-        const MAX_MEMORY_SIZE = 600;
-        if (extracted_content.length > MAX_MEMORY_SIZE) {
-          const lines = extracted_content.split('\n');
-          let display = '';
-          let count = 0;
-          for (const line of lines) {
-            if (display.length + line.length > MAX_MEMORY_SIZE) break;
-            display += `${line}\n`;
-            count += 1;
-          }
-          const saveResult =
-            await fsInstance.save_extracted_content(extracted_content);
-          // NOTE: Do NOT mention file_system tag here as it misleads LLM to use read_file action
-          // The extracted content preview above is sufficient for most tasks
-          memory = `Extracted content from ${page.url}\n<query>${params.query}</query>\n<extracted_content>\n${display}${lines.length - count} more lines (auto-saved, no need to read)...\n</extracted_content>`;
-          includeOnce = true;
+      let includeOnce = false;
+      let memory = extracted_content;
+      const MAX_MEMORY_SIZE = 600;
+      if (extracted_content.length > MAX_MEMORY_SIZE) {
+        const lines = extracted_content.split('\n');
+        let display = '';
+        let count = 0;
+        for (const line of lines) {
+          if (display.length + line.length > MAX_MEMORY_SIZE) break;
+          display += `${line}\n`;
+          count += 1;
         }
-
-        return new ActionResult({
-          extracted_content,
-          include_extracted_content_only_once: includeOnce,
-          long_term_memory: memory,
-        });
+        const saveResult =
+          await fsInstance.save_extracted_content(extracted_content);
+        // NOTE: Do NOT mention file_system tag here as it misleads LLM to use read_file action
+        // The extracted content preview above is sufficient for most tasks
+        memory = `Extracted content from ${page.url}\n<query>${params.query}</query>\n<extracted_content>\n${display}${lines.length - count} more lines (auto-saved, no need to read)...\n</extracted_content>`;
+        includeOnce = true;
       }
-    );
+
+      return new ActionResult({
+        extracted_content,
+        include_extracted_content_only_once: includeOnce,
+        long_term_memory: memory,
+      });
+    });
   }
 
   private registerScrollActions() {
     const scrollLogger = this.logger; // Capture logger reference for use in named function
     type ScrollAction = z.infer<typeof ScrollActionSchema>;
-    
+
     // Define the scroll handler implementation (shared by multiple action names for LLM compatibility)
     const scrollImpl = async (
       params: ScrollAction,
@@ -867,31 +873,68 @@ ${content}`;
         long_term_memory: longTermMemory,
       });
     };
-    
+
     // Register scroll action with multiple names for LLM compatibility
     // Different LLMs may use different names: scroll, scroll_page, scroll_down
-    const scrollDescription = 'Scroll the page by specified number of pages (set down=True to scroll down, down=False to scroll up, num_pages=number of pages to scroll like 0.5 for half page, 1.0 for one page, etc.). Optional index parameter to scroll within a specific element or its scroll container (works well for dropdowns and custom UI components).';
-    
+    const scrollDescription =
+      'Scroll the page by specified number of pages (set down=True to scroll down, down=False to scroll up, num_pages=number of pages to scroll like 0.5 for half page, 1.0 for one page, etc.). Optional index parameter to scroll within a specific element or its scroll container (works well for dropdowns and custom UI components).';
+
     // Create named functions that wrap the implementation
     // Different LLMs may use different names: scroll, scroll_page, scroll_down, scroll_by, scroll_page_by, scroll_up
-    const scrollAction = async function scroll(p: ScrollAction, ctx: any) { return scrollImpl(p, ctx); };
-    const scrollPageAction = async function scroll_page(p: ScrollAction, ctx: any) { return scrollImpl(p, ctx); };
-    const scrollDownAction = async function scroll_down(p: ScrollAction, ctx: any) { return scrollImpl(p, ctx); };
-    const scrollByAction = async function scroll_by(p: ScrollAction, ctx: any) { return scrollImpl(p, ctx); };
-    const scrollPageByAction = async function scroll_page_by(p: ScrollAction, ctx: any) { return scrollImpl(p, ctx); };
-    const scrollUpAction = async function scroll_up(p: ScrollAction, ctx: any) { return scrollImpl(p, ctx); };
-    
-    this.registry.action(scrollDescription, { param_model: ScrollActionSchema })(scrollAction);
-    this.registry.action(scrollDescription, { param_model: ScrollActionSchema })(scrollPageAction);
-    this.registry.action(scrollDescription, { param_model: ScrollActionSchema })(scrollDownAction);
-    this.registry.action(scrollDescription, { param_model: ScrollActionSchema })(scrollByAction);
-    this.registry.action(scrollDescription, { param_model: ScrollActionSchema })(scrollPageByAction);
-    this.registry.action(scrollDescription, { param_model: ScrollActionSchema })(scrollUpAction);
-    
+    const scrollAction = async function scroll(p: ScrollAction, ctx: any) {
+      return scrollImpl(p, ctx);
+    };
+    const scrollPageAction = async function scroll_page(
+      p: ScrollAction,
+      ctx: any
+    ) {
+      return scrollImpl(p, ctx);
+    };
+    const scrollDownAction = async function scroll_down(
+      p: ScrollAction,
+      ctx: any
+    ) {
+      return scrollImpl(p, ctx);
+    };
+    const scrollByAction = async function scroll_by(p: ScrollAction, ctx: any) {
+      return scrollImpl(p, ctx);
+    };
+    const scrollPageByAction = async function scroll_page_by(
+      p: ScrollAction,
+      ctx: any
+    ) {
+      return scrollImpl(p, ctx);
+    };
+    const scrollUpAction = async function scroll_up(p: ScrollAction, ctx: any) {
+      return scrollImpl(p, ctx);
+    };
+
+    this.registry.action(scrollDescription, {
+      param_model: ScrollActionSchema,
+    })(scrollAction);
+    this.registry.action(scrollDescription, {
+      param_model: ScrollActionSchema,
+    })(scrollPageAction);
+    this.registry.action(scrollDescription, {
+      param_model: ScrollActionSchema,
+    })(scrollDownAction);
+    this.registry.action(scrollDescription, {
+      param_model: ScrollActionSchema,
+    })(scrollByAction);
+    this.registry.action(scrollDescription, {
+      param_model: ScrollActionSchema,
+    })(scrollPageByAction);
+    this.registry.action(scrollDescription, {
+      param_model: ScrollActionSchema,
+    })(scrollUpAction);
+
     type ScrollToTextAction = z.infer<typeof ScrollToTextActionSchema>;
     this.registry.action('Scroll to a text in the current page', {
       param_model: ScrollToTextActionSchema,
-    })(async function scroll_to_text(params: ScrollToTextAction, { browser_session }) {
+    })(async function scroll_to_text(
+      params: ScrollToTextAction,
+      { browser_session }
+    ) {
       if (!browser_session) throw new Error('Browser session missing');
       const page: Page | null = await browser_session.get_current_page();
       if (!page?.evaluate) {
@@ -935,36 +978,37 @@ ${content}`;
     type ReadFileAction = z.infer<typeof ReadFileActionSchema>;
     this.registry.action('Read file_name from file system', {
       param_model: ReadFileActionSchema,
-    })(
-      async function read_file(params: ReadFileAction, { file_system, available_file_paths }) {
-        const fsInstance = file_system ?? new FileSystem(process.cwd(), false);
-        const allowed =
-          Array.isArray(available_file_paths) &&
-          available_file_paths.includes(params.file_name);
-        const result = await fsInstance.read_file(params.file_name, allowed);
-        const MAX_MEMORY_SIZE = 1000;
-        let memory = result;
-        if (result.length > MAX_MEMORY_SIZE) {
-          const lines = result.split('\n');
-          let preview = '';
-          let used = 0;
-          for (const line of lines) {
-            if (preview.length + line.length > MAX_MEMORY_SIZE) break;
-            preview += `${line}\n`;
-            used += 1;
-          }
-          const remaining = lines.length - used;
-          memory =
-            remaining > 0 ? `${preview}${remaining} more lines...` : preview;
+    })(async function read_file(
+      params: ReadFileAction,
+      { file_system, available_file_paths }
+    ) {
+      const fsInstance = file_system ?? new FileSystem(process.cwd(), false);
+      const allowed =
+        Array.isArray(available_file_paths) &&
+        available_file_paths.includes(params.file_name);
+      const result = await fsInstance.read_file(params.file_name, allowed);
+      const MAX_MEMORY_SIZE = 1000;
+      let memory = result;
+      if (result.length > MAX_MEMORY_SIZE) {
+        const lines = result.split('\n');
+        let preview = '';
+        let used = 0;
+        for (const line of lines) {
+          if (preview.length + line.length > MAX_MEMORY_SIZE) break;
+          preview += `${line}\n`;
+          used += 1;
         }
-        return new ActionResult({
-          extracted_content: result,
-          include_in_memory: true,
-          long_term_memory: memory,
-          include_extracted_content_only_once: true,
-        });
+        const remaining = lines.length - used;
+        memory =
+          remaining > 0 ? `${preview}${remaining} more lines...` : preview;
       }
-    );
+      return new ActionResult({
+        extracted_content: result,
+        include_in_memory: true,
+        long_term_memory: memory,
+        include_extracted_content_only_once: true,
+      });
+    });
 
     type WriteFileAction = z.infer<typeof WriteFileActionSchema>;
     this.registry.action('Write content to file', {
@@ -1048,7 +1092,10 @@ ${content}`;
     this.registry.action(
       'Get all options from a native dropdown or ARIA menu',
       { param_model: DropdownOptionsActionSchema }
-    )(async function get_dropdown_options(params: DropdownAction, { browser_session, signal }) {
+    )(async function get_dropdown_options(
+      params: DropdownAction,
+      { browser_session, signal }
+    ) {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
       const page: Page | null = await browser_session.get_current_page();
@@ -1129,7 +1176,10 @@ ${content}`;
     type SelectAction = z.infer<typeof SelectDropdownActionSchema>;
     this.registry.action('Select dropdown option or ARIA menu item by text', {
       param_model: SelectDropdownActionSchema,
-    })(async function select_dropdown_option(params: SelectAction, { browser_session, signal }) {
+    })(async function select_dropdown_option(
+      params: SelectAction,
+      { browser_session, signal }
+    ) {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
       const page: Page | null = await browser_session.get_current_page();
@@ -1258,7 +1308,10 @@ ${content}`;
         domains: ['https://docs.google.com'],
         param_model: SheetsRangeActionSchema,
       }
-    )(async function sheets_get_range(params: SheetsRange, { browser_session, signal }) {
+    )(async function sheets_get_range(
+      params: SheetsRange,
+      { browser_session, signal }
+    ) {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
       const page: Page | null = await browser_session.get_current_page();
@@ -1283,7 +1336,10 @@ ${content}`;
         domains: ['https://docs.google.com'],
         param_model: SheetsUpdateActionSchema,
       }
-    )(async function sheets_update(params: SheetsUpdate, { browser_session, signal }) {
+    )(async function sheets_update(
+      params: SheetsUpdate,
+      { browser_session, signal }
+    ) {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
       const page: Page | null = await browser_session.get_current_page();
@@ -1307,7 +1363,10 @@ ${content}`;
         domains: ['https://docs.google.com'],
         param_model: SheetsRangeActionSchema,
       }
-    )(async function sheets_clear(params: SheetsRange, { browser_session, signal }) {
+    )(async function sheets_clear(
+      params: SheetsRange,
+      { browser_session, signal }
+    ) {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
       const page: Page | null = await browser_session.get_current_page();
@@ -1325,7 +1384,10 @@ ${content}`;
         domains: ['https://docs.google.com'],
         param_model: SheetsRangeActionSchema,
       }
-    )(async function sheets_select(params: SheetsRange, { browser_session, signal }) {
+    )(async function sheets_select(
+      params: SheetsRange,
+      { browser_session, signal }
+    ) {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
       const page: Page | null = await browser_session.get_current_page();
@@ -1342,23 +1404,21 @@ ${content}`;
         domains: ['https://docs.google.com'],
         param_model: SheetsInputActionSchema,
       }
-    )(
-      async function sheets_input(
-        params: z.infer<typeof SheetsInputActionSchema>,
-        { browser_session, signal }
-      ) {
-        if (!browser_session) throw new Error('Browser session missing');
-        throwIfAborted(signal);
-        const page: Page | null = await browser_session.get_current_page();
-        await page?.keyboard?.type(params.text, { delay: 100 });
-        await page?.keyboard?.press('Enter');
-        await page?.keyboard?.press('ArrowUp');
-        return new ActionResult({
-          extracted_content: `Inputted text ${params.text}`,
-          long_term_memory: `Inputted text '${params.text}' into cell`,
-        });
-      }
-    );
+    )(async function sheets_input(
+      params: z.infer<typeof SheetsInputActionSchema>,
+      { browser_session, signal }
+    ) {
+      if (!browser_session) throw new Error('Browser session missing');
+      throwIfAborted(signal);
+      const page: Page | null = await browser_session.get_current_page();
+      await page?.keyboard?.type(params.text, { delay: 100 });
+      await page?.keyboard?.press('Enter');
+      await page?.keyboard?.press('ArrowUp');
+      return new ActionResult({
+        extracted_content: `Inputted text ${params.text}`,
+        long_term_memory: `Inputted text '${params.text}' into cell`,
+      });
+    });
   }
 
   private async gotoSheetsRange(

@@ -26,6 +26,7 @@ jobs:
       - name: yarn install and verify
         run: |
           yarn install --frozen-lockfile
+          yarn lint
           yarn typecheck
           yarn build
           yarn test

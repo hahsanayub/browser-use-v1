@@ -100,13 +100,10 @@ export class ChatOpenRouter implements BaseChatModel {
       }
     }
 
-    return new ChatInvokeCompletion(
-      completion,
-      {
-        prompt_tokens: response.usage?.prompt_tokens ?? 0,
-        completion_tokens: response.usage?.completion_tokens ?? 0,
-        total_tokens: response.usage?.total_tokens ?? 0,
-      }
-    );
+    return new ChatInvokeCompletion(completion, {
+      prompt_tokens: response.usage?.prompt_tokens ?? 0,
+      completion_tokens: response.usage?.completion_tokens ?? 0,
+      total_tokens: response.usage?.total_tokens ?? 0,
+    });
   }
 }

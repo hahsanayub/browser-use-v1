@@ -123,7 +123,10 @@ describe('Controller Registry Tests', () => {
           required: z.string(),
           optional: z.string().default('default_value'),
         }),
-      })(async function default_params_action(params: { required: string; optional: string }) {
+      })(async function default_params_action(params: {
+        required: string;
+        optional: string;
+      }) {
         return new ActionResult({
           extracted_content: `${params.required}|${params.optional}`,
         });
@@ -152,7 +155,10 @@ describe('Controller Registry Tests', () => {
           email: z.string().email(),
           age: z.number().min(0).max(150),
         }),
-      })(async function validated_action(params: { email: string; age: number }) {
+      })(async function validated_action(params: {
+        email: string;
+        age: number;
+      }) {
         return new ActionResult({ extracted_content: 'Valid' });
       });
 
@@ -191,7 +197,11 @@ describe('Controller Registry Tests', () => {
       controller.abort();
 
       await expect(
-        registry.execute_action('noop_action', {}, { signal: controller.signal })
+        registry.execute_action(
+          'noop_action',
+          {},
+          { signal: controller.signal }
+        )
       ).rejects.toMatchObject({ name: 'AbortError' });
     });
 
@@ -293,7 +303,10 @@ describe('Controller Registry Tests', () => {
           items: z.array(z.string()),
           counts: z.array(z.number()),
         }),
-      })(async function array_params_action(params: { items: string[]; counts: number[] }) {
+      })(async function array_params_action(params: {
+        items: string[];
+        counts: number[];
+      }) {
         return new ActionResult({
           extracted_content: `Items: ${params.items.join(',')}, Sum: ${params.counts.reduce((a, b) => a + b, 0)}`,
         });
@@ -315,7 +328,10 @@ describe('Controller Registry Tests', () => {
           required: z.string(),
           optional: z.string().optional(),
         }),
-      })(async function optional_params_action(params: { required: string; optional?: string }) {
+      })(async function optional_params_action(params: {
+        required: string;
+        optional?: string;
+      }) {
         return new ActionResult({
           extracted_content: `Required: ${params.required}, Optional: ${params.optional ?? 'not provided'}`,
         });
@@ -325,14 +341,18 @@ describe('Controller Registry Tests', () => {
       const result1 = await registry.execute_action('optional_params_action', {
         required: 'test',
       });
-      expect(result1.extracted_content).toBe('Required: test, Optional: not provided');
+      expect(result1.extracted_content).toBe(
+        'Required: test, Optional: not provided'
+      );
 
       // With optional
       const result2 = await registry.execute_action('optional_params_action', {
         required: 'test',
         optional: 'provided',
       });
-      expect(result2.extracted_content).toBe('Required: test, Optional: provided');
+      expect(result2.extracted_content).toBe(
+        'Required: test, Optional: provided'
+      );
     });
   });
 
@@ -488,8 +508,12 @@ describe('Controller Integration Tests', () => {
           direction: z.enum(['up', 'down']),
           amount: z.number().default(500),
         }),
-      })(async function scroll(params: { direction: 'up' | 'down'; amount: number }) {
-        const delta = params.direction === 'down' ? params.amount : -params.amount;
+      })(async function scroll(params: {
+        direction: 'up' | 'down';
+        amount: number;
+      }) {
+        const delta =
+          params.direction === 'down' ? params.amount : -params.amount;
         await page.evaluate((d) => window.scrollBy(0, d), delta);
         return new ActionResult({
           extracted_content: `Scrolled ${params.direction} by ${params.amount}px`,
@@ -497,7 +521,10 @@ describe('Controller Integration Tests', () => {
       });
 
       const initialScroll = await page.evaluate(() => window.scrollY);
-      await registry.execute_action('scroll', { direction: 'down', amount: 500 });
+      await registry.execute_action('scroll', {
+        direction: 'down',
+        amount: 500,
+      });
       const afterScroll = await page.evaluate(() => window.scrollY);
 
       expect(afterScroll).toBeGreaterThan(initialScroll);

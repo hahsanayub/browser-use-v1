@@ -73,6 +73,22 @@ export default [
       'prefer-destructuring': 'off',
       '@typescript-eslint/ban-ts-comment': 'off',
       'no-param-reassign': 'off',
+      '@typescript-eslint/no-unused-vars': [
+        'off',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+      '@typescript-eslint/no-require-imports': 'off',
+      '@typescript-eslint/no-this-alias': 'off',
+      '@typescript-eslint/no-unsafe-function-type': 'off',
+      '@typescript-eslint/prefer-as-const': 'off',
+      'no-redeclare': 'off',
+      'no-async-promise-executor': 'off',
+      'no-useless-escape': 'off',
+      'import/extensions': 'off',
       'no-useless-constructor': 0,
       'class-methods-use-this': 0,
       'no-underscore-dangle': 0,
@@ -84,14 +100,6 @@ export default [
       'no-restricted-syntax': 'off',
       'import/prefer-default-export': 'off',
       'prettier/prettier': ['error'],
-      'import/extensions': [
-        'error',
-        'ignorePackages',
-        {
-          js: 'never',
-          ts: 'never',
-        },
-      ],
     },
     settings: {
       'import/resolver': {

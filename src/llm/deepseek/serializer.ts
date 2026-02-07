@@ -65,6 +65,8 @@ export class DeepSeekMessageSerializer {
       };
     }
 
-    throw new Error(`Unknown message type: ${(message as any).constructor.name}`);
+    throw new Error(
+      `Unknown message type: ${(message as any).constructor.name}`
+    );
   }
 }

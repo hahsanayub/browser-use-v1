@@ -117,7 +117,14 @@ describe('DOM Element Classes', () => {
     });
 
     it('tracks interactive state', () => {
-      const element = new DOMElementNode(true, null, 'button', '/button', {}, []);
+      const element = new DOMElementNode(
+        true,
+        null,
+        'button',
+        '/button',
+        {},
+        []
+      );
       element.is_interactive = true;
       element.highlight_index = 5;
 
@@ -183,7 +190,11 @@ describe('DOM Element Classes', () => {
 
 describe('HashedDomElement', () => {
   it('creates hashed element', () => {
-    const hashed = new HashedDomElement('branch_hash', 'attr_hash', 'xpath_hash');
+    const hashed = new HashedDomElement(
+      'branch_hash',
+      'attr_hash',
+      'xpath_hash'
+    );
 
     expect(hashed.branch_path_hash).toBe('branch_hash');
     expect(hashed.attributes_hash).toBe('attr_hash');
@@ -233,9 +244,8 @@ describe('DOMHistoryElement', () => {
     );
     domElement.highlight_index = 5;
 
-    const historyElement = HistoryTreeProcessor.convert_dom_element_to_history_element(
-      domElement
-    );
+    const historyElement =
+      HistoryTreeProcessor.convert_dom_element_to_history_element(domElement);
 
     expect(historyElement.tag_name).toBe('button');
     expect(historyElement.xpath).toBe('/html/body/button');
@@ -326,10 +336,11 @@ describe('HistoryTreeProcessor', () => {
       const historyElement =
         HistoryTreeProcessor.convert_dom_element_to_history_element(domElement);
 
-      const matches = HistoryTreeProcessor.compare_history_element_and_dom_element(
-        historyElement,
-        domElement
-      );
+      const matches =
+        HistoryTreeProcessor.compare_history_element_and_dom_element(
+          historyElement,
+          domElement
+        );
 
       expect(matches).toBe(true);
     });
@@ -354,12 +365,15 @@ describe('HistoryTreeProcessor', () => {
       );
 
       const historyElement =
-        HistoryTreeProcessor.convert_dom_element_to_history_element(domElement1);
+        HistoryTreeProcessor.convert_dom_element_to_history_element(
+          domElement1
+        );
 
-      const matches = HistoryTreeProcessor.compare_history_element_and_dom_element(
-        historyElement,
-        domElement2
-      );
+      const matches =
+        HistoryTreeProcessor.compare_history_element_and_dom_element(
+          historyElement,
+          domElement2
+        );
 
       expect(matches).toBe(false);
     });
@@ -368,14 +382,7 @@ describe('HistoryTreeProcessor', () => {
   describe('Tree Search', () => {
     it('finds element in tree by hash', () => {
       // Build a simple tree with proper parent-child relationships
-      const root = new DOMElementNode(
-        true,
-        null,
-        'body',
-        '/html/body',
-        {},
-        []
-      );
+      const root = new DOMElementNode(true, null, 'body', '/html/body', {}, []);
 
       const parent = new DOMElementNode(
         true,

@@ -123,13 +123,10 @@ export class ChatBedrockConverse implements BaseChatModel {
 
     const usage = response.usage || {};
 
-    return new ChatInvokeCompletion(
-      completion,
-      {
-        prompt_tokens: (usage as any).inputTokens || 0,
-        completion_tokens: (usage as any).outputTokens || 0,
-        total_tokens: (usage as any).totalTokens || 0,
-      }
-    );
+    return new ChatInvokeCompletion(completion, {
+      prompt_tokens: (usage as any).inputTokens || 0,
+      completion_tokens: (usage as any).outputTokens || 0,
+      total_tokens: (usage as any).totalTokens || 0,
+    });
   }
 }

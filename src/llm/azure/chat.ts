@@ -85,7 +85,10 @@ export class ChatAzure implements BaseChatModel {
         let startIdx = -1;
         let endIdx = -1;
 
-        if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+        if (
+          firstBrace !== -1 &&
+          (firstBracket === -1 || firstBrace < firstBracket)
+        ) {
           // It's an object
           startIdx = firstBrace;
           endIdx = lastBrace;

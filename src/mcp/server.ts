@@ -246,7 +246,8 @@ export class MCPServer {
   private formatRetryResult(history: any): string {
     const results: string[] = [];
     const steps =
-      Array.isArray(history?.history) || typeof history?.number_of_steps === 'function'
+      Array.isArray(history?.history) ||
+      typeof history?.number_of_steps === 'function'
         ? typeof history?.number_of_steps === 'function'
           ? history.number_of_steps()
           : history.history.length
@@ -547,7 +548,8 @@ export class MCPServer {
           browser_errors: state.browser_errors,
           loading_status: state.loading_status,
           screenshot: state.screenshot,
-          interactive_elements: state.element_tree.clickable_elements_to_string(),
+          interactive_elements:
+            state.element_tree.clickable_elements_to_string(),
           interactive_count: Object.keys(state.selector_map ?? {}).length,
         };
       }
@@ -666,7 +668,9 @@ export class MCPServer {
             : 'gpt-4o';
         const llmModel = model || configuredModel;
         const temperature =
-          typeof llmConfig.temperature === 'number' ? llmConfig.temperature : 0.7;
+          typeof llmConfig.temperature === 'number'
+            ? llmConfig.temperature
+            : 0.7;
 
         const llm = new ChatOpenAI({
           model: llmModel,
@@ -690,7 +694,8 @@ export class MCPServer {
           const history = await agent.run(maxSteps);
           return this.formatRetryResult(history);
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
+          const message =
+            error instanceof Error ? error.message : String(error);
           return `Agent task failed: ${message}`;
         } finally {
           await agent.close();

@@ -8,7 +8,9 @@ import { PLACEHOLDER_4PX_SCREENSHOT } from '../browser/views.js';
 import type { AgentHistoryList } from './views.js';
 
 // Type compatibility between node-canvas and browser canvas
-type CompatibleCanvasContext = NodeCanvasRenderingContext2D | CanvasRenderingContext2D;
+type CompatibleCanvasContext =
+  | NodeCanvasRenderingContext2D
+  | CanvasRenderingContext2D;
 
 const logger = createLogger('browser_use.agent.gif');
 

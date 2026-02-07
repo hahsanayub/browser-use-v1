@@ -191,9 +191,7 @@ class MockLLM implements BaseChatModel {
   model = 'mock-model';
   private readonly responses: Array<{ completion: any }>;
   private readonly onInvoke?:
-    | ((
-        signal: AbortSignal | undefined
-      ) => void | Promise<void>)
+    | ((signal: AbortSignal | undefined) => void | Promise<void>)
     | undefined;
   calls: any[][] = [];
   signals: Array<AbortSignal | undefined> = [];
@@ -201,9 +199,7 @@ class MockLLM implements BaseChatModel {
   constructor(
     responses: Array<{ completion: any }>,
     onInvoke?:
-      | ((
-          signal: AbortSignal | undefined
-        ) => void | Promise<void>)
+      | ((signal: AbortSignal | undefined) => void | Promise<void>)
       | undefined
   ) {
     this.responses = responses;
@@ -472,7 +468,9 @@ describe('Component Tests (Mocked Dependencies)', () => {
     expect(llm.calls.length).toBe(2);
     expect(history.is_done()).toBe(true);
     expect(history.is_successful()).toBe(false);
-    expect(history.final_result() ?? '').toContain('No next action returned by LLM!');
+    expect(history.final_result() ?? '').toContain(
+      'No next action returned by LLM!'
+    );
   });
 
   it('handles multiple actions in sequence', async () => {
@@ -800,7 +798,9 @@ describe('Component Tests (Mocked Dependencies)', () => {
     const llm = new MockLLM([
       {
         completion: {
-          action: [{ done: { success: true, text: 'Recovered after retries' } }],
+          action: [
+            { done: { success: true, text: 'Recovered after retries' } },
+          ],
           thinking: 'retry until browser state is available',
         },
       },
@@ -905,7 +905,11 @@ describe('Component Tests (Mocked Dependencies)', () => {
         return false;
       }
       if (mode === 'shared') {
-        if (exclusiveOwner && exclusiveOwner !== agentId && sharedOwners.size === 0) {
+        if (
+          exclusiveOwner &&
+          exclusiveOwner !== agentId &&
+          sharedOwners.size === 0
+        ) {
           return false;
         }
         if (sharedOwners.size === 0 && exclusiveOwner) {
@@ -943,7 +947,11 @@ describe('Component Tests (Mocked Dependencies)', () => {
       return true;
     };
     browser_session.get_attached_agent_ids = () =>
-      sharedOwners.size ? Array.from(sharedOwners) : exclusiveOwner ? [exclusiveOwner] : [];
+      sharedOwners.size
+        ? Array.from(sharedOwners)
+        : exclusiveOwner
+          ? [exclusiveOwner]
+          : [];
     browser_session.get_attached_agent_id = () =>
       browser_session.get_attached_agent_ids()[0] ?? null;
     browser_session.stop = async () => {
@@ -1028,7 +1036,11 @@ describe('Component Tests (Mocked Dependencies)', () => {
           return false;
         }
         if (mode === 'shared') {
-          if (exclusiveOwner && exclusiveOwner !== agentId && sharedOwners.size === 0) {
+          if (
+            exclusiveOwner &&
+            exclusiveOwner !== agentId &&
+            sharedOwners.size === 0
+          ) {
             return false;
           }
           if (sharedOwners.size === 0 && exclusiveOwner) {
@@ -1053,7 +1065,9 @@ describe('Component Tests (Mocked Dependencies)', () => {
             return false;
           }
           sharedOwners.delete(agentId);
-          exclusiveOwner = sharedOwners.size ? Array.from(sharedOwners)[0] : null;
+          exclusiveOwner = sharedOwners.size
+            ? Array.from(sharedOwners)[0]
+            : null;
           return true;
         }
         if (!exclusiveOwner) {
@@ -1091,7 +1105,10 @@ describe('Component Tests (Mocked Dependencies)', () => {
       },
       async get_browser_state_with_recovery() {
         inStateCalls += 1;
-        maxConcurrentStateCalls = Math.max(maxConcurrentStateCalls, inStateCalls);
+        maxConcurrentStateCalls = Math.max(
+          maxConcurrentStateCalls,
+          inStateCalls
+        );
         await new Promise((resolve) => setTimeout(resolve, 20));
         inStateCalls -= 1;
         const active = tabs[activeTabIndex];
@@ -1155,7 +1172,10 @@ describe('Component Tests (Mocked Dependencies)', () => {
     tempResources.push(agent1.agent_directory);
     tempResources.push(agent2.agent_directory);
 
-    const [history1, history2] = await Promise.all([agent1.run(1), agent2.run(1)]);
+    const [history1, history2] = await Promise.all([
+      agent1.run(1),
+      agent2.run(1),
+    ]);
 
     expect(maxConcurrentStateCalls).toBe(1);
     expect(history1.history[0]?.state?.url).toBe('https://tab-a.test');

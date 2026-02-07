@@ -211,14 +211,11 @@ export class ChatAnthropicBedrock implements BaseChatModel {
       }
     }
 
-    return new ChatInvokeCompletion(
-      completion,
-      {
-        prompt_tokens: response.usage?.inputTokens ?? 0,
-        completion_tokens: response.usage?.outputTokens ?? 0,
-        total_tokens: response.usage?.totalTokens ?? 0,
-      }
-    );
+    return new ChatInvokeCompletion(completion, {
+      prompt_tokens: response.usage?.inputTokens ?? 0,
+      completion_tokens: response.usage?.outputTokens ?? 0,
+      total_tokens: response.usage?.totalTokens ?? 0,
+    });
   }
 
   /**

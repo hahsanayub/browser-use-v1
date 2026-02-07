@@ -1,7 +1,4 @@
-import {
-  GoogleGenAI,
-  type Tool,
-} from '@google/genai';
+import { GoogleGenAI, type Tool } from '@google/genai';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { z } from 'zod';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
@@ -107,7 +104,9 @@ export class ChatGoogle implements BaseChatModel {
 
     // Try to get schema from output_format
     const schemaForJson =
-      output_format && 'schema' in output_format && (output_format as any).schema
+      output_format &&
+      'schema' in output_format &&
+      (output_format as any).schema
         ? (output_format as any).schema
         : null;
 
@@ -193,13 +192,10 @@ export class ChatGoogle implements BaseChatModel {
       }
     }
 
-    return new ChatInvokeCompletion(
-      completion,
-      {
-        prompt_tokens: result.usageMetadata?.promptTokenCount ?? 0,
-        completion_tokens: result.usageMetadata?.candidatesTokenCount ?? 0,
-        total_tokens: result.usageMetadata?.totalTokenCount ?? 0,
-      }
-    );
+    return new ChatInvokeCompletion(completion, {
+      prompt_tokens: result.usageMetadata?.promptTokenCount ?? 0,
+      completion_tokens: result.usageMetadata?.candidatesTokenCount ?? 0,
+      total_tokens: result.usageMetadata?.totalTokenCount ?? 0,
+    });
   }
 }

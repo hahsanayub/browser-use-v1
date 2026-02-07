@@ -52,7 +52,10 @@ import {
   ModelProviderError,
   ModelRateLimitError,
 } from '../src/llm/exceptions.js';
-import { ChatInvokeCompletion, type ChatInvokeUsage } from '../src/llm/views.js';
+import {
+  ChatInvokeCompletion,
+  type ChatInvokeUsage,
+} from '../src/llm/views.js';
 
 describe('LLM Messages', () => {
   describe('SystemMessage', () => {
@@ -259,7 +262,9 @@ describe('Schema Optimizer', () => {
 
       const optimized = SchemaOptimizer.createOptimizedJsonSchema(schema);
 
-      expect(optimized.properties.url.description).toBe('The URL to navigate to');
+      expect(optimized.properties.url.description).toBe(
+        'The URL to navigate to'
+      );
     });
 
     it('sets required to all properties', () => {
@@ -345,7 +350,11 @@ describe('LLM Exceptions', () => {
 
   describe('ModelRateLimitError', () => {
     it('creates rate limit error', () => {
-      const error = new ModelRateLimitError('Rate limit exceeded', 429, 'gpt-4');
+      const error = new ModelRateLimitError(
+        'Rate limit exceeded',
+        429,
+        'gpt-4'
+      );
 
       expect(error).toBeInstanceOf(ModelProviderError);
       expect(error.statusCode).toBe(429);
@@ -444,7 +453,11 @@ describe('Message Serialization Patterns', () => {
       new UserMessage([
         new ContentPartTextParam('What is in this image?'),
         new ContentPartImageParam(
-          new ImageURL('data:image/png;base64,encodedimage', 'auto', 'image/png')
+          new ImageURL(
+            'data:image/png;base64,encodedimage',
+            'auto',
+            'image/png'
+          )
         ),
       ]),
     ];
@@ -532,7 +545,9 @@ describe('Reasoning Model Support', () => {
     ];
 
     const isReasoningModel = (model: string) =>
-      reasoningModels.some((m) => model.toLowerCase().includes(m.toLowerCase()));
+      reasoningModels.some((m) =>
+        model.toLowerCase().includes(m.toLowerCase())
+      );
 
     expect(isReasoningModel('o3-mini')).toBe(true);
     expect(isReasoningModel('gpt-4')).toBe(false);

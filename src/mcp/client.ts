@@ -164,8 +164,13 @@ export class MCPClient {
       this._lastConnectTime = Date.now() / 1000;
 
       // Discover available tools
-      const result = await this.client.request(ListToolsRequestSchema as any, {} as any);
-      this._tools = new Map((result as any).tools.map((tool: any) => [tool.name, tool]));
+      const result = await this.client.request(
+        ListToolsRequestSchema as any,
+        {} as any
+      );
+      this._tools = new Map(
+        (result as any).tools.map((tool: any) => [tool.name, tool])
+      );
 
       // Try to discover prompts (optional)
       try {
@@ -303,10 +308,13 @@ export class MCPClient {
 
       this._toolCallCount++;
 
-      const result = await this.client.request(CallToolRequestSchema as any, {
-        name,
-        arguments: args,
-      } as any);
+      const result = await this.client.request(
+        CallToolRequestSchema as any,
+        {
+          name,
+          arguments: args,
+        } as any
+      );
 
       return (result as any).content;
     } catch (error) {
@@ -508,7 +516,8 @@ export class MCPClient {
         const options = nonNullTypes.map((entry) =>
           this._jsonSchemaToZod({ ...schema, type: entry }, path)
         );
-        const union = options.length === 1 ? options[0] : z.union(options as any);
+        const union =
+          options.length === 1 ? options[0] : z.union(options as any);
         return hasNull ? union.nullable() : union;
       }
     }
@@ -669,7 +678,10 @@ export class MCPClient {
     }
 
     try {
-      const result = await this.client.request(ListPromptsRequestSchema as any, {} as any);
+      const result = await this.client.request(
+        ListPromptsRequestSchema as any,
+        {} as any
+      );
       this._prompts = new Map(
         (result as any).prompts.map((prompt: any) => [prompt.name, prompt])
       );
@@ -689,10 +701,13 @@ export class MCPClient {
     }
 
     try {
-      const result = await this.client.request(GetPromptRequestSchema as any, {
-        name,
-        arguments: args,
-      } as any);
+      const result = await this.client.request(
+        GetPromptRequestSchema as any,
+        {
+          name,
+          arguments: args,
+        } as any
+      );
       return result as any;
     } catch (error) {
       logger.error(`Failed to get prompt '${name}': ${error}`);

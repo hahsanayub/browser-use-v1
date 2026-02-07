@@ -59,7 +59,9 @@ import type { AgentSettings } from '../src/agent/views.js';
 import { ActionResult } from '../src/agent/views.js';
 
 // Helper to create agent settings (since it's an interface)
-const createAgentSettings = (overrides: Partial<AgentSettings> = {}): AgentSettings => ({
+const createAgentSettings = (
+  overrides: Partial<AgentSettings> = {}
+): AgentSettings => ({
   use_vision: true,
   vision_detail_level: 'auto',
   use_vision_for_planner: false,
@@ -296,8 +298,7 @@ describe('Agent Think Tags', () => {
     };
 
     it('removes well-formed think tags', () => {
-      const text =
-        '<think>Internal reasoning here</think>The actual response';
+      const text = '<think>Internal reasoning here</think>The actual response';
       const result = removeThinkTags(text);
 
       expect(result).toBe('The actual response');

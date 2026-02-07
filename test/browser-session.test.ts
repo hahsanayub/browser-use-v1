@@ -8,7 +8,12 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import {
+  chromium,
+  type Browser,
+  type BrowserContext,
+  type Page,
+} from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -249,7 +254,7 @@ describe('BrowserSession Basic Operations', () => {
       | undefined;
     expect(secondLaunchOptions?.chromiumSandbox).toBe(false);
     expect(Array.isArray(secondLaunchOptions?.args)).toBe(true);
-    expect((secondLaunchOptions?.args as string[])).toContain('--no-sandbox');
+    expect(secondLaunchOptions?.args as string[]).toContain('--no-sandbox');
 
     await session.stop();
   });
@@ -309,9 +314,9 @@ describe('BrowserSession PDF Auto Download', () => {
         })),
       } as any;
 
-      const downloadedPath = await (session as any)._auto_download_pdf_if_needed(
-        fakePage
-      );
+      const downloadedPath = await (
+        session as any
+      )._auto_download_pdf_if_needed(fakePage);
 
       expect(downloadedPath).toBeTruthy();
       expect(fs.existsSync(downloadedPath!)).toBe(true);
@@ -425,7 +430,9 @@ describe('Direct Playwright Operations', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'screenshot-test-'));
     const screenshotPath = path.join(tempDir, 'test.png');
 
-    await page.setContent('<html><body style="background:blue;"></body></html>');
+    await page.setContent(
+      '<html><body style="background:blue;"></body></html>'
+    );
     await page.screenshot({ path: screenshotPath });
 
     expect(fs.existsSync(screenshotPath)).toBe(true);

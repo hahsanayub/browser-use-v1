@@ -90,12 +90,14 @@ export class ChatOpenAI implements BaseChatModel {
   }
 
   private isReasoningModel(): boolean {
-    return ReasoningModels.some(
-      (m) => this.model.toLowerCase().includes(m.toLowerCase())
+    return ReasoningModels.some((m) =>
+      this.model.toLowerCase().includes(m.toLowerCase())
     );
   }
 
-  private getUsage(response: OpenAI.Chat.Completions.ChatCompletion): ChatInvokeUsage | null {
+  private getUsage(
+    response: OpenAI.Chat.Completions.ChatCompletion
+  ): ChatInvokeUsage | null {
     if (!response.usage) return null;
 
     let completionTokens = response.usage.completion_tokens;
@@ -106,7 +108,8 @@ export class ChatOpenAI implements BaseChatModel {
 
     return {
       prompt_tokens: response.usage.prompt_tokens,
-      prompt_cached_tokens: (response.usage as any).prompt_tokens_details?.cached_tokens ?? null,
+      prompt_cached_tokens:
+        (response.usage as any).prompt_tokens_details?.cached_tokens ?? null,
       prompt_cache_creation_tokens: null,
       prompt_image_tokens: null,
       completion_tokens: completionTokens,

@@ -280,10 +280,12 @@ export class Registry<Context = unknown> {
     );
   }
 
-  create_action_model(options: {
-    include_actions?: string[] | null;
-    page?: Page | null;
-  } = {}) {
+  create_action_model(
+    options: {
+      include_actions?: string[] | null;
+      page?: Page | null;
+    } = {}
+  ) {
     const { include_actions = null, page = null } = options;
     const availableActions = this.registry.getAvailableActions(
       page,

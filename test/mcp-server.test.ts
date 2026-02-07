@@ -146,7 +146,8 @@ describe('MCPServer browser_click new_tab', () => {
       await vi.advanceTimersByTimeAsync(500);
       const result = await handlerPromise;
 
-      const expectedModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+      const expectedModifier =
+        process.platform === 'darwin' ? 'Meta' : 'Control';
       expect(locatorClick).toHaveBeenCalledWith({
         modifiers: [expectedModifier],
       });
@@ -163,15 +164,15 @@ describe('MCPServer retry_with_browser_use_agent', () => {
     mockAgentInstances.length = 0;
     const server = new MCPServer('test-mcp', '1.0.0');
 
-    const result = await (server as any).tools.retry_with_browser_use_agent.handler(
-      {
-        task: 'Try task again',
-        max_steps: 7,
-        model: 'gpt-4o',
-        allowed_domains: ['retry.example'],
-        use_vision: false,
-      }
-    );
+    const result = await (
+      server as any
+    ).tools.retry_with_browser_use_agent.handler({
+      task: 'Try task again',
+      max_steps: 7,
+      model: 'gpt-4o',
+      allowed_domains: ['retry.example'],
+      use_vision: false,
+    });
 
     expect(result).toContain('Task completed in 2 steps');
     expect(result).toContain('Success: true');
@@ -182,12 +183,12 @@ describe('MCPServer retry_with_browser_use_agent', () => {
     const instance = mockAgentInstances[0];
     expect(instance.params.task).toBe('Try task again');
     expect(instance.params.use_vision).toBe(false);
-    expect(instance.params.browser_session.browser_profile.config.allowed_domains).toEqual([
-      'retry.example',
-    ]);
-    expect(instance.params.browser_session.browser_profile.config.keep_alive).toBe(
-      false
-    );
+    expect(
+      instance.params.browser_session.browser_profile.config.allowed_domains
+    ).toEqual(['retry.example']);
+    expect(
+      instance.params.browser_session.browser_profile.config.keep_alive
+    ).toBe(false);
   });
 
   it('defaults allowed_domains override to empty list when omitted', async () => {
@@ -200,9 +201,9 @@ describe('MCPServer retry_with_browser_use_agent', () => {
 
     expect(mockAgentInstances.length).toBe(1);
     const instance = mockAgentInstances[0];
-    expect(instance.params.browser_session.browser_profile.config.allowed_domains).toEqual(
-      []
-    );
+    expect(
+      instance.params.browser_session.browser_profile.config.allowed_domains
+    ).toEqual([]);
   });
 
   it('returns explicit error when OpenAI key is missing', async () => {
@@ -212,12 +213,14 @@ describe('MCPServer retry_with_browser_use_agent', () => {
       llm: {},
     };
 
-    const result = await (server as any).tools.retry_with_browser_use_agent.handler(
-      {
-        task: 'Try task again',
-      }
-    );
+    const result = await (
+      server as any
+    ).tools.retry_with_browser_use_agent.handler({
+      task: 'Try task again',
+    });
 
-    expect(result).toBe('Error: OPENAI_API_KEY not set in config or environment');
+    expect(result).toBe(
+      'Error: OPENAI_API_KEY not set in config or environment'
+    );
   });
 });

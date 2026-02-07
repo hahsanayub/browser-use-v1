@@ -5,10 +5,7 @@ import PDFDocument from 'pdfkit';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 
-type PdfParseFn = (
-  dataBuffer: Buffer,
-  options?: any
-) => Promise<any>;
+type PdfParseFn = (dataBuffer: Buffer, options?: any) => Promise<any>;
 const require = createRequire(import.meta.url);
 const pdfParse = require('pdf-parse') as PdfParseFn;
 

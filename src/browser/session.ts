@@ -107,7 +107,7 @@ export class BrowserSession {
       ? typeof structuredClone === 'function'
         ? structuredClone(init.browser_profile.config)
         : JSON.parse(JSON.stringify(init.browser_profile.config))
-      : init.profile ?? {};
+      : (init.profile ?? {});
     this.browser_profile = new BrowserProfile(sourceProfileConfig);
     this.id = init.id ?? uuid7str();
     this.browser = init.browser ?? null;
@@ -382,7 +382,10 @@ export class BrowserSession {
     return this.ownsBrowserResources;
   }
 
-  claim_agent(agentId: string, mode: 'exclusive' | 'shared' = 'exclusive'): boolean {
+  claim_agent(
+    agentId: string,
+    mode: 'exclusive' | 'shared' = 'exclusive'
+  ): boolean {
     if (!agentId) {
       return false;
     }
@@ -423,7 +426,10 @@ export class BrowserSession {
     return true;
   }
 
-  claimAgent(agentId: string, mode: 'exclusive' | 'shared' = 'exclusive'): boolean {
+  claimAgent(
+    agentId: string,
+    mode: 'exclusive' | 'shared' = 'exclusive'
+  ): boolean {
     return this.claim_agent(agentId, mode);
   }
 
@@ -607,9 +613,8 @@ export class BrowserSession {
       if (convertedValue === undefined) {
         continue;
       }
-      const normalizedKey = rawKey.replace(
-        /_([a-z])/g,
-        (_, letter: string) => letter.toUpperCase()
+      const normalizedKey = rawKey.replace(/_([a-z])/g, (_, letter: string) =>
+        letter.toUpperCase()
       );
       result[normalizedKey] = convertedValue;
     }
@@ -629,7 +634,9 @@ export class BrowserSession {
     launchOptions: Record<string, unknown>
   ): Record<string, unknown> {
     const rawArgs = Array.isArray(launchOptions.args)
-      ? launchOptions.args.filter((arg): arg is string => typeof arg === 'string')
+      ? launchOptions.args.filter(
+          (arg): arg is string => typeof arg === 'string'
+        )
       : [];
     const mergedArgs = [...rawArgs];
     for (const arg of CHROME_DOCKER_ARGS) {
@@ -653,10 +660,7 @@ export class BrowserSession {
       return await playwright.chromium.launch(launchOptions);
     } catch (error) {
       const sandboxEnabled = this.browser_profile.config.chromium_sandbox;
-      if (
-        !sandboxEnabled ||
-        !this._isSandboxLaunchError(error)
-      ) {
+      if (!sandboxEnabled || !this._isSandboxLaunchError(error)) {
         throw error;
       }
 
@@ -727,7 +731,8 @@ export class BrowserSession {
 
     if (!this.browser_context) {
       if (!this.browser) {
-        const playwright = (this.playwright as any) ?? (await async_playwright());
+        const playwright =
+          (this.playwright as any) ?? (await async_playwright());
         this.playwright = playwright;
 
         if (this.cdp_url) {
@@ -955,7 +960,10 @@ export class BrowserSession {
 
       if (typeof this.browser?.close === 'function') {
         try {
-          await closeWithTimeout('Closing browser instance', this.browser.close());
+          await closeWithTimeout(
+            'Closing browser instance',
+            this.browser.close()
+          );
         } catch (error) {
           this.logger.debug(
             `Failed to close browser instance: ${(error as Error).message}`
@@ -2733,7 +2741,9 @@ export class BrowserSession {
         !Array.isArray(downloadResult.data) ||
         downloadResult.data.length === 0
       ) {
-        this.logger.warning(`⚠️ No data received when downloading PDF from ${url}`);
+        this.logger.warning(
+          `⚠️ No data received when downloading PDF from ${url}`
+        );
         return null;
       }
 
@@ -2744,7 +2754,10 @@ export class BrowserSession {
       );
       const downloadPath = path.join(downloadsPath, uniqueFilename);
 
-      await fs.promises.writeFile(downloadPath, Buffer.from(downloadResult.data));
+      await fs.promises.writeFile(
+        downloadPath,
+        Buffer.from(downloadResult.data)
+      );
       this.add_downloaded_file(downloadPath);
 
       const cacheStatus = downloadResult.fromCache
@@ -2963,9 +2976,7 @@ export class BrowserSession {
     // Check against allowed domains
     for (const allowed_domain of this.browser_profile.allowed_domains) {
       try {
-        if (
-          match_url_with_domain_pattern(url, allowed_domain, true)
-        ) {
+        if (match_url_with_domain_pattern(url, allowed_domain, true)) {
           return true;
         }
       } catch (error) {

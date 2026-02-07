@@ -102,14 +102,11 @@ export class ChatOllama implements BaseChatModel {
       }
     }
 
-    return new ChatInvokeCompletion(
-      completion,
-      {
-        prompt_tokens: response.prompt_eval_count ?? 0,
-        completion_tokens: response.eval_count ?? 0,
-        total_tokens:
-          (response.prompt_eval_count ?? 0) + (response.eval_count ?? 0),
-      }
-    );
+    return new ChatInvokeCompletion(completion, {
+      prompt_tokens: response.prompt_eval_count ?? 0,
+      completion_tokens: response.eval_count ?? 0,
+      total_tokens:
+        (response.prompt_eval_count ?? 0) + (response.eval_count ?? 0),
+    });
   }
 }

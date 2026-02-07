@@ -57,8 +57,10 @@ export class ChatAnthropic implements BaseChatModel {
   }
 
   private getUsage(response: Anthropic.Message): ChatInvokeUsage {
-    const cacheReadTokens = (response.usage as any).cache_read_input_tokens ?? 0;
-    const cacheCreationTokens = (response.usage as any).cache_creation_input_tokens ?? 0;
+    const cacheReadTokens =
+      (response.usage as any).cache_read_input_tokens ?? 0;
+    const cacheCreationTokens =
+      (response.usage as any).cache_creation_input_tokens ?? 0;
 
     return {
       prompt_tokens: response.usage.input_tokens + cacheReadTokens,
@@ -169,7 +171,9 @@ export class ChatAnthropic implements BaseChatModel {
         completion = output_format.parse(toolUseBlock.input as any);
       } else {
         // Fallback to text content
-        const textBlock = response.content.find((block) => block.type === 'text');
+        const textBlock = response.content.find(
+          (block) => block.type === 'text'
+        );
         completion = textBlock ? textBlock.text : '';
       }
 

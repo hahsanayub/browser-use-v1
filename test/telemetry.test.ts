@@ -346,7 +346,9 @@ describe('Telemetry Event Properties', () => {
   });
 
   it('sanitizes sensitive data from events', () => {
-    const sanitizeEventData = (data: Record<string, any>): Record<string, any> => {
+    const sanitizeEventData = (
+      data: Record<string, any>
+    ): Record<string, any> => {
       const sensitiveKeys = ['password', 'api_key', 'token', 'secret'];
       const sanitized: Record<string, any> = {};
 

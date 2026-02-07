@@ -128,9 +128,11 @@ async function testFocusVsAllElements(): Promise<void> {
         console.log('User message written to ./tmp/user_message.txt');
         console.log('Element tree written to ./tmp/element_tree.json');
 
-        const answer = String(await question(
-          "Enter element index to click, 'index,text' to input, 'c,index' to copy element JSON, or 'q' to quit: "
-        ));
+        const answer = String(
+          await question(
+            "Enter element index to click, 'index,text' to input, 'c,index' to copy element JSON, or 'q' to quit: "
+          )
+        );
 
         if (answer.toLowerCase().trim() === 'q') {
           break;
