@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn, exec, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -4052,7 +4053,7 @@ export class BrowserSession {
    * Create a temporary user data directory
    */
   private async _createTempUserDataDir(): Promise<string> {
-    const osTempDir = require('os').tmpdir();
+    const osTempDir = os.tmpdir();
     const tempDir = path.join(
       osTempDir,
       `browser-use-${Date.now()}-${Math.random().toString(36).slice(2)}`

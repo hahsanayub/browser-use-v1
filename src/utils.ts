@@ -8,6 +8,7 @@ import { stderr } from 'node:process';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { config as loadEnv } from 'dotenv';
+import minimatch from 'minimatch';
 import { createLogger } from './logging-config.js';
 
 loadEnv();
@@ -616,7 +617,6 @@ export function match_url_with_domain_pattern(
     }
 
     // If scheme doesn't match using minimatch, return false
-    const minimatch = require('minimatch');
     if (!minimatch(scheme, pattern_scheme)) {
       return false;
     }

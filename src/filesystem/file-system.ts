@@ -5,9 +5,63 @@ import PDFDocument from 'pdfkit';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 
-type PdfParseFn = (dataBuffer: Buffer, options?: any) => Promise<any>;
 const require = createRequire(import.meta.url);
-const pdfParse = require('pdf-parse') as PdfParseFn;
+
+interface LegacyPdfParseResult {
+  text?: string;
+  numpages?: number;
+}
+
+type LegacyPdfParseFn = (
+  dataBuffer: Buffer,
+  options?: unknown
+) => Promise<LegacyPdfParseResult>;
+
+interface PdfParser {
+  destroy?: () => Promise<void>;
+  getText: () => Promise<{ text?: string; total?: number }>;
+}
+
+type PdfParserConstructor = new (options: { data: Buffer }) => PdfParser;
+
+async function extractPdfText(buffer: Buffer): Promise<{
+  text: string;
+  totalPages: number;
+}> {
+  const pdfParseModule = (await import('pdf-parse')) as {
+    default?: unknown;
+    PDFParse?: unknown;
+  };
+
+  if (typeof pdfParseModule.default === 'function') {
+    const legacyParser = pdfParseModule.default as LegacyPdfParseFn;
+    const parsed = await legacyParser(buffer);
+    return {
+      text: parsed.text ?? '',
+      totalPages: parsed.numpages ?? 0,
+    };
+  }
+
+  if (typeof pdfParseModule.PDFParse === 'function') {
+    const Parser = pdfParseModule.PDFParse as PdfParserConstructor;
+    const parser = new Parser({ data: buffer });
+    try {
+      const parsed = await parser.getText();
+      return {
+        text: parsed.text ?? '',
+        totalPages: parsed.total ?? 0,
+      };
+    } finally {
+      if (typeof parser.destroy === 'function') {
+        await parser.destroy();
+      }
+    }
+  }
+
+  throw new FileSystemError(
+    "Error: Could not parse PDF file due to unsupported 'pdf-parse' module format."
+  );
+}
 
 export const INVALID_FILENAME_ERROR_MESSAGE =
   'Error: Invalid filename format. Must be alphanumeric with supported extension.';
@@ -280,10 +334,10 @@ export class FileSystem {
         }
         if (extension === 'pdf') {
           const buffer = await fsp.readFile(filename);
-          const parsed = await pdfParse(buffer);
-          const totalPages = parsed.numpages ?? 0;
+          const parsed = await extractPdfText(buffer);
+          const totalPages = parsed.totalPages;
           const extraPages = Math.max(0, totalPages - 10);
-          const snippet = parsed.text?.trim() || '';
+          const snippet = parsed.text.trim();
           const preview = snippet
             .split(/\n{2,}/)
             .slice(0, 10)

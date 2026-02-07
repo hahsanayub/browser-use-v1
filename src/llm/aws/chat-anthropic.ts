@@ -28,6 +28,7 @@ import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ChatInvokeCompletion } from '../views.js';
 import { type Message, SystemMessage } from '../messages.js';
 import { AnthropicMessageSerializer } from '../anthropic/serializer.js';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 
 export interface ChatAnthropicBedrockConfig {
   /** Model ID, defaults to Claude 3.5 Sonnet */
@@ -222,20 +223,9 @@ export class ChatAnthropicBedrock implements BaseChatModel {
    * Simple Zod to JSON Schema conversion for structured output
    */
   private _zodToJsonSchema(schema: any): any {
-    // This is a simplified version - you might want to use zod-to-json-schema package
-    try {
-      const { zodToJsonSchema } = require('zod-to-json-schema');
-      return zodToJsonSchema(schema, {
-        name: 'Response',
-        target: 'jsonSchema7',
-      });
-    } catch {
-      // Fallback if zod-to-json-schema is not available
-      return {
-        type: 'object',
-        properties: {},
-        required: [],
-      };
-    }
+    return zodToJsonSchema(schema, {
+      name: 'Response',
+      target: 'jsonSchema7',
+    });
   }
 }

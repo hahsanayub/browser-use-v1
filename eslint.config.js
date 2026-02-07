@@ -81,7 +81,6 @@ export default [
           caughtErrorsIgnorePattern: '^_',
         },
       ],
-      '@typescript-eslint/no-require-imports': 'off',
       'import/extensions': 'off',
       'no-useless-constructor': 0,
       'class-methods-use-this': 0,
