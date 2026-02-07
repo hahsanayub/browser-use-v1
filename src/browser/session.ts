@@ -492,7 +492,7 @@ export class BrowserSession {
     return null;
   }
 
-  async close() {
+  private async _shutdown_browser_session() {
     this.initialized = false;
 
     // Kill child processes first
@@ -510,6 +510,10 @@ export class BrowserSession {
     this.cachedBrowserState = null;
     this._tabs = [];
     this.downloaded_files = [];
+  }
+
+  async close() {
+    await this.stop();
   }
 
   async get_browser_state_with_recovery(options: BrowserStateOptions = {}) {
@@ -2372,7 +2376,14 @@ export class BrowserSession {
    * Alias for close() to match Python API
    */
   async stop(): Promise<void> {
-    await this.close();
+    if (this.browser_profile.keep_alive) {
+      this.logger.info(
+        '🕊️ BrowserSession.stop() called but keep_alive=true, leaving browser running. Use .kill() to force close.'
+      );
+      return;
+    }
+
+    await this._shutdown_browser_session();
   }
 
   /**

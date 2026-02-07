@@ -28,6 +28,7 @@ import { BrowserStateSummary, BrowserStateHistory } from '../browser/views.js';
 import { HistoryTreeProcessor } from '../dom/history-tree-processor/service.js';
 import { DOMHistoryElement } from '../dom/history-tree-processor/view.js';
 import type { BaseChatModel } from '../llm/base.js';
+import { UserMessage } from '../llm/messages.js';
 import type { UsageSummary } from '../tokens/views.js';
 import type { ActionResultInit } from './views.js';
 import {
@@ -217,6 +218,11 @@ const AgentLLMOutputSchema = z.object({
   action: z.array(z.record(z.string(), z.any())).optional().nullable().default([]),
 });
 
+const AgentLLMOutputFormat = AgentLLMOutputSchema as typeof AgentLLMOutputSchema & {
+  schema: typeof AgentLLMOutputSchema;
+};
+AgentLLMOutputFormat.schema = AgentLLMOutputSchema;
+
 export class Agent<
   Context = ControllerContext,
   AgentStructuredOutput = unknown,
@@ -282,6 +288,7 @@ export class Agent<
   _session_start_time = 0;
   _task_start_time = 0;
   _force_exit_telemetry_logged = false;
+  private _enforceDoneOnlyForCurrentStep = false;
   system_prompt_class: SystemPrompt;
   ActionModel: typeof ActionModel = ActionModel;
   AgentOutput: typeof AgentOutput = AgentOutput;
@@ -2152,6 +2159,7 @@ export class Agent<
 
   private async _finalize(browser_state_summary: BrowserStateSummary | null) {
     const step_end_time = Date.now() / 1000;
+    this._enforceDoneOnlyForCurrentStep = false;
     if (!this.state.last_result) {
       return;
     }
@@ -2196,23 +2204,28 @@ export class Agent<
   }
 
   private async _handle_final_step(step_info: AgentStepInfo | null = null) {
-    if (step_info && step_info.is_last_step()) {
-      this.logger.info('⚠️ Approaching last step. Prefer done action.');
+    const isLastStep = Boolean(step_info && step_info.is_last_step());
+    this._enforceDoneOnlyForCurrentStep = isLastStep;
+
+    if (isLastStep) {
+      const message =
+        'Now comes your last step. Use only the "done" action now. No other actions - so here your action sequence must have length 1.\n' +
+        'If the task is not yet fully finished as requested by the user, set success in "done" to false! E.g. if not all steps are fully completed.\n' +
+        'If the task is fully finished, set success in "done" to true.\n' +
+        'Include everything you found out for the ultimate task in the done text.';
+      this._message_manager._add_context_message(new UserMessage(message));
+      this.logger.info('⚠️ Approaching last step. Enforcing done-only action.');
     }
   }
 
-  private async _get_model_output_with_retry(messages: any[]) {
-    const completion = await this.llm.ainvoke(
-      messages as any,
-      AgentLLMOutputSchema
-    );
-    let parsed_completion = (completion as any).completion;
+  private _parseCompletionPayload(rawCompletion: unknown): Record<string, unknown> {
+    let parsedCompletion = rawCompletion;
 
-    if (typeof parsed_completion === 'string') {
-      let jsonText = parsed_completion.trim();
+    if (typeof parsedCompletion === 'string') {
+      let jsonText = this._removeThinkTags(parsedCompletion.trim());
 
       // Handle common markdown wrappers like ```json ... ```
-      const fencedMatch = jsonText.match(/```(?:json)?\\s*([\\s\\S]*?)```/i);
+      const fencedMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/i);
       if (fencedMatch && fencedMatch[1]) {
         jsonText = fencedMatch[1].trim();
       }
@@ -2225,7 +2238,7 @@ export class Agent<
       }
 
       try {
-        parsed_completion = JSON.parse(jsonText);
+        parsedCompletion = JSON.parse(jsonText);
       } catch (error) {
         throw new Error(
           `Failed to parse LLM completion as JSON: ${String(error)}`
@@ -2233,18 +2246,180 @@ export class Agent<
       }
     }
 
-    const action = Array.isArray(parsed_completion?.action)
+    if (!parsedCompletion || typeof parsedCompletion !== 'object') {
+      throw new Error('Model completion must be a JSON object');
+    }
+
+    return parsedCompletion as Record<string, unknown>;
+  }
+
+  private _isModelActionMissing(actions: unknown[]): boolean {
+    if (actions.length === 0) {
+      return true;
+    }
+
+    return actions.every((entry) => {
+      const candidate =
+        entry &&
+        typeof entry === 'object' &&
+        typeof (entry as any).model_dump === 'function'
+          ? (entry as any).model_dump()
+          : entry;
+
+      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+        return false;
+      }
+
+      return Object.keys(candidate as Record<string, unknown>).length === 0;
+    });
+  }
+
+  private async _get_model_output_with_retry(messages: any[]) {
+    const invokeAndParse = async (inputMessages: any[]) => {
+      const completion = await this.llm.ainvoke(
+        inputMessages as any,
+        AgentLLMOutputFormat as any
+      );
+      return this._parseCompletionPayload((completion as any).completion);
+    };
+
+    let parsed_completion = await invokeAndParse(messages);
+
+    let rawAction = Array.isArray(parsed_completion?.action)
       ? parsed_completion.action
       : [];
+
+    this.logger.debug(
+      `✅ Step ${this.state.n_steps}: Got LLM response with ${rawAction.length} actions`
+    );
+
+    if (this._isModelActionMissing(rawAction)) {
+      this.logger.warning('Model returned empty action. Retrying...');
+      const clarificationMessage = new UserMessage(
+        'You forgot to return an action. Please respond only with a valid JSON action according to the expected format.'
+      );
+      parsed_completion = await invokeAndParse([
+        ...messages,
+        clarificationMessage,
+      ]);
+      rawAction = Array.isArray(parsed_completion?.action)
+        ? parsed_completion.action
+        : [];
+
+      if (this._isModelActionMissing(rawAction)) {
+        this.logger.warning(
+          'Model still returned empty after retry. Inserting safe noop action.'
+        );
+        rawAction = [
+          {
+            done: {
+              success: false,
+              text: 'No next action returned by LLM!',
+            },
+          },
+        ];
+      }
+    }
+
+    const action = this._validateAndNormalizeActions(rawAction);
+    const toNullableString = (value: unknown): string | null =>
+      typeof value === 'string' ? value : null;
     const AgentOutputModel = this.AgentOutput ?? AgentOutput;
     return new AgentOutputModel({
-      thinking: parsed_completion?.thinking ?? null,
-      evaluation_previous_goal:
-        parsed_completion?.evaluation_previous_goal ?? null,
-      memory: parsed_completion?.memory ?? null,
-      next_goal: parsed_completion?.next_goal ?? null,
+      thinking: toNullableString(parsed_completion?.thinking),
+      evaluation_previous_goal: toNullableString(
+        parsed_completion?.evaluation_previous_goal
+      ),
+      memory: toNullableString(parsed_completion?.memory),
+      next_goal: toNullableString(parsed_completion?.next_goal),
       action,
     });
+  }
+
+  private _validateAndNormalizeActions(actions: unknown[]): ActionModel[] {
+    const normalizedActions: ActionModel[] = [];
+    const registryActions = this.controller.registry.get_all_actions();
+
+    const availableNames = new Set<string>();
+    const modelForStep: typeof ActionModel = this._enforceDoneOnlyForCurrentStep
+      ? this.DoneActionModel
+      : this.ActionModel;
+    const modelAvailableNames = (modelForStep as any)?.available_actions;
+    if (Array.isArray(modelAvailableNames) && modelAvailableNames.length > 0) {
+      for (const actionName of modelAvailableNames) {
+        if (typeof actionName === 'string' && actionName.trim()) {
+          availableNames.add(actionName);
+        }
+      }
+    } else {
+      for (const actionName of registryActions.keys()) {
+        availableNames.add(actionName);
+      }
+    }
+
+    for (let i = 0; i < actions.length; i++) {
+      const entry = actions[i];
+      const candidate =
+        entry &&
+        typeof entry === 'object' &&
+        typeof (entry as any).model_dump === 'function'
+          ? (entry as any).model_dump()
+          : entry;
+
+      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+        throw new Error(
+          `Invalid action at index ${i}: expected an object with exactly one action key`
+        );
+      }
+
+      const actionObject = candidate as Record<string, unknown>;
+      const keys = Object.keys(actionObject);
+      if (keys.length !== 1) {
+        throw new Error(
+          `Invalid action at index ${i}: expected exactly one action key, got ${keys.length}`
+        );
+      }
+
+      const actionName = keys[0];
+      if (!availableNames.has(actionName)) {
+        const available = Array.from(availableNames).sort().join(', ');
+        throw new Error(
+          `Action '${actionName}' is not available on the current page. Available actions: ${available}`
+        );
+      }
+
+      const actionInfo = registryActions.get(actionName);
+      if (!actionInfo) {
+        throw new Error(`Action '${actionName}' is not registered`);
+      }
+
+      const rawParams = (actionObject[actionName] ?? {}) as unknown;
+      const paramsResult = actionInfo.paramSchema.safeParse(rawParams);
+      if (!paramsResult.success) {
+        throw new Error(
+          `Invalid parameters for action '${actionName}': ${paramsResult.error.message}`
+        );
+      }
+
+      normalizedActions.push(
+        new modelForStep({
+          [actionName]: paramsResult.data,
+        })
+      );
+    }
+
+    if (normalizedActions.length === 0) {
+      throw new Error('Model output must contain at least one action');
+    }
+
+    if (normalizedActions.length > this.settings.max_actions_per_step) {
+      this.logger.warning(
+        `Model returned ${normalizedActions.length} actions, trimming to max_actions_per_step=${this.settings.max_actions_per_step}`
+      );
+      return normalizedActions.slice(0, this.settings.max_actions_per_step);
+    }
+
+    return normalizedActions;
   }
 
   private async _update_action_models_for_page(page: Page | null) {

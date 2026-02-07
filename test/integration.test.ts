@@ -336,6 +336,123 @@ describe('Component Tests (Mocked Dependencies)', () => {
     expect(history.final_result()).toContain('Reached example.com');
   });
 
+  it('adds done-only guidance on the final step', async () => {
+    const controller = createTestController();
+    const browser_session = createBrowserSessionStub();
+    const tempDir = createTempDir();
+    const llm = new MockLLM([
+      {
+        completion: {
+          action: [{ go_to_url: { url: 'https://example.com' } }],
+          thinking: 'navigate first',
+        },
+      },
+      {
+        completion: {
+          action: [{ done: { success: true, text: 'Finished on final step' } }],
+          thinking: 'finish now',
+        },
+      },
+    ]);
+
+    const agent = new Agent({
+      task: 'Navigate and finish',
+      llm,
+      browser_session,
+      controller,
+      file_system_path: tempDir,
+      use_vision: false,
+    });
+
+    tempResources.push(agent.agent_directory);
+    const history = await agent.run(2);
+
+    const secondCallMessages = llm.calls[1] ?? [];
+    const hasFinalStepGuidance = secondCallMessages.some((message: any) =>
+      String(message?.text ?? '').includes('Use only the "done" action now')
+    );
+
+    expect(hasFinalStepGuidance).toBe(true);
+    expect(history.is_successful()).toBe(true);
+  });
+
+  it('retries once when model returns empty action', async () => {
+    const controller = createTestController();
+    const browser_session = createBrowserSessionStub();
+    const tempDir = createTempDir();
+    const llm = new MockLLM([
+      {
+        completion: {
+          action: [],
+          thinking: 'oops no action',
+        },
+      },
+      {
+        completion: {
+          action: [{ done: { success: true, text: 'Recovered after retry' } }],
+          thinking: 'fixed output',
+        },
+      },
+    ]);
+
+    const agent = new Agent({
+      task: 'Retry empty action once',
+      llm,
+      browser_session,
+      controller,
+      file_system_path: tempDir,
+      use_vision: false,
+    });
+
+    tempResources.push(agent.agent_directory);
+    const history = await agent.run(2);
+
+    expect(llm.calls.length).toBe(2);
+    expect(llm.calls[1].length).toBe(llm.calls[0].length + 1);
+    expect(String(llm.calls[1][llm.calls[1].length - 1]?.text ?? '')).toContain(
+      'forgot to return an action'
+    );
+    expect(history.is_successful()).toBe(true);
+    expect(history.final_result()).toContain('Recovered after retry');
+  });
+
+  it('falls back to done(success=false) after repeated empty actions', async () => {
+    const controller = createTestController();
+    const browser_session = createBrowserSessionStub();
+    const tempDir = createTempDir();
+    const llm = new MockLLM([
+      {
+        completion: {
+          action: [],
+          thinking: 'still empty',
+        },
+      },
+      {
+        completion: {
+          action: [{}],
+          thinking: 'still empty after retry',
+        },
+      },
+    ]);
+
+    const agent = new Agent({
+      task: 'Fallback on repeated empty action',
+      llm,
+      browser_session,
+      controller,
+      file_system_path: tempDir,
+      use_vision: false,
+    });
+
+    tempResources.push(agent.agent_directory);
+    const history = await agent.run(2);
+
+    expect(llm.calls.length).toBe(2);
+    expect(history.is_done()).toBe(true);
+    expect(history.is_successful()).toBe(false);
+    expect(history.final_result() ?? '').toContain('No next action returned by LLM!');
+  });
+
   it('handles multiple actions in sequence', async () => {
     const controller = createTestController();
     const browser_session = createBrowserSessionStub();

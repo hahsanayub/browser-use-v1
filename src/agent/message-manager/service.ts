@@ -251,6 +251,10 @@ export class MessageManager {
     this.state.history.context_messages.push(filtered);
   }
 
+  _add_context_message(message: SystemMessage | UserMessage) {
+    this.addContextMessage(message);
+  }
+
   private filterSensitiveData(message: SystemMessage | UserMessage) {
     if (!this.sensitiveData) {
       return message;

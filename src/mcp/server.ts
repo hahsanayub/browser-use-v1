@@ -259,10 +259,65 @@ export class MCPServer {
         index: z.number().int(),
         new_tab: z.boolean().optional().default(false),
       }),
-      async (args) =>
-        this.executeControllerAction('click_element_by_index', {
-          index: Number(args?.index),
-        })
+      async (args) => {
+        const browserSession = await this.ensureBrowserSession();
+        const index = Number(args?.index);
+        const openInNewTab = Boolean(args?.new_tab);
+
+        if (!openInNewTab) {
+          return this.executeControllerAction('click_element_by_index', {
+            index,
+          });
+        }
+
+        const element = await browserSession.get_dom_element_by_index(index);
+        if (!element) {
+          throw new Error(`Element with index ${index} not found`);
+        }
+
+        const href = (element as any)?.attributes?.href;
+        if (typeof href === 'string' && href.trim()) {
+          const currentPage = await browserSession.get_current_page();
+          const currentUrl =
+            typeof currentPage?.url === 'function' ? currentPage.url() : '';
+          let targetUrl = href.trim();
+
+          try {
+            if (currentUrl) {
+              targetUrl = new URL(targetUrl, currentUrl).toString();
+            }
+          } catch {
+            // Keep the original href if URL resolution fails.
+          }
+
+          await browserSession.create_new_tab(targetUrl);
+          const tabIndex =
+            typeof (browserSession as any).active_tab_index === 'number'
+              ? (browserSession as any).active_tab_index
+              : null;
+          if (tabIndex !== null) {
+            return `Clicked element ${index} and opened in new tab #${tabIndex}: ${targetUrl}`;
+          }
+          return `Clicked element ${index} and opened new tab: ${targetUrl}`;
+        }
+
+        const locator =
+          typeof (browserSession as any).get_locate_element === 'function'
+            ? await (browserSession as any).get_locate_element(element)
+            : null;
+        if (locator && typeof locator.click === 'function') {
+          const modifier: 'Meta' | 'Control' =
+            process.platform === 'darwin' ? 'Meta' : 'Control';
+          await locator.click({ modifiers: [modifier] });
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          return `Clicked element ${index} with ${modifier} key (new tab if supported)`;
+        }
+
+        // Fallback: if no href exists, perform a normal click.
+        return this.executeControllerAction('click_element_by_index', {
+          index,
+        });
+      }
     );
 
     this.registerTool(
@@ -399,6 +454,9 @@ export class MCPServer {
         const model = String(args?.model ?? 'gpt-4o');
         const maxSteps = Number(args?.max_steps ?? 100);
         const useVision = Boolean(args?.use_vision ?? true);
+        const hasAllowedDomainsArg =
+          args != null &&
+          Object.prototype.hasOwnProperty.call(args, 'allowed_domains');
         const allowedDomains = Array.isArray(args?.allowed_domains)
           ? args.allowed_domains
               .map((entry: unknown) => String(entry).trim())
@@ -410,7 +468,7 @@ export class MCPServer {
 
         const previousAllowed =
           browserSession.browser_profile.config.allowed_domains ?? null;
-        if (allowedDomains.length > 0) {
+        if (hasAllowedDomainsArg) {
           browserSession.browser_profile.config.allowed_domains = allowedDomains;
         }
 
