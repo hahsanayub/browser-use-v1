@@ -151,6 +151,9 @@ console.log(history.final_result());
 ### CLI Usage
 
 ```bash
+# Interactive mode (when running in a TTY)
+npx browser-use
+
 # One-shot task
 npx browser-use -p "Go to example.com and extract the page title"
 
@@ -169,6 +172,11 @@ npx browser-use --cdp-url http://localhost:9222 -p "Inspect the active tab"
 # MCP server mode
 npx browser-use --mcp
 ```
+
+Interactive mode commands:
+
+- `help`: show interactive usage
+- `exit`: quit interactive mode
 
 ## Advanced Usage
 

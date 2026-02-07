@@ -1,11 +1,16 @@
 #!/usr/bin/env node
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { stdin, stdout } from 'node:process';
+import { createInterface } from 'node:readline/promises';
 import { Agent } from './agent/service.js';
 import {
   BrowserProfile,
   type BrowserProfileOptions,
 } from './browser/profile.js';
 import { BrowserSession } from './browser/session.js';
+import { CONFIG } from './config.js';
 import { ChatOpenAI } from './llm/openai/chat.js';
 import { ChatAnthropic } from './llm/anthropic/chat.js';
 import { ChatGoogle } from './llm/google/chat.js';
@@ -39,6 +44,12 @@ export interface ParsedCliArgs {
   mcp: boolean;
   positional: string[];
 }
+
+export const CLI_HISTORY_LIMIT = 100;
+
+const INTERACTIVE_EXIT_COMMANDS = new Set(['exit', 'quit', ':q', '/q', '.q']);
+
+const INTERACTIVE_HELP_COMMANDS = new Set(['help', '?', ':help']);
 
 const parsePositiveInt = (name: string, value: string): number => {
   const parsed = Number.parseInt(value, 10);
@@ -199,6 +210,58 @@ const resolveTask = (args: ParsedCliArgs): string | null => {
     return args.positional.join(' ').trim();
   }
   return null;
+};
+
+export const isInteractiveExitCommand = (value: string): boolean =>
+  INTERACTIVE_EXIT_COMMANDS.has(value.trim().toLowerCase());
+
+export const isInteractiveHelpCommand = (value: string): boolean =>
+  INTERACTIVE_HELP_COMMANDS.has(value.trim().toLowerCase());
+
+export const normalizeCliHistory = (
+  history: unknown[],
+  maxLength = CLI_HISTORY_LIMIT
+): string[] => {
+  const normalized = history
+    .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+    .filter((entry) => entry.length > 0);
+  return normalized.slice(-maxLength);
+};
+
+export const getCliHistoryPath = (configDir?: string | null): string => {
+  const baseDir =
+    configDir ??
+    CONFIG.BROWSER_USE_CONFIG_DIR ??
+    path.join(os.homedir(), '.config', 'browseruse');
+  return path.join(baseDir, 'command_history.json');
+};
+
+export const loadCliHistory = async (
+  historyPath = getCliHistoryPath()
+): Promise<string[]> => {
+  try {
+    const raw = await fs.readFile(historyPath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return normalizeCliHistory(parsed);
+  } catch (error) {
+    const nodeError = error as NodeJS.ErrnoException;
+    if (nodeError.code === 'ENOENT') {
+      return [];
+    }
+    return [];
+  }
+};
+
+export const saveCliHistory = async (
+  history: string[],
+  historyPath = getCliHistoryPath()
+): Promise<void> => {
+  const normalized = normalizeCliHistory(history);
+  await fs.mkdir(path.dirname(historyPath), { recursive: true });
+  await fs.writeFile(historyPath, JSON.stringify(normalized, null, 2), 'utf-8');
 };
 
 const requireEnv = (name: string) => {
@@ -433,7 +496,119 @@ const buildBrowserProfileFromCliArgs = (
   return new BrowserProfile(profile);
 };
 
+interface RunAgentTaskOptions {
+  task: string;
+  llm: BaseChatModel;
+  browserProfile?: BrowserProfile | null;
+  browserSession?: BrowserSession | null;
+  sessionAttachmentMode?: 'copy' | 'strict' | 'shared';
+}
+
+const runAgentTask = async ({
+  task,
+  llm,
+  browserProfile,
+  browserSession,
+  sessionAttachmentMode,
+}: RunAgentTaskOptions): Promise<void> => {
+  const agent = new Agent({
+    task,
+    llm,
+    ...(browserProfile ? { browser_profile: browserProfile } : {}),
+    ...(browserSession ? { browser_session: browserSession } : {}),
+    ...(sessionAttachmentMode
+      ? { session_attachment_mode: sessionAttachmentMode }
+      : {}),
+    source: 'cli',
+  });
+  await agent.run();
+};
+
+const runInteractiveMode = async (
+  args: ParsedCliArgs,
+  llm: BaseChatModel
+): Promise<void> => {
+  const historyPath = getCliHistoryPath();
+  const history = await loadCliHistory(historyPath);
+  const browserProfile =
+    buildBrowserProfileFromCliArgs(args) ?? new BrowserProfile();
+  browserProfile.keep_alive = true;
+
+  const browserSession = new BrowserSession({
+    browser_profile: browserProfile,
+    ...(args.cdp_url ? { cdp_url: args.cdp_url } : {}),
+  });
+
+  const rl = createInterface({
+    input: stdin,
+    output: stdout,
+    terminal: true,
+    historySize: CLI_HISTORY_LIMIT,
+  });
+
+  if (Array.isArray((rl as any).history) && history.length > 0) {
+    (rl as any).history = [...history].reverse();
+  }
+
+  console.log('Interactive mode started. Type a task and press Enter.');
+  console.log('Commands: help, exit');
+
+  try {
+    while (true) {
+      const line = await rl.question('browser-use> ');
+      const task = line.trim();
+
+      if (!task) {
+        continue;
+      }
+
+      if (isInteractiveExitCommand(task)) {
+        break;
+      }
+
+      if (isInteractiveHelpCommand(task)) {
+        console.log('Type any task to run it. Use "exit" to quit.');
+        continue;
+      }
+
+      history.push(task);
+      await saveCliHistory(history, historyPath);
+
+      console.log(`Starting task: ${task}`);
+      try {
+        await runAgentTask({
+          task,
+          llm,
+          browserProfile,
+          browserSession,
+          sessionAttachmentMode: 'strict',
+        });
+      } catch (error) {
+        console.error('Error running agent:', error);
+      }
+    }
+  } finally {
+    rl.close();
+    await saveCliHistory(history, historyPath);
+
+    try {
+      if ((browserSession as any)._owns_browser_resources) {
+        await browserSession.kill();
+      } else {
+        await browserSession.stop();
+      }
+    } catch (error) {
+      console.error(
+        `Warning: failed to close interactive browser session: ${
+          (error as Error).message
+        }`
+      );
+    }
+  }
+};
+
 export const getCliUsage = () => `Usage:
+  browser-use                    # interactive mode (TTY)
   browser-use <task>
   browser-use -p "<task>"
   browser-use [options] <task>
@@ -500,12 +675,12 @@ export async function main(argv: string[] = process.argv.slice(2)) {
   }
 
   const task = resolveTask(args);
-  if (!task) {
+  const shouldStartInteractive = !task && stdin.isTTY && stdout.isTTY;
+  if (!task && !shouldStartInteractive) {
     console.error(getCliUsage());
     process.exit(1);
     return;
   }
-  console.log(`Starting task: ${task}`);
 
   let llm: BaseChatModel;
   try {
@@ -516,6 +691,19 @@ export async function main(argv: string[] = process.argv.slice(2)) {
     return;
   }
 
+  if (shouldStartInteractive) {
+    await runInteractiveMode(args, llm);
+    return;
+  }
+
+  if (!task) {
+    console.error(getCliUsage());
+    process.exit(1);
+    return;
+  }
+
+  console.log(`Starting task: ${task}`);
+
   const browserProfile = buildBrowserProfileFromCliArgs(args);
   const browserSession = args.cdp_url
     ? new BrowserSession({
@@ -523,16 +711,8 @@ export async function main(argv: string[] = process.argv.slice(2)) {
         cdp_url: args.cdp_url,
       })
     : null;
-  const agent = new Agent({
-    task,
-    llm,
-    ...(browserProfile ? { browser_profile: browserProfile } : {}),
-    ...(browserSession ? { browser_session: browserSession } : {}),
-    source: 'cli',
-  });
-
   try {
-    await agent.run();
+    await runAgentTask({ task, llm, browserProfile, browserSession });
   } catch (error) {
     console.error('Error running agent:', error);
     process.exit(1);

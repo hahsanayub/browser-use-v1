@@ -84,6 +84,9 @@ npx tsx example.ts
 Browser-Use includes a CLI for quick tasks:
 
 ```bash
+# Start interactive mode (TTY only)
+npx browser-use
+
 # Run a simple task
 npx browser-use "Go to example.com and extract the page title"
 
@@ -102,6 +105,11 @@ npx browser-use --cdp-url http://localhost:9222 -p "Open current tab and summari
 # Start MCP server mode
 npx browser-use --mcp
 ```
+
+Interactive mode commands:
+
+- `help`: show interactive usage
+- `exit`: quit interactive mode
 
 Supported CLI options:
 

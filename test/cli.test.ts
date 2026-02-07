@@ -1,5 +1,19 @@
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { getCliUsage, getLlmFromCliArgs, parseCliArgs } from '../src/cli.js';
+import {
+  CLI_HISTORY_LIMIT,
+  getCliHistoryPath,
+  getCliUsage,
+  getLlmFromCliArgs,
+  isInteractiveExitCommand,
+  isInteractiveHelpCommand,
+  loadCliHistory,
+  normalizeCliHistory,
+  parseCliArgs,
+  saveCliHistory,
+} from '../src/cli.js';
 
 const MANAGED_ENV_KEYS = [
   'OPENAI_API_KEY',
@@ -21,6 +35,8 @@ const ORIGINAL_ENV = Object.fromEntries(
   MANAGED_ENV_KEYS.map((key) => [key, process.env[key]])
 ) as Record<(typeof MANAGED_ENV_KEYS)[number], string | undefined>;
 
+const TEMP_DIRS: string[] = [];
+
 const clearManagedEnv = () => {
   for (const key of MANAGED_ENV_KEYS) {
     delete process.env[key];
@@ -36,6 +52,12 @@ const restoreManagedEnv = () => {
       process.env[key] = value;
     }
   }
+};
+
+const makeTempDir = async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'browser-use-cli-test-'));
+  TEMP_DIRS.push(dir);
+  return dir;
 };
 
 describe('CLI argument parsing', () => {
@@ -100,6 +122,60 @@ describe('CLI argument parsing', () => {
     expect(usage).toContain('browser-use --mcp');
     expect(usage).toContain('--model <model>');
     expect(usage).toContain('--headless');
+  });
+});
+
+describe('CLI interactive helpers', () => {
+  afterEach(async () => {
+    await Promise.all(
+      TEMP_DIRS.splice(0).map((dir) =>
+        fs.rm(dir, { recursive: true, force: true })
+      )
+    );
+  });
+
+  it('normalizes and trims command history entries', () => {
+    const values = [' first ', '', 'second', '   ', 'third'];
+    expect(normalizeCliHistory(values, 2)).toEqual(['second', 'third']);
+  });
+
+  it('builds history path from explicit config dir', () => {
+    const target = getCliHistoryPath('/tmp/browseruse-config');
+    expect(target).toBe('/tmp/browseruse-config/command_history.json');
+  });
+
+  it('persists and reloads trimmed history', async () => {
+    const dir = await makeTempDir();
+    const historyPath = path.join(dir, 'command_history.json');
+    const oversized = Array.from(
+      { length: CLI_HISTORY_LIMIT + 5 },
+      (_, i) => `task-${i}`
+    );
+
+    await saveCliHistory(oversized, historyPath);
+    const loaded = await loadCliHistory(historyPath);
+
+    expect(loaded).toHaveLength(CLI_HISTORY_LIMIT);
+    expect(loaded[0]).toBe('task-5');
+    expect(loaded[CLI_HISTORY_LIMIT - 1]).toBe(`task-${CLI_HISTORY_LIMIT + 4}`);
+  });
+
+  it('returns empty history for invalid history file content', async () => {
+    const dir = await makeTempDir();
+    const historyPath = path.join(dir, 'command_history.json');
+    await fs.writeFile(historyPath, '{not-json', 'utf-8');
+
+    const loaded = await loadCliHistory(historyPath);
+    expect(loaded).toEqual([]);
+  });
+
+  it('detects interactive control commands', () => {
+    expect(isInteractiveExitCommand('exit')).toBe(true);
+    expect(isInteractiveExitCommand(':q')).toBe(true);
+    expect(isInteractiveExitCommand('search docs')).toBe(false);
+    expect(isInteractiveHelpCommand('help')).toBe(true);
+    expect(isInteractiveHelpCommand('?')).toBe(true);
+    expect(isInteractiveHelpCommand('run task')).toBe(false);
   });
 });
 
