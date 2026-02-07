@@ -148,6 +148,46 @@ describe('BrowserSession Basic Operations', () => {
     expect(shutdownSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('aborts navigation when signal is triggered', async () => {
+    const session = new BrowserSession({
+      browser_profile: new BrowserProfile({}),
+    });
+
+    const never = new Promise<never>(() => {});
+    const fakePage = {
+      goto: vi.fn(() => never),
+      url: () => 'about:blank',
+    } as any;
+
+    session.update_current_page(fakePage, 'about:blank', 'about:blank');
+    (session as any).initialized = true;
+
+    const controller = new AbortController();
+    const navigation = session.navigate_to('https://example.com', {
+      signal: controller.signal,
+    });
+    controller.abort();
+
+    await expect(navigation).rejects.toMatchObject({ name: 'AbortError' });
+    expect(session.active_tab?.url).toBe('about:blank');
+  });
+
+  it('aborts browser state capture when signal is already aborted', async () => {
+    const session = new BrowserSession({
+      browser_profile: new BrowserProfile({}),
+    });
+
+    session.update_current_page({ url: () => 'about:blank' } as any);
+    (session as any).initialized = true;
+
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      session.get_browser_state_with_recovery({ signal: controller.signal })
+    ).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
   it('starts and stops browser session', async () => {
     const session = new BrowserSession({
       browser_profile: new BrowserProfile({

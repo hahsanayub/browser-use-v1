@@ -1705,6 +1705,7 @@ export class Agent<
       await this.browser_session.get_browser_state_with_recovery?.({
         cache_clickable_elements_hashes: true,
         include_screenshot: this.settings.use_vision,
+        signal,
       });
     this._throwIfAborted(signal);
     const current_page = await this.browser_session.get_current_page?.();
@@ -1909,6 +1910,7 @@ export class Agent<
             await this.browser_session.get_browser_state_with_recovery?.({
               cache_clickable_elements_hashes: false,
               include_screenshot: false,
+              signal,
             });
           const new_selector_map =
             new_browser_state_summary?.selector_map || {};

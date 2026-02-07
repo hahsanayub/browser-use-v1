@@ -61,6 +61,11 @@ interface CachedClickableElementHashes {
 export interface BrowserStateOptions {
   cache_clickable_elements_hashes?: boolean;
   include_screenshot?: boolean;
+  signal?: AbortSignal | null;
+}
+
+export interface BrowserActionOptions {
+  signal?: AbortSignal | null;
 }
 
 export class BrowserSession {
@@ -133,7 +138,10 @@ export class BrowserSession {
     this.tabPages.set(this._tabs[0].page_id, this.agent_current_page ?? null);
   }
 
-  private async _waitForStableNetwork(page: Page) {
+  private async _waitForStableNetwork(
+    page: Page,
+    signal: AbortSignal | null = null
+  ) {
     const pendingRequests = new Set<any>();
     let lastActivity = Date.now() / 1000;
 
@@ -309,7 +317,9 @@ export class BrowserSession {
     const waitForIdle = async () => {
       const startTime = Date.now() / 1000;
       while (true) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        this._throwIfAborted(signal);
+        await this._waitWithAbort(100, signal);
+        this._throwIfAborted(signal);
         const now = Date.now() / 1000;
         if (
           pendingRequests.size === 0 &&
@@ -476,6 +486,98 @@ export class BrowserSession {
       return false;
     }
     return true;
+  }
+
+  private _createAbortError(reason?: unknown): Error {
+    if (reason instanceof Error) {
+      return reason;
+    }
+    const error = new Error('Operation aborted');
+    error.name = 'AbortError';
+    return error;
+  }
+
+  private _isAbortError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+    return (
+      error.name === 'AbortError' ||
+      /abort|aborted|interrupted/i.test(error.message)
+    );
+  }
+
+  private _throwIfAborted(signal: AbortSignal | null = null) {
+    if (signal?.aborted) {
+      throw this._createAbortError(signal.reason);
+    }
+  }
+
+  private async _waitWithAbort(
+    timeoutMs: number,
+    signal: AbortSignal | null = null
+  ) {
+    if (timeoutMs <= 0) {
+      this._throwIfAborted(signal);
+      return;
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        cleanup();
+        resolve();
+      }, timeoutMs);
+
+      const onAbort = () => {
+        clearTimeout(timeout);
+        cleanup();
+        reject(this._createAbortError(signal?.reason));
+      };
+
+      const cleanup = () => {
+        signal?.removeEventListener('abort', onAbort);
+      };
+
+      if (signal) {
+        if (signal.aborted) {
+          onAbort();
+          return;
+        }
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+    });
+  }
+
+  private async _withAbort<T>(
+    promise: Promise<T>,
+    signal: AbortSignal | null = null
+  ): Promise<T> {
+    if (!signal) {
+      return promise;
+    }
+    this._throwIfAborted(signal);
+
+    return await new Promise<T>((resolve, reject) => {
+      const onAbort = () => {
+        cleanup();
+        reject(this._createAbortError(signal.reason));
+      };
+
+      const cleanup = () => {
+        signal.removeEventListener('abort', onAbort);
+      };
+
+      signal.addEventListener('abort', onAbort, { once: true });
+      promise
+        .then((result) => {
+          cleanup();
+          resolve(result);
+        })
+        .catch((error) => {
+          cleanup();
+          reject(error);
+        });
+    });
   }
 
   private _toPlaywrightOptions(value: unknown): unknown {
@@ -761,10 +863,35 @@ export class BrowserSession {
     this.attachedAgentId = null;
     this.attachedSharedAgentIds.clear();
 
+    const closeWithTimeout = async (
+      label: string,
+      operation: Promise<unknown>,
+      timeoutMs = 3000
+    ) => {
+      let timeoutHandle: NodeJS.Timeout | null = null;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(
+          () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
+          timeoutMs
+        );
+      });
+
+      try {
+        await Promise.race([operation, timeoutPromise]);
+      } finally {
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+        }
+      }
+    };
+
     if (this.ownsBrowserResources) {
       if (typeof this.browser_context?.close === 'function') {
         try {
-          await this.browser_context.close();
+          await closeWithTimeout(
+            'Closing browser context',
+            this.browser_context.close()
+          );
         } catch (error) {
           this.logger.debug(
             `Failed to close browser context: ${(error as Error).message}`
@@ -774,7 +901,7 @@ export class BrowserSession {
 
       if (typeof this.browser?.close === 'function') {
         try {
-          await this.browser.close();
+          await closeWithTimeout('Closing browser instance', this.browser.close());
         } catch (error) {
           this.logger.debug(
             `Failed to close browser instance: ${(error as Error).message}`
@@ -809,10 +936,14 @@ export class BrowserSession {
   }
 
   async get_browser_state_with_recovery(options: BrowserStateOptions = {}) {
+    const signal = options.signal ?? null;
+    this._throwIfAborted(signal);
+
     if (!this.initialized) {
-      await this.start();
+      await this._withAbort(this.start(), signal);
     }
-    const page = await this.get_current_page();
+    const page = await this._withAbort(this.get_current_page(), signal);
+    this._throwIfAborted(signal);
     this.cachedBrowserState = null;
     let domState: DOMState;
 
@@ -821,8 +952,14 @@ export class BrowserSession {
     } else {
       try {
         const domService = new DomService(page, this.logger);
-        domState = await domService.get_clickable_elements();
+        domState = await this._withAbort(
+          domService.get_clickable_elements(),
+          signal
+        );
       } catch (error) {
+        if (this._isAbortError(error)) {
+          throw error;
+        }
         this.logger.debug(
           `Failed to build DOM tree: ${(error as Error).message}`
         );
@@ -833,15 +970,21 @@ export class BrowserSession {
     let screenshot: string | null = null;
     if (options.include_screenshot && page?.screenshot) {
       try {
-        const image = await page.screenshot({
-          type: 'png',
-          fullPage: true,
-        });
+        const image = await this._withAbort(
+          page.screenshot({
+            type: 'png',
+            fullPage: true,
+          }),
+          signal
+        );
         screenshot =
           typeof image === 'string'
             ? image
             : Buffer.from(image).toString('base64');
       } catch (error) {
+        if (this._isAbortError(error)) {
+          throw error;
+        }
         this.logger.debug(
           `Failed to capture screenshot: ${(error as Error).message}`
         );
@@ -855,28 +998,31 @@ export class BrowserSession {
     let pixelsRight = 0;
     if (page) {
       try {
-        const metrics = await page.evaluate(() => {
-          const doc = document.documentElement;
-          const body = document.body;
-          const width = Math.max(
-            doc?.scrollWidth ?? 0,
-            body?.scrollWidth ?? 0,
-            doc?.clientWidth ?? 0
-          );
-          const height = Math.max(
-            doc?.scrollHeight ?? 0,
-            body?.scrollHeight ?? 0,
-            doc?.clientHeight ?? 0
-          );
-          return {
-            viewportWidth: window.innerWidth,
-            viewportHeight: window.innerHeight,
-            scrollX: window.scrollX,
-            scrollY: window.scrollY,
-            pageWidth: width,
-            pageHeight: height,
-          };
-        });
+        const metrics = await this._withAbort(
+          page.evaluate(() => {
+            const doc = document.documentElement;
+            const body = document.body;
+            const width = Math.max(
+              doc?.scrollWidth ?? 0,
+              body?.scrollWidth ?? 0,
+              doc?.clientWidth ?? 0
+            );
+            const height = Math.max(
+              doc?.scrollHeight ?? 0,
+              body?.scrollHeight ?? 0,
+              doc?.clientHeight ?? 0
+            );
+            return {
+              viewportWidth: window.innerWidth,
+              viewportHeight: window.innerHeight,
+              scrollX: window.scrollX,
+              scrollY: window.scrollY,
+              pageWidth: width,
+              pageHeight: height,
+            };
+          }),
+          signal
+        );
         pixelsAbove = Math.max(metrics.scrollY ?? 0, 0);
         const viewportHeight = metrics.viewportHeight ?? 0;
         const viewportWidth = metrics.viewportWidth ?? 0;
@@ -902,6 +1048,9 @@ export class BrowserSession {
           pixels_right: pixelsRight,
         };
       } catch (error) {
+        if (this._isAbortError(error)) {
+          throw error;
+        }
         this.logger.debug(
           `Failed to compute page metrics: ${(error as Error).message}`
         );
@@ -946,6 +1095,7 @@ export class BrowserSession {
       };
     }
 
+    this._throwIfAborted(signal);
     this.cachedBrowserState = summary;
     return summary;
   }
@@ -998,19 +1148,28 @@ export class BrowserSession {
     return this._tabs.slice();
   }
 
-  async navigate_to(url: string) {
+  async navigate_to(url: string, options: BrowserActionOptions = {}) {
+    const signal = options.signal ?? null;
+    this._throwIfAborted(signal);
     const normalized = normalize_url(url);
-    const page = await this.get_current_page();
+    const page = await this._withAbort(this.get_current_page(), signal);
     if (page?.goto) {
       try {
         this.currentPageLoadingStatus = null;
-        await page.goto(normalized, { waitUntil: 'domcontentloaded' });
-        await this._waitForStableNetwork(page);
+        await this._withAbort(
+          page.goto(normalized, { waitUntil: 'domcontentloaded' }),
+          signal
+        );
+        await this._waitForStableNetwork(page, signal);
       } catch (error) {
+        if (this._isAbortError(error)) {
+          throw error;
+        }
         const message = (error as Error).message ?? 'Navigation failed';
         throw new BrowserError(message);
       }
     }
+    this._throwIfAborted(signal);
     this.currentUrl = normalized;
     this.currentTitle = normalized;
     this.historyStack.push(normalized);
@@ -1023,7 +1182,9 @@ export class BrowserSession {
     return this.agent_current_page;
   }
 
-  async create_new_tab(url: string) {
+  async create_new_tab(url: string, options: BrowserActionOptions = {}) {
+    const signal = options.signal ?? null;
+    this._throwIfAborted(signal);
     const normalized = normalize_url(url);
     const newTab: TabInfo = {
       page_id: this._tabCounter++,
@@ -1038,13 +1199,23 @@ export class BrowserSession {
     this.historyStack.push(normalized);
     let page: Page | null = null;
     try {
-      page = (await this.browser_context?.newPage?.()) ?? null;
+      page =
+        (await this._withAbort(
+          this.browser_context?.newPage?.() ?? Promise.resolve(null),
+          signal
+        )) ?? null;
       if (page) {
         this.currentPageLoadingStatus = null;
-        await page.goto(normalized, { waitUntil: 'domcontentloaded' });
-        await this._waitForStableNetwork(page);
+        await this._withAbort(
+          page.goto(normalized, { waitUntil: 'domcontentloaded' }),
+          signal
+        );
+        await this._waitForStableNetwork(page, signal);
       }
     } catch (error) {
+      if (this._isAbortError(error)) {
+        throw error;
+      }
       this.logger.debug(
         `Failed to open new tab via Playwright: ${(error as Error).message}`
       );
@@ -1073,7 +1244,9 @@ export class BrowserSession {
     return -1;
   }
 
-  async switch_to_tab(identifier: number) {
+  async switch_to_tab(identifier: number, options: BrowserActionOptions = {}) {
+    const signal = options.signal ?? null;
+    this._throwIfAborted(signal);
     const index = this._resolveTabIndex(identifier);
     const tab = index >= 0 ? (this._tabs[index] ?? null) : null;
     if (!tab) {
@@ -1086,12 +1259,15 @@ export class BrowserSession {
     this._setActivePage(page);
     if (page?.bringToFront) {
       try {
-        await page.bringToFront();
+        await this._withAbort(page.bringToFront(), signal);
       } catch (error) {
+        if (this._isAbortError(error)) {
+          throw error;
+        }
         this.logger.debug(`Failed to focus tab: ${(error as Error).message}`);
       }
     }
-    await this._waitForLoad(page);
+    await this._waitForLoad(page, 5000, signal);
     this.cachedBrowserState = null;
     return page;
   }
@@ -1131,20 +1307,26 @@ export class BrowserSession {
     }
   }
 
-  async go_back() {
+  async go_back(options: BrowserActionOptions = {}) {
+    const signal = options.signal ?? null;
+    this._throwIfAborted(signal);
     if (this.historyStack.length <= 1) {
       return;
     }
-    const page = await this.get_current_page();
+    const page = await this._withAbort(this.get_current_page(), signal);
     if (page?.goBack) {
       try {
-        await page.goBack();
+        await this._withAbort(page.goBack(), signal);
       } catch (error) {
+        if (this._isAbortError(error)) {
+          throw error;
+        }
         this.logger.debug(
           `Failed to navigate back: ${(error as Error).message}`
         );
       }
     }
+    this._throwIfAborted(signal);
     this.historyStack.pop();
     const previous = this.historyStack[this.historyStack.length - 1];
     this.currentUrl = previous;
@@ -1155,8 +1337,11 @@ export class BrowserSession {
     }
   }
 
-  async get_dom_element_by_index(_index: number) {
-    const selectorMap = await this.get_selector_map();
+  async get_dom_element_by_index(
+    _index: number,
+    options: BrowserActionOptions = {}
+  ) {
+    const selectorMap = await this.get_selector_map(options);
     return selectorMap?.[_index] ?? null;
   }
 
@@ -1209,11 +1394,12 @@ export class BrowserSession {
     return candidate;
   }
 
-  async get_selector_map() {
+  async get_selector_map(options: BrowserActionOptions = {}) {
     if (!this.cachedBrowserState) {
       await this.get_browser_state_with_recovery({
         cache_clickable_elements_hashes: true,
         include_screenshot: false,
+        signal: options.signal ?? null,
       });
     }
     return this.cachedBrowserState?.selector_map ?? {};
@@ -1236,9 +1422,10 @@ export class BrowserSession {
   async find_file_upload_element_by_index(
     index: number,
     maxHeight = 3,
-    maxDescendantDepth = 3
+    maxDescendantDepth = 3,
+    options: BrowserActionOptions = {}
   ) {
-    const selectorMap = await this.get_selector_map();
+    const selectorMap = await this.get_selector_map(options);
     const root = selectorMap[index];
     if (!root) {
       return null;
@@ -1311,23 +1498,34 @@ export class BrowserSession {
     }
   }
 
-  async _input_text_element_node(node: DOMElementNode, text: string) {
+  async _input_text_element_node(
+    node: DOMElementNode,
+    text: string,
+    options: BrowserActionOptions = {}
+  ) {
+    const signal = options.signal ?? null;
+    this._throwIfAborted(signal);
     const locator = await this.get_locate_element(node);
     if (!locator) {
       throw new Error('Element not found');
     }
-    await locator.click({ timeout: 5000 });
-    await locator.fill(text, { timeout: 5000 });
+    await this._withAbort(locator.click({ timeout: 5000 }), signal);
+    await this._withAbort(locator.fill(text, { timeout: 5000 }), signal);
   }
 
-  async _click_element_node(node: DOMElementNode) {
+  async _click_element_node(
+    node: DOMElementNode,
+    options: BrowserActionOptions = {}
+  ) {
+    const signal = options.signal ?? null;
+    this._throwIfAborted(signal);
     const locator = await this.get_locate_element(node);
     if (!locator) {
       throw new Error('Element not found');
     }
-    const page = await this.get_current_page();
+    const page = await this._withAbort(this.get_current_page(), signal);
     const performClick = async () => {
-      await locator.click({ timeout: 5000 });
+      await this._withAbort(locator.click({ timeout: 5000 }), signal);
     };
 
     const downloadsDir = this.browser_profile.downloads_path;
@@ -1335,7 +1533,7 @@ export class BrowserSession {
       const downloadPromise = page.waitForEvent('download', { timeout: 5000 });
       await performClick();
       try {
-        const download = await downloadPromise;
+        const download = await this._withAbort(downloadPromise, signal);
         const suggested =
           typeof download.suggestedFilename === 'function'
             ? download.suggestedFilename()
@@ -1351,6 +1549,9 @@ export class BrowserSession {
         this.add_downloaded_file(downloadPath);
         return downloadPath;
       } catch (error) {
+        if (this._isAbortError(error)) {
+          throw error;
+        }
         this.logger.debug(
           `No download triggered within timeout: ${(error as Error).message}`
         );
@@ -1359,17 +1560,27 @@ export class BrowserSession {
       await performClick();
     }
 
-    await this._waitForLoad(page);
+    await this._waitForLoad(page, 5000, signal);
     return null;
   }
 
-  private async _waitForLoad(page: Page | null, timeout = 5000) {
+  private async _waitForLoad(
+    page: Page | null,
+    timeout = 5000,
+    signal: AbortSignal | null = null
+  ) {
     if (!page || typeof page.waitForLoadState !== 'function') {
       return;
     }
     try {
-      await page.waitForLoadState('domcontentloaded', { timeout });
+      await this._withAbort(
+        page.waitForLoadState('domcontentloaded', { timeout }),
+        signal
+      );
     } catch (error) {
+      if (this._isAbortError(error)) {
+        throw error;
+      }
       this.logger.debug(`waitForLoadState failed: ${(error as Error).message}`);
     }
   }
