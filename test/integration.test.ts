@@ -834,6 +834,178 @@ describe('Component Tests (Mocked Dependencies)', () => {
     expect(stopCalls).toBe(1);
     expect(browser_session.get_attached_agent_ids()).toEqual([]);
   });
+
+  it('serializes shared-mode steps and restores each agent pinned tab', async () => {
+    const controller = createTestController();
+    const tempDir1 = createTempDir();
+    const tempDir2 = createTempDir();
+
+    const root = new DOMElementNode(true, null, 'body', '/html/body', {}, [
+      new DOMTextNode(true, null, 'Shared root'),
+    ]);
+    root.is_top_element = true;
+    root.is_in_viewport = true;
+    root.highlight_index = 0;
+    const domState = new DOMState(root, { 0: root });
+
+    const tabs = [
+      { page_id: 0, url: 'https://tab-a.test', title: 'Tab A' },
+      { page_id: 1, url: 'https://tab-b.test', title: 'Tab B' },
+    ];
+    let activeTabIndex = 0;
+    let inStateCalls = 0;
+    let maxConcurrentStateCalls = 0;
+
+    const sharedOwners = new Set<string>();
+    let exclusiveOwner: string | null = null;
+    const browser_session: any = {
+      id: 'shared-pin-stub',
+      browser_profile: {},
+      downloaded_files: [],
+      get active_tab_index() {
+        return activeTabIndex;
+      },
+      get active_tab() {
+        return tabs[activeTabIndex] ?? null;
+      },
+      claim_agent(agentId: string, mode: 'exclusive' | 'shared' = 'exclusive') {
+        if (!agentId) {
+          return false;
+        }
+        if (mode === 'shared') {
+          if (exclusiveOwner && exclusiveOwner !== agentId && sharedOwners.size === 0) {
+            return false;
+          }
+          if (sharedOwners.size === 0 && exclusiveOwner) {
+            sharedOwners.add(exclusiveOwner);
+          }
+          sharedOwners.add(agentId);
+          exclusiveOwner = exclusiveOwner ?? agentId;
+          return true;
+        }
+        if (sharedOwners.size > 0) {
+          return sharedOwners.size === 1 && sharedOwners.has(agentId);
+        }
+        if (exclusiveOwner && exclusiveOwner !== agentId) {
+          return false;
+        }
+        exclusiveOwner = agentId;
+        return true;
+      },
+      release_agent(agentId?: string) {
+        if (sharedOwners.size > 0) {
+          if (!agentId || !sharedOwners.has(agentId)) {
+            return false;
+          }
+          sharedOwners.delete(agentId);
+          exclusiveOwner = sharedOwners.size ? Array.from(sharedOwners)[0] : null;
+          return true;
+        }
+        if (!exclusiveOwner) {
+          return true;
+        }
+        if (agentId && exclusiveOwner !== agentId) {
+          return false;
+        }
+        exclusiveOwner = null;
+        return true;
+      },
+      get_attached_agent_ids() {
+        return sharedOwners.size
+          ? Array.from(sharedOwners)
+          : exclusiveOwner
+            ? [exclusiveOwner]
+            : [];
+      },
+      get_attached_agent_id() {
+        return this.get_attached_agent_ids()[0] ?? null;
+      },
+      async switch_to_tab(identifier: number) {
+        const byPageId = tabs.findIndex((tab) => tab.page_id === identifier);
+        const index =
+          byPageId >= 0
+            ? byPageId
+            : identifier >= 0 && identifier < tabs.length
+              ? identifier
+              : -1;
+        if (index < 0) {
+          throw new Error(`Tab ${identifier} not found`);
+        }
+        activeTabIndex = index;
+        return { url: () => tabs[activeTabIndex].url };
+      },
+      async get_browser_state_with_recovery() {
+        inStateCalls += 1;
+        maxConcurrentStateCalls = Math.max(maxConcurrentStateCalls, inStateCalls);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        inStateCalls -= 1;
+        const active = tabs[activeTabIndex];
+        return new BrowserStateSummary(domState, {
+          url: active.url,
+          title: active.title,
+          tabs: tabs.map((tab) => ({ ...tab })),
+        });
+      },
+      async get_current_page() {
+        const active = tabs[activeTabIndex];
+        return {
+          url: () => active.url,
+        };
+      },
+      async navigate_to(url: string) {
+        tabs[activeTabIndex].url = url;
+      },
+      async stop() {},
+      get_selector_map: async () => ({ 0: root }),
+    };
+
+    const llm1 = new MockLLM([
+      {
+        completion: {
+          action: [{ done: { success: true, text: 'shared-1' } }],
+          thinking: 'done',
+        },
+      },
+    ]);
+    const llm2 = new MockLLM([
+      {
+        completion: {
+          action: [{ done: { success: true, text: 'shared-2' } }],
+          thinking: 'done',
+        },
+      },
+    ]);
+
+    activeTabIndex = 0;
+    const agent1 = new Agent({
+      task: 'Shared pinned tab agent 1',
+      llm: llm1,
+      browser_session,
+      controller,
+      file_system_path: tempDir1,
+      use_vision: false,
+      session_attachment_mode: 'shared',
+    });
+    activeTabIndex = 1;
+    const agent2 = new Agent({
+      task: 'Shared pinned tab agent 2',
+      llm: llm2,
+      browser_session,
+      controller,
+      file_system_path: tempDir2,
+      use_vision: false,
+      session_attachment_mode: 'shared',
+    });
+
+    tempResources.push(agent1.agent_directory);
+    tempResources.push(agent2.agent_directory);
+
+    const [history1, history2] = await Promise.all([agent1.run(1), agent2.run(1)]);
+
+    expect(maxConcurrentStateCalls).toBe(1);
+    expect(history1.history[0]?.state?.url).toBe('https://tab-a.test');
+    expect(history2.history[0]?.state?.url).toBe('https://tab-b.test');
+  });
 });
 
 describe('Unit Tests', () => {

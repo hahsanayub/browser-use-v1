@@ -103,6 +103,45 @@ type AgentHookFunc<Context, AgentStructuredOutput> = (
   agent: Agent<Context, AgentStructuredOutput>
 ) => Promise<void> | void;
 
+class AsyncMutex {
+  private locked = false;
+  private waiters: Array<() => void> = [];
+
+  async acquire(): Promise<() => void> {
+    if (!this.locked) {
+      this.locked = true;
+      let released = false;
+      return () => {
+        if (released) {
+          return;
+        }
+        released = true;
+        this.release();
+      };
+    }
+
+    await new Promise<void>((resolve) => this.waiters.push(resolve));
+    this.locked = true;
+    let released = false;
+    return () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      this.release();
+    };
+  }
+
+  private release() {
+    const next = this.waiters.shift();
+    if (next) {
+      next();
+      return;
+    }
+    this.locked = false;
+  }
+}
+
 interface RerunHistoryOptions {
   max_retries?: number;
   skip_failures?: boolean;
@@ -231,6 +270,8 @@ export class Agent<
   Context = ControllerContext,
   AgentStructuredOutput = unknown,
 > {
+  private static _sharedSessionStepLocks = new Map<string, AsyncMutex>();
+
   static DEFAULT_AGENT_DATA_DIR = path.join(
     process.cwd(),
     DEFAULT_FILE_SYSTEM_PATH
@@ -294,6 +335,7 @@ export class Agent<
   _force_exit_telemetry_logged = false;
   private _closePromise: Promise<void> | null = null;
   private _hasBrowserSessionClaim = false;
+  private _sharedPinnedTabId: number | null = null;
   private _enforceDoneOnlyForCurrentStep = false;
   system_prompt_class: SystemPrompt;
   ActionModel: typeof ActionModel = ActionModel;
@@ -485,6 +527,7 @@ export class Agent<
 
     // Security validation for sensitive_data and allowed_domains
     this._validateSecuritySettings();
+    this._capture_shared_pinned_tab();
 
     // LLM verification and setup
     this._verifyAndSetupLlm();
@@ -660,6 +703,68 @@ export class Agent<
       return false;
     }
     return typeof singleGetter.call(browser_session) === 'string';
+  }
+
+  private _is_shared_session_mode() {
+    return this.settings.session_attachment_mode === 'shared';
+  }
+
+  private _capture_shared_pinned_tab() {
+    if (!this._is_shared_session_mode() || !this.browser_session) {
+      return;
+    }
+
+    const activeTab = (this.browser_session as any).active_tab;
+    const pageId = activeTab?.page_id;
+    if (typeof pageId === 'number') {
+      this._sharedPinnedTabId = pageId;
+    }
+  }
+
+  private async _restore_shared_pinned_tab_if_needed() {
+    if (!this._is_shared_session_mode() || !this.browser_session) {
+      return;
+    }
+
+    const switchFn =
+      (this.browser_session as any).switch_to_tab ??
+      (this.browser_session as any).switchToTab;
+    if (typeof switchFn !== 'function') {
+      return;
+    }
+
+    if (this._sharedPinnedTabId == null) {
+      this._capture_shared_pinned_tab();
+      return;
+    }
+
+    try {
+      await switchFn.call(this.browser_session, this._sharedPinnedTabId);
+    } catch {
+      this._capture_shared_pinned_tab();
+    }
+  }
+
+  private async _run_with_shared_session_step_lock<T>(
+    callback: () => Promise<T>
+  ): Promise<T> {
+    if (!this._is_shared_session_mode() || !this.browser_session) {
+      return callback();
+    }
+
+    const sessionId = this.browser_session.id;
+    let lock = Agent._sharedSessionStepLocks.get(sessionId);
+    if (!lock) {
+      lock = new AsyncMutex();
+      Agent._sharedSessionStepLocks.set(sessionId, lock);
+    }
+
+    const release = await lock.acquire();
+    try {
+      return await callback();
+    } finally {
+      release();
+    }
   }
 
   private _init_browser_session(init: {
@@ -1495,25 +1600,29 @@ export class Agent<
   }
 
   async _step(step_info: AgentStepInfo | null = null) {
-    this.step_start_time = Date.now() / 1000;
-    let browser_state_summary: BrowserStateSummary | null = null;
+    await this._run_with_shared_session_step_lock(async () => {
+      this.step_start_time = Date.now() / 1000;
+      let browser_state_summary: BrowserStateSummary | null = null;
 
-    try {
-      browser_state_summary = await this._prepare_context(step_info);
-      await this._get_next_action(browser_state_summary);
-      await this._execute_actions();
-      await this._post_process();
-    } catch (error) {
-      await this._handle_step_error(error as Error);
-    } finally {
-      await this._finalize(browser_state_summary);
-    }
+      try {
+        browser_state_summary = await this._prepare_context(step_info);
+        await this._get_next_action(browser_state_summary);
+        await this._execute_actions();
+        await this._post_process();
+      } catch (error) {
+        await this._handle_step_error(error as Error);
+      } finally {
+        await this._finalize(browser_state_summary);
+      }
+    });
   }
 
   private async _prepare_context(step_info: AgentStepInfo | null = null) {
     if (!this.browser_session) {
       throw new Error('BrowserSession is not set up');
     }
+
+    await this._restore_shared_pinned_tab_if_needed();
 
     this.logger.debug(
       `🌐 Step ${this.state.n_steps}: Getting browser state...`
@@ -1655,6 +1764,8 @@ export class Agent<
       throw new Error('BrowserSession is not set up');
     }
 
+    await this._restore_shared_pinned_tab_if_needed();
+
     // ==================== Selector Map Caching ====================
     // Check if any action uses an index, if so cache the selector map
     let cached_selector_map: Record<number, any> = {};
@@ -1785,11 +1896,14 @@ export class Agent<
           results[results.length - 1]?.error ||
           i === actions.length - 1
         ) {
+          this._capture_shared_pinned_tab();
           break;
         }
+        this._capture_shared_pinned_tab();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         this.logger.error(`❌ Action ${i + 1} failed: ${message}`);
+        this._capture_shared_pinned_tab();
         throw error;
       }
     }
