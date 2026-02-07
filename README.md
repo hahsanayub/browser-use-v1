@@ -148,6 +148,28 @@ const history = await agent.run(10);
 console.log(history.final_result());
 ```
 
+### CLI Usage
+
+```bash
+# One-shot task
+npx browser-use -p "Go to example.com and extract the page title"
+
+# Positional task mode
+npx browser-use "Search for TypeScript browser automation"
+
+# Pick model/provider by model name
+npx browser-use --model claude-sonnet-4-20250514 -p "Summarize latest AI news"
+
+# Headless + custom browser profile settings
+npx browser-use --headless --window-width 1440 --window-height 900 -p "Check dashboard status"
+
+# Connect to existing Chromium via CDP
+npx browser-use --cdp-url http://localhost:9222 -p "Inspect the active tab"
+
+# MCP server mode
+npx browser-use --mcp
+```
+
 ## Advanced Usage
 
 ### Vision/Multimodal Support

@@ -87,9 +87,33 @@ Browser-Use includes a CLI for quick tasks:
 # Run a simple task
 npx browser-use "Go to example.com and extract the page title"
 
+# Equivalent one-shot mode
+npx browser-use -p "Go to example.com and extract the page title"
+
+# Select model/provider by model name prefix
+npx browser-use --model claude-sonnet-4-20250514 -p "Search for AI news"
+
+# Headless mode
+npx browser-use --headless -p "Check the weather"
+
+# Attach to existing Chromium via CDP
+npx browser-use --cdp-url http://localhost:9222 -p "Open current tab and summarize"
+
 # Start MCP server mode
 npx browser-use --mcp
 ```
+
+Supported CLI options:
+
+- `--version`: print package version
+- `--model <name>`: choose model/provider (for example `gpt-*`, `claude-*`, `gemini-*`)
+- `-p, --prompt <task>`: one-shot task
+- `--headless`: headless browser mode
+- `--window-width <px>`, `--window-height <px>`: browser window size
+- `--user-data-dir <path>`, `--profile-directory <name>`: Chrome profile controls
+- `--cdp-url <url>`: connect to existing Chromium via CDP
+- `--debug`: verbose debug logging
+- `--mcp`: run MCP server
 
 ## Using with Claude Desktop (MCP)
 
