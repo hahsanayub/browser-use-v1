@@ -1003,7 +1003,7 @@ export class Agent<
       }
 
       this.logger.warning(
-        '‼️ Continuing with insecure settings for now... but this will become a hard error in the future!'
+        '‼️ Continuing with insecure settings because allow_insecure_sensitive_data=true is enabled.'
       );
     }
     // If we're using domain-specific credentials, validate domain patterns

@@ -45,6 +45,33 @@ const agent = new Agent({
 2. **Domain Scoping**: Credentials are only available on matching domains
 3. **Secret Placeholders**: Use `<secret>key</secret>` pattern in prompts to reference credentials
 4. **Memory Isolation**: Sensitive data is not included in LLM context
+5. **Hard Safety Gate**: By default, `sensitive_data` requires `allowed_domains` to be configured
+
+If `sensitive_data` is provided without `allowed_domains`, Agent construction fails with `InsecureSensitiveDataError`.
+
+```typescript
+const agent = new Agent({
+  task: 'Log in and fetch invoices',
+  llm,
+  sensitive_data: { password: 'secret' },
+  browser_session: new BrowserSession({
+    browser_profile: new BrowserProfile({
+      allowed_domains: ['example.com', '*.example.com'],
+    }),
+  }),
+});
+```
+
+You can explicitly bypass this check for local testing only:
+
+```typescript
+const agent = new Agent({
+  task: 'Unsafe test run',
+  llm,
+  sensitive_data: { password: 'secret' },
+  allow_insecure_sensitive_data: true, // unsafe: do not use in production
+});
+```
 
 ### Domain Patterns
 
@@ -173,6 +200,13 @@ const profile = new BrowserProfile({
   allowed_domains: ['*.example.com', '*.trusted.org', 'api.mysite.com'],
 });
 ```
+
+```bash
+# CLI
+npx browser-use --allowed-domains "*.example.com,*.trusted.org" -p "Complete login flow"
+```
+
+Avoid `--allow-insecure` in production. It permits `sensitive_data` usage without domain lock-down.
 
 ### Domain Patterns
 
