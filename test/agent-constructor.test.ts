@@ -87,4 +87,31 @@ describe('Agent constructor browser session alignment', () => {
 
     await agent.close();
   });
+
+  it('treats allowed_domains=[] as unlocked when sensitive_data is used', async () => {
+    const agent = new Agent({
+      task: 'test allowed domains empty',
+      llm: createLlm(),
+      browser_session: new BrowserSession({
+        browser_profile: new BrowserProfile({
+          allowed_domains: [],
+        }),
+      }),
+    });
+
+    (agent as any).sensitive_data = {
+      '*.example.com': {
+        password: 'secret',
+      },
+    };
+
+    const errorSpy = vi.spyOn(agent.logger, 'error');
+    (agent as any)._validateSecuritySettings();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('not locked down')
+    );
+
+    await agent.close();
+  });
 });
