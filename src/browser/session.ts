@@ -88,8 +88,12 @@ export class BrowserSession {
   private _childProcesses: Set<number> = new Set();
 
   constructor(init: BrowserSessionInit = {}) {
-    this.browser_profile =
-      init.browser_profile ?? new BrowserProfile(init.profile ?? {});
+    const sourceProfileConfig = init.browser_profile
+      ? typeof structuredClone === 'function'
+        ? structuredClone(init.browser_profile.config)
+        : JSON.parse(JSON.stringify(init.browser_profile.config))
+      : init.profile ?? {};
+    this.browser_profile = new BrowserProfile(sourceProfileConfig);
     this.id = init.id ?? uuid7str();
     this.browser = init.browser ?? null;
     this.browser_context = init.browser_context ?? null;
@@ -352,6 +356,10 @@ export class BrowserSession {
 
   describe() {
     return this.toString();
+  }
+
+  get _owns_browser_resources(): boolean {
+    return this.ownsBrowserResources;
   }
 
   private _determineOwnership() {
@@ -2768,6 +2776,10 @@ export class BrowserSession {
       playwright: this.playwright,
       downloaded_files: [...this.downloaded_files],
     });
+  }
+
+  model_copy(): BrowserSession {
+    return this.modelCopy();
   }
 
   // endregion

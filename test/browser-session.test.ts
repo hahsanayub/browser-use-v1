@@ -67,6 +67,34 @@ describe('BrowserSession Basic Operations', () => {
     expect(session).toBeDefined();
   });
 
+  it('clones provided browser_profile to avoid shared mutable state', () => {
+    const profile = new BrowserProfile({
+      keep_alive: null,
+      allowed_domains: ['example.com'],
+    });
+
+    const session = new BrowserSession({
+      browser_profile: profile,
+    });
+
+    expect(session.browser_profile).not.toBe(profile);
+    profile.keep_alive = true;
+    expect(session.browser_profile.keep_alive).toBeNull();
+  });
+
+  it('supports python compatibility aliases for ownership and model_copy', () => {
+    const session = new BrowserSession({
+      browser_profile: new BrowserProfile({}),
+      browser: {} as any,
+    });
+
+    expect(session._owns_browser_resources).toBe(false);
+
+    const copied = session.model_copy();
+    expect(copied).toBeInstanceOf(BrowserSession);
+    expect(copied).not.toBe(session);
+  });
+
   it('starts and stops browser session', async () => {
     const session = new BrowserSession({
       browser_profile: new BrowserProfile({

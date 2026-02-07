@@ -25,6 +25,12 @@ import { SystemPrompt } from './prompts.js';
 import { MessageManager } from './message-manager/service.js';
 import type { MessageManagerState } from './message-manager/views.js';
 import { BrowserStateSummary, BrowserStateHistory } from '../browser/views.js';
+import { BrowserSession } from '../browser/session.js';
+import {
+  BrowserProfile,
+  DEFAULT_BROWSER_PROFILE,
+} from '../browser/profile.js';
+import type { Browser, BrowserContext, Page } from '../browser/types.js';
 import { HistoryTreeProcessor } from '../dom/history-tree-processor/service.js';
 import { DOMHistoryElement } from '../dom/history-tree-processor/view.js';
 import type { BaseChatModel } from '../llm/base.js';
@@ -91,10 +97,6 @@ export const log_response = (
   }
 };
 
-type BrowserSession = any;
-type Browser = any;
-type BrowserContext = any;
-type Page = any;
 type ControllerContext = unknown;
 
 type AgentHookFunc<Context, AgentStructuredOutput> = (
@@ -113,7 +115,7 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
   page?: Page | null;
   browser?: Browser | BrowserSession | null;
   browser_context?: BrowserContext | null;
-  browser_profile?: BrowserSession | null;
+  browser_profile?: BrowserProfile | null;
   browser_session?: BrowserSession | null;
   controller?: Controller<Context> | null;
   sensitive_data?: Record<string, string | Record<string, string>> | null;
@@ -343,6 +345,7 @@ export class Agent<
     if (!llm) {
       throw new Error('Invalid llm, must be provided');
     }
+    const effectivePageExtractionLlm = page_extraction_llm ?? llm;
 
     this.llm = llm;
     this.id = task_id || uuid7str();
@@ -361,8 +364,6 @@ export class Agent<
       : null;
     this.register_new_step_callback = register_new_step_callback;
     this.register_done_callback = register_done_callback;
-    this.register_external_agent_status_raise_error_callback =
-      register_external_agent_status_raise_error_callback;
     this.register_external_agent_status_raise_error_callback =
       register_external_agent_status_raise_error_callback;
     this.context = context as Context | null;
@@ -385,7 +386,7 @@ export class Agent<
       use_thinking,
       flash_mode,
       max_history_items,
-      page_extraction_llm,
+      page_extraction_llm: effectivePageExtractionLlm,
       planner_llm: null,
       planner_interval: 1,
       is_planner_reasoning: false,
@@ -405,9 +406,7 @@ export class Agent<
       });
     }
     this.token_cost_service.register_llm(llm);
-    if (page_extraction_llm) {
-      this.token_cost_service.register_llm(page_extraction_llm);
-    }
+    this.token_cost_service.register_llm(effectivePageExtractionLlm);
 
     this.state = params.injected_agent_state || new AgentState();
     this.history = new AgentHistoryList([], null);
@@ -419,7 +418,13 @@ export class Agent<
     this._setup_action_models();
     this._set_browser_use_version_and_source(source);
 
-    this.browser_session = browser_session ?? null;
+    this.browser_session = this._init_browser_session({
+      page,
+      browser,
+      browser_context,
+      browser_profile,
+      browser_session,
+    });
     this.has_downloads_path = Boolean(
       this.browser_session?.browser_profile?.downloads_path
     );
@@ -480,6 +485,93 @@ export class Agent<
 
     // Model-specific vision handling
     this._handleModelSpecificVision();
+  }
+
+  private _createSessionIdWithAgentSuffix(): string {
+    const suffix = this.id.slice(-4);
+    const generated = uuid7str();
+    return `${generated.slice(0, -4)}${suffix}`;
+  }
+
+  private _copyBrowserProfile(profile: BrowserProfile | null): BrowserProfile {
+    const source = profile ?? DEFAULT_BROWSER_PROFILE;
+    const clonedConfig =
+      typeof structuredClone === 'function'
+        ? structuredClone(source.config)
+        : JSON.parse(JSON.stringify(source.config));
+    return new BrowserProfile(clonedConfig);
+  }
+
+  private _getBrowserContextFromPage(
+    page: Page | null,
+    browser_context: BrowserContext | null
+  ): BrowserContext | null {
+    if (!page) {
+      return browser_context;
+    }
+
+    const contextAttr = (page as any).context;
+    if (typeof contextAttr === 'function') {
+      try {
+        const resolved = contextAttr.call(page) as BrowserContext | null;
+        return resolved ?? browser_context;
+      } catch {
+        return browser_context;
+      }
+    }
+
+    return (contextAttr as BrowserContext | null) ?? browser_context;
+  }
+
+  private _init_browser_session(init: {
+    page: Page | null;
+    browser: Browser | BrowserSession | null;
+    browser_context: BrowserContext | null;
+    browser_profile: BrowserProfile | null;
+    browser_session: BrowserSession | null;
+  }): BrowserSession {
+    let {
+      page,
+      browser,
+      browser_context,
+      browser_profile,
+      browser_session,
+    } = init;
+
+    if (browser instanceof BrowserSession) {
+      browser_session = browser_session ?? browser;
+      browser = null;
+    }
+
+    if (browser_session) {
+      const ownsResources = (browser_session as any)._owns_browser_resources;
+      if (ownsResources === false) {
+        this.logger.warning(
+          '⚠️ Attempting to use multiple Agents with the same BrowserSession! This is not supported yet and will likely lead to strange behavior, use separate BrowserSessions for each Agent.'
+        );
+        const modelCopyFn =
+          (browser_session as any).model_copy ??
+          (browser_session as any).modelCopy;
+        if (typeof modelCopyFn === 'function') {
+          return modelCopyFn.call(browser_session) as BrowserSession;
+        }
+      }
+      return browser_session;
+    }
+
+    const resolvedContext = this._getBrowserContextFromPage(
+      page,
+      browser_context
+    );
+    const resolvedProfile = this._copyBrowserProfile(browser_profile);
+
+    return new BrowserSession({
+      browser_profile: resolvedProfile,
+      browser: (browser as Browser | null) ?? null,
+      browser_context: resolvedContext,
+      page,
+      id: this._createSessionIdWithAgentSuffix(),
+    });
   }
 
   /**
@@ -593,8 +685,14 @@ export class Agent<
       this.sensitive_data
     ).some((value) => typeof value === 'object' && value !== null);
 
+    const allowedDomainsConfig =
+      this.browser_session?.browser_profile?.config?.allowed_domains;
+    const hasAllowedDomains = Array.isArray(allowedDomainsConfig)
+      ? allowedDomainsConfig.length > 0
+      : Boolean(allowedDomainsConfig);
+
     // If no allowed_domains are configured, show a security warning
-    if (!this.browser_session?.browser_profile?.config?.allowed_domains) {
+    if (!hasAllowedDomains) {
       this.logger.error(
         '⚠️⚠️⚠️ Agent(sensitive_data=••••••••) was provided but BrowserSession(allowed_domains=[...]) is not locked down! ⚠️⚠️⚠️\n' +
           '          ☠️ If the agent visits a malicious website and encounters a prompt-injection attack, your sensitive_data may be exposed!\n\n' +
@@ -606,7 +704,7 @@ export class Agent<
       if (process.stdin.isTTY) {
         // Sleep for 10 seconds to give user time to abort
         const sleepMs = 10000;
-        const sleepPromise = new Promise<void>((resolve) => {
+        void new Promise<void>((resolve) => {
           const timeout = setTimeout(() => {
             process.stdin.removeListener('data', abortHandler);
             resolve();
@@ -804,7 +902,7 @@ export class Agent<
   /**
    * Get the browser profile from the browser session
    */
-  get browserProfile(): BrowserSession {
+  get browserProfile(): BrowserProfile {
     if (!this.browser_session) {
       throw new Error('BrowserSession is not set up');
     }
