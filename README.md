@@ -1,5 +1,9 @@
 # browser-use
 
+![Node CI](https://github.com/webllm/browser-use/workflows/Node%20CI/badge.svg)
+[![npm](https://img.shields.io/npm/v/browser-use.svg)](https://www.npmjs.com/package/browser-use)
+![license](https://img.shields.io/npm/l/browser-use)
+
 > 🙏 **A TypeScript port of the amazing [browser-use](https://github.com/browser-use/browser-use) Python library**
 >
 > This project is a faithful TypeScript/JavaScript implementation of the original [browser-use](https://github.com/browser-use/browser-use) Python library, bringing the power of AI-driven browser automation to the Node.js ecosystem. All credit for the innovative design and architecture goes to the original Python project and its creators.
