@@ -569,6 +569,43 @@ describe('Component Tests (Mocked Dependencies)', () => {
     expect(history.is_done()).toBe(false);
   });
 
+  it("does not treat regular 'timeout' errors as step-timeout signals", async () => {
+    const controller = createTestController();
+    const browser_session = createBrowserSessionStub();
+    const tempDir = createTempDir();
+    const llm = new MockLLM([
+      {
+        completion: {
+          action: [{ done: { success: true, text: 'done' } }],
+          thinking: 'done',
+        },
+      },
+    ]);
+
+    const agent = new Agent({
+      task: 'Literal timeout error',
+      llm,
+      browser_session,
+      controller,
+      file_system_path: tempDir,
+      use_vision: false,
+      step_timeout: 5,
+      max_failures: 2,
+    });
+
+    tempResources.push(agent.agent_directory);
+    const stepSpy = vi
+      .spyOn(agent as any, '_step')
+      .mockRejectedValue(new Error('timeout'));
+
+    const history = await agent.run(3);
+
+    expect(stepSpy).toHaveBeenCalledTimes(2);
+    expect(agent.state.stopped).toBe(false);
+    expect(agent.state.last_result?.[0]?.error).toBe('timeout');
+    expect(history.is_done()).toBe(false);
+  });
+
   it('handles action failures', async () => {
     const controller = createTestController();
     const browser_session = createBrowserSessionStub();

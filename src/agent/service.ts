@@ -142,6 +142,13 @@ class AsyncMutex {
   }
 }
 
+class ExecutionTimeoutError extends Error {
+  constructor() {
+    super('Operation timed out');
+    this.name = 'ExecutionTimeoutError';
+  }
+}
+
 interface RerunHistoryOptions {
   max_retries?: number;
   skip_failures?: boolean;
@@ -1485,7 +1492,7 @@ export class Agent<
         } catch (error) {
           const message =
             error instanceof Error ? error.message : String(error);
-          const isTimeout = message === 'timeout';
+          const isTimeout = error instanceof ExecutionTimeoutError;
 
           if (isTimeout) {
             const timeoutMessage = `Step ${step + 1} timed out after ${this.settings.step_timeout} seconds`;
@@ -1622,7 +1629,7 @@ export class Agent<
     let timeoutHandle: NodeJS.Timeout | null = null;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutHandle = setTimeout(
-        () => reject(new Error('timeout')),
+        () => reject(new ExecutionTimeoutError()),
         timeoutSeconds * 1000
       );
     });
@@ -1743,7 +1750,7 @@ export class Agent<
         this.settings.llm_timeout
       );
     } catch (error) {
-      if (error instanceof Error && error.message === 'timeout') {
+      if (error instanceof ExecutionTimeoutError) {
         throw new Error(
           `LLM call timed out after ${this.settings.llm_timeout} seconds. Keep your thinking and output short.`
         );
