@@ -144,6 +144,73 @@ describe('BrowserProfile Configuration', () => {
   });
 });
 
+describe('BrowserSession PDF Auto Download', () => {
+  it('auto-downloads detected PDFs and tracks the file', async () => {
+    const downloadsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bu-pdf-'));
+    try {
+      const session = new BrowserSession({
+        browser_profile: new BrowserProfile({
+          downloads_path: downloadsDir,
+        }),
+      });
+
+      const fakePage = {
+        url: () => 'https://example.com/report.pdf',
+        evaluate: vi.fn(async () => ({
+          data: [37, 80, 68, 70], // %PDF
+          fromCache: true,
+          responseSize: 4,
+        })),
+      } as any;
+
+      const downloadedPath = await (session as any)._auto_download_pdf_if_needed(
+        fakePage
+      );
+
+      expect(downloadedPath).toBeTruthy();
+      expect(fs.existsSync(downloadedPath!)).toBe(true);
+      expect(session.get_downloaded_files()).toContain(downloadedPath);
+    } finally {
+      fs.rmSync(downloadsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('skips re-downloading the same PDF filename', async () => {
+    const downloadsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bu-pdf-'));
+    try {
+      const session = new BrowserSession({
+        browser_profile: new BrowserProfile({
+          downloads_path: downloadsDir,
+        }),
+      });
+
+      const evaluate = vi.fn(async () => ({
+        data: [37, 80, 68, 70],
+        fromCache: false,
+        responseSize: 4,
+      }));
+      const fakePage = {
+        url: () => 'https://example.com/duplicate.pdf?token=abc',
+        evaluate,
+      } as any;
+
+      const firstPath = await (session as any)._auto_download_pdf_if_needed(
+        fakePage
+      );
+      const secondPath = await (session as any)._auto_download_pdf_if_needed(
+        fakePage
+      );
+
+      expect(firstPath).toBeTruthy();
+      expect(secondPath).toBeNull();
+      expect(evaluate).toHaveBeenCalledTimes(1);
+      expect(session.get_downloaded_files()).toHaveLength(1);
+    } finally {
+      fs.rmSync(downloadsDir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('Direct Playwright Operations', () => {
   let browser: Browser;
   let context: BrowserContext;

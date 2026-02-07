@@ -2106,7 +2106,8 @@ export class BrowserSession {
   private async _auto_download_pdf_if_needed(
     page: Page
   ): Promise<string | null> {
-    if (!this._autoDownloadPdfs) {
+    const downloadsPath = this.browser_profile.downloads_path;
+    if (!downloadsPath || !this._autoDownloadPdfs) {
       return null;
     }
 
@@ -2119,14 +2120,93 @@ export class BrowserSession {
       const url = page.url();
       this.logger.info(`📄 PDF detected: ${url}`);
 
-      // TODO: Implement actual PDF download logic
-      // This would involve:
-      // 1. Getting the PDF URL
-      // 2. Downloading it to a temp directory
-      // 3. Adding to downloaded_files list
-      // 4. Returning the file path
+      let pdfFilename = path.basename(url.split('?')[0]);
+      if (!pdfFilename || !pdfFilename.toLowerCase().endsWith('.pdf')) {
+        const parsed = new URL(url);
+        pdfFilename = path.basename(parsed.pathname) || 'document.pdf';
+        if (!pdfFilename.toLowerCase().endsWith('.pdf')) {
+          pdfFilename += '.pdf';
+        }
+      }
 
-      return null;
+      if (
+        this.downloaded_files.some(
+          (downloaded) => path.basename(downloaded) === pdfFilename
+        )
+      ) {
+        this.logger.debug(`📄 PDF already downloaded: ${pdfFilename}`);
+        return null;
+      }
+
+      this.logger.info(`📄 Auto-downloading PDF from: ${url}`);
+      const downloadResult = await page.evaluate(async (pdfUrl: string) => {
+        try {
+          const response = await fetch(pdfUrl, {
+            cache: 'force-cache',
+          });
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const blob = await response.blob();
+          const arrayBuffer = await blob.arrayBuffer();
+          const uint8Array = new Uint8Array(arrayBuffer);
+          const cacheHeader = response.headers.get('x-cache') || '';
+          const fromCache =
+            response.headers.has('age') ||
+            cacheHeader.toLowerCase().includes('hit');
+
+          return {
+            data: Array.from(uint8Array),
+            fromCache,
+            responseSize: uint8Array.length,
+          };
+        } catch (error) {
+          return {
+            data: [],
+            fromCache: false,
+            responseSize: 0,
+            error:
+              error instanceof Error ? error.message : 'Unknown fetch error',
+          };
+        }
+      }, url);
+
+      if (downloadResult?.error) {
+        this.logger.warning(
+          `⚠️ Failed to auto-download PDF from ${url}: ${downloadResult.error}`
+        );
+        return null;
+      }
+
+      if (
+        !downloadResult ||
+        !Array.isArray(downloadResult.data) ||
+        downloadResult.data.length === 0
+      ) {
+        this.logger.warning(`⚠️ No data received when downloading PDF from ${url}`);
+        return null;
+      }
+
+      await fs.promises.mkdir(downloadsPath, { recursive: true });
+      const uniqueFilename = await BrowserSession.get_unique_filename(
+        downloadsPath,
+        pdfFilename
+      );
+      const downloadPath = path.join(downloadsPath, uniqueFilename);
+
+      await fs.promises.writeFile(downloadPath, Buffer.from(downloadResult.data));
+      this.add_downloaded_file(downloadPath);
+
+      const cacheStatus = downloadResult.fromCache
+        ? 'from cache'
+        : 'from network';
+      const responseSize = Number(downloadResult.responseSize || 0);
+      this.logger.info(
+        `📄 Auto-downloaded PDF (${cacheStatus}, ${responseSize.toLocaleString()} bytes): ${downloadPath}`
+      );
+
+      return downloadPath;
     } catch (error) {
       this.logger.debug(`PDF detection failed: ${(error as Error).message}`);
       return null;
@@ -2426,16 +2506,17 @@ export class BrowserSession {
 
         // Save the downloaded file
         const suggested_filename = download.suggestedFilename();
-        const download_path = path.join(downloads_path, suggested_filename);
+        const unique_filename = await BrowserSession.get_unique_filename(
+          downloads_path,
+          suggested_filename
+        );
+        const download_path = path.join(downloads_path, unique_filename);
 
         await download.saveAs(download_path);
         this.logger.info(`⬇️ Downloaded file to: ${download_path}`);
 
         // Track the downloaded file
-        this.downloaded_files.push(download_path);
-        this.logger.info(
-          `📁 Added download to session tracking (total: ${this.downloaded_files.length} files)`
-        );
+        this.add_downloaded_file(download_path);
 
         return download_path;
       } catch (error) {
