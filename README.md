@@ -52,9 +52,9 @@ This is **not** a fork or competing project—it's a respectful port to serve a 
 This Node.js/TypeScript implementation is currently **strictly aligned** with the Python `browser-use` release
 [`v0.5.11`](https://github.com/browser-use/browser-use/releases/tag/0.5.11), published on **August 10, 2025**.
 
-- Core features and behavior are aligned against that upstream tag baseline.
-- Our test strategy is maintained to be as equivalent as practical to the Python coverage and behavior checks.
-- We expect to move this parity baseline forward to the Python **January 2026** release line very soon.
+- 📦 Core features and behavior are aligned against that upstream tag baseline.
+- ✅ Our test strategy is maintained to be as equivalent as practical to the Python coverage and behavior checks.
+- 🔄 We expect to move this parity baseline forward to the Python **January 2026** release line very soon.
 
 ## Features
 
@@ -641,28 +641,28 @@ yarn typecheck
 The library follows a modular, layered architecture:
 
 ```
-┌─────────────────────────────────────────┐
+┌──────────────────────────────────────────┐
 │            Agent (Orchestrator)          │
 │  - Task execution & planning             │
 │  - LLM message management                │
 │  - Step execution loop                   │
-└─────────┬───────────────────────────────┘
+└─────────┬────────────────────────────────┘
           │
-┌─────────▼───────────────────────────────┐
+┌─────────▼────────────────────────────────┐
 │           Controller (Actions)           │
 │  - Action registry & execution           │
 │  - Built-in actions (30+)                │
 │  - Custom action support                 │
-└─────────┬───────────────────────────────┘
+└─────────┬────────────────────────────────┘
           │
-┌─────────▼───────────────────────────────┐
+┌─────────▼────────────────────────────────┐
 │        BrowserSession (Browser)          │
 │  - Playwright integration                │
 │  - Tab & page management                 │
 │  - Navigation & interaction              │
-└─────────┬───────────────────────────────┘
+└─────────┬────────────────────────────────┘
           │
-┌─────────▼───────────────────────────────┐
+┌─────────▼────────────────────────────────┐
 │         DOMService (DOM Analysis)        │
 │  - Element extraction                    │
 │  - Clickable element detection           │
