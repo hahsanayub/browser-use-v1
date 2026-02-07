@@ -93,6 +93,7 @@ export class BrowserSession {
   private _subprocess: ChildProcess | null = null;
   private _childProcesses: Set<number> = new Set();
   private attachedAgentId: string | null = null;
+  private attachedSharedAgentIds: Set<string> = new Set();
   private _stoppingPromise: Promise<void> | null = null;
 
   constructor(init: BrowserSessionInit = {}) {
@@ -370,10 +371,40 @@ export class BrowserSession {
     return this.ownsBrowserResources;
   }
 
-  claim_agent(agentId: string): boolean {
+  claim_agent(agentId: string, mode: 'exclusive' | 'shared' = 'exclusive'): boolean {
     if (!agentId) {
       return false;
     }
+
+    if (mode === 'shared') {
+      if (
+        this.attachedAgentId &&
+        this.attachedAgentId !== agentId &&
+        this.attachedSharedAgentIds.size === 0
+      ) {
+        return false;
+      }
+
+      if (this.attachedSharedAgentIds.size === 0 && this.attachedAgentId) {
+        this.attachedSharedAgentIds.add(this.attachedAgentId);
+      }
+      this.attachedSharedAgentIds.add(agentId);
+      this.attachedAgentId = this.attachedAgentId ?? agentId;
+      return true;
+    }
+
+    if (this.attachedSharedAgentIds.size > 0) {
+      if (
+        this.attachedSharedAgentIds.size === 1 &&
+        this.attachedSharedAgentIds.has(agentId)
+      ) {
+        this.attachedSharedAgentIds.clear();
+        this.attachedAgentId = agentId;
+        return true;
+      }
+      return false;
+    }
+
     if (this.attachedAgentId && this.attachedAgentId !== agentId) {
       return false;
     }
@@ -381,11 +412,32 @@ export class BrowserSession {
     return true;
   }
 
-  claimAgent(agentId: string): boolean {
-    return this.claim_agent(agentId);
+  claimAgent(agentId: string, mode: 'exclusive' | 'shared' = 'exclusive'): boolean {
+    return this.claim_agent(agentId, mode);
   }
 
   release_agent(agentId?: string): boolean {
+    if (this.attachedSharedAgentIds.size > 0) {
+      if (!agentId) {
+        this.attachedSharedAgentIds.clear();
+        this.attachedAgentId = null;
+        return true;
+      }
+
+      if (!this.attachedSharedAgentIds.has(agentId)) {
+        return false;
+      }
+
+      this.attachedSharedAgentIds.delete(agentId);
+      if (this.attachedSharedAgentIds.size === 0) {
+        this.attachedAgentId = null;
+      } else if (this.attachedAgentId === agentId) {
+        const [nextOwner] = this.attachedSharedAgentIds;
+        this.attachedAgentId = nextOwner ?? null;
+      }
+      return true;
+    }
+
     if (!this.attachedAgentId) {
       return true;
     }
@@ -406,6 +458,17 @@ export class BrowserSession {
 
   getAttachedAgentId(): string | null {
     return this.get_attached_agent_id();
+  }
+
+  get_attached_agent_ids(): string[] {
+    if (this.attachedSharedAgentIds.size > 0) {
+      return Array.from(this.attachedSharedAgentIds);
+    }
+    return this.attachedAgentId ? [this.attachedAgentId] : [];
+  }
+
+  getAttachedAgentIds(): string[] {
+    return this.get_attached_agent_ids();
   }
 
   private _determineOwnership() {
@@ -696,6 +759,7 @@ export class BrowserSession {
   private async _shutdown_browser_session() {
     this.initialized = false;
     this.attachedAgentId = null;
+    this.attachedSharedAgentIds.clear();
 
     if (this.ownsBrowserResources) {
       if (typeof this.browser_context?.close === 'function') {

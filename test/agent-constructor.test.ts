@@ -156,6 +156,65 @@ describe('Agent constructor browser session alignment', () => {
     ).toThrow(/already attached to Agent existing-agent/);
   });
 
+  it('reuses BrowserSession in shared attachment mode and defers shutdown until last agent closes', async () => {
+    const sharedSession = new BrowserSession({
+      browser_profile: new BrowserProfile({}),
+    });
+    const stopSpy = vi
+      .spyOn(sharedSession as any, 'stop')
+      .mockImplementation(async () => {});
+
+    const agent1 = new Agent({
+      task: 'shared agent 1',
+      llm: createLlm(),
+      browser_session: sharedSession,
+      session_attachment_mode: 'shared',
+    });
+    const agent2 = new Agent({
+      task: 'shared agent 2',
+      llm: createLlm(),
+      browser_session: sharedSession,
+      session_attachment_mode: 'shared',
+    });
+
+    expect(agent1.browser_session).toBe(sharedSession);
+    expect(agent2.browser_session).toBe(sharedSession);
+    expect(sharedSession.get_attached_agent_ids().sort()).toEqual(
+      [agent1.id, agent2.id].sort()
+    );
+
+    await agent1.close();
+    expect(stopSpy).toHaveBeenCalledTimes(0);
+    expect(sharedSession.get_attached_agent_ids()).toEqual([agent2.id]);
+
+    await agent2.close();
+    expect(stopSpy).toHaveBeenCalledTimes(1);
+    expect(sharedSession.get_attached_agent_ids()).toEqual([]);
+  });
+
+  it('throws in shared attachment mode when session is already exclusively attached', async () => {
+    const sharedSession = new BrowserSession({
+      browser_profile: new BrowserProfile({}),
+    });
+    const exclusiveAgent = new Agent({
+      task: 'exclusive owner',
+      llm: createLlm(),
+      browser_session: sharedSession,
+    });
+
+    expect(
+      () =>
+        new Agent({
+          task: 'shared join fails',
+          llm: createLlm(),
+          browser_session: sharedSession,
+          session_attachment_mode: 'shared',
+        })
+    ).toThrow(/already attached in exclusive mode/);
+
+    await exclusiveAgent.close();
+  });
+
   it('defaults page_extraction_llm to the main llm when omitted', async () => {
     const llm = createLlm();
     const agent = new Agent({

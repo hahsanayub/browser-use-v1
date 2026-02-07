@@ -112,6 +112,25 @@ describe('BrowserSession Basic Operations', () => {
     expect(session.get_attached_agent_id()).toBeNull();
   });
 
+  it('supports shared attachment mode for controlled parallel agents', () => {
+    const session = new BrowserSession({
+      browser_profile: new BrowserProfile({}),
+    });
+
+    expect(session.claim_agent('agent-a', 'shared')).toBe(true);
+    expect(session.claim_agent('agent-b', 'shared')).toBe(true);
+    expect(session.get_attached_agent_ids().sort()).toEqual([
+      'agent-a',
+      'agent-b',
+    ]);
+    expect(session.claim_agent('agent-c')).toBe(false);
+
+    expect(session.release_agent('agent-a')).toBe(true);
+    expect(session.get_attached_agent_ids()).toEqual(['agent-b']);
+    expect(session.release_agent('agent-b')).toBe(true);
+    expect(session.get_attached_agent_ids()).toEqual([]);
+  });
+
   it('deduplicates concurrent stop calls', async () => {
     const session = new BrowserSession({
       browser_profile: new BrowserProfile({}),

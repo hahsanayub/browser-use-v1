@@ -99,7 +99,7 @@ export class ActionResult {
 }
 
 export interface AgentSettings {
-  session_attachment_mode: 'copy' | 'strict';
+  session_attachment_mode: 'copy' | 'strict' | 'shared';
   use_vision: boolean;
   vision_detail_level: 'auto' | 'low' | 'high';
   use_vision_for_planner: boolean;

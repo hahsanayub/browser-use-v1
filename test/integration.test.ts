@@ -732,6 +732,108 @@ describe('Component Tests (Mocked Dependencies)', () => {
     expect(releaseSpy).toHaveBeenCalledTimes(1);
     expect(browser_session.get_attached_agent_id()).toBeNull();
   });
+
+  it('keeps shared BrowserSession alive until all shared agents close', async () => {
+    const controller = createTestController();
+    const tempDir1 = createTempDir();
+    const tempDir2 = createTempDir();
+    const browser_session = createBrowserSessionStub() as any;
+
+    let exclusiveOwner: string | null = null;
+    const sharedOwners = new Set<string>();
+    let stopCalls = 0;
+    browser_session.claim_agent = (
+      agentId: string,
+      mode: 'exclusive' | 'shared' = 'exclusive'
+    ) => {
+      if (!agentId) {
+        return false;
+      }
+      if (mode === 'shared') {
+        if (exclusiveOwner && exclusiveOwner !== agentId && sharedOwners.size === 0) {
+          return false;
+        }
+        if (sharedOwners.size === 0 && exclusiveOwner) {
+          sharedOwners.add(exclusiveOwner);
+        }
+        sharedOwners.add(agentId);
+        exclusiveOwner = exclusiveOwner ?? agentId;
+        return true;
+      }
+      if (sharedOwners.size > 0) {
+        return sharedOwners.size === 1 && sharedOwners.has(agentId);
+      }
+      if (exclusiveOwner && exclusiveOwner !== agentId) {
+        return false;
+      }
+      exclusiveOwner = agentId;
+      return true;
+    };
+    browser_session.release_agent = (agentId?: string) => {
+      if (sharedOwners.size > 0) {
+        if (!agentId || !sharedOwners.has(agentId)) {
+          return false;
+        }
+        sharedOwners.delete(agentId);
+        exclusiveOwner = sharedOwners.size ? Array.from(sharedOwners)[0] : null;
+        return true;
+      }
+      if (!exclusiveOwner) {
+        return true;
+      }
+      if (agentId && exclusiveOwner !== agentId) {
+        return false;
+      }
+      exclusiveOwner = null;
+      return true;
+    };
+    browser_session.get_attached_agent_ids = () =>
+      sharedOwners.size ? Array.from(sharedOwners) : exclusiveOwner ? [exclusiveOwner] : [];
+    browser_session.get_attached_agent_id = () =>
+      browser_session.get_attached_agent_ids()[0] ?? null;
+    browser_session.stop = async () => {
+      stopCalls += 1;
+    };
+
+    const llm = new MockLLM([
+      {
+        completion: {
+          action: [{ done: { success: true, text: 'done shared task' } }],
+          thinking: 'done',
+        },
+      },
+    ]);
+
+    const agent1 = new Agent({
+      task: 'Shared agent 1',
+      llm,
+      browser_session,
+      controller,
+      file_system_path: tempDir1,
+      use_vision: false,
+      session_attachment_mode: 'shared',
+    });
+    const agent2 = new Agent({
+      task: 'Shared agent 2',
+      llm,
+      browser_session,
+      controller,
+      file_system_path: tempDir2,
+      use_vision: false,
+      session_attachment_mode: 'shared',
+    });
+
+    tempResources.push(agent1.agent_directory);
+    tempResources.push(agent2.agent_directory);
+
+    await agent1.run(1);
+    expect(stopCalls).toBe(0);
+    expect(browser_session.get_attached_agent_ids()).toEqual([agent2.id]);
+
+    await agent2.run(1);
+    expect(stopCalls).toBe(1);
+    expect(browser_session.get_attached_agent_ids()).toEqual([]);
+  });
 });
 
 describe('Unit Tests', () => {

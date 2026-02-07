@@ -293,6 +293,7 @@ export class Agent<
   _task_start_time = 0;
   _force_exit_telemetry_logged = false;
   private _closePromise: Promise<void> | null = null;
+  private _hasBrowserSessionClaim = false;
   private _enforceDoneOnlyForCurrentStep = false;
   system_prompt_class: SystemPrompt;
   ActionModel: typeof ActionModel = ActionModel;
@@ -531,59 +532,91 @@ export class Agent<
   private _claim_or_isolate_browser_session(
     browser_session: BrowserSession
   ): BrowserSession {
-    const claimSession = (session: BrowserSession): boolean => {
+    const claimMode =
+      this.settings.session_attachment_mode === 'shared'
+        ? 'shared'
+        : 'exclusive';
+    this._hasBrowserSessionClaim = false;
+
+    const claimSession = (
+      session: BrowserSession
+    ): 'claimed' | 'noop' | 'failed' => {
       const claimFn =
         (session as any).claim_agent ?? (session as any).claimAgent;
       if (typeof claimFn !== 'function') {
-        return true;
+        return 'noop';
       }
-      return Boolean(claimFn.call(session, this.id));
+      const claimed = Boolean(claimFn.call(session, this.id, claimMode));
+      return claimed ? 'claimed' : 'failed';
     };
 
-    const getAttachedAgentId = (session: BrowserSession): string | null => {
-      const getter =
+    const getAttachedAgentIds = (session: BrowserSession): string[] => {
+      const pluralGetter =
+        (session as any).get_attached_agent_ids ??
+        (session as any).getAttachedAgentIds;
+      if (typeof pluralGetter === 'function') {
+        const value = pluralGetter.call(session);
+        if (Array.isArray(value)) {
+          return value.filter((item) => typeof item === 'string');
+        }
+      }
+
+      const singleGetter =
         (session as any).get_attached_agent_id ??
         (session as any).getAttachedAgentId;
-      if (typeof getter !== 'function') {
-        return null;
+      if (typeof singleGetter !== 'function') {
+        return [];
       }
-      const value = getter.call(session);
-      return typeof value === 'string' ? value : null;
+      const value = singleGetter.call(session);
+      return typeof value === 'string' ? [value] : [];
     };
 
-    if (claimSession(browser_session)) {
+    const claimResult = claimSession(browser_session);
+    if (claimResult !== 'failed') {
+      this._hasBrowserSessionClaim = claimResult === 'claimed';
       return browser_session;
     }
 
-    const currentOwner = getAttachedAgentId(browser_session) ?? 'unknown';
+    const currentOwners = getAttachedAgentIds(browser_session);
+    const ownerLabel =
+      currentOwners.length > 0 ? currentOwners.join(', ') : 'unknown';
     if (this.settings.session_attachment_mode === 'strict') {
       throw new Error(
-        `BrowserSession is already attached to Agent ${currentOwner}. Set session_attachment_mode='copy' to allow automatic isolation.`
+        `BrowserSession is already attached to Agent ${ownerLabel}. Set session_attachment_mode='copy' to allow automatic isolation.`
       );
     }
+
+    if (this.settings.session_attachment_mode === 'shared') {
+      throw new Error(
+        `BrowserSession is already attached in exclusive mode by Agent ${ownerLabel}. Configure all participating agents with session_attachment_mode='shared' or use session_attachment_mode='copy'.`
+      );
+    }
+
     this.logger.warning(
-      `⚠️ BrowserSession is already attached to Agent ${currentOwner}. Creating an isolated copy for this Agent.`
+      `⚠️ BrowserSession is already attached to Agent ${ownerLabel}. Creating an isolated copy for this Agent.`
     );
 
     const modelCopyFn =
       (browser_session as any).model_copy ?? (browser_session as any).modelCopy;
     if (typeof modelCopyFn !== 'function') {
       throw new Error(
-        `BrowserSession is attached to another Agent (${currentOwner}) and cannot be safely reused. Provide a separate BrowserSession.`
+        `BrowserSession is attached to another Agent (${ownerLabel}) and cannot be safely reused. Provide a separate BrowserSession.`
       );
     }
 
     const isolated = modelCopyFn.call(browser_session) as BrowserSession;
-    if (!claimSession(isolated)) {
+    const isolatedClaimResult = claimSession(isolated);
+    if (isolatedClaimResult === 'failed') {
       throw new Error(
         'Failed to claim isolated BrowserSession for current Agent'
       );
     }
+    this._hasBrowserSessionClaim = isolatedClaimResult === 'claimed';
     return isolated;
   }
 
   private _release_browser_session_claim(browser_session: BrowserSession | null) {
-    if (!browser_session) {
+    if (!browser_session || !this._hasBrowserSessionClaim) {
       return;
     }
 
@@ -600,6 +633,33 @@ export class Agent<
         '⚠️ BrowserSession claim was not released because it is currently attached to another Agent.'
       );
     }
+    this._hasBrowserSessionClaim = false;
+  }
+
+  private _has_any_browser_session_attachments(
+    browser_session: BrowserSession | null
+  ): boolean {
+    if (!browser_session) {
+      return false;
+    }
+
+    const pluralGetter =
+      (browser_session as any).get_attached_agent_ids ??
+      (browser_session as any).getAttachedAgentIds;
+    if (typeof pluralGetter === 'function') {
+      const value = pluralGetter.call(browser_session);
+      if (Array.isArray(value)) {
+        return value.some((item) => typeof item === 'string');
+      }
+    }
+
+    const singleGetter =
+      (browser_session as any).get_attached_agent_id ??
+      (browser_session as any).getAttachedAgentId;
+    if (typeof singleGetter !== 'function') {
+      return false;
+    }
+    return typeof singleGetter.call(browser_session) === 'string';
   }
 
   private _init_browser_session(init: {
@@ -1990,6 +2050,15 @@ export class Agent<
     }
 
     this._closePromise = (async () => {
+      this._release_browser_session_claim(browser_session);
+
+      if (this._has_any_browser_session_attachments(browser_session)) {
+        this.logger.debug(
+          'Skipping BrowserSession shutdown because other attached Agents are still active.'
+        );
+        return;
+      }
+
       try {
         if (typeof (browser_session as any).stop === 'function') {
           await (browser_session as any).stop();
@@ -2000,8 +2069,6 @@ export class Agent<
         this.logger.error(
           `Error during agent cleanup: ${error instanceof Error ? error.message : String(error)}`
         );
-      } finally {
-        this._release_browser_session_claim(browser_session);
       }
     })();
 
