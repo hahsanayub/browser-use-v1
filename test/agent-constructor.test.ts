@@ -114,4 +114,38 @@ describe('Agent constructor browser session alignment', () => {
 
     await agent.close();
   });
+
+  it('triggers blocking warning delay in TTY mode for unlocked sensitive_data', async () => {
+    const agent = new Agent({
+      task: 'test tty delay',
+      llm: createLlm(),
+      browser_session: new BrowserSession({
+        browser_profile: new BrowserProfile({
+          allowed_domains: [],
+        }),
+      }),
+    });
+
+    (agent as any).sensitive_data = {
+      '*.example.com': {
+        password: 'secret',
+      },
+    };
+
+    const originalIsTTY = (process.stdin as any).isTTY;
+    const sleepSpy = vi
+      .spyOn(agent as any, '_sleep_blocking')
+      .mockImplementation(() => {});
+
+    (process.stdin as any).isTTY = true;
+    try {
+      (agent as any)._validateSecuritySettings();
+      expect(sleepSpy).toHaveBeenCalledWith(10_000);
+    } finally {
+      (process.stdin as any).isTTY = originalIsTTY;
+      sleepSpy.mockRestore();
+    }
+
+    await agent.close();
+  });
 });

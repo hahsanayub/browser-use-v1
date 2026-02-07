@@ -574,6 +574,23 @@ export class Agent<
     });
   }
 
+  private _sleep_blocking(ms: number) {
+    if (ms <= 0) {
+      return;
+    }
+
+    if (typeof SharedArrayBuffer === 'function' && Atomics?.wait) {
+      const lock = new Int32Array(new SharedArrayBuffer(4));
+      Atomics.wait(lock, 0, 0, ms);
+      return;
+    }
+
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      // Intentional busy-wait fallback for runtimes without Atomics.wait.
+    }
+  }
+
   /**
    * Convert dictionary-based actions to ActionModel instances
    */
@@ -702,30 +719,9 @@ export class Agent<
 
       // Check if we're in an interactive shell (TTY)
       if (process.stdin.isTTY) {
-        // Sleep for 10 seconds to give user time to abort
-        const sleepMs = 10000;
-        void new Promise<void>((resolve) => {
-          const timeout = setTimeout(() => {
-            process.stdin.removeListener('data', abortHandler);
-            resolve();
-          }, sleepMs);
-
-          const abortHandler = (data: Buffer) => {
-            // Check for Ctrl+C (0x03)
-            if (data.toString().includes('\x03')) {
-              clearTimeout(timeout);
-              this.logger.info(
-                '\n\n 🛑 Exiting now... set BrowserSession(allowed_domains=["example.com", "example.org"]) to only domains you trust to see your sensitive_data.'
-              );
-              process.exit(0);
-            }
-          };
-
-          process.stdin.on('data', abortHandler);
-        });
-
-        // This is a blocking operation in the constructor - not ideal but matches Python behavior
-        // In production, users should set allowed_domains to avoid this
+        // Block startup for 10 seconds to match Python warning behavior.
+        // User can still abort process with Ctrl+C.
+        this._sleep_blocking(10_000);
       }
 
       this.logger.warning(
