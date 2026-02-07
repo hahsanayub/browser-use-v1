@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { BaseChatModel } from '../src/llm/base.js';
 import { Agent } from '../src/agent/service.js';
+import { ActionResult } from '../src/agent/views.js';
 import { BrowserSession } from '../src/browser/session.js';
 import { BrowserProfile } from '../src/browser/profile.js';
 
@@ -367,6 +368,75 @@ describe('Agent constructor browser session alignment', () => {
       (process.stdin as any).isTTY = originalIsTTY;
       sleepSpy.mockRestore();
     }
+
+    await agent.close();
+  });
+
+  it('passes signal through rerun_history to history step execution', async () => {
+    const agent = new Agent({
+      task: 'test rerun signal propagation',
+      llm: createLlm(),
+    });
+    const executeSpy = vi
+      .spyOn(agent as any, '_execute_history_step')
+      .mockResolvedValue([
+        new ActionResult({ extracted_content: 'replayed step' }),
+      ]);
+    const signalController = new AbortController();
+    const history = {
+      history: [
+        {
+          model_output: {
+            current_state: { next_goal: 'Replay action' },
+            action: [{}],
+          },
+        },
+      ],
+    } as any;
+
+    const result = await agent.rerun_history(history, {
+      signal: signalController.signal,
+    });
+
+    expect(result).toHaveLength(1);
+    expect(executeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model_output: expect.objectContaining({
+          current_state: expect.objectContaining({
+            next_goal: 'Replay action',
+          }),
+        }),
+      }),
+      2,
+      signalController.signal
+    );
+
+    await agent.close();
+  });
+
+  it('aborts rerun_history before replay execution when signal is already aborted', async () => {
+    const agent = new Agent({
+      task: 'test rerun abort',
+      llm: createLlm(),
+    });
+    const executeSpy = vi.spyOn(agent as any, '_execute_history_step');
+    const signalController = new AbortController();
+    signalController.abort();
+    const history = {
+      history: [
+        {
+          model_output: {
+            current_state: { next_goal: 'Replay action' },
+            action: [{}],
+          },
+        },
+      ],
+    } as any;
+
+    await expect(
+      agent.rerun_history(history, { signal: signalController.signal })
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(executeSpy).not.toHaveBeenCalled();
 
     await agent.close();
   });

@@ -153,6 +153,7 @@ interface RerunHistoryOptions {
   max_retries?: number;
   skip_failures?: boolean;
   delay_between_actions?: number;
+  signal?: AbortSignal | null;
 }
 
 interface AgentConstructorParams<Context, AgentStructuredOutput> {
@@ -2021,16 +2022,21 @@ export class Agent<
       max_retries = 3,
       skip_failures = true,
       delay_between_actions = 2,
+      signal = null,
     } = options;
 
+    this._throwIfAborted(signal);
     if (this.initial_actions?.length) {
-      const initialResult = await this.multi_act(this.initial_actions);
+      const initialResult = await this.multi_act(this.initial_actions, {
+        signal,
+      });
       this.state.last_result = initialResult;
     }
 
     const results: ActionResult[] = [];
 
     for (let index = 0; index < history.history.length; index++) {
+      this._throwIfAborted(signal);
       const historyItem = history.history[index];
       const goal = historyItem.model_output?.current_state?.next_goal ?? '';
       this.logger.info(
@@ -2048,14 +2054,22 @@ export class Agent<
 
       let attempt = 0;
       while (attempt < max_retries) {
+        this._throwIfAborted(signal);
         try {
           const stepResult = await this._execute_history_step(
             historyItem,
-            delay_between_actions
+            delay_between_actions,
+            signal
           );
           results.push(...stepResult);
           break;
         } catch (error) {
+          if (
+            signal?.aborted ||
+            (error instanceof Error && error.name === 'AbortError')
+          ) {
+            throw this._createAbortError();
+          }
           attempt += 1;
           if (attempt === max_retries) {
             const message = `Step ${index + 1} failed after ${max_retries} attempts: ${
@@ -2071,7 +2085,7 @@ export class Agent<
             this.logger.warning(
               `Step ${index + 1} failed (attempt ${attempt}/${max_retries}), retrying...`
             );
-            await this._sleep(delay_between_actions);
+            await this._sleep(delay_between_actions, signal);
           }
         }
       }
@@ -2082,8 +2096,10 @@ export class Agent<
 
   private async _execute_history_step(
     historyItem: AgentHistory,
-    delaySeconds: number
+    delaySeconds: number,
+    signal: AbortSignal | null = null
   ) {
+    this._throwIfAborted(signal);
     if (!this.browser_session) {
       throw new Error('BrowserSession is not set up');
     }
@@ -2091,6 +2107,7 @@ export class Agent<
       await this.browser_session.get_browser_state_with_recovery?.({
         cache_clickable_elements_hashes: false,
         include_screenshot: false,
+        signal,
       });
     if (!browser_state_summary || !historyItem.model_output) {
       throw new Error('Invalid browser state or model output');
@@ -2103,6 +2120,7 @@ export class Agent<
       actionIndex < historyItem.model_output.action.length;
       actionIndex++
     ) {
+      this._throwIfAborted(signal);
       const originalAction = historyItem.model_output.action[actionIndex];
       if (!originalAction) {
         continue;
@@ -2127,8 +2145,9 @@ export class Agent<
       }
     }
 
-    const result = await this.multi_act(updatedActions);
-    await this._sleep(delaySeconds);
+    this._throwIfAborted(signal);
+    const result = await this.multi_act(updatedActions, { signal });
+    await this._sleep(delaySeconds, signal);
     return result;
   }
 

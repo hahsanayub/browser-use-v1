@@ -631,4 +631,50 @@ describe('Regression Coverage', () => {
     expect((pageModel as any).available_actions).toContain('domain_action');
     expect((includedModel as any).available_actions).toEqual(['domain_action']);
   });
+
+  it('extract_structured_data propagates abort during iframe extraction', async () => {
+    const controller = new Controller();
+    const abortController = new AbortController();
+    const pageExtractionLlm = {
+      ainvoke: vi.fn(async () => ({ completion: 'ok' })),
+    };
+    const iframe = {
+      waitForLoadState: vi.fn(async () => {}),
+      url: vi.fn(() => 'https://iframe.example.com'),
+      content: vi.fn(
+        () =>
+          new Promise<string>((resolve) => {
+            setTimeout(() => resolve('<html><body>Iframe</body></html>'), 50);
+          })
+      ),
+    };
+    const page = {
+      content: vi.fn(async () => '<html><body>Main</body></html>'),
+      frames: vi.fn(() => [iframe]),
+      url: vi.fn(() => 'https://example.com'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+      agent_current_page: {
+        url: vi.fn(() => 'https://example.com'),
+      },
+    };
+
+    const execution = controller.registry.execute_action(
+      'extract_structured_data',
+      { query: 'Extract data', extract_links: true },
+      {
+        browser_session: browserSession as any,
+        page_extraction_llm: pageExtractionLlm as any,
+        file_system: {
+          save_extracted_content: vi.fn(async () => ''),
+        } as any,
+        signal: abortController.signal,
+      }
+    );
+    setTimeout(() => abortController.abort(), 10);
+
+    await expect(execution).rejects.toThrow(/aborted/i);
+    expect(pageExtractionLlm.ainvoke).not.toHaveBeenCalled();
+  });
 });

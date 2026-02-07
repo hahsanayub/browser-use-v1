@@ -79,6 +79,10 @@ const createAbortError = (reason?: unknown) => {
   return error;
 };
 
+const isAbortError = (error: unknown): boolean => {
+  return error instanceof Error && error.name === 'AbortError';
+};
+
 const throwIfAborted = (signal?: AbortSignal | null) => {
   if (signal?.aborted) {
     throw createAbortError(signal.reason);
@@ -117,6 +121,74 @@ const waitWithSignal = async (
       }
       signal.addEventListener('abort', onAbort, { once: true });
     }
+  });
+};
+
+const runWithTimeoutAndSignal = async <T>(
+  operation: () => Promise<T>,
+  timeoutMs: number,
+  signal?: AbortSignal | null,
+  timeoutMessage = 'Operation timed out'
+): Promise<T> => {
+  throwIfAborted(signal);
+  if (timeoutMs <= 0) {
+    return operation();
+  }
+
+  return await new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const onAbort = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      reject(createAbortError(signal?.reason));
+    };
+
+    const onTimeout = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      reject(new Error(timeoutMessage));
+    };
+
+    const cleanup = () => {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+      signal?.removeEventListener('abort', onAbort);
+    };
+
+    const timeout = setTimeout(onTimeout, timeoutMs);
+
+    if (signal) {
+      if (signal.aborted) {
+        onAbort();
+        return;
+      }
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+
+    void operation()
+      .then((value) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        resolve(value);
+      })
+      .catch((error) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        reject(error);
+      });
   });
 };
 
@@ -471,8 +543,18 @@ export class Controller<Context = unknown> {
           throwIfAborted(signal);
           try {
             // Wait for iframe to load with aggressive timeout
-            await iframe.waitForLoadState?.('load').catch(() => {});
-          } catch {
+            await runWithTimeoutAndSignal(
+              async () => {
+                await iframe.waitForLoadState?.('load');
+              },
+              2000,
+              signal,
+              'Iframe load timeout'
+            );
+          } catch (error) {
+            if (isAbortError(error)) {
+              throw error;
+            }
             // Ignore iframe load errors
           }
 
@@ -487,18 +569,19 @@ export class Controller<Context = unknown> {
           ) {
             content += `\n\nIFRAME ${iframeUrl}:\n`;
             try {
-              // Aggressive timeouts for iframe content
-              const iframeHtml = await Promise.race([
-                iframe.content?.(),
-                new Promise<string>((_, reject) =>
-                  setTimeout(() => reject(new Error('Timeout')), 2000)
-                ),
-              ]);
+              const iframeHtml = await runWithTimeoutAndSignal(
+                async () => (await iframe.content?.()) ?? '',
+                2000,
+                signal,
+                'Iframe content extraction timeout'
+              );
               const iframeMarkdown = turndown.turndown(iframeHtml || '');
               content += iframeMarkdown;
-            } catch {
+            } catch (error) {
+              if (isAbortError(error)) {
+                throw error;
+              }
               // Skip failed iframes
-              content += '';
             }
           }
         }
