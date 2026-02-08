@@ -3206,7 +3206,13 @@ export class Agent<
         SimpleJudgeOutputFormat as any
       );
       const parsed = this._parseCompletionPayload((response as any).completion);
-      const isCorrect = parsed?.is_correct === true;
+      if (typeof parsed?.is_correct !== 'boolean') {
+        this.logger.debug(
+          'Simple judge response missing boolean is_correct; skipping override.'
+        );
+        return;
+      }
+      const isCorrect = parsed.is_correct;
       const reason =
         typeof parsed?.reason === 'string' && parsed.reason.trim()
           ? parsed.reason.trim()

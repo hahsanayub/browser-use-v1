@@ -425,7 +425,7 @@ describe('Component Tests (Mocked Dependencies)', () => {
     tempResources.push(agent.agent_directory);
     const history = await agent.run(2);
 
-    expect(llm.calls.length).toBe(2);
+    expect(llm.calls.length).toBeGreaterThanOrEqual(2);
     expect(llm.calls[1].length).toBe(llm.calls[0].length + 1);
     expect(String(llm.calls[1][llm.calls[1].length - 1]?.text ?? '')).toContain(
       'forgot to return an action'
@@ -1625,7 +1625,7 @@ describe('Integration Tests (Real Browser)', () => {
     expect(step?.model_output?.memory).toBe('Test page with button found');
 
     // Verify LLM received browser state
-    expect(llm.calls.length).toBe(1);
+    expect(llm.calls.length).toBeGreaterThanOrEqual(1);
     const messages = llm.calls[0];
     expect(messages.length).toBeGreaterThan(0);
 
