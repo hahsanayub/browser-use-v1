@@ -438,3 +438,86 @@ ${this.pageFilteredActions}
     return message;
   }
 }
+
+export const get_rerun_summary_prompt = (
+  originalTask: string,
+  totalSteps: number,
+  successCount: number,
+  errorCount: number
+) =>
+  `You are analyzing the completion of a rerun task. Based on the screenshot and execution info, provide a summary.
+
+Original task: ${originalTask}
+
+Execution statistics:
+- Total steps: ${totalSteps}
+- Successful steps: ${successCount}
+- Failed steps: ${errorCount}
+
+Analyze the screenshot to determine:
+1. Whether the task completed successfully
+2. What the final state shows
+3. Overall completion status (complete/partial/failed)
+
+Respond with:
+- summary: A clear, concise summary of what happened during the rerun
+- success: Whether the task completed successfully (true/false)
+- completion_status: One of "complete", "partial", or "failed"`;
+
+export const get_rerun_summary_message = (
+  prompt: string,
+  screenshotB64: string | null = null
+) => {
+  if (screenshotB64) {
+    const parts: Array<ContentPartTextParam | ContentPartImageParam> = [
+      new ContentPartTextParam(prompt),
+      new ContentPartImageParam(
+        new ImageURL(`data:image/png;base64,${screenshotB64}`)
+      ),
+    ];
+    return new UserMessage(parts);
+  }
+  return new UserMessage(prompt);
+};
+
+export const get_ai_step_system_prompt = () =>
+  `
+You are an expert at extracting data from webpages.
+
+<input>
+You will be given:
+1. A query describing what to extract
+2. A textual representation of the webpage
+3. Optionally, a screenshot of the current page state
+</input>
+
+<instructions>
+- Extract information from the webpage that is relevant to the query
+- ONLY use the information available in the webpage - do not make up information
+- If the information is not available, mention that clearly
+- If the query asks for all items, list all of them
+</instructions>
+
+<output>
+- Present ALL relevant information in a concise way
+- Do not use conversational format - directly output the relevant information
+- If information is unavailable, state that clearly
+</output>
+`.trim();
+
+export const get_ai_step_user_prompt = (
+  query: string,
+  statsSummary: string,
+  content: string
+) =>
+  `<query>
+${query}
+</query>
+
+<content_stats>
+${statsSummary}
+</content_stats>
+
+<webpage_content>
+${content}
+</webpage_content>`;

@@ -571,7 +571,8 @@ describe('Agent constructor browser session alignment', () => {
       signal: signalController.signal,
     });
 
-    expect(result).toHaveLength(1);
+    expect(result).toHaveLength(2);
+    expect(result[1]?.is_done).toBe(true);
     expect(executeSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         model_output: expect.objectContaining({
@@ -625,7 +626,7 @@ describe('Agent constructor browser session alignment', () => {
       max_step_interval: 45,
     });
 
-    expect(result).toHaveLength(2);
+    expect(result).toHaveLength(3);
     expect(executeSpy).toHaveBeenCalledTimes(2);
     expect(executeSpy.mock.calls[0]?.[1]).toBe(45);
     expect(executeSpy.mock.calls[1]?.[1]).toBe(0.25);
@@ -688,7 +689,7 @@ describe('Agent constructor browser session alignment', () => {
     });
 
     expect(executeSpy).not.toHaveBeenCalled();
-    expect(results).toHaveLength(1);
+    expect(results).toHaveLength(2);
     expect(results[0]?.error).toContain('Skipped - original step had error');
 
     await agent.close();
@@ -722,7 +723,7 @@ describe('Agent constructor browser session alignment', () => {
     });
 
     expect(executeSpy).toHaveBeenCalledTimes(3);
-    expect(results).toHaveLength(1);
+    expect(results).toHaveLength(2);
     const retryDelays = sleepSpy.mock.calls.map((call) => call[0]);
     expect(retryDelays).toEqual([5, 10]);
 
@@ -785,7 +786,7 @@ describe('Agent constructor browser session alignment', () => {
     });
 
     expect(executeSpy).toHaveBeenCalledTimes(1);
-    expect(results).toHaveLength(2);
+    expect(results).toHaveLength(3);
     expect(results[1]?.extracted_content).toContain(
       'Skipped - redundant retry'
     );
@@ -817,6 +818,102 @@ describe('Agent constructor browser session alignment', () => {
     });
 
     expect(executeSpy.mock.calls[0]?.[3]).toBe(true);
+
+    await agent.close();
+  });
+
+  it('forwards ai_step_llm option to history step execution', async () => {
+    const agent = new Agent({
+      task: 'test ai_step_llm forwarding',
+      llm: createLlm(),
+    });
+    const executeSpy = vi
+      .spyOn(agent as any, '_execute_history_step')
+      .mockResolvedValue([new ActionResult({ extracted_content: 'ok' })]);
+    const aiStepLlm = createLlm('gpt-ai-step', 'openai');
+    const history = {
+      history: [
+        {
+          model_output: {
+            current_state: { next_goal: 'Replay action' },
+            action: [{}],
+          },
+        },
+      ],
+    } as any;
+
+    await agent.rerun_history(history, {
+      ai_step_llm: aiStepLlm,
+    });
+
+    expect(executeSpy.mock.calls[0]?.[4]).toBe(aiStepLlm);
+
+    await agent.close();
+  });
+
+  it('executes extract actions via AI step during history replay', async () => {
+    const agent = new Agent({
+      task: 'test extract ai-step replay',
+      llm: createLlm(),
+    });
+
+    vi.spyOn(agent.browser_session as any, 'get_browser_state_with_recovery')
+      .mockResolvedValue({
+        element_tree: {
+          clickable_elements_to_string: () => '',
+        },
+        selector_map: {},
+      } as any);
+    const multiActSpy = vi
+      .spyOn(agent, 'multi_act')
+      .mockResolvedValue([
+        new ActionResult({ extracted_content: 'clicked menu button' }),
+      ]);
+    const aiStepSpy = vi
+      .spyOn(agent as any, '_execute_ai_step')
+      .mockResolvedValue(
+        new ActionResult({ extracted_content: 'ai extracted content' })
+      );
+    vi.spyOn(agent as any, '_sleep').mockResolvedValue(undefined);
+
+    const clickAction = {
+      get_index: () => 3,
+      model_dump: () => ({ click: { index: 3 } }),
+    };
+    const extractAction = {
+      get_index: () => null,
+      model_dump: () => ({
+        extract_structured_data: { query: 'Find pricing', extract_links: true },
+      }),
+    };
+
+    const results = await (agent as any)._execute_history_step(
+      {
+        model_output: {
+          action: [clickAction, extractAction],
+        },
+        state: {
+          interacted_element: [null, null],
+        },
+      },
+      0,
+      null,
+      false,
+      createLlm('gpt-ai-step', 'openai')
+    );
+
+    expect(multiActSpy).toHaveBeenCalledTimes(1);
+    expect(multiActSpy.mock.calls[0]?.[0]).toEqual([{ click: { index: 3 } }]);
+    expect(aiStepSpy).toHaveBeenCalledWith(
+      'Find pricing',
+      false,
+      true,
+      expect.anything(),
+      null
+    );
+    expect(results.map((result: ActionResult) => result.extracted_content)).toEqual(
+      ['clicked menu button', 'ai extracted content']
+    );
 
     await agent.close();
   });
@@ -896,7 +993,7 @@ describe('Agent constructor browser session alignment', () => {
     });
 
     expect(executeSpy).toHaveBeenCalledTimes(4);
-    expect(results).toHaveLength(2);
+    expect(results).toHaveLength(3);
     expect(results[1]?.extracted_content).toBe('menu item clicked');
     expect(sleepSpy).toHaveBeenCalledWith(0.3, null);
 

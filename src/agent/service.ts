@@ -15,7 +15,13 @@ import {
   FileSystem as AgentFileSystem,
   DEFAULT_FILE_SYSTEM_PATH,
 } from '../filesystem/file-system.js';
-import { SystemPrompt } from './prompts.js';
+import {
+  SystemPrompt,
+  get_ai_step_system_prompt,
+  get_ai_step_user_prompt,
+  get_rerun_summary_message,
+  get_rerun_summary_prompt,
+} from './prompts.js';
 import { MessageManager } from './message-manager/service.js';
 import type { MessageManagerState } from './message-manager/views.js';
 import { BrowserStateSummary, BrowserStateHistory } from '../browser/views.js';
@@ -153,6 +159,8 @@ interface RerunHistoryOptions {
   delay_between_actions?: number;
   max_step_interval?: number;
   wait_for_elements?: boolean;
+  summary_llm?: BaseChatModel | null;
+  ai_step_llm?: BaseChatModel | null;
   signal?: AbortSignal | null;
 }
 
@@ -2406,6 +2414,221 @@ export class Agent<
     return results;
   }
 
+  private async _generate_rerun_summary(
+    originalTask: string,
+    results: ActionResult[],
+    summaryLlm: BaseChatModel | null = null,
+    signal: AbortSignal | null = null
+  ) {
+    if (!this.browser_session) {
+      return new ActionResult({
+        is_done: true,
+        success: false,
+        extracted_content: 'Rerun completed without an active browser session.',
+        long_term_memory: 'Rerun completed without an active browser session.',
+      });
+    }
+
+    let screenshotB64: string | null = null;
+    try {
+      screenshotB64 = await this.browser_session.take_screenshot(false);
+    } catch (error) {
+      this.logger.warning(
+        `Failed to capture screenshot for rerun summary: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+
+    const errorCount = results.filter((result) => Boolean(result.error)).length;
+    const successCount = results.length - errorCount;
+    const prompt = get_rerun_summary_prompt(
+      originalTask,
+      results.length,
+      successCount,
+      errorCount
+    );
+    const message = get_rerun_summary_message(prompt, screenshotB64);
+    const llm = summaryLlm ?? this.llm;
+    const parser = {
+      parse: (input: string) =>
+        z
+          .object({
+            summary: z.string(),
+            success: z.boolean(),
+            completion_status: z.enum(['complete', 'partial', 'failed']),
+          })
+          .parse(JSON.parse(input)),
+    };
+
+    try {
+      const response = await llm.ainvoke([message], parser, {
+        signal: signal ?? undefined,
+      });
+      const summary = response.completion as {
+        summary?: unknown;
+        success?: unknown;
+        completion_status?: unknown;
+      };
+      if (
+        !summary ||
+        typeof summary !== 'object' ||
+        typeof summary.summary !== 'string' ||
+        typeof summary.success !== 'boolean' ||
+        !['complete', 'partial', 'failed'].includes(
+          String(summary.completion_status)
+        )
+      ) {
+        throw new Error(
+          'Structured rerun summary response did not match expected schema'
+        );
+      }
+      this.logger.info(`Rerun Summary: ${summary.summary}`);
+      this.logger.info(
+        `Rerun Status: ${summary.completion_status} (success=${summary.success})`
+      );
+      return new ActionResult({
+        is_done: true,
+        success: summary.success,
+        extracted_content: summary.summary,
+        long_term_memory: `Rerun completed with status: ${summary.completion_status}. ${summary.summary.slice(
+          0,
+          100
+        )}`,
+      });
+    } catch (structuredError) {
+      this.logger.debug(
+        `Structured rerun summary failed: ${
+          structuredError instanceof Error
+            ? structuredError.message
+            : String(structuredError)
+        }, falling back to text response`
+      );
+    }
+
+    try {
+      const response = await llm.ainvoke([message], undefined, {
+        signal: signal ?? undefined,
+      });
+      const summaryText =
+        typeof response.completion === 'string'
+          ? response.completion
+          : JSON.stringify(response.completion);
+      const completionStatus =
+        errorCount === 0 ? 'complete' : successCount > 0 ? 'partial' : 'failed';
+      return new ActionResult({
+        is_done: true,
+        success: errorCount === 0,
+        extracted_content: summaryText,
+        long_term_memory: `Rerun completed with status: ${completionStatus}. ${summaryText.slice(
+          0,
+          100
+        )}`,
+      });
+    } catch (error) {
+      this.logger.warning(
+        `Failed to generate rerun summary: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      return new ActionResult({
+        is_done: true,
+        success: errorCount === 0,
+        extracted_content: `Rerun completed: ${successCount}/${results.length} steps succeeded`,
+        long_term_memory: `Rerun completed: ${successCount} steps succeeded, ${errorCount} errors`,
+      });
+    }
+  }
+
+  private async _execute_ai_step(
+    query: string,
+    includeScreenshot = false,
+    extractLinks = false,
+    aiStepLlm: BaseChatModel | null = null,
+    signal: AbortSignal | null = null
+  ) {
+    if (!this.browser_session) {
+      return new ActionResult({ error: 'AI step failed: BrowserSession missing' });
+    }
+
+    const llm = aiStepLlm ?? this.llm;
+    let browserState: BrowserStateSummary | null = null;
+    try {
+      browserState = await this.browser_session.get_browser_state_with_recovery?.(
+        {
+          cache_clickable_elements_hashes: false,
+          include_screenshot: includeScreenshot,
+          signal,
+        }
+      );
+    } catch (error) {
+      return new ActionResult({
+        error: `AI step failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      });
+    }
+
+    const content =
+      browserState?.element_tree?.clickable_elements_to_string?.(
+        this.settings.include_attributes ?? undefined
+      ) ?? '';
+    const statsSummary = `Content processed: ${content.length.toLocaleString()} chars, extract_links=${extractLinks}`;
+    const systemPrompt = get_ai_step_system_prompt();
+    const userPrompt = get_ai_step_user_prompt(query, statsSummary, content);
+    const screenshotB64 = includeScreenshot ? browserState?.screenshot ?? null : null;
+    const userMessage = get_rerun_summary_message(userPrompt, screenshotB64);
+
+    try {
+      const response = await llm.ainvoke(
+        [new SystemMessage(systemPrompt), userMessage],
+        undefined,
+        { signal: signal ?? undefined }
+      );
+      const currentUrl = browserState?.url ?? '';
+      const completion =
+        typeof response.completion === 'string'
+          ? response.completion
+          : JSON.stringify(response.completion);
+      const extractedContent = `<url>\n${currentUrl}\n</url>\n<query>\n${query}\n</query>\n<result>\n${completion}\n</result>`;
+      const maxMemoryLength = 1000;
+      if (extractedContent.length < maxMemoryLength) {
+        return new ActionResult({
+          extracted_content: extractedContent,
+          include_extracted_content_only_once: false,
+          long_term_memory: extractedContent,
+        });
+      }
+
+      if (!this.file_system) {
+        return new ActionResult({
+          extracted_content: extractedContent,
+          include_extracted_content_only_once: false,
+          long_term_memory: extractedContent.slice(0, maxMemoryLength),
+        });
+      }
+
+      const fileName =
+        await this.file_system.save_extracted_content(extractedContent);
+      return new ActionResult({
+        extracted_content: extractedContent,
+        include_extracted_content_only_once: true,
+        long_term_memory: `Query: ${query}\nContent in ${fileName} and once in <read_state>.`,
+      });
+    } catch (error) {
+      this.logger.warning(
+        `Failed to execute AI step: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      return new ActionResult({
+        error: `AI step failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      });
+    }
+  }
+
   async rerun_history(
     history: AgentHistoryList,
     options: RerunHistoryOptions = {}
@@ -2416,6 +2639,8 @@ export class Agent<
       delay_between_actions = 2,
       max_step_interval = 45,
       wait_for_elements = false,
+      summary_llm = null,
+      ai_step_llm = null,
       signal = null,
     } = options;
 
@@ -2506,12 +2731,21 @@ export class Agent<
       while (attempt < max_retries) {
         this._throwIfAborted(signal);
         try {
-          const stepResult = await this._execute_history_step(
-            historyItem,
-            stepDelay,
-            signal,
-            wait_for_elements
-          );
+          const stepResult =
+            ai_step_llm != null
+              ? await this._execute_history_step(
+                  historyItem,
+                  stepDelay,
+                  signal,
+                  wait_for_elements,
+                  ai_step_llm
+                )
+              : await this._execute_history_step(
+                  historyItem,
+                  stepDelay,
+                  signal,
+                  wait_for_elements
+                );
           results.push(...stepResult);
           stepSucceeded = true;
           break;
@@ -2541,7 +2775,8 @@ export class Agent<
               );
               const reopened = await this._reexecute_menu_opener(
                 previousItem,
-                signal
+                signal,
+                ai_step_llm
               );
               if (reopened) {
                 menuReopened = true;
@@ -2582,6 +2817,14 @@ export class Agent<
       previousStepSucceeded = stepSucceeded;
     }
 
+    const summaryResult = await this._generate_rerun_summary(
+      this.task,
+      results,
+      summary_llm,
+      signal
+    );
+    results.push(summaryResult);
+
     return results;
   }
 
@@ -2589,7 +2832,8 @@ export class Agent<
     historyItem: AgentHistory,
     delaySeconds: number,
     signal: AbortSignal | null = null,
-    wait_for_elements = false
+    wait_for_elements = false,
+    ai_step_llm: BaseChatModel | null = null
   ) {
     this._throwIfAborted(signal);
     if (!this.browser_session) {
@@ -2622,7 +2866,8 @@ export class Agent<
     }
 
     const interactedElements = historyItem.state?.interacted_element ?? [];
-    const updatedActions: Array<Record<string, Record<string, unknown>>> = [];
+    const results: ActionResult[] = [];
+    const pendingActions: Array<Record<string, Record<string, unknown>>> = [];
     for (
       let actionIndex = 0;
       actionIndex < historyItem.model_output.action.length;
@@ -2633,6 +2878,45 @@ export class Agent<
       if (!originalAction) {
         continue;
       }
+
+      const actionPayload =
+        typeof (originalAction as any)?.model_dump === 'function'
+          ? (originalAction as any).model_dump({ exclude_unset: true })
+          : (originalAction as Record<string, unknown>);
+      const actionName = Object.keys(actionPayload ?? {})[0] ?? null;
+
+      if (
+        actionName &&
+        ['extract', 'extract_structured_data', 'extract_content'].includes(
+          actionName
+        )
+      ) {
+        if (pendingActions.length > 0) {
+          this._throwIfAborted(signal);
+          const batchActions = [...pendingActions];
+          pendingActions.length = 0;
+          const batchResults = await this.multi_act(batchActions, { signal });
+          results.push(...batchResults);
+        }
+
+        const params = (actionPayload as Record<string, any>)[actionName] ?? {};
+        const query = typeof params.query === 'string' ? params.query : '';
+        const extractLinks = Boolean(params.extract_links);
+
+        this.logger.info(
+          `Using AI step for extract action: ${query.slice(0, 50)}...`
+        );
+        const aiResult = await this._execute_ai_step(
+          query,
+          false,
+          extractLinks,
+          ai_step_llm,
+          signal
+        );
+        results.push(aiResult);
+        continue;
+      }
+
       const updatedAction = await this._update_action_indices(
         this._coerceHistoryElement(interactedElements[actionIndex]),
         originalAction,
@@ -2654,18 +2938,24 @@ export class Agent<
       }
 
       if (typeof (updatedAction as any)?.model_dump === 'function') {
-        updatedActions.push(
+        pendingActions.push(
           (updatedAction as any).model_dump({ exclude_unset: true })
         );
       } else {
-        updatedActions.push(updatedAction as any);
+        pendingActions.push(updatedAction as any);
       }
     }
 
-    this._throwIfAborted(signal);
-    const result = await this.multi_act(updatedActions, { signal });
+    if (pendingActions.length > 0) {
+      this._throwIfAborted(signal);
+      const batchActions = [...pendingActions];
+      pendingActions.length = 0;
+      const batchResults = await this.multi_act(batchActions, { signal });
+      results.push(...batchResults);
+    }
+
     await this._sleep(delaySeconds, signal);
-    return result;
+    return results;
   }
 
   private _countExpectedElementsFromHistory(historyItem: AgentHistory) {
@@ -2945,13 +3235,20 @@ export class Agent<
 
   private async _reexecute_menu_opener(
     openerItem: AgentHistory,
-    signal: AbortSignal | null = null
+    signal: AbortSignal | null = null,
+    aiStepLlm: BaseChatModel | null = null
   ) {
     try {
       this.logger.info(
         'Re-opening dropdown/menu by re-executing previous step...'
       );
-      await this._execute_history_step(openerItem, 0.5, signal, false);
+      await this._execute_history_step(
+        openerItem,
+        0.5,
+        signal,
+        false,
+        aiStepLlm
+      );
       await this._sleep(0.3, signal);
       return true;
     } catch (error) {
