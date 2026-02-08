@@ -308,12 +308,12 @@ ${elementsText}
     const todoText =
       todoContents ||
       '[Current todo.md is empty, fill it with your plan when applicable]';
-    const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const timestamp = new Date().toISOString().slice(0, 10);
     const stepInfo =
       this.stepInfo != null
-        ? `Step ${this.stepInfo.step_number + 1} of ${this.stepInfo.max_steps}\n`
+        ? `Step${this.stepInfo.step_number + 1} maximum:${this.stepInfo.max_steps}\n`
         : '';
-    const stepInfoDescription = `${stepInfo}Current date and time: ${timestamp}`;
+    const stepInfoDescription = `${stepInfo}Today:${timestamp}`;
 
     let agentState = `<user_request>
 ${this.task ?? ''}
@@ -339,15 +339,12 @@ ${this.planDescription}
 `;
     }
 
-    agentState += `<step_info>
-${stepInfoDescription}
-</step_info>
+    agentState += `<step_info>${stepInfoDescription}</step_info>
 `;
 
     if (this.availableFilePaths?.length) {
-      agentState += `<available_file_paths>
-${this.availableFilePaths.join('\n')}
-</available_file_paths>
+      agentState += `<available_file_paths>${this.availableFilePaths.join('\n')}
+Use with absolute paths</available_file_paths>
 `;
     }
 

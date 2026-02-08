@@ -881,6 +881,16 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('throws when max_history_items is set to 5 or less', () => {
+    expect(() =>
+      new Agent({
+        task: 'Invalid history limit',
+        llm: createLlm(),
+        max_history_items: 5,
+      } as any)
+    ).toThrow('max_history_items must be null or greater than 5');
+  });
+
   it('filters sensitive data only in state messages (not system/context)', async () => {
     const secret = 'secret-value-123';
     const agent = new Agent({

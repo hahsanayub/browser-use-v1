@@ -49,6 +49,10 @@ export class MessageManager {
       | null = null,
     private readonly llmScreenshotSize: [number, number] | null = null
   ) {
+    if (this.maxHistoryItems != null && this.maxHistoryItems <= 5) {
+      throw new Error('max_history_items must be null or greater than 5');
+    }
+
     this.task = task;
     this.systemPrompt = systemMessage;
     this.includeAttributes = includeAttributes ?? [];

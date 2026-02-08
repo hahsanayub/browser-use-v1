@@ -181,6 +181,35 @@ describe('AgentMessagePrompt browser state enrichment', () => {
     expect(resizedImage.width).toBe(2);
     expect(resizedImage.height).toBe(1);
   });
+
+  it('formats step info and available file paths using latest prompt style', () => {
+    const root = new DOMElementNode(true, null, 'body', '/body', {}, []);
+    const domState = new DOMState(root, {});
+    const browserState = new BrowserStateSummary(domState, {
+      url: 'https://example.com',
+      title: 'Example',
+      tabs: [{ page_id: 0, url: 'https://example.com', title: 'Example' }],
+    });
+
+    const prompt = new AgentMessagePrompt({
+      browser_state_summary: browserState,
+      file_system: {
+        describe: () => '/tmp',
+        get_todo_contents: () => '',
+      } as any,
+      task: 'test',
+      step_info: { step_number: 0, max_steps: 5 } as any,
+      available_file_paths: ['/tmp/report.pdf'],
+    });
+
+    const userMessage = prompt.get_user_message(false) as any;
+    const content = String(userMessage.content ?? '');
+    const today = new Date().toISOString().slice(0, 10);
+
+    expect(content).toContain('<step_info>Step1 maximum:5');
+    expect(content).toContain(`Today:${today}</step_info>`);
+    expect(content).toContain('Use with absolute paths');
+  });
 });
 
 describe('SystemPrompt template selection parity', () => {
