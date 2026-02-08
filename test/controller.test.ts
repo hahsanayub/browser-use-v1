@@ -1283,7 +1283,7 @@ describe('Regression Coverage', () => {
     expect(page.evaluate).toHaveBeenCalled();
     expect(result.error).toBeNull();
     expect(result.extracted_content).toContain('"status":"ok"');
-    expect(result.include_extracted_content_only_once).toBe(true);
+    expect(result.include_extracted_content_only_once).toBe(false);
   });
 
   it('evaluate returns action error on JavaScript failure', async () => {
@@ -1306,6 +1306,31 @@ describe('Regression Coverage', () => {
     );
 
     expect(result.error).toContain('JavaScript execution error: boom');
+  });
+
+  it('evaluate extracts inline base64 images into metadata', async () => {
+    const controller = new Controller();
+    const imageData = 'data:image/png;base64,QUJDRA==';
+    const page = {
+      evaluate: vi.fn(async () => ({
+        ok: true,
+        result: `Result includes ${imageData} for preview`,
+      })),
+      url: vi.fn(() => 'https://example.com'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+    };
+
+    const result = await controller.registry.execute_action(
+      'evaluate',
+      { code: 'return image' },
+      { browser_session: browserSession as any }
+    );
+
+    expect(result.metadata).toEqual({ images: [imageData] });
+    expect(result.extracted_content).toContain('[Image]');
+    expect(result.extracted_content).not.toContain(imageData);
   });
 
   it('screenshot saves base64 image to requested file path', async () => {

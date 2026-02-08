@@ -2150,19 +2150,37 @@ Context: ${context}`;
         });
       }
 
-      const rendered =
+      let rendered =
         typeof payload.result === 'string'
           ? payload.result
           : JSON.stringify(payload.result);
+
+      const imagePattern = /(data:image\/[^;]+;base64,[A-Za-z0-9+/=]+)/g;
+      const foundImages = rendered.match(imagePattern) ?? [];
+      let metadata: Record<string, unknown> | null = null;
+      if (foundImages.length > 0) {
+        metadata = { images: foundImages };
+        for (const imageData of foundImages) {
+          rendered = rendered.split(imageData).join('[Image]');
+        }
+      }
+
       const maxChars = 20000;
-      const clipped =
-        rendered.length > maxChars
-          ? `${rendered.slice(0, maxChars)}\n... output truncated ...`
-          : rendered;
+      if (rendered.length > maxChars) {
+        rendered = `${rendered.slice(0, maxChars - 50)}\n... [Truncated after 20000 characters]`;
+      }
+
+      const maxMemoryChars = 10000;
+      const includeExtractedContentOnlyOnce = rendered.length >= maxMemoryChars;
+      const longTermMemory = includeExtractedContentOnlyOnce
+        ? `JavaScript executed successfully, result length: ${rendered.length} characters.`
+        : rendered;
+
       return new ActionResult({
-        extracted_content: clipped,
-        long_term_memory: `Executed JavaScript and returned ${Math.min(rendered.length, maxChars)} chars.`,
-        include_extracted_content_only_once: true,
+        extracted_content: rendered,
+        long_term_memory: longTermMemory,
+        include_extracted_content_only_once: includeExtractedContentOnlyOnce,
+        metadata,
       });
     });
   }
