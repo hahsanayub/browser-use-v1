@@ -26,7 +26,7 @@ import { InsecureSensitiveDataError } from '../exceptions.js';
 import { HistoryTreeProcessor } from '../dom/history-tree-processor/service.js';
 import { DOMHistoryElement } from '../dom/history-tree-processor/view.js';
 import type { BaseChatModel } from '../llm/base.js';
-import { UserMessage } from '../llm/messages.js';
+import { SystemMessage, UserMessage } from '../llm/messages.js';
 import type { UsageSummary } from '../tokens/views.js';
 import {
   ActionResult,
@@ -291,11 +291,22 @@ const AgentLLMOutputSchema = z.object({
     .default([]),
 });
 
+const SimpleJudgeSchema = z.object({
+  is_correct: z.boolean(),
+  reason: z.string().optional().default(''),
+});
+
 const AgentLLMOutputFormat =
   AgentLLMOutputSchema as typeof AgentLLMOutputSchema & {
     schema: typeof AgentLLMOutputSchema;
   };
 AgentLLMOutputFormat.schema = AgentLLMOutputSchema;
+
+const SimpleJudgeOutputFormat =
+  SimpleJudgeSchema as typeof SimpleJudgeSchema & {
+    schema: typeof SimpleJudgeSchema;
+  };
+SimpleJudgeOutputFormat.schema = SimpleJudgeSchema;
 
 export class Agent<
   Context = ControllerContext,
@@ -1286,6 +1297,7 @@ export class Agent<
     await this._step(stepInfo ?? null);
 
     if (this.history.is_done()) {
+      await this._run_simple_judge();
       await this.log_completion();
       if (this.register_done_callback) {
         await this.register_done_callback(this.history);
@@ -1623,6 +1635,7 @@ export class Agent<
 
         if (this.history.is_done()) {
           this.logger.debug(`🎯 Task completed after ${step + 1} steps!`);
+          await this._run_simple_judge();
           await this.log_completion();
 
           if (this.register_done_callback) {
@@ -3119,6 +3132,93 @@ export class Agent<
       `Step budget warning: ${stepsUsed}/${step_info.max_steps} (${pct}%)`
     );
     this._message_manager._add_context_message(new UserMessage(message));
+  }
+
+  private _truncateJudgeText(
+    text: string,
+    maxLength: number,
+    fromBeginning = false
+  ) {
+    if (text.length <= maxLength) {
+      return text;
+    }
+    const marker = '...[text truncated]...';
+    if (fromBeginning) {
+      return `...[text truncated]${text.slice(-(maxLength - 20))}`;
+    }
+    return `${text.slice(0, maxLength - marker.length)}${marker}`;
+  }
+
+  private async _run_simple_judge() {
+    const lastHistoryItem = this.history.history[this.history.history.length - 1];
+    if (!lastHistoryItem || !lastHistoryItem.result.length) {
+      return;
+    }
+
+    const lastResult = lastHistoryItem.result[lastHistoryItem.result.length - 1];
+    if (!lastResult.is_done || !lastResult.success) {
+      return;
+    }
+
+    const task = this._truncateJudgeText(this.task, 20000);
+    const finalResult = this._truncateJudgeText(
+      this.history.final_result() ?? '',
+      20000
+    );
+    const currentDate = new Date().toISOString().slice(0, 10);
+
+    const systemPrompt =
+      `You are a strict verifier checking whether a browser automation agent actually completed its task.\n\n` +
+      `Today's date is ${currentDate}. The agent ran recently — dates near today are expected and NOT fabricated.\n\n` +
+      'Given the task and the agent\'s final response, determine if the response genuinely satisfies ALL requirements.\n\n' +
+      'Check for these common failure patterns:\n' +
+      '1. Incorrect data: Wrong number of items, missing filters/criteria, wrong format\n' +
+      '2. Unverified actions: Agent claims completion without clear evidence\n' +
+      '3. Incomplete results: Some requirements from the task are not addressed\n' +
+      '4. Fabricated content: Plausible but unsupported claims\n' +
+      '5. Partial completion reported as success\n\n' +
+      'Respond with EXACTLY this JSON structure:\n' +
+      '{\n' +
+      '  "is_correct": true or false,\n' +
+      '  "reason": "Brief explanation if not correct, empty string if correct"\n' +
+      '}\n\n' +
+      'Be strict: if the response does not clearly satisfy every requirement, set is_correct to false.';
+
+    const userPrompt =
+      `<task>\n${task || 'No task provided'}\n</task>\n\n` +
+      `<final_result>\n${finalResult || 'No final result provided'}\n</final_result>`;
+
+    try {
+      const response = await this.llm.ainvoke(
+        [new SystemMessage(systemPrompt), new UserMessage(userPrompt)] as any,
+        SimpleJudgeOutputFormat as any
+      );
+      const parsed = this._parseCompletionPayload((response as any).completion);
+      const isCorrect = parsed?.is_correct === true;
+      const reason =
+        typeof parsed?.reason === 'string' && parsed.reason.trim()
+          ? parsed.reason.trim()
+          : 'Task requirements not fully met';
+
+      if (!isCorrect) {
+        this.logger.info(
+          `⚠️  Simple judge overriding success to failure: ${reason}`
+        );
+        lastResult.success = false;
+        const note = `[Simple judge: ${reason}]`;
+        if (lastResult.extracted_content) {
+          lastResult.extracted_content += `\n\n${note}`;
+        } else {
+          lastResult.extracted_content = note;
+        }
+      }
+    } catch (error) {
+      this.logger.warning(
+        `Simple judge failed with error: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
   }
 
   private _parseCompletionPayload(
