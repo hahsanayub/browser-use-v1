@@ -877,6 +877,67 @@ describe('Regression Coverage', () => {
     expect(result.include_extracted_content_only_once).toBe(true);
   });
 
+  it('read_long_content blocks files outside available_file_paths', async () => {
+    const controller = new Controller();
+
+    const result = await controller.registry.execute_action(
+      'read_long_content',
+      {
+        goal: 'find totals',
+        source: '/tmp/not-allowed.txt',
+      },
+      {
+        browser_session: {
+          downloaded_files: [],
+        } as any,
+        available_file_paths: ['/tmp/allowed.txt'],
+      }
+    );
+
+    expect(result.extracted_content).toContain(
+      'Error: File path not in available_file_paths: /tmp/not-allowed.txt'
+    );
+    expect(result.long_term_memory).toContain('file path not allowed');
+  });
+
+  it('read_long_content returns relevant sections for long page content', async () => {
+    const controller = new Controller();
+    const noisePrefix = 'lorem ipsum dolor sit amet '.repeat(2200);
+    const noiseSuffix = 'consectetur adipiscing elit '.repeat(2200);
+    const html = `<html><body>${noisePrefix}TARGET_KEYWORD revenue growth${noiseSuffix}</body></html>`;
+    const page = {
+      content: vi.fn(async () => html),
+      url: vi.fn(() => 'https://example.com/report'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+      downloaded_files: [],
+    };
+    const pageExtractionLlm = {
+      ainvoke: vi.fn(async () => ({
+        completion: 'TARGET_KEYWORD\nrevenue growth',
+      })),
+    };
+
+    const result = await controller.registry.execute_action(
+      'read_long_content',
+      {
+        goal: 'Find revenue growth details',
+        source: 'page',
+      },
+      {
+        browser_session: browserSession as any,
+        page_extraction_llm: pageExtractionLlm as any,
+      }
+    );
+
+    expect(pageExtractionLlm.ainvoke).toHaveBeenCalled();
+    expect(result.extracted_content).toContain('relevant sections');
+    expect(result.extracted_content).toContain('revenue growth');
+    expect(result.include_extracted_content_only_once).toBe(true);
+    expect(result.long_term_memory).toContain('relevant sections');
+  });
+
   it('extract_structured_data keeps long-term memory up to 10k chars', async () => {
     const controller = new Controller();
     const completion = 'result '.repeat(300);

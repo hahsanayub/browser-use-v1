@@ -24,7 +24,7 @@ interface PdfParser {
 
 type PdfParserConstructor = new (options: { data: Buffer }) => PdfParser;
 
-async function extractPdfText(buffer: Buffer): Promise<{
+export async function extractPdfText(buffer: Buffer): Promise<{
   text: string;
   totalPages: number;
 }> {
