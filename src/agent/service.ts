@@ -152,6 +152,7 @@ interface RerunHistoryOptions {
   skip_failures?: boolean;
   delay_between_actions?: number;
   max_step_interval?: number;
+  wait_for_elements?: boolean;
   signal?: AbortSignal | null;
 }
 
@@ -2227,6 +2228,7 @@ export class Agent<
       skip_failures = false,
       delay_between_actions = 2,
       max_step_interval = 45,
+      wait_for_elements = false,
       signal = null,
     } = options;
 
@@ -2239,6 +2241,8 @@ export class Agent<
     }
 
     const results: ActionResult[] = [];
+    let previousItem: AgentHistory | null = null;
+    let previousStepSucceeded = false;
 
     for (let index = 0; index < history.history.length; index++) {
       this._throwIfAborted(signal);
@@ -2290,16 +2294,38 @@ export class Agent<
         continue;
       }
 
+      if (
+        this._is_redundant_retry_step(
+          historyItem,
+          previousItem,
+          previousStepSucceeded
+        )
+      ) {
+        this.logger.info(
+          `${stepName}: Skipping redundant retry (previous step already succeeded with same element)`
+        );
+        results.push(
+          new ActionResult({
+            extracted_content: 'Skipped - redundant retry of previous step',
+            include_in_memory: false,
+          })
+        );
+        continue;
+      }
+
       let attempt = 0;
+      let stepSucceeded = false;
       while (attempt < max_retries) {
         this._throwIfAborted(signal);
         try {
           const stepResult = await this._execute_history_step(
             historyItem,
             stepDelay,
-            signal
+            signal,
+            wait_for_elements
           );
           results.push(...stepResult);
+          stepSucceeded = true;
           break;
         } catch (error) {
           if (
@@ -2320,13 +2346,20 @@ export class Agent<
               throw new Error(message);
             }
           } else {
-            this.logger.warning(
-              `Step ${index + 1} failed (attempt ${attempt}/${max_retries}), retrying...`
+            const retryDelay = Math.min(
+              5 * 2 ** Math.max(attempt - 1, 0),
+              30
             );
-            await this._sleep(stepDelay, signal);
+            this.logger.warning(
+              `Step ${index + 1} failed (attempt ${attempt}/${max_retries}), retrying in ${retryDelay}s...`
+            );
+            await this._sleep(retryDelay, signal);
           }
         }
       }
+
+      previousItem = historyItem;
+      previousStepSucceeded = stepSucceeded;
     }
 
     return results;
@@ -2335,18 +2368,35 @@ export class Agent<
   private async _execute_history_step(
     historyItem: AgentHistory,
     delaySeconds: number,
-    signal: AbortSignal | null = null
+    signal: AbortSignal | null = null,
+    wait_for_elements = false
   ) {
     this._throwIfAborted(signal);
     if (!this.browser_session) {
       throw new Error('BrowserSession is not set up');
     }
-    const browser_state_summary: BrowserStateSummary | null =
-      await this.browser_session.get_browser_state_with_recovery?.({
-        cache_clickable_elements_hashes: false,
-        include_screenshot: false,
-        signal,
-      });
+
+    let browser_state_summary: BrowserStateSummary | null = null;
+    if (wait_for_elements) {
+      const minElements = this._countExpectedElementsFromHistory(historyItem);
+      if (minElements > 0) {
+        browser_state_summary = await this._waitForMinimumElements(
+          minElements,
+          15,
+          1,
+          signal
+        );
+      }
+    }
+    if (!browser_state_summary) {
+      browser_state_summary =
+        await this.browser_session.get_browser_state_with_recovery?.({
+          cache_clickable_elements_hashes: false,
+          include_screenshot: false,
+          signal,
+        });
+    }
+
     if (!browser_state_summary || !historyItem.model_output) {
       throw new Error('Invalid browser state or model output');
     }
@@ -2369,8 +2419,17 @@ export class Agent<
         browser_state_summary
       );
       if (!updatedAction) {
+        const historicalElement = this._coerceHistoryElement(
+          interactedElements[actionIndex]
+        );
+        const selectorCount = Object.keys(
+          browser_state_summary.selector_map ?? {}
+        ).length;
         throw new Error(
-          `Could not find matching element ${actionIndex} in current page`
+          `Could not find matching element for action ${actionIndex} in current page.\n` +
+            `  Looking for: ${this._formatHistoryElementForError(historicalElement)}\n` +
+            `  Page has ${selectorCount} interactive elements.\n` +
+            '  Tried: EXACT hash → XPATH → ATTRIBUTE matching'
         );
       }
 
@@ -2389,6 +2448,212 @@ export class Agent<
     return result;
   }
 
+  private _countExpectedElementsFromHistory(historyItem: AgentHistory) {
+    if (!historyItem.model_output?.action?.length) {
+      return 0;
+    }
+
+    let maxIndex = -1;
+    for (const action of historyItem.model_output.action) {
+      const index = this._extractActionIndex(action);
+      if (index != null) {
+        maxIndex = Math.max(maxIndex, index);
+      }
+    }
+
+    if (maxIndex < 0) {
+      return 0;
+    }
+    return Math.min(maxIndex + 1, 50);
+  }
+
+  private async _waitForMinimumElements(
+    minElements: number,
+    timeoutSeconds = 30,
+    pollIntervalSeconds = 1,
+    signal: AbortSignal | null = null
+  ) {
+    if (!this.browser_session) {
+      return null;
+    }
+
+    const start = Date.now();
+    let lastCount = 0;
+    let lastState: BrowserStateSummary | null = null;
+
+    while ((Date.now() - start) / 1000 < timeoutSeconds) {
+      this._throwIfAborted(signal);
+      const state = await this.browser_session.get_browser_state_with_recovery?.(
+        {
+          cache_clickable_elements_hashes: false,
+          include_screenshot: false,
+          signal,
+        }
+      );
+      lastState = state ?? null;
+      const currentCount = Object.keys(state?.selector_map ?? {}).length;
+      if (currentCount >= minElements) {
+        this.logger.debug(
+          `Page has ${currentCount} interactive elements (needed ${minElements}), proceeding`
+        );
+        return state;
+      }
+      if (currentCount !== lastCount) {
+        const remaining = Math.max(
+          0,
+          timeoutSeconds - (Date.now() - start) / 1000
+        );
+        this.logger.debug(
+          `Waiting for elements: ${currentCount}/${minElements} (timeout in ${remaining.toFixed(1)}s)`
+        );
+        lastCount = currentCount;
+      }
+      await this._sleep(pollIntervalSeconds, signal);
+    }
+
+    this.logger.warning(
+      `Timeout waiting for ${minElements} elements, proceeding with ${lastCount} elements`
+    );
+    return lastState;
+  }
+
+  private _extractActionIndex(action: unknown): number | null {
+    if (action && typeof (action as any).get_index === 'function') {
+      const index = (action as any).get_index();
+      if (typeof index === 'number' && Number.isFinite(index)) {
+        return index;
+      }
+    }
+
+    if (!action || typeof action !== 'object') {
+      return null;
+    }
+
+    const modelDump =
+      typeof (action as any).model_dump === 'function'
+        ? (action as any).model_dump()
+        : action;
+    if (!modelDump || typeof modelDump !== 'object' || Array.isArray(modelDump)) {
+      return null;
+    }
+
+    const actionName = Object.keys(modelDump)[0];
+    if (!actionName) {
+      return null;
+    }
+    const params = (modelDump as Record<string, any>)[actionName];
+    const index = params?.index;
+    return typeof index === 'number' && Number.isFinite(index) ? index : null;
+  }
+
+  private _extractActionType(action: unknown): string | null {
+    if (!action || typeof action !== 'object') {
+      return null;
+    }
+
+    const modelDump =
+      typeof (action as any).model_dump === 'function'
+        ? (action as any).model_dump()
+        : action;
+    if (!modelDump || typeof modelDump !== 'object' || Array.isArray(modelDump)) {
+      return null;
+    }
+    const actionName = Object.keys(modelDump)[0];
+    return actionName ?? null;
+  }
+
+  private _sameHistoryElement(
+    current: DOMHistoryElement | null,
+    previous: DOMHistoryElement | null
+  ) {
+    if (!current || !previous) {
+      return false;
+    }
+
+    if (current.xpath && previous.xpath && current.xpath === previous.xpath) {
+      return true;
+    }
+
+    if (
+      current.tag_name &&
+      previous.tag_name &&
+      current.tag_name === previous.tag_name
+    ) {
+      for (const key of ['name', 'id', 'aria-label']) {
+        const currentValue = current.attributes?.[key];
+        const previousValue = previous.attributes?.[key];
+        if (
+          currentValue &&
+          previousValue &&
+          String(currentValue) === String(previousValue)
+        ) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  private _is_redundant_retry_step(
+    currentItem: AgentHistory,
+    previousItem: AgentHistory | null,
+    previousStepSucceeded: boolean
+  ) {
+    if (!previousItem || !previousStepSucceeded) {
+      return false;
+    }
+
+    const currentActions = currentItem.model_output?.action ?? [];
+    const previousActions = previousItem.model_output?.action ?? [];
+    if (!currentActions.length || !previousActions.length) {
+      return false;
+    }
+
+    const currentActionType = this._extractActionType(currentActions[0]);
+    const previousActionType = this._extractActionType(previousActions[0]);
+    if (!currentActionType || currentActionType !== previousActionType) {
+      return false;
+    }
+
+    const currentElement = this._coerceHistoryElement(
+      currentItem.state?.interacted_element?.[0]
+    );
+    const previousElement = this._coerceHistoryElement(
+      previousItem.state?.interacted_element?.[0]
+    );
+
+    if (!this._sameHistoryElement(currentElement, previousElement)) {
+      return false;
+    }
+
+    this.logger.debug(
+      `Detected redundant retry on same element with action "${currentActionType}"`
+    );
+    return true;
+  }
+
+  private _formatHistoryElementForError(element: DOMHistoryElement | null) {
+    if (!element) {
+      return '<no element recorded>';
+    }
+    const parts = [`<${element.tag_name || 'unknown'}>`];
+    for (const key of ['name', 'id', 'aria-label', 'type']) {
+      const value = element.attributes?.[key];
+      if (typeof value === 'string' && value.trim()) {
+        parts.push(`${key}="${value}"`);
+      }
+    }
+    if (element.xpath) {
+      const xpath =
+        element.xpath.length > 60
+          ? `...${element.xpath.slice(-57)}`
+          : element.xpath;
+      parts.push(`xpath="${xpath}"`);
+    }
+    return parts.join(' ');
+  }
+
   private async _update_action_indices(
     historicalElement: DOMHistoryElement | null,
     action: any,
@@ -2398,10 +2663,45 @@ export class Agent<
       return action;
     }
 
-    const currentNode = HistoryTreeProcessor.find_history_element_in_tree(
+    let currentNode = HistoryTreeProcessor.find_history_element_in_tree(
       historicalElement,
       browserStateSummary.element_tree
     );
+
+    if (!currentNode && historicalElement.xpath) {
+      for (const node of Object.values(browserStateSummary.selector_map ?? {})) {
+        if (node?.xpath === historicalElement.xpath) {
+          currentNode = node;
+          this.logger.info(
+            `Element matched at XPATH fallback: ${historicalElement.xpath}`
+          );
+          break;
+        }
+      }
+    }
+
+    if (!currentNode && historicalElement.attributes) {
+      const tagName = historicalElement.tag_name?.toLowerCase();
+      for (const attrKey of ['name', 'id', 'aria-label']) {
+        const attrValue = historicalElement.attributes[attrKey];
+        if (!attrValue) {
+          continue;
+        }
+        const matches = Object.values(browserStateSummary.selector_map ?? {}).filter(
+          (node) =>
+            node?.tag_name?.toLowerCase() === tagName &&
+            node?.attributes?.[attrKey] === attrValue
+        );
+        if (matches.length === 1) {
+          currentNode = matches[0];
+          this.logger.info(
+            `Element matched via ${attrKey} attribute fallback: ${attrValue}`
+          );
+          break;
+        }
+      }
+    }
+
     if (!currentNode || currentNode.highlight_index == null) {
       return null;
     }

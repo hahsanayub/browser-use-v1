@@ -501,7 +501,8 @@ describe('Agent constructor browser session alignment', () => {
         }),
       }),
       2,
-      signalController.signal
+      signalController.signal,
+      false
     );
 
     await agent.close();
@@ -609,6 +610,133 @@ describe('Agent constructor browser session alignment', () => {
     expect(executeSpy).not.toHaveBeenCalled();
     expect(results).toHaveLength(1);
     expect(results[0]?.error).toContain('Skipped - original step had error');
+
+    await agent.close();
+  });
+
+  it('uses exponential backoff delays for rerun retries', async () => {
+    const agent = new Agent({
+      task: 'test rerun retry backoff',
+      llm: createLlm(),
+    });
+    const executeSpy = vi
+      .spyOn(agent as any, '_execute_history_step')
+      .mockRejectedValueOnce(new Error('first failure'))
+      .mockRejectedValueOnce(new Error('second failure'))
+      .mockResolvedValue([new ActionResult({ extracted_content: 'ok' })]);
+    const sleepSpy = vi.spyOn(agent as any, '_sleep').mockResolvedValue(undefined);
+
+    const history = {
+      history: [
+        {
+          model_output: {
+            current_state: { next_goal: 'Replay action with retries' },
+            action: [{}],
+          },
+        },
+      ],
+    } as any;
+
+    const results = await agent.rerun_history(history, {
+      max_retries: 3,
+    });
+
+    expect(executeSpy).toHaveBeenCalledTimes(3);
+    expect(results).toHaveLength(1);
+    const retryDelays = sleepSpy.mock.calls.map((call) => call[0]);
+    expect(retryDelays).toEqual([5, 10]);
+
+    await agent.close();
+  });
+
+  it('skips redundant retry steps when previous equivalent step already succeeded', async () => {
+    const agent = new Agent({
+      task: 'test rerun redundant retry skip',
+      llm: createLlm(),
+    });
+    const executeSpy = vi
+      .spyOn(agent as any, '_execute_history_step')
+      .mockResolvedValue([new ActionResult({ extracted_content: 'clicked' })]);
+
+    const clickAction = {
+      get_index: () => 7,
+      model_dump: () => ({ click: { index: 7 } }),
+    };
+
+    const history = {
+      history: [
+        {
+          model_output: {
+            current_state: { next_goal: 'Open menu' },
+            action: [clickAction],
+          },
+          state: {
+            interacted_element: [
+              {
+                tag_name: 'button',
+                xpath: '/html/body/button[1]',
+                attributes: { 'aria-label': 'Open menu' },
+              },
+            ],
+          },
+          result: [],
+        },
+        {
+          model_output: {
+            current_state: { next_goal: 'Retry open menu' },
+            action: [clickAction],
+          },
+          state: {
+            interacted_element: [
+              {
+                tag_name: 'button',
+                xpath: '/html/body/button[1]',
+                attributes: { 'aria-label': 'Open menu' },
+              },
+            ],
+          },
+          result: [],
+        },
+      ],
+    } as any;
+
+    const results = await agent.rerun_history(history, {
+      max_retries: 1,
+    });
+
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+    expect(results).toHaveLength(2);
+    expect(results[1]?.extracted_content).toContain(
+      'Skipped - redundant retry'
+    );
+
+    await agent.close();
+  });
+
+  it('forwards wait_for_elements option to history step execution', async () => {
+    const agent = new Agent({
+      task: 'test wait_for_elements forwarding',
+      llm: createLlm(),
+    });
+    const executeSpy = vi
+      .spyOn(agent as any, '_execute_history_step')
+      .mockResolvedValue([new ActionResult({ extracted_content: 'ok' })]);
+    const history = {
+      history: [
+        {
+          model_output: {
+            current_state: { next_goal: 'Replay action' },
+            action: [{}],
+          },
+        },
+      ],
+    } as any;
+
+    await agent.rerun_history(history, {
+      wait_for_elements: true,
+    });
+
+    expect(executeSpy.mock.calls[0]?.[3]).toBe(true);
 
     await agent.close();
   });
