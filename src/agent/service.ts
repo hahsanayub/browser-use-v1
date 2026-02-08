@@ -33,6 +33,10 @@ import { HistoryTreeProcessor } from '../dom/history-tree-processor/service.js';
 import { DOMHistoryElement } from '../dom/history-tree-processor/view.js';
 import type { DOMElementNode } from '../dom/views.js';
 import type { BaseChatModel } from '../llm/base.js';
+import {
+  ModelProviderError,
+  ModelRateLimitError,
+} from '../llm/exceptions.js';
 import { UserMessage } from '../llm/messages.js';
 import type { UsageSummary } from '../tokens/views.js';
 import {
@@ -213,6 +217,7 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
   ground_truth?: string | null;
   max_history_items?: number | null;
   page_extraction_llm?: BaseChatModel | null;
+  fallback_llm?: BaseChatModel | null;
   judge_llm?: BaseChatModel | null;
   planner_llm?: BaseChatModel | null;
   planner_interval?: number;
@@ -291,6 +296,7 @@ const defaultAgentOptions = () => ({
   ground_truth: null as string | null,
   max_history_items: null as number | null,
   page_extraction_llm: null as BaseChatModel | null,
+  fallback_llm: null as BaseChatModel | null,
   judge_llm: null as BaseChatModel | null,
   planner_llm: null as BaseChatModel | null,
   planner_interval: 1,
@@ -440,6 +446,9 @@ export class Agent<
   AgentOutput: typeof AgentOutput = AgentOutput;
   DoneActionModel: typeof ActionModel = ActionModel;
   DoneAgentOutput: typeof AgentOutput = AgentOutput;
+  private _fallback_llm: BaseChatModel | null = null;
+  private _using_fallback_llm = false;
+  private _original_llm: BaseChatModel | null = null;
 
   constructor(params: AgentConstructorParams<Context, AgentStructuredOutput>) {
     const {
@@ -477,6 +486,7 @@ export class Agent<
       ground_truth = null,
       max_history_items = null,
       page_extraction_llm = null,
+      fallback_llm = null,
       judge_llm = null,
       enable_planning = true,
       planning_replan_on_stall = 3,
@@ -516,6 +526,9 @@ export class Agent<
 
     this.llm = llm;
     this.judge_llm = effectiveJudgeLlm;
+    this._fallback_llm = fallback_llm;
+    this._using_fallback_llm = false;
+    this._original_llm = llm;
     this.id = task_id || uuid7str();
     this.task_id = this.id;
     this.session_id = uuid7str();
@@ -1365,6 +1378,14 @@ export class Agent<
       throw new Error('BrowserSession is not set up');
     }
     return this.browser_session.browser_profile;
+  }
+
+  get is_using_fallback_llm(): boolean {
+    return this._using_fallback_llm;
+  }
+
+  get current_llm_model(): string {
+    return typeof this.llm?.model === 'string' ? this.llm.model : 'unknown';
   }
 
   /**
@@ -4502,7 +4523,23 @@ export class Agent<
       return this._parseCompletionPayload((completion as any).completion);
     };
 
-    let parsed_completion = await invokeAndParse(messages);
+    const invokeAndParseWithFallback = async (inputMessages: any[]) => {
+      try {
+        return await invokeAndParse(inputMessages);
+      } catch (error) {
+        if (
+          (error instanceof ModelRateLimitError ||
+            error instanceof ModelProviderError) &&
+          this._try_switch_to_fallback_llm(error)
+        ) {
+          this._throwIfAborted(signal);
+          return await invokeAndParse(inputMessages);
+        }
+        throw error;
+      }
+    };
+
+    let parsed_completion = await invokeAndParseWithFallback(messages);
 
     let rawAction = Array.isArray(parsed_completion?.action)
       ? parsed_completion.action
@@ -4518,7 +4555,7 @@ export class Agent<
       const clarificationMessage = new UserMessage(
         'You forgot to return an action. Please respond only with a valid JSON action according to the expected format.'
       );
-      parsed_completion = await invokeAndParse([
+      parsed_completion = await invokeAndParseWithFallback([
         ...messages,
         clarificationMessage,
       ]);
@@ -4564,6 +4601,59 @@ export class Agent<
       plan_update: toNullablePlanUpdate(parsed_completion?.plan_update),
       action,
     });
+  }
+
+  private _try_switch_to_fallback_llm(
+    error: ModelRateLimitError | ModelProviderError
+  ): boolean {
+    if (this._using_fallback_llm) {
+      this.logger.warning(
+        `⚠️ Fallback LLM also failed (${error.name}: ${error.message}), no more fallbacks available`
+      );
+      return false;
+    }
+
+    const retryableStatusCodes = new Set([401, 402, 429, 500, 502, 503, 504]);
+    const statusCode =
+      typeof error.statusCode === 'number' ? error.statusCode : null;
+    const isRetryable =
+      error instanceof ModelRateLimitError ||
+      (statusCode != null && retryableStatusCodes.has(statusCode));
+    if (!isRetryable) {
+      return false;
+    }
+
+    if (!this._fallback_llm) {
+      this.logger.warning(
+        `⚠️ LLM error (${error.name}: ${error.message}) but no fallback_llm configured`
+      );
+      return false;
+    }
+
+    this._log_fallback_switch(error, this._fallback_llm);
+    this.llm = this._fallback_llm;
+    this._using_fallback_llm = true;
+    this.token_cost_service.register_llm(this._fallback_llm);
+    return true;
+  }
+
+  private _log_fallback_switch(
+    error: ModelRateLimitError | ModelProviderError,
+    fallback: BaseChatModel
+  ): void {
+    const originalModel =
+      typeof this._original_llm?.model === 'string'
+        ? this._original_llm.model
+        : 'unknown';
+    const fallbackModel =
+      typeof fallback?.model === 'string' ? fallback.model : 'unknown';
+    const errorType = error.name || 'Error';
+    const statusCode =
+      typeof error.statusCode === 'number' ? error.statusCode : 'N/A';
+
+    this.logger.warning(
+      `⚠️ Primary LLM (${originalModel}) failed with ${errorType} (status=${statusCode}), switching to fallback LLM (${fallbackModel})`
+    );
   }
 
   private _validateAndNormalizeActions(actions: unknown[]): ActionModel[] {

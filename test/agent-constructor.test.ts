@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import type { BaseChatModel } from '../src/llm/base.js';
 import { Agent } from '../src/agent/service.js';
 import { ActionResult } from '../src/agent/views.js';
+import {
+  ModelProviderError,
+  ModelRateLimitError,
+} from '../src/llm/exceptions.js';
 import { BrowserSession } from '../src/browser/session.js';
 import { BrowserProfile } from '../src/browser/profile.js';
 import { DOMElementNode } from '../src/dom/views.js';
@@ -130,6 +134,126 @@ describe('Agent constructor browser session alignment', () => {
     await grok2Agent.close();
     await grok3Agent.close();
     await grokCodeAgent.close();
+  });
+
+  it('initializes fallback llm state and exposes model tracking getters', async () => {
+    const primary = createLlm('primary-model', 'openai');
+    const fallback = createLlm('fallback-model', 'anthropic');
+    const agent = new Agent({
+      task: 'fallback state init',
+      llm: primary,
+      fallback_llm: fallback,
+    });
+
+    expect(agent.is_using_fallback_llm).toBe(false);
+    expect(agent.current_llm_model).toBe('primary-model');
+    expect((agent as any)._fallback_llm).toBe(fallback);
+    expect((agent as any)._original_llm).toBe(primary);
+
+    await agent.close();
+  });
+
+  it('switches to fallback llm on retryable provider errors', async () => {
+    const primary = createLlm('primary-model');
+    const fallback = createLlm('fallback-model');
+    const agent = new Agent({
+      task: 'fallback switch',
+      llm: primary,
+      fallback_llm: fallback,
+    });
+    const registerSpy = vi.spyOn(
+      (agent as any).token_cost_service,
+      'register_llm'
+    );
+
+    const switched = (agent as any)._try_switch_to_fallback_llm(
+      new ModelProviderError('Service unavailable', 503, 'primary-model')
+    );
+
+    expect(switched).toBe(true);
+    expect(agent.llm).toBe(fallback);
+    expect(agent.is_using_fallback_llm).toBe(true);
+    expect(agent.current_llm_model).toBe('fallback-model');
+    expect(registerSpy).toHaveBeenCalledWith(fallback);
+
+    await agent.close();
+  });
+
+  it('does not switch to fallback llm for non-retryable provider errors', async () => {
+    const primary = createLlm('primary-model');
+    const fallback = createLlm('fallback-model');
+    const agent = new Agent({
+      task: 'fallback non retryable',
+      llm: primary,
+      fallback_llm: fallback,
+    });
+
+    const switched = (agent as any)._try_switch_to_fallback_llm(
+      new ModelProviderError('Bad request', 400, 'primary-model')
+    );
+
+    expect(switched).toBe(false);
+    expect(agent.llm).toBe(primary);
+    expect(agent.is_using_fallback_llm).toBe(false);
+    expect(agent.current_llm_model).toBe('primary-model');
+
+    await agent.close();
+  });
+
+  it('retries model output generation with fallback llm after rate limit', async () => {
+    const primaryInvoke = vi.fn(async () => {
+      throw new ModelRateLimitError('Rate limit exceeded', 429, 'primary-model');
+    });
+    const fallbackInvoke = vi.fn(async () => ({
+      completion: {
+        thinking: null,
+        evaluation_previous_goal: 'none',
+        memory: 'none',
+        next_goal: 'finish',
+        action: [
+          {
+            done: {
+              text: 'Task completed',
+              success: true,
+            },
+          },
+        ],
+      },
+      usage: null,
+    }));
+    const primary = {
+      ...createLlm('primary-model'),
+      ainvoke: primaryInvoke,
+    } as BaseChatModel;
+    const fallback = {
+      ...createLlm('fallback-model'),
+      ainvoke: fallbackInvoke,
+    } as BaseChatModel;
+    const agent = new Agent({
+      task: 'fallback invoke retry',
+      llm: primary,
+      fallback_llm: fallback,
+    });
+
+    const output = await (agent as any)._get_model_output_with_retry(
+      [{ role: 'user', content: 'test' }],
+      null
+    );
+
+    expect(primaryInvoke).toHaveBeenCalledTimes(1);
+    expect(fallbackInvoke).toHaveBeenCalledTimes(1);
+    expect(agent.llm).toBe(fallback);
+    expect(agent.is_using_fallback_llm).toBe(true);
+    expect(output.action).toHaveLength(1);
+    expect(output.action[0].model_dump()).toEqual({
+      done: {
+        text: 'Task completed',
+        success: true,
+        files_to_display: [],
+      },
+    });
+
+    await agent.close();
   });
 
   it('copies non-owning BrowserSession instances to avoid shared-agent state', async () => {
