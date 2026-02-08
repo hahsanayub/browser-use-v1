@@ -539,12 +539,14 @@ export class MCPServer {
       z
         .object({
           include_screenshot: z.boolean().default(false),
+          include_recent_events: z.boolean().default(false),
         })
-        .default({ include_screenshot: false }),
+        .default({ include_screenshot: false, include_recent_events: false }),
       async (args) => {
         const browserSession = await this.ensureBrowserSession();
         const state = await browserSession.get_browser_state_with_recovery({
           include_screenshot: Boolean(args?.include_screenshot),
+          include_recent_events: Boolean(args?.include_recent_events),
           cache_clickable_elements_hashes: true,
         });
 

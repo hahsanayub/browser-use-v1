@@ -215,6 +215,46 @@ describe('MCPServer browser_get_state', () => {
       '[alert] Session expired soon',
     ]);
   });
+
+  it('forwards include_recent_events option to browser session', async () => {
+    const server = new MCPServer('test-mcp', '1.0.0');
+    const getState = vi.fn(async () => ({
+      url: 'https://example.com',
+      title: 'Example',
+      tabs: [],
+      page_info: null,
+      pixels_above: 0,
+      pixels_below: 0,
+      browser_errors: [],
+      loading_status: null,
+      recent_events: null,
+      pending_network_requests: [],
+      pagination_buttons: [],
+      closed_popup_messages: [],
+      screenshot: null,
+      element_tree: {
+        clickable_elements_to_string: () => '',
+      },
+      selector_map: {},
+    }));
+    const browserSession = {
+      initialized: true,
+      start: vi.fn(),
+      get_browser_state_with_recovery: getState,
+    };
+    (server as any).ensureBrowserSession = vi.fn(async () => browserSession);
+
+    await (server as any).tools.browser_get_state.handler({
+      include_screenshot: false,
+      include_recent_events: true,
+    });
+
+    expect(getState).toHaveBeenCalledWith({
+      include_screenshot: false,
+      include_recent_events: true,
+      cache_clickable_elements_hashes: true,
+    });
+  });
 });
 
 describe('MCPServer retry_with_browser_use_agent', () => {

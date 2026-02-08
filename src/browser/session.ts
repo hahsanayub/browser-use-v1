@@ -71,6 +71,7 @@ interface CachedClickableElementHashes {
 export interface BrowserStateOptions {
   cache_clickable_elements_hashes?: boolean;
   include_screenshot?: boolean;
+  include_recent_events?: boolean;
   signal?: AbortSignal | null;
 }
 
@@ -1251,6 +1252,7 @@ export class BrowserSession {
 
   async get_browser_state_with_recovery(options: BrowserStateOptions = {}) {
     const signal = options.signal ?? null;
+    const includeRecentEvents = options.include_recent_events ?? false;
     this._throwIfAborted(signal);
 
     if (!this.initialized) {
@@ -1388,7 +1390,7 @@ export class BrowserSession {
         : [],
       is_pdf_viewer: Boolean(this.currentUrl?.toLowerCase().endsWith('.pdf')),
       loading_status: this.currentPageLoadingStatus,
-      recent_events: this._getRecentEventsSummary(),
+      recent_events: includeRecentEvents ? this._getRecentEventsSummary() : null,
       pending_network_requests: pendingNetworkRequests,
       pagination_buttons: paginationButtons,
       closed_popup_messages: this._getClosedPopupMessagesSnapshot(),
@@ -2583,11 +2585,16 @@ export class BrowserSession {
    */
   async get_state_summary(
     cache_clickable_elements_hashes: boolean = true,
-    include_screenshot: boolean = true
+    include_screenshot: boolean = true,
+    include_recent_events: boolean = false
   ): Promise<BrowserStateSummary> {
     this.logger.debug('🔄 Starting get_state_summary...');
 
-    const updated_state = await this._get_updated_state(-1, include_screenshot);
+    const updated_state = await this._get_updated_state(
+      -1,
+      include_screenshot,
+      include_recent_events
+    );
 
     // Implement clickable element hash caching to detect new elements
     if (cache_clickable_elements_hashes) {
@@ -2625,7 +2632,9 @@ export class BrowserSession {
    * Get minimal state summary without DOM processing, but with screenshot
    * Used when page is in error state or unresponsive
    */
-  async get_minimal_state_summary(): Promise<BrowserStateSummary> {
+  async get_minimal_state_summary(
+    include_recent_events: boolean = false
+  ): Promise<BrowserStateSummary> {
     try {
       const page = await this.get_current_page();
       const url = page ? page.url() : 'unknown';
@@ -2705,7 +2714,9 @@ export class BrowserSession {
         browser_errors: ['Page in error state - minimal navigation available'],
         is_pdf_viewer: false,
         loading_status: this.currentPageLoadingStatus,
-        recent_events: this._getRecentEventsSummary(),
+        recent_events: include_recent_events
+          ? this._getRecentEventsSummary()
+          : null,
         pending_network_requests: [],
         pagination_buttons: [],
         closed_popup_messages: this._getClosedPopupMessagesSnapshot(),
@@ -2725,7 +2736,8 @@ export class BrowserSession {
    */
   private async _get_updated_state(
     focus_element: number = -1,
-    include_screenshot: boolean = true
+    include_screenshot: boolean = true,
+    include_recent_events: boolean = false
   ): Promise<BrowserStateSummary> {
     const page = await this.get_current_page();
     if (!page) {
@@ -2780,7 +2792,9 @@ export class BrowserSession {
         browser_errors: [],
         is_pdf_viewer: false,
         loading_status: this.currentPageLoadingStatus,
-        recent_events: this._getRecentEventsSummary(),
+        recent_events: include_recent_events
+          ? this._getRecentEventsSummary()
+          : null,
         pending_network_requests: [],
         pagination_buttons: [],
         closed_popup_messages: this._getClosedPopupMessagesSnapshot(),
@@ -2923,7 +2937,9 @@ export class BrowserSession {
       browser_errors,
       is_pdf_viewer,
       loading_status: this.currentPageLoadingStatus,
-      recent_events: this._getRecentEventsSummary(),
+      recent_events: include_recent_events
+        ? this._getRecentEventsSummary()
+        : null,
       pending_network_requests: pendingNetworkRequests,
       pagination_buttons: paginationButtons,
       closed_popup_messages: this._getClosedPopupMessagesSnapshot(),

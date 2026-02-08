@@ -40,6 +40,7 @@ describe('AgentMessagePrompt browser state enrichment', () => {
         get_todo_contents: () => '',
       } as any,
       task: 'test',
+      include_recent_events: true,
     });
 
     const userMessage = prompt.get_user_message(false) as any;
@@ -49,5 +50,29 @@ describe('AgentMessagePrompt browser state enrichment', () => {
     expect(content).toContain('Pending network requests:');
     expect(content).toContain('Detected pagination buttons:');
     expect(content).toContain('Auto-closed JavaScript dialogs:');
+  });
+
+  it('does not include recent events by default', () => {
+    const root = new DOMElementNode(true, null, 'body', '/body', {}, []);
+    const domState = new DOMState(root, {});
+    const browserState = new BrowserStateSummary(domState, {
+      url: 'https://example.com/list',
+      title: 'List',
+      tabs: [{ page_id: 0, url: 'https://example.com/list', title: 'List' }],
+      recent_events: '[{"event_type":"tab_switched"}]',
+    });
+
+    const prompt = new AgentMessagePrompt({
+      browser_state_summary: browserState,
+      file_system: {
+        describe: () => '/tmp',
+        get_todo_contents: () => '',
+      } as any,
+      task: 'test',
+    });
+
+    const userMessage = prompt.get_user_message(false) as any;
+    const content = String(userMessage.content ?? '');
+    expect(content).not.toContain('Recent browser events:');
   });
 });

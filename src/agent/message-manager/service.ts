@@ -191,7 +191,8 @@ export class MessageManager {
       string,
       string | Record<string, string>
     > | null = null,
-    available_file_paths: string[] | null = null
+    available_file_paths: string[] | null = null,
+    include_recent_events = false
   ) {
     this.state.history.context_messages = [];
     this.updateAgentHistoryDescription(model_output, result, step_info);
@@ -219,6 +220,7 @@ export class MessageManager {
       available_file_paths,
       screenshots,
       vision_detail_level: this.visionDetailLevel,
+      include_recent_events,
     });
     const message = prompt.get_user_message(use_vision);
     this.setMessageWithType(message, 'state');

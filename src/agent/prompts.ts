@@ -82,6 +82,7 @@ interface AgentMessagePromptInit {
   available_file_paths?: string[] | null;
   screenshots?: string[] | null;
   vision_detail_level?: 'auto' | 'low' | 'high';
+  include_recent_events?: boolean;
 }
 
 export class AgentMessagePrompt {
@@ -98,6 +99,7 @@ export class AgentMessagePrompt {
   private readonly availableFilePaths?: string[] | null;
   private readonly screenshots: string[];
   private readonly visionDetailLevel: 'auto' | 'low' | 'high';
+  private readonly includeRecentEvents: boolean;
 
   constructor(init: AgentMessagePromptInit) {
     this.browserState = init.browser_state_summary;
@@ -114,6 +116,7 @@ export class AgentMessagePrompt {
     this.availableFilePaths = init.available_file_paths ?? null;
     this.screenshots = init.screenshots ?? [];
     this.visionDetailLevel = init.vision_detail_level ?? 'auto';
+    this.includeRecentEvents = init.include_recent_events ?? false;
   }
 
   private browserStateDescription() {
@@ -193,7 +196,8 @@ export class AgentMessagePrompt {
     const pdfMessage = this.browserState.is_pdf_viewer
       ? 'PDF viewer cannot be rendered. Do not use extract_structured_data here; use read_file on downloaded PDF via available_file_paths.\n\n'
       : '';
-    const recentEventsText = this.browserState.recent_events
+    const recentEventsText =
+      this.includeRecentEvents && this.browserState.recent_events
       ? `Recent browser events: ${this.browserState.recent_events}\n`
       : '';
 

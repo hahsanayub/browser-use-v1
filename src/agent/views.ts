@@ -102,6 +102,7 @@ export interface AgentSettings {
   session_attachment_mode: 'copy' | 'strict' | 'shared';
   allow_insecure_sensitive_data: boolean;
   use_vision: boolean;
+  include_recent_events: boolean;
   vision_detail_level: 'auto' | 'low' | 'high';
   use_vision_for_planner: boolean;
   save_conversation_path: string | null;
@@ -132,6 +133,7 @@ export const defaultAgentSettings = (): AgentSettings => ({
   session_attachment_mode: 'copy',
   allow_insecure_sensitive_data: false,
   use_vision: true,
+  include_recent_events: false,
   vision_detail_level: 'auto',
   use_vision_for_planner: false,
   save_conversation_path: null,

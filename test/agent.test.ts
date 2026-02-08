@@ -63,6 +63,7 @@ const createAgentSettings = (
   overrides: Partial<AgentSettings> = {}
 ): AgentSettings => ({
   use_vision: true,
+  include_recent_events: false,
   vision_detail_level: 'auto',
   use_vision_for_planner: false,
   save_conversation_path: null,
@@ -221,6 +222,7 @@ describe('Agent Settings', () => {
 
     expect(settings.max_steps).toBeDefined();
     expect(settings.use_vision).toBeDefined();
+    expect(settings.include_recent_events).toBe(false);
   });
 
   it('overrides default settings', () => {

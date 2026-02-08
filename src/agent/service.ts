@@ -174,6 +174,7 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
     | null;
   output_model_schema?: StructuredOutputParser<AgentStructuredOutput> | null;
   use_vision?: boolean;
+  include_recent_events?: boolean;
   use_vision_for_planner?: boolean;
   save_conversation_path?: string | null;
   save_conversation_path_encoding?: BufferEncoding | null;
@@ -218,6 +219,7 @@ const ensureDir = (target: string) => {
 
 const defaultAgentOptions = () => ({
   use_vision: true,
+  include_recent_events: false,
   use_vision_for_planner: false,
   save_conversation_path: null,
   save_conversation_path_encoding: 'utf-8' as BufferEncoding,
@@ -365,6 +367,7 @@ export class Agent<
       register_external_agent_status_raise_error_callback = null,
       output_model_schema = null,
       use_vision = true,
+      include_recent_events = false,
       save_conversation_path = null,
       save_conversation_path_encoding = 'utf-8',
       max_failures = 3,
@@ -424,6 +427,7 @@ export class Agent<
 
     this.settings = {
       use_vision,
+      include_recent_events,
       vision_detail_level,
       use_vision_for_planner: false,
       save_conversation_path,
@@ -1721,6 +1725,7 @@ export class Agent<
       await this.browser_session.get_browser_state_with_recovery?.({
         cache_clickable_elements_hashes: true,
         include_screenshot: this.settings.use_vision,
+        include_recent_events: this.settings.include_recent_events,
         signal,
       });
     this._throwIfAborted(signal);
@@ -1754,7 +1759,8 @@ export class Agent<
       this.settings.use_vision,
       page_filtered_actions || null,
       this.sensitive_data ?? null,
-      this.available_file_paths
+      this.available_file_paths,
+      this.settings.include_recent_events
     );
 
     await this._handle_final_step(step_info);
