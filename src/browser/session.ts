@@ -21,6 +21,7 @@ import {
 } from './profile.js';
 import {
   BrowserStateSummary,
+  type NetworkRequest,
   type TabInfo,
   BrowserError,
   URLNotAllowedError,
@@ -77,6 +78,14 @@ export interface BrowserActionOptions {
   signal?: AbortSignal | null;
 }
 
+interface RecentBrowserEvent {
+  event_type: string;
+  timestamp: string;
+  url?: string;
+  error_message?: string;
+  page_id?: number;
+}
+
 export class BrowserSession {
   readonly id: string;
   readonly browser_profile: BrowserProfile;
@@ -112,6 +121,8 @@ export class BrowserSession {
   private _closedPopupMessages: string[] = [];
   private _dialogHandlersAttached = new WeakSet<Page>();
   private readonly _maxClosedPopupMessages = 20;
+  private _recentEvents: RecentBrowserEvent[] = [];
+  private readonly _maxRecentEvents = 100;
 
   constructor(init: BrowserSessionInit = {}) {
     const sourceProfileConfig = init.browser_profile
@@ -152,6 +163,7 @@ export class BrowserSession {
     this.ownsBrowserResources = this._determineOwnership();
     this.tabPages.set(this._tabs[0].page_id, this.agent_current_page ?? null);
     this._attachDialogHandler(this.agent_current_page);
+    this._recordRecentEvent('session_initialized', { url: this.currentUrl });
   }
 
   private async _waitForStableNetwork(
@@ -399,6 +411,44 @@ export class BrowserSession {
     return [...this._closedPopupMessages];
   }
 
+  private _recordRecentEvent(
+    event_type: string,
+    details: Partial<Omit<RecentBrowserEvent, 'event_type' | 'timestamp'>> = {}
+  ) {
+    const event: RecentBrowserEvent = {
+      event_type: String(event_type || 'unknown').trim() || 'unknown',
+      timestamp: new Date().toISOString(),
+    };
+    if (typeof details.url === 'string' && details.url.trim()) {
+      event.url = details.url.trim();
+    }
+    if (
+      typeof details.error_message === 'string' &&
+      details.error_message.trim()
+    ) {
+      event.error_message = details.error_message.trim();
+    }
+    if (typeof details.page_id === 'number' && Number.isFinite(details.page_id)) {
+      event.page_id = details.page_id;
+    }
+
+    this._recentEvents.push(event);
+    if (this._recentEvents.length > this._maxRecentEvents) {
+      this._recentEvents.splice(
+        0,
+        this._recentEvents.length - this._maxRecentEvents
+      );
+    }
+  }
+
+  private _getRecentEventsSummary(limit = 10): string | null {
+    if (!this._recentEvents.length || limit <= 0) {
+      return null;
+    }
+    const events = this._recentEvents.slice(-limit);
+    return JSON.stringify(events);
+  }
+
   private _attachDialogHandler(page: Page | null) {
     if (!page || this._dialogHandlersAttached.has(page)) {
       return;
@@ -418,6 +468,12 @@ export class BrowserSession {
         const message =
           typeof dialog?.message === 'function' ? dialog.message() : '';
         this._captureClosedPopupMessage(dialogType, message);
+        this._recordRecentEvent('javascript_dialog_closed', {
+          url: this.currentUrl,
+          error_message: message
+            ? `[${dialogType}] ${String(message).trim()}`
+            : `[${dialogType}]`,
+        });
 
         const shouldAccept =
           dialogType === 'alert' ||
@@ -437,6 +493,121 @@ export class BrowserSession {
 
     pageWithEvents.on('dialog', handler);
     this._dialogHandlersAttached.add(page);
+  }
+
+  private async _getPendingNetworkRequests(
+    page: Page | null
+  ): Promise<NetworkRequest[]> {
+    if (!page || typeof page.evaluate !== 'function') {
+      return [];
+    }
+
+    try {
+      const pending = await page.evaluate(() => {
+        const perf = (window as any).performance;
+        if (!perf?.getEntriesByType) {
+          return [];
+        }
+
+        const entries = perf.getEntriesByType('resource');
+        const now = perf.now?.() ?? Date.now();
+        const blockedPatterns = [
+          'doubleclick',
+          'analytics',
+          'tracking',
+          'metrics',
+          'telemetry',
+          'facebook.net',
+          'hotjar',
+          'clarity',
+          'mixpanel',
+          'segment',
+          '/beacon/',
+          '/collector/',
+          '/telemetry/',
+        ];
+        const pendingRequests: Array<{
+          url: string;
+          method: string;
+          loading_duration_ms: number;
+          resource_type: string | null;
+        }> = [];
+
+        for (const entry of entries) {
+          const responseEnd =
+            typeof (entry as any).responseEnd === 'number'
+              ? (entry as any).responseEnd
+              : 0;
+          if (responseEnd !== 0) {
+            continue;
+          }
+
+          const url = String((entry as any).name ?? '');
+          if (!url || url.startsWith('data:') || url.length > 500) {
+            continue;
+          }
+          const lower = url.toLowerCase();
+          if (blockedPatterns.some((pattern) => lower.includes(pattern))) {
+            continue;
+          }
+
+          const startTime =
+            typeof (entry as any).startTime === 'number'
+              ? (entry as any).startTime
+              : now;
+          const loadingDuration = Math.max(0, now - startTime);
+          if (loadingDuration > 10000) {
+            continue;
+          }
+
+          const resourceType = String((entry as any).initiatorType ?? '').toLowerCase();
+          if (
+            (resourceType === 'img' ||
+              resourceType === 'image' ||
+              resourceType === 'font') &&
+            loadingDuration > 3000
+          ) {
+            continue;
+          }
+
+          pendingRequests.push({
+            url,
+            method: 'GET',
+            loading_duration_ms: Math.round(loadingDuration),
+            resource_type: resourceType || null,
+          });
+
+          if (pendingRequests.length >= 20) {
+            break;
+          }
+        }
+
+        return pendingRequests;
+      });
+
+      return Array.isArray(pending)
+        ? pending.map((entry) => ({
+            url: String((entry as any).url ?? ''),
+            method:
+              typeof (entry as any).method === 'string'
+                ? (entry as any).method
+                : 'GET',
+            loading_duration_ms:
+              typeof (entry as any).loading_duration_ms === 'number'
+                ? (entry as any).loading_duration_ms
+                : 0,
+            resource_type:
+              typeof (entry as any).resource_type === 'string'
+                ? (entry as any).resource_type
+                : null,
+          }))
+        : [];
+    } catch (error) {
+      this.logger.debug(
+        `Failed to gather pending network requests: ${(error as Error).message}`
+      );
+      return [];
+    }
   }
 
   get tabs() {
@@ -889,6 +1060,7 @@ export class BrowserSession {
     }
 
     this.initialized = true;
+    this._recordRecentEvent('browser_started', { url: this.currentUrl });
     this.logger.debug(
       `Started ${this.describe()} with profile ${this.browser_profile.toString()}`
     );
@@ -1070,6 +1242,7 @@ export class BrowserSession {
     this.downloaded_files = [];
     this._closedPopupMessages = [];
     this._dialogHandlersAttached = new WeakSet<Page>();
+    this._recentEvents = [];
   }
 
   async close() {
@@ -1198,6 +1371,10 @@ export class BrowserSession {
       }
     }
 
+    const pendingNetworkRequests = await this._getPendingNetworkRequests(page);
+    const paginationButtons = DomService.detect_pagination_buttons(
+      domState.selector_map
+    );
     const summary = new BrowserStateSummary(domState, {
       url: this.currentUrl,
       title: this.currentTitle || this.currentUrl,
@@ -1211,6 +1388,9 @@ export class BrowserSession {
         : [],
       is_pdf_viewer: Boolean(this.currentUrl?.toLowerCase().endsWith('.pdf')),
       loading_status: this.currentPageLoadingStatus,
+      recent_events: this._getRecentEventsSummary(),
+      pending_network_requests: pendingNetworkRequests,
+      pagination_buttons: paginationButtons,
       closed_popup_messages: this._getClosedPopupMessagesSnapshot(),
     });
 
@@ -1295,6 +1475,7 @@ export class BrowserSession {
     this._throwIfAborted(signal);
     this._assert_url_allowed(url);
     const normalized = normalize_url(url);
+    this._recordRecentEvent('navigation_started', { url: normalized });
     const page = await this._withAbort(this.get_current_page(), signal);
     if (page?.goto) {
       try {
@@ -1311,6 +1492,10 @@ export class BrowserSession {
           throw error;
         }
         const message = (error as Error).message ?? 'Navigation failed';
+        this._recordRecentEvent('navigation_failed', {
+          url: normalized,
+          error_message: message,
+        });
         throw new BrowserError(message);
       }
     }
@@ -1323,6 +1508,7 @@ export class BrowserSession {
       this._tabs[this.currentTabIndex].title = normalized;
     }
     this._setActivePage(page ?? null);
+    this._recordRecentEvent('navigation_completed', { url: normalized });
     this.cachedBrowserState = null;
     return this.agent_current_page;
   }
@@ -1343,6 +1529,10 @@ export class BrowserSession {
     this.currentUrl = normalized;
     this.currentTitle = normalized;
     this.historyStack.push(normalized);
+    this._recordRecentEvent('tab_created', {
+      url: normalized,
+      page_id: newTab.page_id,
+    });
     let page: Page | null = null;
     try {
       page =
@@ -1364,6 +1554,11 @@ export class BrowserSession {
       if (this._isAbortError(error)) {
         throw error;
       }
+      this._recordRecentEvent('tab_navigation_failed', {
+        url: normalized,
+        page_id: newTab.page_id,
+        error_message: (error as Error).message ?? 'Failed to open new tab',
+      });
       this.logger.debug(
         `Failed to open new tab via Playwright: ${(error as Error).message}`
       );
@@ -1374,6 +1569,10 @@ export class BrowserSession {
     if (!this.human_current_page) {
       this.human_current_page = page;
     }
+    this._recordRecentEvent('tab_ready', {
+      url: normalized,
+      page_id: newTab.page_id,
+    });
     this.cachedBrowserState = null;
     return this.agent_current_page;
   }
@@ -1416,6 +1615,10 @@ export class BrowserSession {
       }
     }
     await this._waitForLoad(page, 5000, signal);
+    this._recordRecentEvent('tab_switched', {
+      url: tab.url,
+      page_id: tab.page_id,
+    });
     this.cachedBrowserState = null;
     return page;
   }
@@ -1435,6 +1638,10 @@ export class BrowserSession {
       }
     }
     this.tabPages.delete(closingTab.page_id);
+    this._recordRecentEvent('tab_closed', {
+      url: closingTab.url,
+      page_id: closingTab.page_id,
+    });
     this._tabs.splice(index, 1);
     if (this.currentTabIndex >= this._tabs.length) {
       this.currentTabIndex = Math.max(0, this._tabs.length - 1);
@@ -1483,6 +1690,7 @@ export class BrowserSession {
       this._tabs[this.currentTabIndex].url = previous;
       this._tabs[this.currentTabIndex].title = previous;
     }
+    this._recordRecentEvent('navigation_back', { url: previous });
   }
 
   async get_dom_element_by_index(
@@ -2497,6 +2705,9 @@ export class BrowserSession {
         browser_errors: ['Page in error state - minimal navigation available'],
         is_pdf_viewer: false,
         loading_status: this.currentPageLoadingStatus,
+        recent_events: this._getRecentEventsSummary(),
+        pending_network_requests: [],
+        pagination_buttons: [],
         closed_popup_messages: this._getClosedPopupMessagesSnapshot(),
       });
     } catch (error) {
@@ -2569,6 +2780,9 @@ export class BrowserSession {
         browser_errors: [],
         is_pdf_viewer: false,
         loading_status: this.currentPageLoadingStatus,
+        recent_events: this._getRecentEventsSummary(),
+        pending_network_requests: [],
+        pagination_buttons: [],
         closed_popup_messages: this._getClosedPopupMessagesSnapshot(),
       });
     }
@@ -2694,6 +2908,10 @@ export class BrowserSession {
     // Check if PDF viewer
     const is_pdf_viewer = await this._is_pdf_viewer(page);
 
+    const pendingNetworkRequests = await this._getPendingNetworkRequests(page);
+    const paginationButtons = DomService.detect_pagination_buttons(
+      content.selector_map
+    );
     const browser_state = new BrowserStateSummary(content, {
       url: page_url,
       title,
@@ -2705,6 +2923,9 @@ export class BrowserSession {
       browser_errors,
       is_pdf_viewer,
       loading_status: this.currentPageLoadingStatus,
+      recent_events: this._getRecentEventsSummary(),
+      pending_network_requests: pendingNetworkRequests,
+      pagination_buttons: paginationButtons,
       closed_popup_messages: this._getClosedPopupMessagesSnapshot(),
     });
 
@@ -3127,6 +3348,10 @@ export class BrowserSession {
     if (!denialReason) {
       return;
     }
+    this._recordRecentEvent('navigation_blocked', {
+      url,
+      error_message: denialReason,
+    });
 
     if (denialReason === 'not_in_allowed_domains') {
       throw new URLNotAllowedError(
@@ -3212,6 +3437,7 @@ export class BrowserSession {
 
     try {
       await this._stoppingPromise;
+      this._recordRecentEvent('browser_stopped');
     } finally {
       this._stoppingPromise = null;
     }

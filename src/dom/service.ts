@@ -12,6 +12,7 @@ import {
   DOMTextNode,
   type SelectorMap,
 } from './views.js';
+import type { PaginationButton } from '../browser/views.js';
 
 type SerializedDOMNode = {
   type: string;
@@ -307,5 +308,95 @@ export class DomService {
     return (
       (process.env.BROWSER_USE_LOGGING_LEVEL ?? '').toLowerCase() === 'debug'
     );
+  }
+
+  static detect_pagination_buttons(
+    selector_map: SelectorMap
+  ): PaginationButton[] {
+    const paginationButtons: PaginationButton[] = [];
+
+    const nextPatterns = [
+      'next',
+      '>',
+      '>>',
+      'siguiente',
+      'suivant',
+      'weiter',
+      'volgende',
+    ];
+    const prevPatterns = [
+      'prev',
+      'previous',
+      '<',
+      '<<',
+      'anterior',
+      'precedent',
+      'zuruck',
+      'vorige',
+    ];
+    const firstPatterns = ['first', 'primera', 'premiere', 'erste'];
+    const lastPatterns = ['last', 'ultima', 'dernier', 'letzte'];
+
+    const hasPattern = (text: string, patterns: string[]) =>
+      patterns.some((pattern) => text.includes(pattern));
+
+    for (const [index, node] of Object.entries(selector_map)) {
+      if (!(node instanceof DOMElementNode)) {
+        continue;
+      }
+
+      const text = node.get_all_text_till_next_clickable_element().trim();
+      const textLower = text.toLowerCase();
+      const ariaLabel = String(node.attributes?.['aria-label'] ?? '').toLowerCase();
+      const title = String(node.attributes?.title ?? '').toLowerCase();
+      const className = String(node.attributes?.class ?? '').toLowerCase();
+      const role = String(node.attributes?.role ?? '').toLowerCase();
+      const allText = `${textLower} ${ariaLabel} ${title} ${className}`.trim();
+
+      const disabledRaw = node.attributes?.disabled;
+      const ariaDisabledRaw = node.attributes?.['aria-disabled'];
+      const disabledAttr =
+        typeof disabledRaw === 'string' ? disabledRaw.toLowerCase() : '';
+      const ariaDisabled =
+        typeof ariaDisabledRaw === 'string'
+          ? ariaDisabledRaw.toLowerCase()
+          : '';
+      const isDisabled =
+        (typeof disabledRaw === 'string' &&
+          disabledAttr !== '' &&
+          disabledAttr !== 'false') ||
+        ariaDisabled === 'true' ||
+        className.includes('disabled');
+
+      let buttonType: PaginationButton['button_type'] | null = null;
+      if (hasPattern(allText, nextPatterns)) {
+        buttonType = 'next';
+      } else if (hasPattern(allText, prevPatterns)) {
+        buttonType = 'prev';
+      } else if (hasPattern(allText, firstPatterns)) {
+        buttonType = 'first';
+      } else if (hasPattern(allText, lastPatterns)) {
+        buttonType = 'last';
+      } else if (
+        /^\d{1,2}$/.test(textLower) &&
+        (role === 'button' || role === 'link' || role === '')
+      ) {
+        buttonType = 'page_number';
+      }
+
+      if (!buttonType) {
+        continue;
+      }
+
+      paginationButtons.push({
+        button_type: buttonType,
+        backend_node_id: Number(index),
+        text: text || ariaLabel || title || node.tag_name,
+        selector: node.xpath,
+        is_disabled: isDisabled,
+      });
+    }
+
+    return paginationButtons;
   }
 }

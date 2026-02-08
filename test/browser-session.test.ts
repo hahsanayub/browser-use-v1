@@ -58,6 +58,8 @@ vi.mock('../src/telemetry/service.js', () => ({
 // Import after mocks
 import { BrowserSession } from '../src/browser/session.js';
 import { BrowserProfile } from '../src/browser/profile.js';
+import { DomService } from '../src/dom/service.js';
+import { DOMElementNode, DOMTextNode, DOMState } from '../src/dom/views.js';
 
 describe('BrowserSession Basic Operations', () => {
   it('creates browser session with profile', () => {
@@ -252,6 +254,82 @@ describe('BrowserSession Basic Operations', () => {
     expect(summary.closed_popup_messages).toEqual([
       '[alert] Existing popup message',
     ]);
+  });
+
+  it('includes recent events, pending requests, and pagination buttons in browser state', async () => {
+    const paginationNode = new DOMElementNode(
+      true,
+      null,
+      'button',
+      '/html/body/nav/button[1]',
+      { 'aria-label': 'Next page', role: 'button' },
+      [new DOMTextNode(true, null, 'Next')]
+    );
+    paginationNode.highlight_index = 1;
+    const domState = new DOMState(
+      new DOMElementNode(true, null, 'body', '/html/body', {}, [
+        paginationNode,
+      ]),
+      { 1: paginationNode }
+    );
+
+    const clickableSpy = vi
+      .spyOn(DomService.prototype, 'get_clickable_elements')
+      .mockResolvedValue(domState);
+
+    try {
+      const session = new BrowserSession({
+        browser_profile: new BrowserProfile({}),
+      });
+
+      const evaluate = vi
+        .fn()
+        .mockResolvedValueOnce({
+          viewportWidth: 1280,
+          viewportHeight: 720,
+          scrollX: 0,
+          scrollY: 0,
+          pageWidth: 1280,
+          pageHeight: 2000,
+        })
+        .mockResolvedValueOnce([
+          {
+            url: 'https://example.com/api/items',
+            method: 'GET',
+            loading_duration_ms: 120,
+            resource_type: 'fetch',
+          },
+        ]);
+
+      const fakePage = {
+        url: () => 'https://example.com/list',
+        title: vi.fn(async () => 'List'),
+        evaluate,
+        on: vi.fn(),
+        off: vi.fn(),
+      } as any;
+
+      session.update_current_page(fakePage, 'List', 'https://example.com/list');
+      (session as any).initialized = true;
+      (session as any)._recordRecentEvent('tab_switched', {
+        url: 'https://example.com/list',
+        page_id: 0,
+      });
+
+      const summary = await session.get_browser_state_with_recovery({
+        include_screenshot: false,
+      });
+
+      expect(summary.recent_events).toContain('"event_type":"tab_switched"');
+      expect(summary.pending_network_requests).toHaveLength(1);
+      expect(summary.pending_network_requests[0]?.url).toContain(
+        '/api/items'
+      );
+      expect(summary.pagination_buttons).toHaveLength(1);
+      expect(summary.pagination_buttons[0]?.button_type).toBe('next');
+    } finally {
+      clickableSpy.mockRestore();
+    }
   });
 
   it('starts and stops browser session', async () => {

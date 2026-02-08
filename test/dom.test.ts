@@ -188,6 +188,66 @@ describe('DOM Element Classes', () => {
   });
 });
 
+describe('DomService Pagination Detection', () => {
+  it('detects next/prev/page-number buttons from selector map', () => {
+    const nextButton = new DOMElementNode(
+      true,
+      null,
+      'button',
+      '/html/body/nav/button[1]',
+      { 'aria-label': 'Next page', role: 'button' },
+      [new DOMTextNode(true, null, 'Next')]
+    );
+    nextButton.highlight_index = 1;
+
+    const prevButton = new DOMElementNode(
+      true,
+      null,
+      'a',
+      '/html/body/nav/a[1]',
+      { 'aria-label': 'Previous page', role: 'link', 'aria-disabled': 'true' },
+      [new DOMTextNode(true, null, 'Previous')]
+    );
+    prevButton.highlight_index = 2;
+
+    const pageNumber = new DOMElementNode(
+      true,
+      null,
+      'button',
+      '/html/body/nav/button[2]',
+      { role: 'button' },
+      [new DOMTextNode(true, null, '2')]
+    );
+    pageNumber.highlight_index = 3;
+
+    const unrelated = new DOMElementNode(
+      true,
+      null,
+      'button',
+      '/html/body/main/button[1]',
+      { role: 'button' },
+      [new DOMTextNode(true, null, 'Submit')]
+    );
+    unrelated.highlight_index = 4;
+
+    const selectorMap = {
+      1: nextButton,
+      2: prevButton,
+      3: pageNumber,
+      4: unrelated,
+    };
+
+    const buttons = DomService.detect_pagination_buttons(selectorMap);
+    expect(buttons).toHaveLength(3);
+    expect(buttons.map((button) => button.button_type)).toEqual(
+      expect.arrayContaining(['next', 'prev', 'page_number'])
+    );
+    expect(
+      buttons.find((button) => button.backend_node_id === 2)?.is_disabled
+    ).toBe(true);
+  });
+});
+
 describe('HashedDomElement', () => {
   it('creates hashed element', () => {
     const hashed = new HashedDomElement(
