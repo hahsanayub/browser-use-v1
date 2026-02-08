@@ -376,12 +376,45 @@ export class Controller<Context = unknown> {
     ) => {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
+      const collectTabIds = (): Set<number> => {
+        if (!Array.isArray(browser_session.tabs)) {
+          return new Set<number>();
+        }
+        return new Set<number>(
+          browser_session.tabs
+            .map((tab: any) => tab?.page_id)
+            .filter(
+              (pageId: unknown): pageId is number =>
+                typeof pageId === 'number' && Number.isFinite(pageId)
+            )
+        );
+      };
+      const detectNewTabNote = async (tabsBefore: Set<number>) => {
+        try {
+          await waitWithSignal(50, signal);
+          const tabsAfter = Array.isArray(browser_session.tabs)
+            ? browser_session.tabs
+            : [];
+          const newTab = tabsAfter.find((tab: any) => {
+            const pageId = tab?.page_id;
+            return typeof pageId === 'number' && !tabsBefore.has(pageId);
+          });
+          if (!newTab) {
+            return '';
+          }
+          const tabId = String(newTab.page_id);
+          return `. Note: This opened a new tab (tab_id: ${tabId}) - switch to it if you need to interact with the new page.`;
+        } catch {
+          return '';
+        }
+      };
 
       if (
         params.coordinate_x != null &&
         params.coordinate_y != null &&
         params.index == null
       ) {
+        const tabsBefore = collectTabIds();
         const page: Page | null = await browser_session.get_current_page();
         if (!page?.mouse?.click) {
           throw new BrowserError(
@@ -389,7 +422,9 @@ export class Controller<Context = unknown> {
           );
         }
         await page.mouse.click(params.coordinate_x, params.coordinate_y);
-        const coordinateMessage = `🖱️ Clicked at coordinates (${params.coordinate_x}, ${params.coordinate_y})`;
+        const coordinateMessage =
+          `🖱️ Clicked at coordinates (${params.coordinate_x}, ${params.coordinate_y})` +
+          (await detectNewTabNote(tabsBefore));
         return new ActionResult({
           extracted_content: coordinateMessage,
           include_in_memory: true,
@@ -411,9 +446,7 @@ export class Controller<Context = unknown> {
           `Element index ${params.index} does not exist - retry or use alternative actions`
         );
       }
-      const initialTabs = Array.isArray(browser_session.tabs)
-        ? browser_session.tabs.length
-        : 0;
+      const tabsBefore = collectTabIds();
       if (browser_session.is_file_input?.(element)) {
         const msg = `Index ${params.index} - has an element which opens file upload dialog.`;
         return new ActionResult({
@@ -436,13 +469,7 @@ export class Controller<Context = unknown> {
         msg = `🖱️  Clicked button with index ${params.index}: ${snippet}`;
       }
 
-      if (
-        Array.isArray(browser_session.tabs) &&
-        browser_session.tabs.length > initialTabs
-      ) {
-        msg += ' - New tab opened - switching to it';
-        await browser_session.switch_to_tab(-1, { signal });
-      }
+      msg += await detectNewTabNote(tabsBefore);
 
       return new ActionResult({
         extracted_content: msg,

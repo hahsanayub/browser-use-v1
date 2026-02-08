@@ -788,6 +788,62 @@ describe('Regression Coverage', () => {
     expect(result.extracted_content).toContain('Clicked at coordinates (42, 84)');
   });
 
+  it('click action by coordinate reports newly opened tab for follow-up switch', async () => {
+    const controller = new Controller();
+    const tabs = [{ page_id: 1, url: 'https://example.com', title: 'Example' }];
+    const page = {
+      mouse: {
+        click: vi.fn(async () => {
+          tabs.push({ page_id: 7, url: 'https://newtab.test', title: 'New Tab' });
+        }),
+      },
+      url: vi.fn(() => 'https://example.com'),
+    };
+    const browserSession = {
+      tabs,
+      get_current_page: vi.fn(async () => page),
+    };
+
+    const result = await controller.registry.execute_action(
+      'click',
+      { coordinate_x: 12, coordinate_y: 34 },
+      { browser_session: browserSession as any }
+    );
+
+    expect(result.extracted_content).toContain('Clicked at coordinates (12, 34)');
+    expect(result.extracted_content).toContain('opened a new tab');
+    expect(result.extracted_content).toContain('tab_id: 7');
+  });
+
+  it('click action by index reports newly opened tab without auto-switching', async () => {
+    const controller = new Controller();
+    const tabs = [{ page_id: 1, url: 'https://example.com', title: 'Example' }];
+    const element = {
+      get_all_text_till_next_clickable_element: vi.fn(() => 'Open details'),
+    };
+    const browserSession = {
+      tabs,
+      get_dom_element_by_index: vi.fn(async () => element),
+      is_file_input: vi.fn(() => false),
+      _click_element_node: vi.fn(async () => {
+        tabs.push({ page_id: 8, url: 'https://details.test', title: 'Details' });
+        return null;
+      }),
+      switch_to_tab: vi.fn(async () => {}),
+    };
+
+    const result = await controller.registry.execute_action(
+      'click',
+      { index: 3 },
+      { browser_session: browserSession as any }
+    );
+
+    expect(result.extracted_content).toContain('Clicked button with index 3');
+    expect(result.extracted_content).toContain('opened a new tab');
+    expect(result.extracted_content).toContain('tab_id: 8');
+    expect(browserSession.switch_to_tab).not.toHaveBeenCalled();
+  });
+
   it('click action validation requires index or coordinates', async () => {
     const controller = new Controller();
     const browserSession = {
