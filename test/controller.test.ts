@@ -784,6 +784,63 @@ describe('Regression Coverage', () => {
     expect(pageExtractionLlm.ainvoke).not.toHaveBeenCalled();
   });
 
+  it('read_file keeps long content in long_term_memory up to 10k chars', async () => {
+    const controller = new Controller();
+    const content = 'x'.repeat(2000);
+    const fileSystem = {
+      read_file: vi.fn(async () => content),
+    };
+
+    const result = await controller.registry.execute_action(
+      'read_file',
+      { file_name: 'sample.txt' },
+      {
+        file_system: fileSystem as any,
+        available_file_paths: ['sample.txt'],
+      }
+    );
+
+    expect(fileSystem.read_file).toHaveBeenCalledWith('sample.txt', true);
+    expect(result.long_term_memory).toBe(content);
+    expect(result.include_extracted_content_only_once).toBe(true);
+  });
+
+  it('extract_structured_data keeps long-term memory up to 10k chars', async () => {
+    const controller = new Controller();
+    const completion = 'result '.repeat(300);
+    const pageExtractionLlm = {
+      ainvoke: vi.fn(async () => ({ completion })),
+    };
+    const page = {
+      content: vi.fn(async () => '<html><body>Main Content</body></html>'),
+      frames: vi.fn(() => []),
+      url: vi.fn(() => 'https://example.com'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+      agent_current_page: {
+        url: vi.fn(() => 'https://example.com'),
+      },
+    };
+    const fileSystem = {
+      save_extracted_content: vi.fn(async () => '/tmp/saved.txt'),
+    };
+
+    const result = await controller.registry.execute_action(
+      'extract_structured_data',
+      { query: 'Extract data', extract_links: true },
+      {
+        browser_session: browserSession as any,
+        page_extraction_llm: pageExtractionLlm as any,
+        file_system: fileSystem as any,
+      }
+    );
+
+    expect(result.include_extracted_content_only_once).toBe(false);
+    expect(result.long_term_memory).toContain(completion.trim());
+    expect(fileSystem.save_extracted_content).not.toHaveBeenCalled();
+  });
+
   it('controller.act maps BrowserError to ActionResult memory fields', async () => {
     const controller = new Controller();
 

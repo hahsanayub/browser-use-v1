@@ -624,7 +624,7 @@ ${content}`;
 
       let includeOnce = false;
       let memory = extracted_content;
-      const MAX_MEMORY_SIZE = 600;
+      const MAX_MEMORY_SIZE = 10000;
       if (extracted_content.length > MAX_MEMORY_SIZE) {
         const lines = extracted_content.split('\n');
         let display = '';
@@ -987,7 +987,7 @@ ${content}`;
         Array.isArray(available_file_paths) &&
         available_file_paths.includes(params.file_name);
       const result = await fsInstance.read_file(params.file_name, allowed);
-      const MAX_MEMORY_SIZE = 1000;
+      const MAX_MEMORY_SIZE = 10000;
       let memory = result;
       if (result.length > MAX_MEMORY_SIZE) {
         const lines = result.split('\n');
