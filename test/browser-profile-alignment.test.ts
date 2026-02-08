@@ -1,0 +1,48 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const importProfileModule = async () => {
+  vi.resetModules();
+  return await import('../src/browser/profile.js');
+};
+
+describe('BrowserProfile alignment with latest py-browser-use defaults', () => {
+  afterEach(() => {
+    delete process.env.BROWSER_USE_DISABLE_EXTENSIONS;
+  });
+
+  it('defaults wait_between_actions to 0.1 seconds', async () => {
+    const { BrowserProfile } = await importProfileModule();
+    const profile = new BrowserProfile({});
+    expect(profile.config.wait_between_actions).toBe(0.1);
+  });
+
+  it('keeps default extensions enabled when env var is unset', async () => {
+    delete process.env.BROWSER_USE_DISABLE_EXTENSIONS;
+    const { BrowserProfile } = await importProfileModule();
+    const profile = new BrowserProfile({});
+    expect(profile.config.enable_default_extensions).toBe(true);
+  });
+
+  it('disables default extensions when BROWSER_USE_DISABLE_EXTENSIONS is truthy', async () => {
+    process.env.BROWSER_USE_DISABLE_EXTENSIONS = '1';
+    const { BrowserProfile } = await importProfileModule();
+    const profile = new BrowserProfile({});
+    expect(profile.config.enable_default_extensions).toBe(false);
+  });
+
+  it('still enables default extensions for falsey env values', async () => {
+    process.env.BROWSER_USE_DISABLE_EXTENSIONS = 'false';
+    const { BrowserProfile } = await importProfileModule();
+    const profile = new BrowserProfile({});
+    expect(profile.config.enable_default_extensions).toBe(true);
+  });
+
+  it('lets explicit constructor values override env defaults', async () => {
+    process.env.BROWSER_USE_DISABLE_EXTENSIONS = '1';
+    const { BrowserProfile } = await importProfileModule();
+    const profile = new BrowserProfile({
+      enable_default_extensions: true,
+    });
+    expect(profile.config.enable_default_extensions).toBe(true);
+  });
+});

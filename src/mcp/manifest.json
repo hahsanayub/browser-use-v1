@@ -229,7 +229,7 @@
       "type": "number",
       "title": "Wait Between Actions (seconds)",
       "description": "Time to wait between browser actions for stability",
-      "default": 0.5,
+      "default": 0.1,
       "minimum": 0,
       "maximum": 10,
       "required": false

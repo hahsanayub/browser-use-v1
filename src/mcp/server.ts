@@ -146,7 +146,7 @@ export class MCPServer {
   ): BrowserProfile {
     const merged = {
       downloads_path: '~/Downloads/browser-use-mcp',
-      wait_between_actions: 0.5,
+      wait_between_actions: 0.1,
       keep_alive: true,
       user_data_dir: '~/.config/browseruse/profiles/default',
       is_mobile: false,

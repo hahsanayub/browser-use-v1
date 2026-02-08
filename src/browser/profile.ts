@@ -147,19 +147,42 @@ const DEFAULT_EXTENSIONS = [
   {
     name: 'uBlock Origin',
     id: 'cjpalhdlnbpafiamejdnhcphjbkeiagm',
-    url: 'https://clients2.google.com/service/update2/crx?response=redirect&prodversion=130&acceptformat=crx3&x=id%3Dcjpalhdlnbpafiamejdnhcphjbkeiagm%26uc',
+    url: 'https://clients2.google.com/service/update2/crx?response=redirect&prodversion=133&acceptformat=crx3&x=id%3Dcjpalhdlnbpafiamejdnhcphjbkeiagm%26uc',
   },
   {
     name: "I still don't care about cookies",
     id: 'edibdbjcniadpccecjdfdjjppcpchdlm',
-    url: 'https://clients2.google.com/service/update2/crx?response=redirect&prodversion=130&acceptformat=crx3&x=id%3Dedibdbjcniadpccecjdfdjjppcpchdlm%26uc',
+    url: 'https://clients2.google.com/service/update2/crx?response=redirect&prodversion=133&acceptformat=crx3&x=id%3Dedibdbjcniadpccecjdfdjjppcpchdlm%26uc',
   },
   {
     name: 'ClearURLs',
     id: 'lckanjgmijmafbedllaakclkaicjfmnk',
-    url: 'https://clients2.google.com/service/update2/crx?response=redirect&prodversion=130&acceptformat=crx3&x=id%3Dlckanjgmijmafbedllaakclkaicjfmnk%26uc',
+    url: 'https://clients2.google.com/service/update2/crx?response=redirect&prodversion=133&acceptformat=crx3&x=id%3Dlckanjgmijmafbedllaakclkaicjfmnk%26uc',
+  },
+  {
+    name: 'Force Background Tab',
+    id: 'gidlfommnbibbmegmgajdbikelkdcmcl',
+    url: 'https://clients2.google.com/service/update2/crx?response=redirect&prodversion=133&acceptformat=crx3&x=id%3Dgidlfommnbibbmegmgajdbikelkdcmcl%26uc',
   },
 ];
+
+const getEnableDefaultExtensionsDefault = () => {
+  const envValue = process.env.BROWSER_USE_DISABLE_EXTENSIONS;
+  if (typeof envValue === 'undefined') {
+    return true;
+  }
+  const normalized = envValue.trim().toLowerCase();
+  if (
+    normalized === '' ||
+    normalized === '0' ||
+    normalized === 'false' ||
+    normalized === 'no' ||
+    normalized === 'off'
+  ) {
+    return true;
+  }
+  return false;
+};
 
 const parseDisplayEnv = () => {
   const width = process.env.BROWSER_USE_SCREEN_WIDTH;
@@ -460,7 +483,7 @@ const DEFAULT_BROWSER_PROFILE_OPTIONS: BrowserProfileOptions = {
   prohibited_domains: null,
   block_ip_addresses: false,
   keep_alive: null,
-  enable_default_extensions: true,
+  enable_default_extensions: getEnableDefaultExtensionsDefault(),
   window_size: null,
   window_height: null,
   window_width: null,
@@ -470,7 +493,7 @@ const DEFAULT_BROWSER_PROFILE_OPTIONS: BrowserProfileOptions = {
   minimum_wait_page_load_time: 0.25,
   wait_for_network_idle_page_load_time: 0.5,
   maximum_wait_page_load_time: 5.0,
-  wait_between_actions: 0.5,
+  wait_between_actions: 0.1,
   include_dynamic_attributes: true,
   highlight_elements: true,
   viewport_expansion: 500,
