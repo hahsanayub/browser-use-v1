@@ -427,6 +427,30 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('enhances task text with structured output schema when provided', async () => {
+    const outputSchema = {
+      name: 'ResultSchema',
+      parse: (input: string) => JSON.parse(input),
+      model_json_schema: () => ({
+        type: 'object',
+        properties: {
+          answer: { type: 'string' },
+        },
+      }),
+    };
+
+    const agent = new Agent({
+      task: 'Extract the answer from the page',
+      llm: createLlm(),
+      output_model_schema: outputSchema as any,
+    });
+
+    expect(agent.task).toContain('Expected output format: ResultSchema');
+    expect(agent.task).toContain('"answer"');
+
+    await agent.close();
+  });
+
   it('clears timeout handles when timed execution rejects early', async () => {
     const agent = new Agent({
       task: 'test timeout cleanup',

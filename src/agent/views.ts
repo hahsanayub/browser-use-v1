@@ -17,6 +17,8 @@ export { ActionModel };
 export interface StructuredOutputParser<T = unknown> {
   parse?: (input: string) => T;
   model_validate_json?: (input: string) => T;
+  model_json_schema?: () => unknown;
+  schema?: unknown;
 }
 
 const parseStructuredOutput = <T>(

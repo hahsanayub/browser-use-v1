@@ -510,8 +510,8 @@ export class Agent<
     this.id = task_id || uuid7str();
     this.task_id = this.id;
     this.session_id = uuid7str();
-    this.task = task;
     this.output_model_schema = output_model_schema ?? null;
+    this.task = this._enhanceTaskWithSchema(task, this.output_model_schema);
     this.sensitive_data = sensitive_data;
     this.available_file_paths = available_file_paths || [];
     this.controller = (controller ??
@@ -1366,6 +1366,51 @@ export class Agent<
     // The task continues with new instructions, it doesn't end and start a new one
     this.task = newTask;
     this._message_manager.add_new_task(newTask);
+  }
+
+  private _enhanceTaskWithSchema(
+    task: string,
+    outputModelSchema: StructuredOutputParser<AgentStructuredOutput> | null
+  ) {
+    if (!outputModelSchema) {
+      return task;
+    }
+
+    try {
+      let schemaPayload: unknown = null;
+      if (typeof outputModelSchema.model_json_schema === 'function') {
+        schemaPayload = outputModelSchema.model_json_schema();
+      } else if (outputModelSchema.schema != null) {
+        const schemaCandidate = outputModelSchema.schema as any;
+        schemaPayload =
+          typeof schemaCandidate?.toJSON === 'function'
+            ? schemaCandidate.toJSON()
+            : schemaCandidate;
+      }
+
+      if (schemaPayload == null) {
+        return task;
+      }
+
+      const schemaJson = JSON.stringify(schemaPayload, null, 2);
+      if (!schemaJson) {
+        return task;
+      }
+
+      const schemaName =
+        typeof (outputModelSchema as any)?.name === 'string'
+          ? ((outputModelSchema as any).name as string)
+          : 'StructuredOutput';
+
+      return `${task}\nExpected output format: ${schemaName}\n${schemaJson}`;
+    } catch (error) {
+      this.logger.debug(
+        `Could not parse output schema for task enhancement: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      return task;
+    }
   }
 
   private _extract_start_url(taskText: string): string | null {
