@@ -155,6 +155,28 @@ describe('BrowserSession Basic Operations', () => {
     expect(shutdownSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('appends text when clear=false in _input_text_element_node', async () => {
+    const session = new BrowserSession({
+      browser_profile: new BrowserProfile({}),
+    });
+    const locator = {
+      click: vi.fn(async () => {}),
+      fill: vi.fn(async () => {}),
+      type: vi.fn(async () => {}),
+    };
+    vi.spyOn(session, 'get_locate_element').mockResolvedValue(locator as any);
+
+    await session._input_text_element_node(
+      { xpath: '/html/body/input' } as any,
+      'append',
+      { clear: false }
+    );
+
+    expect(locator.click).toHaveBeenCalledTimes(1);
+    expect(locator.type).toHaveBeenCalledWith('append', { timeout: 5000 });
+    expect(locator.fill).not.toHaveBeenCalled();
+  });
+
   it('aborts navigation when signal is triggered', async () => {
     const session = new BrowserSession({
       browser_profile: new BrowserProfile({}),

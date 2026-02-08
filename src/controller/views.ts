@@ -24,7 +24,7 @@ export type WaitAction = z.infer<typeof WaitActionSchema>;
 
 export const ClickElementActionSchema = z
   .object({
-    index: z.number().int().optional(),
+    index: z.number().int().min(1).optional(),
     coordinate_x: z.number().int().optional(),
     coordinate_y: z.number().int().optional(),
   })
@@ -39,8 +39,9 @@ export const ClickElementActionSchema = z
 export type ClickElementAction = z.infer<typeof ClickElementActionSchema>;
 
 export const InputTextActionSchema = z.object({
-  index: z.number().int(),
+  index: z.number().int().min(0),
   text: z.string(),
+  clear: z.boolean().default(true),
 });
 export type InputTextAction = z.infer<typeof InputTextActionSchema>;
 
@@ -171,12 +172,12 @@ export const ScrollToTextActionSchema = z.object({
 export type ScrollToTextAction = z.infer<typeof ScrollToTextActionSchema>;
 
 export const DropdownOptionsActionSchema = z.object({
-  index: z.number().int(),
+  index: z.number().int().min(1),
 });
 export type DropdownOptionsAction = z.infer<typeof DropdownOptionsActionSchema>;
 
 export const SelectDropdownActionSchema = z.object({
-  index: z.number().int(),
+  index: z.number().int().min(1),
   text: z.string(),
 });
 export type SelectDropdownAction = z.infer<typeof SelectDropdownActionSchema>;

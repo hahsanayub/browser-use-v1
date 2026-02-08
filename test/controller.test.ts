@@ -907,6 +907,34 @@ describe('Regression Coverage', () => {
     ).rejects.toThrow('Provide index or both coordinate_x and coordinate_y');
   });
 
+  it('click action rejects index 0', async () => {
+    const controller = new Controller();
+    await expect(
+      controller.registry.execute_action('click', { index: 0 })
+    ).rejects.toThrow('Too small: expected number to be >=1');
+  });
+
+  it('input_text forwards clear=false to browser session', async () => {
+    const controller = new Controller();
+    const element = { xpath: '/html/body/input' };
+    const browserSession = {
+      get_dom_element_by_index: vi.fn(async () => element),
+      _input_text_element_node: vi.fn(async () => {}),
+    };
+
+    await controller.registry.execute_action(
+      'input_text',
+      { index: 2, text: 'append text', clear: false },
+      { browser_session: browserSession as any }
+    );
+
+    expect(browserSession._input_text_element_node).toHaveBeenCalledWith(
+      element,
+      'append text',
+      expect.objectContaining({ clear: false })
+    );
+  });
+
   it('scroll action accepts pages alias for num_pages', async () => {
     const controller = new Controller();
     const page = {

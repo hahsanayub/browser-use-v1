@@ -77,6 +77,7 @@ export interface BrowserStateOptions {
 
 export interface BrowserActionOptions {
   signal?: AbortSignal | null;
+  clear?: boolean;
 }
 
 interface RecentBrowserEvent {
@@ -1874,13 +1875,18 @@ export class BrowserSession {
     options: BrowserActionOptions = {}
   ) {
     const signal = options.signal ?? null;
+    const clear = options.clear ?? true;
     this._throwIfAborted(signal);
     const locator = await this.get_locate_element(node);
     if (!locator) {
       throw new Error('Element not found');
     }
     await this._withAbort(locator.click({ timeout: 5000 }), signal);
-    await this._withAbort(locator.fill(text, { timeout: 5000 }), signal);
+    if (clear) {
+      await this._withAbort(locator.fill(text, { timeout: 5000 }), signal);
+    } else {
+      await this._withAbort(locator.type(text, { timeout: 5000 }), signal);
+    }
   }
 
   async _click_element_node(

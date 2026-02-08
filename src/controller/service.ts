@@ -569,6 +569,7 @@ export class Controller<Context = unknown> {
         );
       }
       await browser_session._input_text_element_node(element, params.text, {
+        clear: params.clear,
         signal,
       });
       const msg = has_sensitive_data
