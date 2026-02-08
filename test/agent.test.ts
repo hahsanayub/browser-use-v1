@@ -75,7 +75,7 @@ const createAgentSettings = (
   override_system_message: null,
   extend_system_message: null,
   include_attributes: [],
-  max_actions_per_step: 10,
+  max_actions_per_step: 5,
   use_thinking: false,
   flash_mode: false,
   max_steps: 100,
