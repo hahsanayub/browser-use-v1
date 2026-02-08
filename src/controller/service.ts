@@ -1581,6 +1581,13 @@ ${content}`;
         }
         return new ActionResult({ extracted_content: JSON.stringify(result) });
       } catch (error: any) {
+        if (error instanceof BrowserError) {
+          return new ActionResult({
+            error: error.short_term_memory ?? error.message,
+            include_in_memory: true,
+            long_term_memory: error.long_term_memory ?? error.message,
+          });
+        }
         return new ActionResult({
           error: String(error?.message ?? error ?? ''),
         });

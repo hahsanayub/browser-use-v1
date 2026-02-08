@@ -4,6 +4,7 @@ import { observe_debug } from '../../observability.js';
 import { time_execution_async } from '../../utils.js';
 import { is_new_tab_page, match_url_with_domain_pattern } from '../../utils.js';
 import type { Page } from '../../browser/types.js';
+import { BrowserError } from '../../browser/views.js';
 import { FileSystem } from '../../filesystem/file-system.js';
 import { ActionModel, ActionRegistry, RegisteredAction } from './views.js';
 
@@ -64,6 +65,9 @@ const wrapActionExecutionError = (
   actionName: string,
   error: unknown
 ): Error => {
+  if (error instanceof BrowserError) {
+    return error;
+  }
   const message = error instanceof Error ? error.message : String(error);
   const wrapped = new Error(`Error executing action ${actionName}: ${message}`);
   if (error !== undefined) {

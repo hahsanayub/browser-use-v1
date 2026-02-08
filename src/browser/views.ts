@@ -133,6 +133,45 @@ export class BrowserStateHistory {
   }
 }
 
-export class BrowserError extends Error {}
+export interface BrowserErrorInit {
+  message: string;
+  short_term_memory?: string | null;
+  long_term_memory?: string | null;
+  details?: Record<string, unknown> | null;
+  event?: unknown;
+}
+
+export class BrowserError extends Error {
+  short_term_memory: string | null;
+  long_term_memory: string | null;
+  details: Record<string, unknown> | null;
+  while_handling_event: unknown;
+
+  constructor(
+    messageOrInit: string | BrowserErrorInit,
+    options?: Omit<BrowserErrorInit, 'message'>
+  ) {
+    const init: BrowserErrorInit =
+      typeof messageOrInit === 'string'
+        ? { message: messageOrInit, ...(options ?? {}) }
+        : messageOrInit;
+    super(init.message);
+    this.name = 'BrowserError';
+    this.short_term_memory = init.short_term_memory ?? null;
+    this.long_term_memory = init.long_term_memory ?? null;
+    this.details = init.details ?? null;
+    this.while_handling_event = init.event ?? null;
+  }
+
+  override toString() {
+    if (this.details) {
+      return `${this.message} (${JSON.stringify(this.details)})`;
+    }
+    if (this.while_handling_event) {
+      return `${this.message} (while handling: ${String(this.while_handling_event)})`;
+    }
+    return this.message;
+  }
+}
 
 export class URLNotAllowedError extends BrowserError {}

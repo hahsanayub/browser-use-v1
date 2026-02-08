@@ -45,6 +45,7 @@ vi.mock('../src/utils.js', () => {
 import { Registry } from '../src/controller/registry/service.js';
 import { Controller } from '../src/controller/service.js';
 import { ActionResult } from '../src/agent/views.js';
+import { BrowserError } from '../src/browser/views.js';
 
 describe('Controller Registry Tests', () => {
   describe('Action Registration', () => {
@@ -261,6 +262,34 @@ describe('Controller Registry Tests', () => {
       await expect(
         registry.execute_action('throwing_action', {})
       ).rejects.toThrow('Unexpected error');
+    });
+
+    it('preserves BrowserError metadata when action throws BrowserError', async () => {
+      const registry = new Registry();
+
+      registry.action('Browser error action')(async function browser_error() {
+        throw new BrowserError({
+          message: 'Element interaction failed',
+          short_term_memory: 'Try refreshing the page and retry.',
+          long_term_memory: 'Element became stale after navigation.',
+          details: { action: 'click', index: 7 },
+        });
+      });
+
+      await expect(registry.execute_action('browser_error', {})).rejects.toBeInstanceOf(
+        BrowserError
+      );
+      try {
+        await registry.execute_action('browser_error', {});
+      } catch (error) {
+        const browserError = error as BrowserError;
+        expect(browserError.short_term_memory).toBe(
+          'Try refreshing the page and retry.'
+        );
+        expect(browserError.long_term_memory).toBe(
+          'Element became stale after navigation.'
+        );
+      }
     });
   });
 
@@ -732,5 +761,30 @@ describe('Regression Coverage', () => {
 
     await expect(execution).rejects.toThrow(/aborted/i);
     expect(pageExtractionLlm.ainvoke).not.toHaveBeenCalled();
+  });
+
+  it('controller.act maps BrowserError to ActionResult memory fields', async () => {
+    const controller = new Controller();
+
+    controller.registry.action('Custom browser error action')(
+      async function custom_browser_error_action() {
+        throw new BrowserError({
+          message: 'Navigation blocked by policy',
+          short_term_memory: 'Open an allowed URL instead.',
+          long_term_memory: 'Attempted blocked navigation to disallowed host.',
+        });
+      }
+    );
+
+    const result = await controller.act(
+      { custom_browser_error_action: {} },
+      { browser_session: {} as any }
+    );
+
+    expect(result.error).toBe('Open an allowed URL instead.');
+    expect(result.long_term_memory).toBe(
+      'Attempted blocked navigation to disallowed host.'
+    );
+    expect(result.include_in_memory).toBe(true);
   });
 });
