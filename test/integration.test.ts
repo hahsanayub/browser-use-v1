@@ -473,7 +473,7 @@ describe('Component Tests (Mocked Dependencies)', () => {
     );
   });
 
-  it('handles multiple actions in sequence', async () => {
+  it('stops remaining multi-actions after a terminating navigation action', async () => {
     const controller = createTestController();
     const browser_session = createBrowserSessionStub();
     const tempDir = createTempDir();
@@ -511,11 +511,7 @@ describe('Component Tests (Mocked Dependencies)', () => {
     const history = await agent.run(5);
 
     expect(history.is_successful()).toBe(true);
-    expect(browser_session.navigateCalls).toEqual([
-      'https://step1.com',
-      'https://step2.com',
-      'https://step3.com',
-    ]);
+    expect(browser_session.navigateCalls).toEqual(['https://step1.com']);
   });
 
   it('handles max steps reached without completion', async () => {

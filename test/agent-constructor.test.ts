@@ -315,6 +315,60 @@ describe('Agent constructor browser session alignment', () => {
     expect(() => (partialAgent as any).logger).not.toThrow();
   });
 
+  it('multi_act skips remaining actions after terminating navigation actions', async () => {
+    const agent = new Agent({
+      task: 'multi_act terminating action guard',
+      llm: createLlm(),
+    });
+    const executeActionSpy = vi
+      .spyOn(agent.controller.registry as any, 'execute_action')
+      .mockResolvedValue(new ActionResult({ extracted_content: 'ok' }));
+
+    const results = await agent.multi_act(
+      [
+        { go_to_url: { url: 'https://example.com', new_tab: false } },
+        { wait: { seconds: 1 } },
+      ],
+      { check_for_new_elements: false }
+    );
+
+    expect(executeActionSpy).toHaveBeenCalledTimes(1);
+    expect(executeActionSpy.mock.calls[0]?.[0]).toBe('go_to_url');
+    expect(results).toHaveLength(1);
+
+    await agent.close();
+  });
+
+  it('multi_act skips remaining actions when page URL changes after an action', async () => {
+    const agent = new Agent({
+      task: 'multi_act runtime page-change guard',
+      llm: createLlm(),
+    });
+    let currentUrl = 'https://start.test';
+    vi.spyOn(agent.browser_session as any, 'get_current_page').mockImplementation(
+      async () =>
+        ({
+          url: () => currentUrl,
+        }) as any
+    );
+    const executeActionSpy = vi
+      .spyOn(agent.controller.registry as any, 'execute_action')
+      .mockImplementation(async (_name: string, _params: any) => {
+        currentUrl = 'https://changed.test';
+        return new ActionResult({ extracted_content: 'ok' });
+      });
+
+    const results = await agent.multi_act(
+      [{ wait: { seconds: 1 } }, { wait: { seconds: 1 } }],
+      { check_for_new_elements: false }
+    );
+
+    expect(executeActionSpy).toHaveBeenCalledTimes(1);
+    expect(results).toHaveLength(1);
+
+    await agent.close();
+  });
+
   it('copies non-owning BrowserSession instances to avoid shared-agent state', async () => {
     const sharedSession = new BrowserSession({
       browser_profile: new BrowserProfile({}),

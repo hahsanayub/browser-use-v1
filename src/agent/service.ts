@@ -2305,6 +2305,15 @@ export class Agent<
     }
 
     await this._restore_shared_pinned_tab_if_needed();
+    const terminateSequenceActions = new Set([
+      'go_to_url',
+      'search',
+      'search_google',
+      'go_back',
+      'switch_tab',
+      'open_tab',
+      'close_tab',
+    ]);
 
     // ==================== Selector Map Caching ====================
     // Check if any action uses an index, if so cache the selector map
@@ -2416,6 +2425,10 @@ export class Agent<
       try {
         this._throwIfAborted(signal);
         await this._raise_if_stopped_or_paused();
+        const preActionPage = await this.browser_session.get_current_page?.();
+        const preActionUrl =
+          typeof preActionPage?.url === 'function' ? preActionPage.url() : '';
+        const preActionTabId = this.browser_session.active_tab?.page_id ?? null;
 
         const actResult = await (
           this.controller.registry as any
@@ -2441,6 +2454,26 @@ export class Agent<
           results[results.length - 1]?.error ||
           i === actions.length - 1
         ) {
+          this._capture_shared_pinned_tab();
+          break;
+        }
+
+        if (terminateSequenceActions.has(actionName)) {
+          this.logger.info(
+            `Action "${actionName}" terminates sequence - skipping ${actions.length - i - 1} remaining action(s)`
+          );
+          this._capture_shared_pinned_tab();
+          break;
+        }
+
+        const postActionPage = await this.browser_session.get_current_page?.();
+        const postActionUrl =
+          typeof postActionPage?.url === 'function' ? postActionPage.url() : '';
+        const postActionTabId = this.browser_session.active_tab?.page_id ?? null;
+        if (postActionUrl !== preActionUrl || postActionTabId !== preActionTabId) {
+          this.logger.info(
+            `Page changed after "${actionName}" - skipping ${actions.length - i - 1} remaining action(s)`
+          );
           this._capture_shared_pinned_tab();
           break;
         }
