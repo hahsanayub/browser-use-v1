@@ -822,6 +822,71 @@ describe('Regression Coverage', () => {
     expect(result.long_term_memory).toContain('by 0.5 pages');
   });
 
+  it('select_dropdown_option matches options case-insensitively by text/value', async () => {
+    const controller = new Controller();
+    const frame = {
+      evaluate: vi
+        .fn()
+        .mockResolvedValueOnce({ found: true, type: 'select' })
+        .mockResolvedValueOnce({
+          found: true,
+          success: true,
+          matched: { index: 2, text: 'United Kingdom', value: 'uk' },
+          options: [],
+        }),
+    };
+    const page = {
+      frames: [frame],
+      url: vi.fn(() => 'https://example.com'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+      get_dom_element_by_index: vi.fn(async () => ({ xpath: '/html/body/select' })),
+    };
+
+    const result = await controller.registry.execute_action(
+      'select_dropdown_option',
+      { index: 1, text: 'united kingdom' },
+      { browser_session: browserSession as any }
+    );
+
+    expect(result.extracted_content).toContain('United Kingdom');
+    expect(result.extracted_content).toContain('(uk)');
+  });
+
+  it('select_dropdown_option returns available options in error details', async () => {
+    const controller = new Controller();
+    const frame = {
+      evaluate: vi
+        .fn()
+        .mockResolvedValueOnce({ found: true, type: 'select' })
+        .mockResolvedValueOnce({
+          found: true,
+          success: false,
+          options: [
+            { index: 0, text: 'United States', value: 'us' },
+            { index: 1, text: 'Canada', value: 'ca' },
+          ],
+        }),
+    };
+    const page = {
+      frames: [frame],
+      url: vi.fn(() => 'https://example.com'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+      get_dom_element_by_index: vi.fn(async () => ({ xpath: '/html/body/select' })),
+    };
+
+    await expect(
+      controller.registry.execute_action(
+        'select_dropdown_option',
+        { index: 1, text: 'united kingdom' },
+        { browser_session: browserSession as any }
+      )
+    ).rejects.toThrow('Available options');
+  });
+
   it('search_page returns formatted matches with memory summary', async () => {
     const controller = new Controller();
     const page = {
