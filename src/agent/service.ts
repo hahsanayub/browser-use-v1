@@ -3662,6 +3662,27 @@ export class Agent<
     const final_result = this.history.final_result();
     const final_result_str =
       final_result != null ? JSON.stringify(final_result) : null;
+    const judgement_data = this.history.judgement();
+    const judge_verdict =
+      judgement_data && typeof judgement_data.verdict === 'boolean'
+        ? judgement_data.verdict
+        : null;
+    const judge_reasoning =
+      judgement_data && typeof judgement_data.reasoning === 'string'
+        ? judgement_data.reasoning
+        : null;
+    const judge_failure_reason =
+      judgement_data && typeof judgement_data.failure_reason === 'string'
+        ? judgement_data.failure_reason
+        : null;
+    const judge_reached_captcha =
+      judgement_data && typeof judgement_data.reached_captcha === 'boolean'
+        ? judgement_data.reached_captcha
+        : null;
+    const judge_impossible_task =
+      judgement_data && typeof judgement_data.impossible_task === 'boolean'
+        ? judgement_data.impossible_task
+        : null;
 
     let cdpHost: string | null = null;
     const cdpUrl = (this.browser_session as any)?.cdp_url;
@@ -3702,6 +3723,11 @@ export class Agent<
         success: this.history.is_successful(),
         final_result_response: final_result_str,
         error_message: agent_run_error,
+        judge_verdict,
+        judge_reasoning,
+        judge_failure_reason,
+        judge_reached_captcha,
+        judge_impossible_task,
       })
     );
   }

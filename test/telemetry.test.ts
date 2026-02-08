@@ -144,6 +144,43 @@ describe('Telemetry Events', () => {
       const props = event.properties();
       expect(props.action_errors).toHaveLength(2);
     });
+
+    it('tracks judge verdict fields when present', () => {
+      const event = new AgentTelemetryEvent({
+        version: '1.0.0',
+        source: 'npm',
+        model: 'gpt-4',
+        model_provider: 'openai',
+        planner_llm: null,
+        max_steps: 100,
+        max_actions_per_step: 10,
+        use_vision: false,
+        use_validation: false,
+        cdp_url: null,
+        task: 'Test',
+        action_errors: [],
+        action_history: [],
+        urls_visited: [],
+        steps: 1,
+        total_input_tokens: 100,
+        total_duration_seconds: 10,
+        success: false,
+        final_result_response: null,
+        error_message: null,
+        judge_verdict: false,
+        judge_reasoning: 'Did not satisfy all requirements',
+        judge_failure_reason: 'Missing required output',
+        judge_reached_captcha: false,
+        judge_impossible_task: false,
+      });
+
+      const props = event.properties();
+      expect(props.judge_verdict).toBe(false);
+      expect(props.judge_reasoning).toBe('Did not satisfy all requirements');
+      expect(props.judge_failure_reason).toBe('Missing required output');
+      expect(props.judge_reached_captcha).toBe(false);
+      expect(props.judge_impossible_task).toBe(false);
+    });
   });
 
   describe('MCPClientTelemetryEvent', () => {

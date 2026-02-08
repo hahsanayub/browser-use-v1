@@ -32,6 +32,11 @@ export interface AgentTelemetryPayload {
   success: boolean | null;
   final_result_response: string | null;
   error_message: string | null;
+  judge_verdict?: boolean | null;
+  judge_reasoning?: string | null;
+  judge_failure_reason?: string | null;
+  judge_reached_captcha?: boolean | null;
+  judge_impossible_task?: boolean | null;
 }
 
 export class AgentTelemetryEvent
@@ -59,6 +64,11 @@ export class AgentTelemetryEvent
   success: boolean | null;
   final_result_response: string | null;
   error_message: string | null;
+  judge_verdict: boolean | null;
+  judge_reasoning: string | null;
+  judge_failure_reason: string | null;
+  judge_reached_captcha: boolean | null;
+  judge_impossible_task: boolean | null;
 
   constructor(payload: AgentTelemetryPayload) {
     super();
@@ -82,6 +92,11 @@ export class AgentTelemetryEvent
     this.success = payload.success;
     this.final_result_response = payload.final_result_response;
     this.error_message = payload.error_message;
+    this.judge_verdict = payload.judge_verdict ?? null;
+    this.judge_reasoning = payload.judge_reasoning ?? null;
+    this.judge_failure_reason = payload.judge_failure_reason ?? null;
+    this.judge_reached_captcha = payload.judge_reached_captcha ?? null;
+    this.judge_impossible_task = payload.judge_impossible_task ?? null;
   }
 }
 
