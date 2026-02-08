@@ -198,5 +198,9 @@ export const SheetsInputActionSchema = z.object({
 });
 export type SheetsInputAction = z.infer<typeof SheetsInputActionSchema>;
 
-export const NoParamsActionSchema = z.object({}).passthrough();
+export const NoParamsActionSchema = z
+  .object({
+    description: z.string().optional(),
+  })
+  .passthrough();
 export type NoParamsAction = z.infer<typeof NoParamsActionSchema>;
