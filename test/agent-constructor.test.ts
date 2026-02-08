@@ -919,6 +919,52 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('waits step delay before executing replayed actions', async () => {
+    const agent = new Agent({
+      task: 'test replay delay ordering',
+      llm: createLlm(),
+    });
+
+    vi.spyOn(agent.browser_session as any, 'get_browser_state_with_recovery')
+      .mockResolvedValue({
+        element_tree: {
+          clickable_elements_to_string: () => '',
+        },
+        selector_map: {},
+      } as any);
+    const sleepSpy = vi
+      .spyOn(agent as any, '_sleep')
+      .mockResolvedValue(undefined);
+    const multiActSpy = vi
+      .spyOn(agent, 'multi_act')
+      .mockResolvedValue([new ActionResult({ extracted_content: 'done' })]);
+
+    const action = {
+      get_index: () => null,
+      model_dump: () => ({ done: { text: 'ok', success: true } }),
+    };
+
+    await (agent as any)._execute_history_step(
+      {
+        model_output: { action: [action] },
+        state: { interacted_element: [null] },
+      },
+      0.75,
+      null,
+      false,
+      null
+    );
+
+    expect(sleepSpy).toHaveBeenCalledWith(0.75, null);
+    const sleepOrder = sleepSpy.mock.invocationCallOrder[0] ?? 0;
+    const multiActOrder = multiActSpy.mock.invocationCallOrder[0] ?? 0;
+    expect(sleepOrder).toBeGreaterThan(0);
+    expect(multiActOrder).toBeGreaterThan(0);
+    expect(sleepOrder).toBeLessThan(multiActOrder);
+
+    await agent.close();
+  });
+
   it('reopens dropdown menu once when rerun cannot match a menu item element', async () => {
     const agent = new Agent({
       task: 'test rerun dropdown reopen',

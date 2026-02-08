@@ -2840,6 +2840,7 @@ export class Agent<
     if (!this.browser_session) {
       throw new Error('BrowserSession is not set up');
     }
+    await this._sleep(delaySeconds, signal);
 
     let browser_state_summary: BrowserStateSummary | null = null;
     if (wait_for_elements) {
@@ -2955,7 +2956,6 @@ export class Agent<
       results.push(...batchResults);
     }
 
-    await this._sleep(delaySeconds, signal);
     return results;
   }
 
