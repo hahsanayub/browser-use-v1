@@ -3287,9 +3287,14 @@ export class Agent<
     });
 
     try {
+      const invokeOptions =
+        (this.judge_llm as any)?.provider === 'browser-use'
+          ? ({ request_type: 'judge' } as const)
+          : undefined;
       const response = await this.judge_llm.ainvoke(
         messages as any,
-        JudgeOutputFormat as any
+        JudgeOutputFormat as any,
+        invokeOptions as any
       );
       const parsed = this._parseCompletionPayload((response as any).completion);
       const validation = JudgeSchema.safeParse(parsed);

@@ -195,4 +195,51 @@ describe('Agent full judge alignment', () => {
     expect(systemText).toContain("Today's date is 2026-02-08");
     expect(userText).toContain('<agent_final_response>');
   });
+
+  it('passes request_type=judge for browser-use provider in full judge', async () => {
+    const { llm: mainLlm } = createLlm('{"is_correct": true, "reason": ""}');
+    const { llm: judgeLlm, ainvoke: judgeInvoke } = createLlm(
+      JSON.stringify({
+        reasoning: 'ok',
+        verdict: true,
+        failure_reason: '',
+        impossible_task: false,
+        reached_captcha: false,
+      }),
+      'browser-use'
+    );
+    const agent = new Agent({
+      task: 'Verify',
+      llm: mainLlm,
+      judge_llm: judgeLlm,
+      use_judge: true,
+    });
+    try {
+      vi.spyOn(agent as any, '_step').mockImplementation(async () => {
+        agent.history.add_item(
+          new AgentHistory(
+            null,
+            [
+              new ActionResult({
+                is_done: true,
+                success: true,
+                extracted_content: 'done',
+              }),
+            ],
+            new BrowserStateHistory('https://example.com', 'Example', [], [], null),
+            null
+          )
+        );
+      });
+      vi.spyOn(agent, 'log_completion').mockResolvedValue(undefined as any);
+
+      await agent.takeStep(new AgentStepInfo(0, 1));
+
+      expect(judgeInvoke).toHaveBeenCalledTimes(1);
+      const thirdArg = judgeInvoke.mock.calls[0]?.[2] as any;
+      expect(thirdArg).toMatchObject({ request_type: 'judge' });
+    } finally {
+      await agent.close();
+    }
+  });
 });
