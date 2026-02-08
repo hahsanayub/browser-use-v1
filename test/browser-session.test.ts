@@ -193,6 +193,67 @@ describe('BrowserSession Basic Operations', () => {
     ).rejects.toMatchObject({ name: 'AbortError' });
   });
 
+  it('auto-handles JavaScript dialogs and records closed popup messages', async () => {
+    const listeners = new Map<string, (dialog: any) => Promise<void>>();
+    const fakePage = {
+      url: () => 'about:blank',
+      on: vi.fn((event: string, handler: (dialog: any) => Promise<void>) => {
+        listeners.set(event, handler);
+      }),
+    } as any;
+
+    const session = new BrowserSession({
+      browser_profile: new BrowserProfile({}),
+      page: fakePage,
+    });
+
+    const dialogHandler = listeners.get('dialog');
+    expect(typeof dialogHandler).toBe('function');
+
+    const alertDialog = {
+      type: () => 'alert',
+      message: () => 'This is alert',
+      accept: vi.fn(async () => {}),
+      dismiss: vi.fn(async () => {}),
+    };
+    await dialogHandler?.(alertDialog);
+    expect(alertDialog.accept).toHaveBeenCalledTimes(1);
+    expect((session as any)._closedPopupMessages).toContain(
+      '[alert] This is alert'
+    );
+
+    const promptDialog = {
+      type: () => 'prompt',
+      message: () => 'Need user input',
+      accept: vi.fn(async () => {}),
+      dismiss: vi.fn(async () => {}),
+    };
+    await dialogHandler?.(promptDialog);
+    expect(promptDialog.dismiss).toHaveBeenCalledTimes(1);
+    expect((session as any)._closedPopupMessages).toContain(
+      '[prompt] Need user input'
+    );
+  });
+
+  it('preserves closed popup messages in minimal state summary', async () => {
+    const session = new BrowserSession({
+      browser_profile: new BrowserProfile({}),
+      closed_popup_messages: ['[alert] Existing popup message'],
+    });
+
+    const fakePage = {
+      url: () => 'https://example.com',
+      title: vi.fn(async () => 'Example'),
+    } as any;
+    session.update_current_page(fakePage);
+    (session as any).initialized = true;
+
+    const summary = await session.get_minimal_state_summary();
+    expect(summary.closed_popup_messages).toEqual([
+      '[alert] Existing popup message',
+    ]);
+  });
+
   it('starts and stops browser session', async () => {
     const session = new BrowserSession({
       browser_profile: new BrowserProfile({

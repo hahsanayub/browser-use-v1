@@ -50,6 +50,7 @@ export interface BrowserSessionInit {
   browser_pid?: number | null;
   playwright?: unknown;
   downloaded_files?: string[];
+  closed_popup_messages?: string[];
 }
 
 const createEmptyDomState = (): DOMState => {
@@ -108,6 +109,9 @@ export class BrowserSession {
   private attachedAgentId: string | null = null;
   private attachedSharedAgentIds: Set<string> = new Set();
   private _stoppingPromise: Promise<void> | null = null;
+  private _closedPopupMessages: string[] = [];
+  private _dialogHandlersAttached = new WeakSet<Page>();
+  private readonly _maxClosedPopupMessages = 20;
 
   constructor(init: BrowserSessionInit = {}) {
     const sourceProfileConfig = init.browser_profile
@@ -130,6 +134,9 @@ export class BrowserSession {
     this.downloaded_files = Array.isArray(init.downloaded_files)
       ? [...init.downloaded_files]
       : [];
+    this._closedPopupMessages = Array.isArray(init.closed_popup_messages)
+      ? [...init.closed_popup_messages]
+      : [];
     if (typeof (init as any)?.auto_download_pdfs === 'boolean') {
       this._autoDownloadPdfs = Boolean((init as any).auto_download_pdfs);
     }
@@ -144,6 +151,7 @@ export class BrowserSession {
     this.historyStack.push(this.currentUrl);
     this.ownsBrowserResources = this._determineOwnership();
     this.tabPages.set(this._tabs[0].page_id, this.agent_current_page ?? null);
+    this._attachDialogHandler(this.agent_current_page);
   }
 
   private async _waitForStableNetwork(
@@ -366,7 +374,69 @@ export class BrowserSession {
     if (currentTab) {
       this.tabPages.set(currentTab.page_id, page ?? null);
     }
+    this._attachDialogHandler(page);
     this.agent_current_page = page ?? null;
+  }
+
+  private _captureClosedPopupMessage(dialogType: string, message: string) {
+    const normalizedType = String(dialogType || 'alert').trim() || 'alert';
+    const normalizedMessage = String(message || '').trim();
+    if (!normalizedMessage) {
+      return;
+    }
+
+    const formatted = `[${normalizedType}] ${normalizedMessage}`;
+    this._closedPopupMessages.push(formatted);
+    if (this._closedPopupMessages.length > this._maxClosedPopupMessages) {
+      this._closedPopupMessages.splice(
+        0,
+        this._closedPopupMessages.length - this._maxClosedPopupMessages
+      );
+    }
+  }
+
+  private _getClosedPopupMessagesSnapshot() {
+    return [...this._closedPopupMessages];
+  }
+
+  private _attachDialogHandler(page: Page | null) {
+    if (!page || this._dialogHandlersAttached.has(page)) {
+      return;
+    }
+
+    const pageWithEvents = page as unknown as {
+      on?: (event: string, handler: (...args: any[]) => void) => void;
+    };
+    if (typeof pageWithEvents.on !== 'function') {
+      return;
+    }
+
+    const handler = async (dialog: any) => {
+      try {
+        const dialogType =
+          typeof dialog?.type === 'function' ? dialog.type() : 'alert';
+        const message =
+          typeof dialog?.message === 'function' ? dialog.message() : '';
+        this._captureClosedPopupMessage(dialogType, message);
+
+        const shouldAccept =
+          dialogType === 'alert' ||
+          dialogType === 'confirm' ||
+          dialogType === 'beforeunload';
+        if (shouldAccept && typeof dialog?.accept === 'function') {
+          await dialog.accept();
+        } else if (typeof dialog?.dismiss === 'function') {
+          await dialog.dismiss();
+        }
+      } catch (error) {
+        this.logger.debug(
+          `Failed to auto-handle JavaScript dialog: ${(error as Error).message}`
+        );
+      }
+    };
+
+    pageWithEvents.on('dialog', handler);
+    this._dialogHandlersAttached.add(page);
   }
 
   get tabs() {
@@ -998,6 +1068,8 @@ export class BrowserSession {
     this.cachedBrowserState = null;
     this._tabs = [];
     this.downloaded_files = [];
+    this._closedPopupMessages = [];
+    this._dialogHandlersAttached = new WeakSet<Page>();
   }
 
   async close() {
@@ -1139,6 +1211,7 @@ export class BrowserSession {
         : [],
       is_pdf_viewer: Boolean(this.currentUrl?.toLowerCase().endsWith('.pdf')),
       loading_status: this.currentPageLoadingStatus,
+      closed_popup_messages: this._getClosedPopupMessagesSnapshot(),
     });
 
     // Implement clickable element hash caching to detect new elements
@@ -2165,6 +2238,7 @@ export class BrowserSession {
 
     for (let page_id = 0; page_id < pages.length; page_id++) {
       const page = pages[page_id];
+      this._attachDialogHandler(page ?? null);
 
       // Skip chrome:// pages and new tab pages
       const isNewTab =
@@ -2423,6 +2497,7 @@ export class BrowserSession {
         browser_errors: ['Page in error state - minimal navigation available'],
         is_pdf_viewer: false,
         loading_status: this.currentPageLoadingStatus,
+        closed_popup_messages: this._getClosedPopupMessagesSnapshot(),
       });
     } catch (error) {
       this.logger.error(
@@ -2494,6 +2569,7 @@ export class BrowserSession {
         browser_errors: [],
         is_pdf_viewer: false,
         loading_status: this.currentPageLoadingStatus,
+        closed_popup_messages: this._getClosedPopupMessagesSnapshot(),
       });
     }
 
@@ -2629,6 +2705,7 @@ export class BrowserSession {
       browser_errors,
       is_pdf_viewer,
       loading_status: this.currentPageLoadingStatus,
+      closed_popup_messages: this._getClosedPopupMessagesSnapshot(),
     });
 
     this.logger.debug('✅ get_state_summary completed successfully');
@@ -3522,6 +3599,7 @@ export class BrowserSession {
       browser_pid: this.browser_pid,
       playwright: this.playwright,
       downloaded_files: [...this.downloaded_files],
+      closed_popup_messages: [...this._closedPopupMessages],
     });
   }
 

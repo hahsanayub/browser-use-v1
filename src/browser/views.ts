@@ -26,6 +26,21 @@ export interface PageInfo {
   pixels_right: number;
 }
 
+export interface NetworkRequest {
+  url: string;
+  method?: string;
+  loading_duration_ms?: number;
+  resource_type?: string | null;
+}
+
+export interface PaginationButton {
+  button_type: string;
+  backend_node_id: number;
+  text: string;
+  selector: string;
+  is_disabled?: boolean;
+}
+
 interface BrowserStateSummaryInit {
   url: string;
   title: string;
@@ -37,6 +52,10 @@ interface BrowserStateSummaryInit {
   browser_errors?: string[];
   is_pdf_viewer?: boolean;
   loading_status?: string | null;
+  recent_events?: string | null;
+  pending_network_requests?: NetworkRequest[];
+  pagination_buttons?: PaginationButton[];
+  closed_popup_messages?: string[];
 }
 
 export class BrowserStateSummary extends DOMState {
@@ -50,6 +69,10 @@ export class BrowserStateSummary extends DOMState {
   browser_errors: string[];
   is_pdf_viewer: boolean;
   loading_status: string | null;
+  recent_events: string | null;
+  pending_network_requests: NetworkRequest[];
+  pagination_buttons: PaginationButton[];
+  closed_popup_messages: string[];
 
   constructor(dom_state: DOMState, init: BrowserStateSummaryInit) {
     super(dom_state.element_tree, dom_state.selector_map);
@@ -63,6 +86,10 @@ export class BrowserStateSummary extends DOMState {
     this.browser_errors = init.browser_errors ?? [];
     this.is_pdf_viewer = init.is_pdf_viewer ?? false;
     this.loading_status = init.loading_status ?? null;
+    this.recent_events = init.recent_events ?? null;
+    this.pending_network_requests = init.pending_network_requests ?? [];
+    this.pagination_buttons = init.pagination_buttons ?? [];
+    this.closed_popup_messages = init.closed_popup_messages ?? [];
   }
 }
 
