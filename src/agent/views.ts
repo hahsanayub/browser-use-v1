@@ -830,6 +830,30 @@ export class AgentHistoryList<TStructured = unknown> {
     return null;
   }
 
+  judgement(): Record<string, unknown> | null {
+    if (!this.history.length) {
+      return null;
+    }
+    const last = this.history[this.history.length - 1];
+    const result = last.result[last.result.length - 1];
+    if (result?.judgement && typeof result.judgement === 'object') {
+      return result.judgement;
+    }
+    return null;
+  }
+
+  is_judged() {
+    return this.judgement() != null;
+  }
+
+  is_validated(): boolean | null {
+    const judgement = this.judgement();
+    if (!judgement) {
+      return null;
+    }
+    return judgement.verdict === true;
+  }
+
   has_errors() {
     return this.errors().some((error) => error != null);
   }
@@ -979,6 +1003,42 @@ export class AgentHistoryList<TStructured = unknown> {
 
   number_of_steps() {
     return this.history.length;
+  }
+
+  agent_steps() {
+    const steps: string[] = [];
+    for (let stepIndex = 0; stepIndex < this.history.length; stepIndex += 1) {
+      const historyItem = this.history[stepIndex];
+      let stepText = `Step ${stepIndex + 1}:\n`;
+
+      if (historyItem.model_output?.action?.length) {
+        const actions = historyItem.model_output.action.map((action) =>
+          typeof (action as any)?.model_dump === 'function'
+            ? (action as any).model_dump()
+            : action
+        );
+        stepText += `Actions: ${JSON.stringify(actions, null, 1)}\n`;
+      }
+
+      if (historyItem.result?.length) {
+        for (
+          let resultIndex = 0;
+          resultIndex < historyItem.result.length;
+          resultIndex += 1
+        ) {
+          const result = historyItem.result[resultIndex];
+          if (result?.extracted_content) {
+            stepText += `Result ${resultIndex + 1}: ${String(result.extracted_content)}\n`;
+          }
+          if (result?.error) {
+            stepText += `Error ${resultIndex + 1}: ${String(result.error)}\n`;
+          }
+        }
+      }
+
+      steps.push(stepText);
+    }
+    return steps;
   }
 
   get structured_output(): TStructured | null {
