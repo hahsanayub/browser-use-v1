@@ -8,13 +8,25 @@ import { stderr } from 'node:process';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { config as loadEnv } from 'dotenv';
-import minimatch from 'minimatch';
+import * as minimatchModule from 'minimatch';
 import { createLogger } from './logging-config.js';
 
 loadEnv();
 
 const logger = createLogger('browser_use.utils');
 let _exiting = false;
+
+type MinimatchFn = (
+  target: string,
+  pattern: string,
+  options?: Record<string, unknown>
+) => boolean;
+
+const minimatch = (
+  (minimatchModule as any).minimatch ??
+  (minimatchModule as any).default ??
+  minimatchModule
+) as MinimatchFn;
 
 type Callback = (() => void) | undefined;
 

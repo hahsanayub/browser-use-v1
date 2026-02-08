@@ -900,9 +900,21 @@ export class Agent<
 
         // Validate parameters using Zod schema
         const validatedParams = paramModel.parse(params);
+        if (
+          !validatedParams ||
+          typeof validatedParams !== 'object' ||
+          Array.isArray(validatedParams)
+        ) {
+          this.logger.warning(
+            `⚠️ Parsed params for action "${actionName}" are not an object, skipping`
+          );
+          continue;
+        }
 
         // Create action with validated parameters
-        convertedActions.push({ [actionName]: validatedParams });
+        convertedActions.push({
+          [actionName]: validatedParams as Record<string, unknown>,
+        });
       } catch (error) {
         this.logger.error(
           `❌ Failed to validate initial action "${actionName}": ${error}`

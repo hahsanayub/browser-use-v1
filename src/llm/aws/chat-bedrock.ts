@@ -5,7 +5,6 @@ import {
   type ToolChoice,
 } from '@aws-sdk/client-bedrock-runtime';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import type { z } from 'zod';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ChatInvokeCompletion } from '../views.js';
 import { type Message, SystemMessage } from '../messages.js';
@@ -60,13 +59,10 @@ export class ChatBedrockConverse implements BaseChatModel {
 
     if (output_format && 'schema' in output_format && output_format.schema) {
       try {
-        const jsonSchema = zodToJsonSchema(
-          output_format as unknown as z.ZodType,
-          {
-            name: 'Response',
-            target: 'jsonSchema7',
-          }
-        );
+        const jsonSchema = zodToJsonSchema(output_format as any, {
+          name: 'Response',
+          target: 'jsonSchema7',
+        });
 
         tools = [
           {

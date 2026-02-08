@@ -110,7 +110,14 @@ async function getAxTree(targetUrl: string): Promise<void> {
   console.log(`Navigating to ${targetUrl}`);
   await page.goto(targetUrl, { waitUntil: 'load' });
 
-  const axTreeInteresting = await page.accessibility.snapshot({
+  const accessibilityApi = (page as any).accessibility;
+  if (!accessibilityApi || typeof accessibilityApi.snapshot !== 'function') {
+    throw new Error(
+      'Playwright accessibility API is unavailable in this Playwright version.'
+    );
+  }
+
+  const axTreeInteresting = await accessibilityApi.snapshot({
     interestingOnly: true,
   });
   const lines: string[] = [];

@@ -1,7 +1,6 @@
 import OpenAI from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources/index.mjs';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import type { z } from 'zod';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ChatInvokeCompletion, ChatInvokeUsage } from '../views.js';
 import type { Message } from '../messages.js';
@@ -176,13 +175,10 @@ export class ChatOpenAI implements BaseChatModel {
       // We need to cast it to any or check if it's a Zod schema to get the schema for JSON schema generation.
       // For now, I'll try to use zodToJsonSchema on it if possible.
       try {
-        const jsonSchema = zodToJsonSchema(
-          output_format as unknown as z.ZodType,
-          {
-            name: 'Response',
-            target: 'jsonSchema7',
-          }
-        );
+        const jsonSchema = zodToJsonSchema(output_format as any, {
+          name: 'Response',
+          target: 'jsonSchema7',
+        });
 
         // OpenAI expects a specific format for json_schema
         responseFormat = {

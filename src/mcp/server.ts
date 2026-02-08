@@ -790,7 +790,7 @@ export class MCPServer {
       description,
       inputSchema:
         inputSchema instanceof z.ZodType
-          ? zodToJsonSchema(inputSchema)
+          ? zodToJsonSchema(inputSchema as any)
           : inputSchema,
       handler,
     };

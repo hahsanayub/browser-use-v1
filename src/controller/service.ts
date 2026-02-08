@@ -1455,7 +1455,13 @@ ${content}`;
         'Complete task - with return text and success flag.',
         { param_model: structuredSchema }
       )(async function done(params: StructuredParams) {
-        const payload: Record<string, unknown> = { ...params.data };
+        const data =
+          params.data &&
+          typeof params.data === 'object' &&
+          !Array.isArray(params.data)
+            ? (params.data as Record<string, unknown>)
+            : {};
+        const payload: Record<string, unknown> = { ...data };
         for (const key of Object.keys(payload)) {
           const value = payload[key];
           if (value && typeof value === 'object' && 'value' in value) {

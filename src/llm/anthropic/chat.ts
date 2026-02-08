@@ -1,6 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import type { z } from 'zod';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ChatInvokeCompletion, ChatInvokeUsage } from '../views.js';
 import { type Message, SystemMessage } from '../messages.js';
@@ -101,13 +100,10 @@ export class ChatAnthropic implements BaseChatModel {
     if (output_format && 'schema' in output_format && output_format.schema) {
       // Assuming output_format is a Zod schema wrapper
       try {
-        const jsonSchema = zodToJsonSchema(
-          output_format as unknown as z.ZodType,
-          {
-            name: 'Response',
-            target: 'jsonSchema7',
-          }
-        );
+        const jsonSchema = zodToJsonSchema(output_format as any, {
+          name: 'Response',
+          target: 'jsonSchema7',
+        });
 
         tools = [
           {

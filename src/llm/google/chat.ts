@@ -1,6 +1,5 @@
 import { GoogleGenAI, type Tool } from '@google/genai';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import type { z } from 'zod';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ChatInvokeCompletion } from '../views.js';
 import { type Message, SystemMessage } from '../messages.js';
@@ -112,9 +111,7 @@ export class ChatGoogle implements BaseChatModel {
 
     if (schemaForJson) {
       try {
-        const jsonSchema = zodToJsonSchema(
-          schemaForJson as unknown as z.ZodType
-        );
+        const jsonSchema = zodToJsonSchema(schemaForJson as any);
         // Clean up the schema for Google's format
         const cleanSchema = this._cleanSchemaForGoogle(jsonSchema);
         generationConfig.responseSchema = cleanSchema;

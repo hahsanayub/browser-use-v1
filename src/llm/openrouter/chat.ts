@@ -1,6 +1,5 @@
 import OpenAI from 'openai';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import type { z } from 'zod';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ChatInvokeCompletion } from '../views.js';
 import type { Message } from '../messages.js';
@@ -51,13 +50,10 @@ export class ChatOpenRouter implements BaseChatModel {
       // OpenRouter supports structured outputs for some models, but it depends on the underlying provider.
       // We'll try to use json_schema if possible, or json_object.
       try {
-        const jsonSchema = zodToJsonSchema(
-          output_format as unknown as z.ZodType,
-          {
-            name: 'Response',
-            target: 'jsonSchema7',
-          }
-        );
+        const jsonSchema = zodToJsonSchema(output_format as any, {
+          name: 'Response',
+          target: 'jsonSchema7',
+        });
 
         responseFormat = {
           type: 'json_schema',
