@@ -434,6 +434,51 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('uses saved step_interval and caps it by max_step_interval during rerun_history', async () => {
+    const agent = new Agent({
+      task: 'test rerun step timing',
+      llm: createLlm(),
+    });
+    const executeSpy = vi
+      .spyOn(agent as any, '_execute_history_step')
+      .mockResolvedValue([new ActionResult({ extracted_content: 'ok' })]);
+    const history = {
+      history: [
+        {
+          model_output: {
+            current_state: { next_goal: 'Replay slow step' },
+            action: [{}],
+          },
+          metadata: {
+            step_number: 1,
+            step_interval: 90,
+          },
+        },
+        {
+          model_output: {
+            current_state: { next_goal: 'Replay fast step' },
+            action: [{}],
+          },
+          metadata: {
+            step_number: 2,
+            step_interval: 0.25,
+          },
+        },
+      ],
+    } as any;
+
+    const result = await agent.rerun_history(history, {
+      max_step_interval: 45,
+    });
+
+    expect(result).toHaveLength(2);
+    expect(executeSpy).toHaveBeenCalledTimes(2);
+    expect(executeSpy.mock.calls[0]?.[1]).toBe(45);
+    expect(executeSpy.mock.calls[1]?.[1]).toBe(0.25);
+
+    await agent.close();
+  });
+
   it('aborts rerun_history before replay execution when signal is already aborted', async () => {
     const agent = new Agent({
       task: 'test rerun abort',

@@ -151,6 +151,7 @@ interface RerunHistoryOptions {
   max_retries?: number;
   skip_failures?: boolean;
   delay_between_actions?: number;
+  max_step_interval?: number;
   signal?: AbortSignal | null;
 }
 
@@ -2188,8 +2189,9 @@ export class Agent<
   ): Promise<ActionResult[]> {
     const {
       max_retries = 3,
-      skip_failures = true,
+      skip_failures = false,
       delay_between_actions = 2,
+      max_step_interval = 45,
       signal = null,
     } = options;
 
@@ -2207,8 +2209,21 @@ export class Agent<
       this._throwIfAborted(signal);
       const historyItem = history.history[index];
       const goal = historyItem.model_output?.current_state?.next_goal ?? '';
+      const stepNumber = historyItem.metadata?.step_number ?? index + 1;
+      const stepName = stepNumber === 0 ? 'Initial actions' : `Step ${stepNumber}`;
+      const savedInterval = historyItem.metadata?.step_interval;
+      let stepDelay = delay_between_actions;
+      let delaySource = `using default delay=${this._formatDelaySeconds(stepDelay)}`;
+      if (typeof savedInterval === 'number' && Number.isFinite(savedInterval)) {
+        stepDelay = Math.min(savedInterval, max_step_interval);
+        if (savedInterval > max_step_interval) {
+          delaySource = `capped to ${this._formatDelaySeconds(stepDelay)} (saved was ${savedInterval.toFixed(1)}s)`;
+        } else {
+          delaySource = `using saved step_interval=${this._formatDelaySeconds(stepDelay)}`;
+        }
+      }
       this.logger.info(
-        `Replaying step ${index + 1}/${history.history.length}: goal: ${goal}`
+        `Replaying ${stepName} (${index + 1}/${history.history.length}) [${delaySource}]: ${goal}`
       );
 
       const actions = historyItem.model_output?.action ?? [];
@@ -2226,7 +2241,7 @@ export class Agent<
         try {
           const stepResult = await this._execute_history_step(
             historyItem,
-            delay_between_actions,
+            stepDelay,
             signal
           );
           results.push(...stepResult);
@@ -2253,7 +2268,7 @@ export class Agent<
             this.logger.warning(
               `Step ${index + 1} failed (attempt ${attempt}/${max_retries}), retrying...`
             );
-            await this._sleep(delay_between_actions, signal);
+            await this._sleep(stepDelay, signal);
           }
         }
       }
@@ -2419,6 +2434,13 @@ export class Agent<
     const handleAbort = () => controller.abort(signal.reason);
     signal.addEventListener('abort', handleAbort, { once: true });
     return () => signal.removeEventListener('abort', handleAbort);
+  }
+
+  private _formatDelaySeconds(delaySeconds: number) {
+    if (delaySeconds < 1) {
+      return `${Math.round(delaySeconds * 1000)}ms`;
+    }
+    return `${delaySeconds.toFixed(1)}s`;
   }
 
   private async _sleep(seconds: number, signal: AbortSignal | null = null) {
