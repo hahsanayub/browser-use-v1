@@ -4,6 +4,7 @@ import { Agent } from '../src/agent/service.js';
 import { ActionResult } from '../src/agent/views.js';
 import { BrowserSession } from '../src/browser/session.js';
 import { BrowserProfile } from '../src/browser/profile.js';
+import { DOMElementNode } from '../src/dom/views.js';
 import { HistoryTreeProcessor } from '../src/dom/history-tree-processor/service.js';
 
 const createLlm = (
@@ -1006,10 +1007,6 @@ describe('Agent constructor browser session alignment', () => {
       llm: createLlm(),
     });
 
-    const findSpy = vi
-      .spyOn(HistoryTreeProcessor, 'find_history_element_in_tree')
-      .mockReturnValue(null as any);
-
     const action = {
       _index: 4,
       get_index() {
@@ -1032,13 +1029,14 @@ describe('Agent constructor browser session alignment', () => {
       },
       action,
       {
-        element_tree: {},
         selector_map: {
           11: {
             tag_name: 'div',
             xpath: '/html/body/div[99]',
             attributes: { 'aria-label': 'Open Settings' },
             highlight_index: 11,
+            get_all_text_till_next_clickable_element: () => '',
+            children: [],
           },
         },
       }
@@ -1047,7 +1045,66 @@ describe('Agent constructor browser session alignment', () => {
     expect(updatedAction).toBe(action);
     expect(action._index).toBe(11);
 
-    findSpy.mockRestore();
+    await agent.close();
+  });
+
+  it('matches history elements with stable_hash fallback when classes drift', async () => {
+    const agent = new Agent({
+      task: 'test stable hash fallback',
+      llm: createLlm(),
+    });
+
+    const historicalNode = new DOMElementNode(
+      true,
+      null,
+      'button',
+      '/html/body/button[1]',
+      { class: 'btn focus', id: 'settings' },
+      []
+    );
+    const liveNode = new DOMElementNode(
+      true,
+      null,
+      'button',
+      '/html/body/button[9]',
+      { class: 'btn active', id: 'settings' },
+      []
+    );
+    liveNode.highlight_index = 12;
+    const stableHash = HistoryTreeProcessor.compute_stable_hash(historicalNode);
+
+    const action = {
+      _index: 4,
+      get_index() {
+        return this._index;
+      },
+      set_index(index: number) {
+        this._index = index;
+      },
+      model_dump() {
+        return { click: { index: this._index } };
+      },
+    };
+
+    const updatedAction = await (agent as any)._update_action_indices(
+      {
+        tag_name: 'button',
+        xpath: '/html/body/button[1]',
+        attributes: { class: 'btn focus', id: 'settings' },
+        element_hash: 'old-hash',
+        stable_hash: stableHash,
+      },
+      action,
+      {
+        selector_map: {
+          12: liveNode,
+        },
+      }
+    );
+
+    expect(updatedAction).toBe(action);
+    expect(action._index).toBe(12);
+
     await agent.close();
   });
 });

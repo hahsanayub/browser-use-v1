@@ -82,6 +82,33 @@ describe('DOM Element Classes', () => {
       expect(hash.xpath_hash).toBeDefined();
     });
 
+    it('computes stable hash without dynamic classes', () => {
+      const first = new DOMElementNode(
+        true,
+        null,
+        'button',
+        '/html/body/button[1]',
+        { class: 'btn focus active', id: 'cta' },
+        []
+      );
+      const second = new DOMElementNode(
+        true,
+        null,
+        'button',
+        '/html/body/button[1]',
+        { class: 'btn', id: 'cta' },
+        []
+      );
+
+      const firstExact = HistoryTreeProcessor.compute_element_hash(first);
+      const secondExact = HistoryTreeProcessor.compute_element_hash(second);
+      const firstStable = HistoryTreeProcessor.compute_stable_hash(first);
+      const secondStable = HistoryTreeProcessor.compute_stable_hash(second);
+
+      expect(firstExact).not.toBe(secondExact);
+      expect(firstStable).toBe(secondStable);
+    });
+
     it('caches hash computation', () => {
       const element = new DOMElementNode(
         true,
@@ -299,7 +326,7 @@ describe('DOMHistoryElement', () => {
       null,
       'button',
       '/html/body/button',
-      { id: 'submit-btn', class: 'primary' },
+      { id: 'submit-btn', class: 'primary focus', 'aria-label': 'Submit order' },
       []
     );
     domElement.highlight_index = 5;
@@ -311,6 +338,9 @@ describe('DOMHistoryElement', () => {
     expect(historyElement.xpath).toBe('/html/body/button');
     expect(historyElement.highlight_index).toBe(5);
     expect(historyElement.attributes.id).toBe('submit-btn');
+    expect(historyElement.element_hash).toBeTypeOf('string');
+    expect(historyElement.stable_hash).toBeTypeOf('string');
+    expect(historyElement.ax_name).toBe('Submit order');
   });
 
   it('to_dict returns serializable object', () => {
@@ -522,6 +552,42 @@ describe('HistoryTreeProcessor', () => {
       );
 
       expect(found).toBeNull();
+    });
+
+    it('falls back to stable hash when dynamic classes differ', () => {
+      const root = new DOMElementNode(true, null, 'body', '/html/body', {}, []);
+      const current = new DOMElementNode(
+        true,
+        root,
+        'button',
+        '/html/body/button[1]',
+        { class: 'btn active', id: 'settings' },
+        []
+      );
+      current.highlight_index = 7;
+      root.children.push(current);
+
+      const historical = new DOMElementNode(
+        true,
+        root,
+        'button',
+        '/html/body/button[1]',
+        { class: 'btn focus', id: 'settings' },
+        []
+      );
+      const historyElement =
+        HistoryTreeProcessor.convert_dom_element_to_history_element(historical);
+
+      expect(historyElement.element_hash).toBeTruthy();
+      expect(historyElement.stable_hash).toBeTruthy();
+
+      const found = HistoryTreeProcessor.find_history_element_in_tree(
+        historyElement,
+        root
+      );
+
+      expect(found).toBeDefined();
+      expect(found?.highlight_index).toBe(7);
     });
   });
 });

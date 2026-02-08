@@ -31,6 +31,7 @@ import type { Browser, BrowserContext, Page } from '../browser/types.js';
 import { InsecureSensitiveDataError } from '../exceptions.js';
 import { HistoryTreeProcessor } from '../dom/history-tree-processor/service.js';
 import { DOMHistoryElement } from '../dom/history-tree-processor/view.js';
+import type { DOMElementNode } from '../dom/views.js';
 import type { BaseChatModel } from '../llm/base.js';
 import { UserMessage } from '../llm/messages.js';
 import type { UsageSummary } from '../tokens/views.js';
@@ -2933,7 +2934,7 @@ export class Agent<
           `Could not find matching element for action ${actionIndex} in current page.\n` +
             `  Looking for: ${this._formatHistoryElementForError(historicalElement)}\n` +
             `  Page has ${selectorCount} interactive elements.\n` +
-            '  Tried: EXACT hash → XPATH → AX_NAME → ATTRIBUTE matching'
+            '  Tried: EXACT hash → STABLE hash → XPATH → AX_NAME → ATTRIBUTE matching'
         );
       }
 
@@ -3293,21 +3294,43 @@ export class Agent<
     action: any,
     browserStateSummary: BrowserStateSummary
   ) {
-    if (!historicalElement || !browserStateSummary?.element_tree) {
+    if (!historicalElement || !browserStateSummary?.selector_map) {
+      return action;
+    }
+
+    const selectorMap = browserStateSummary.selector_map ?? {};
+    if (!Object.keys(selectorMap).length) {
       return action;
     }
 
     let matchLevel: string | null = null;
-    let currentNode = HistoryTreeProcessor.find_history_element_in_tree(
-      historicalElement,
-      browserStateSummary.element_tree
-    );
-    if (currentNode) {
-      matchLevel = 'EXACT';
+    let currentNode: DOMElementNode | null = null;
+
+    if (historicalElement.element_hash) {
+      for (const node of Object.values(selectorMap)) {
+        const nodeHash = HistoryTreeProcessor.compute_element_hash(node);
+        if (nodeHash === historicalElement.element_hash) {
+          currentNode = node;
+          matchLevel = 'EXACT';
+          break;
+        }
+      }
+    }
+
+    if (!currentNode && historicalElement.stable_hash) {
+      for (const node of Object.values(selectorMap)) {
+        const stableHash = HistoryTreeProcessor.compute_stable_hash(node);
+        if (stableHash === historicalElement.stable_hash) {
+          currentNode = node;
+          matchLevel = 'STABLE';
+          this.logger.info('Element matched at STABLE hash fallback');
+          break;
+        }
+      }
     }
 
     if (!currentNode && historicalElement.xpath) {
-      for (const node of Object.values(browserStateSummary.selector_map ?? {})) {
+      for (const node of Object.values(selectorMap)) {
         if (node?.xpath === historicalElement.xpath) {
           currentNode = node;
           matchLevel = 'XPATH';
@@ -3322,8 +3345,8 @@ export class Agent<
     if (!currentNode && historicalElement.ax_name) {
       const tagName = historicalElement.tag_name?.toLowerCase();
       const targetAxName = historicalElement.ax_name;
-      for (const node of Object.values(browserStateSummary.selector_map ?? {})) {
-        const nodeAxName = node?.attributes?.['aria-label'];
+      for (const node of Object.values(selectorMap)) {
+        const nodeAxName = HistoryTreeProcessor.get_accessible_name(node);
         if (
           node?.tag_name?.toLowerCase() === tagName &&
           typeof nodeAxName === 'string' &&
@@ -3344,17 +3367,20 @@ export class Agent<
         if (!attrValue) {
           continue;
         }
-        const matches = Object.values(browserStateSummary.selector_map ?? {}).filter(
-          (node) =>
+        for (const node of Object.values(selectorMap)) {
+          if (
             node?.tag_name?.toLowerCase() === tagName &&
             node?.attributes?.[attrKey] === attrValue
-        );
-        if (matches.length === 1) {
-          currentNode = matches[0];
-          matchLevel = 'ATTRIBUTE';
-          this.logger.info(
-            `Element matched via ${attrKey} attribute fallback: ${attrValue}`
-          );
+          ) {
+            currentNode = node;
+            matchLevel = 'ATTRIBUTE';
+            this.logger.info(
+              `Element matched via ${attrKey} attribute fallback: ${attrValue}`
+            );
+            break;
+          }
+        }
+        if (currentNode) {
           break;
         }
       }
