@@ -29,7 +29,10 @@ export class SystemPrompt {
     private readonly overrideSystemMessage: string | null = null,
     private readonly extendSystemMessage: string | null = null,
     private readonly useThinking = true,
-    private readonly flashMode = false
+    private readonly flashMode = false,
+    private readonly isAnthropic = false,
+    private readonly isBrowserUseModel = false,
+    private readonly modelName: string | null = null
   ) {
     if (overrideSystemMessage) {
       this.promptTemplate = overrideSystemMessage;
@@ -48,12 +51,40 @@ export class SystemPrompt {
     this.systemMessage.cache = true;
   }
 
+  private isAnthropic45Model() {
+    if (!this.modelName) {
+      return false;
+    }
+    const modelLower = this.modelName.toLowerCase();
+    const isOpus45 =
+      modelLower.includes('opus') &&
+      (modelLower.includes('4.5') || modelLower.includes('4-5'));
+    const isHaiku45 =
+      modelLower.includes('haiku') &&
+      (modelLower.includes('4.5') || modelLower.includes('4-5'));
+    return isOpus45 || isHaiku45;
+  }
+
   private loadPromptTemplate() {
-    const templateName = this.flashMode
-      ? './system_prompt_flash.md'
-      : this.useThinking
-        ? './system_prompt.md'
-        : './system_prompt_no_thinking.md';
+    let templateName = './system_prompt.md';
+    if (this.isBrowserUseModel) {
+      if (this.flashMode) {
+        templateName = './system_prompt_browser_use_flash.md';
+      } else if (this.useThinking) {
+        templateName = './system_prompt_browser_use.md';
+      } else {
+        templateName = './system_prompt_browser_use_no_thinking.md';
+      }
+    } else if (this.flashMode && this.isAnthropic45Model()) {
+      templateName = './system_prompt_anthropic_flash.md';
+    } else if (this.flashMode && this.isAnthropic) {
+      templateName = './system_prompt_flash_anthropic.md';
+    } else if (this.flashMode) {
+      templateName = './system_prompt_flash.md';
+    } else if (!this.useThinking) {
+      templateName = './system_prompt_no_thinking.md';
+    }
+
     try {
       this.promptTemplate = readPromptTemplate(templateName);
     } catch (error) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AgentMessagePrompt } from '../src/agent/prompts.js';
+import { AgentMessagePrompt, SystemPrompt } from '../src/agent/prompts.js';
 import { BrowserStateSummary } from '../src/browser/views.js';
 import { DOMElementNode, DOMState } from '../src/dom/views.js';
 
@@ -128,5 +128,75 @@ describe('AgentMessagePrompt browser state enrichment', () => {
       (part: any) => part?.image_url?.url?.startsWith?.('data:image/png;base64,')
     );
     expect(imageParts).toHaveLength(1);
+  });
+});
+
+describe('SystemPrompt template selection parity', () => {
+  it('uses browser-use thinking template for browser-use models', () => {
+    const prompt = new SystemPrompt(
+      'actions',
+      5,
+      null,
+      null,
+      true,
+      false,
+      false,
+      true,
+      'browser-use/agent'
+    );
+    expect(prompt.get_system_message().text).toContain(
+      'You are a browser-use agent operating in thinking mode.'
+    );
+  });
+
+  it('uses browser-use flash template in flash mode', () => {
+    const prompt = new SystemPrompt(
+      'actions',
+      5,
+      null,
+      null,
+      true,
+      true,
+      false,
+      true,
+      'browser-use/agent'
+    );
+    expect(prompt.get_system_message().text).toContain(
+      'You are a browser-use agent operating in flash mode.'
+    );
+  });
+
+  it('uses anthropic flash template for anthropic models in flash mode', () => {
+    const prompt = new SystemPrompt(
+      'actions',
+      5,
+      null,
+      null,
+      true,
+      true,
+      true,
+      false,
+      'claude-3-7-sonnet'
+    );
+    expect(prompt.get_system_message().text).toContain(
+      'You must call the AgentOutput tool with the following schema for the arguments'
+    );
+  });
+
+  it('uses anthropic 4.5 flash template for opus/haiku 4.5 models', () => {
+    const prompt = new SystemPrompt(
+      'actions',
+      5,
+      null,
+      null,
+      true,
+      true,
+      true,
+      false,
+      'claude-opus-4.5'
+    );
+    expect(prompt.get_system_message().text).toContain(
+      'Operating effectively in an agent loop with persistent state'
+    );
   });
 });

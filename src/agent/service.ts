@@ -612,7 +612,12 @@ export class Agent<
       this.settings.override_system_message,
       this.settings.extend_system_message,
       this.settings.use_thinking,
-      this.settings.flash_mode
+      this.settings.flash_mode,
+      String((this.llm as any)?.provider ?? '').toLowerCase() === 'anthropic',
+      String((this.llm as any)?.model ?? '')
+        .toLowerCase()
+        .includes('browser-use/'),
+      String((this.llm as any)?.model ?? '')
     );
 
     this._message_manager = new MessageManager(
@@ -1078,10 +1083,13 @@ export class Agent<
       this.settings.use_vision = false;
     }
 
-    // Handle XAI (Grok) models
-    if (modelName.includes('grok') && this.settings.use_vision) {
+    // Handle XAI models that currently do not support vision
+    if (
+      (modelName.includes('grok-3') || modelName.includes('grok-code')) &&
+      this.settings.use_vision
+    ) {
       this.logger.warning(
-        '⚠️ XAI models do not support use_vision=True yet. Setting use_vision=False for now...'
+        '⚠️ This XAI model does not support use_vision=True yet. Setting use_vision=False for now...'
       );
       this.settings.use_vision = false;
     }

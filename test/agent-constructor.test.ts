@@ -104,6 +104,32 @@ describe('Agent constructor browser session alignment', () => {
     await overrideAgent.close();
   });
 
+  it('only disables vision automatically for grok-3/grok-code models', async () => {
+    const grok2Agent = new Agent({
+      task: 'grok-2 vision',
+      llm: createLlm('grok-2-vision', 'xai'),
+      use_vision: true,
+    });
+    const grok3Agent = new Agent({
+      task: 'grok-3 vision',
+      llm: createLlm('grok-3-beta', 'xai'),
+      use_vision: true,
+    });
+    const grokCodeAgent = new Agent({
+      task: 'grok-code vision',
+      llm: createLlm('grok-code-fast', 'xai'),
+      use_vision: true,
+    });
+
+    expect(grok2Agent.settings.use_vision).toBe(true);
+    expect(grok3Agent.settings.use_vision).toBe(false);
+    expect(grokCodeAgent.settings.use_vision).toBe(false);
+
+    await grok2Agent.close();
+    await grok3Agent.close();
+    await grokCodeAgent.close();
+  });
+
   it('copies non-owning BrowserSession instances to avoid shared-agent state', async () => {
     const sharedSession = new BrowserSession({
       browser_profile: new BrowserProfile({}),
