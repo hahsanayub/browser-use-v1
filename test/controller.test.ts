@@ -766,6 +766,41 @@ describe('Regression Coverage', () => {
     expect(result.long_term_memory).toContain("Searched duckduckgo for 'browser use'");
   });
 
+  it('click action supports coordinate clicks without index', async () => {
+    const controller = new Controller();
+    const page = {
+      mouse: {
+        click: vi.fn(async () => {}),
+      },
+      url: vi.fn(() => 'https://example.com'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+    };
+
+    const result = await controller.registry.execute_action(
+      'click',
+      { coordinate_x: 42, coordinate_y: 84 },
+      { browser_session: browserSession as any }
+    );
+
+    expect(page.mouse.click).toHaveBeenCalledWith(42, 84);
+    expect(result.extracted_content).toContain('Clicked at coordinates (42, 84)');
+  });
+
+  it('click action validation requires index or coordinates', async () => {
+    const controller = new Controller();
+    const browserSession = {
+      get_current_page: vi.fn(async () => ({
+        url: vi.fn(() => 'https://example.com'),
+      })),
+    };
+
+    await expect(
+      controller.registry.execute_action('click', {}, { browser_session: browserSession as any })
+    ).rejects.toThrow('Provide index or both coordinate_x and coordinate_y');
+  });
+
   it('search_page returns formatted matches with memory summary', async () => {
     const controller = new Controller();
     const page = {

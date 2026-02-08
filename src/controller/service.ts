@@ -368,24 +368,49 @@ export class Controller<Context = unknown> {
 
   private registerElementActions() {
     type ClickElementAction = z.infer<typeof ClickElementActionSchema>;
-    this.registry.action('Click element by index', {
-      param_model: ClickElementActionSchema,
-    })(async function click_element_by_index(
+    const clickDescription =
+      'Click element by index or by viewport coordinates (coordinate_x/coordinate_y).';
+    const clickImpl = async (
       params: ClickElementAction,
-      { browser_session, signal }
-    ) {
+      { browser_session, signal }: any
+    ) => {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
-      const element = await browser_session.get_dom_element_by_index(
-        params.index,
-        { signal }
-      );
+
+      if (
+        params.coordinate_x != null &&
+        params.coordinate_y != null &&
+        params.index == null
+      ) {
+        const page: Page | null = await browser_session.get_current_page();
+        if (!page?.mouse?.click) {
+          throw new BrowserError(
+            'Unable to perform coordinate click on the current page.'
+          );
+        }
+        await page.mouse.click(params.coordinate_x, params.coordinate_y);
+        const coordinateMessage = `🖱️ Clicked at coordinates (${params.coordinate_x}, ${params.coordinate_y})`;
+        return new ActionResult({
+          extracted_content: coordinateMessage,
+          include_in_memory: true,
+          long_term_memory: coordinateMessage,
+        });
+      }
+
+      if (params.index == null) {
+        throw new BrowserError(
+          'Provide element index or both coordinate_x and coordinate_y.'
+        );
+      }
+
+      const element = await browser_session.get_dom_element_by_index(params.index, {
+        signal,
+      });
       if (!element) {
         throw new BrowserError(
           `Element index ${params.index} does not exist - retry or use alternative actions`
         );
       }
-
       const initialTabs = Array.isArray(browser_session.tabs)
         ? browser_session.tabs.length
         : 0;
@@ -424,6 +449,17 @@ export class Controller<Context = unknown> {
         include_in_memory: true,
         long_term_memory: msg,
       });
+    };
+
+    this.registry.action(clickDescription, {
+      param_model: ClickElementActionSchema,
+    })(async function click_element_by_index(params: ClickElementAction, ctx) {
+      return clickImpl(params, ctx);
+    });
+    this.registry.action(clickDescription, {
+      param_model: ClickElementActionSchema,
+    })(async function click(params: ClickElementAction, ctx) {
+      return clickImpl(params, ctx);
     });
 
     type InputTextAction = z.infer<typeof InputTextActionSchema>;
