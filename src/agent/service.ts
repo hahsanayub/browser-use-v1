@@ -3320,6 +3320,8 @@ export class Agent<
     }
     if (judgement.reached_captcha) {
       judgeLog += '   Captcha Detected: Agent encountered captcha challenges\n';
+      judgeLog +=
+        '   Use Browser Use Cloud for stealth browser infra: https://docs.browser-use.com/customize/browser/remote\n';
     }
     if (judgement.reasoning) {
       judgeLog += `   ${judgement.reasoning}\n`;
