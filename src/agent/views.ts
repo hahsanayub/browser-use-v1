@@ -370,12 +370,17 @@ export interface AgentSettings {
   max_actions_per_step: number;
   use_thinking: boolean;
   flash_mode: boolean;
+  use_judge: boolean;
+  ground_truth: string | null;
   max_history_items: number | null;
   page_extraction_llm: unknown | null;
   planner_llm: unknown | null;
   planner_interval: number;
   is_planner_reasoning: boolean;
   extend_planner_system_message: string | null;
+  enable_planning: boolean;
+  planning_replan_on_stall: number;
+  planning_exploration_limit: number;
   calculate_cost: boolean;
   include_tool_call_examples: boolean;
   llm_timeout: number;
@@ -416,12 +421,17 @@ export const defaultAgentSettings = (): AgentSettings => ({
   max_actions_per_step: 5,
   use_thinking: true,
   flash_mode: false,
+  use_judge: true,
+  ground_truth: null,
   max_history_items: null,
   page_extraction_llm: null,
   planner_llm: null,
   planner_interval: 1,
   is_planner_reasoning: false,
   extend_planner_system_message: null,
+  enable_planning: true,
+  planning_replan_on_stall: 3,
+  planning_exploration_limit: 5,
   calculate_cost: false,
   include_tool_call_examples: false,
   llm_timeout: 60,
@@ -438,6 +448,9 @@ export class AgentState {
   consecutive_failures: number;
   last_result: ActionResult[] | null;
   last_plan: string | null;
+  plan: PlanItem[] | null;
+  current_plan_item_index: number;
+  plan_generation_step: number | null;
   last_model_output: AgentOutput | null;
   paused: boolean;
   stopped: boolean;
@@ -451,6 +464,12 @@ export class AgentState {
     this.consecutive_failures = init?.consecutive_failures ?? 0;
     this.last_result = init?.last_result ?? null;
     this.last_plan = init?.last_plan ?? null;
+    this.plan =
+      init?.plan?.map((item) =>
+        item instanceof PlanItem ? item : new PlanItem(item)
+      ) ?? null;
+    this.current_plan_item_index = init?.current_plan_item_index ?? 0;
+    this.plan_generation_step = init?.plan_generation_step ?? null;
     this.last_model_output = init?.last_model_output ?? null;
     this.paused = init?.paused ?? false;
     this.stopped = init?.stopped ?? false;
@@ -485,6 +504,9 @@ export class AgentState {
       last_result:
         this.last_result?.map((result) => result.model_dump()) ?? null,
       last_plan: this.last_plan,
+      plan: this.plan?.map((item) => item.model_dump()) ?? null,
+      current_plan_item_index: this.current_plan_item_index,
+      plan_generation_step: this.plan_generation_step,
       last_model_output: this.last_model_output?.model_dump() ?? null,
       paused: this.paused,
       stopped: this.stopped,
@@ -516,11 +538,31 @@ export class StepMetadata {
   constructor(
     public step_start_time: number,
     public step_end_time: number,
-    public step_number: number
+    public step_number: number,
+    public step_interval: number | null = null
   ) {}
 
   get duration_seconds() {
     return this.step_end_time - this.step_start_time;
+  }
+}
+
+export type PlanItemStatus = 'pending' | 'current' | 'done' | 'skipped';
+
+export class PlanItem {
+  text: string;
+  status: PlanItemStatus;
+
+  constructor(init?: Partial<PlanItem>) {
+    this.text = init?.text ?? '';
+    this.status = init?.status ?? 'pending';
+  }
+
+  model_dump() {
+    return {
+      text: this.text,
+      status: this.status,
+    };
   }
 }
 
@@ -536,6 +578,8 @@ export class AgentOutput {
   evaluation_previous_goal: string | null;
   memory: string | null;
   next_goal: string | null;
+  current_plan_item: number | null;
+  plan_update: string[] | null;
   action: ActionModel[];
 
   constructor(init?: Partial<AgentOutput>) {
@@ -543,6 +587,8 @@ export class AgentOutput {
     this.evaluation_previous_goal = init?.evaluation_previous_goal ?? null;
     this.memory = init?.memory ?? null;
     this.next_goal = init?.next_goal ?? null;
+    this.current_plan_item = init?.current_plan_item ?? null;
+    this.plan_update = init?.plan_update ?? null;
     this.action = (init?.action ?? []).map((entry) =>
       entry instanceof ActionModel ? entry : new ActionModel(entry)
     );
@@ -563,6 +609,8 @@ export class AgentOutput {
       evaluation_previous_goal: this.evaluation_previous_goal,
       memory: this.memory,
       next_goal: this.next_goal,
+      current_plan_item: this.current_plan_item,
+      plan_update: this.plan_update,
       action: this.action.map((action) => action.model_dump?.() ?? action),
     };
   }
@@ -587,6 +635,14 @@ export class AgentOutput {
       evaluation_previous_goal: data.evaluation_previous_goal ?? null,
       memory: data.memory ?? null,
       next_goal: data.next_goal ?? null,
+      current_plan_item:
+        typeof data.current_plan_item === 'number'
+          ? data.current_plan_item
+          : null,
+      plan_update: Array.isArray(data.plan_update)
+        ? data.plan_update
+            .filter((item: unknown): item is string => typeof item === 'string')
+        : null,
       action: actions,
     });
   }
@@ -634,6 +690,8 @@ export class AgentOutput {
         this.thinking = null;
         this.evaluation_previous_goal = null;
         this.next_goal = null;
+        this.current_plan_item = null;
+        this.plan_update = null;
       }
     };
   }
@@ -677,6 +735,7 @@ export class AgentHistory {
             step_start_time: this.metadata.step_start_time,
             step_end_time: this.metadata.step_end_time,
             step_number: this.metadata.step_number,
+            step_interval: this.metadata.step_interval,
           }
         : null,
     };
@@ -946,7 +1005,8 @@ export class AgentHistoryList<TStructured = unknown> {
         ? new StepMetadata(
             entry.metadata.step_start_time,
             entry.metadata.step_end_time,
-            entry.metadata.step_number
+            entry.metadata.step_number,
+            entry.metadata.step_interval ?? null
           )
         : null;
       return new AgentHistory(modelOutput, result, state, metadata);

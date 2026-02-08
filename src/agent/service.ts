@@ -39,6 +39,7 @@ import {
   AgentError,
   StepMetadata,
   ActionModel,
+  PlanItem,
   MessageCompactionSettings,
   defaultMessageCompactionSettings,
   normalizeMessageCompactionSettings,
@@ -192,12 +193,17 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
   max_actions_per_step?: number;
   use_thinking?: boolean;
   flash_mode?: boolean;
+  use_judge?: boolean;
+  ground_truth?: string | null;
   max_history_items?: number | null;
   page_extraction_llm?: BaseChatModel | null;
   planner_llm?: BaseChatModel | null;
   planner_interval?: number;
   is_planner_reasoning?: boolean;
   extend_planner_system_message?: string | null;
+  enable_planning?: boolean;
+  planning_replan_on_stall?: number;
+  planning_exploration_limit?: number;
   injected_agent_state?: AgentState | null;
   context?: Context | null;
   source?: string | null;
@@ -241,12 +247,17 @@ const defaultAgentOptions = () => ({
   max_actions_per_step: 5,
   use_thinking: true,
   flash_mode: false,
+  use_judge: true,
+  ground_truth: null as string | null,
   max_history_items: null as number | null,
   page_extraction_llm: null as BaseChatModel | null,
   planner_llm: null as BaseChatModel | null,
   planner_interval: 1,
   is_planner_reasoning: false,
   extend_planner_system_message: null as string | null,
+  enable_planning: true,
+  planning_replan_on_stall: 3,
+  planning_exploration_limit: 5,
   context: null as ControllerContext | null,
   source: null as string | null,
   file_system_path: null as string | null,
@@ -271,6 +282,8 @@ const AgentLLMOutputSchema = z.object({
   evaluation_previous_goal: z.string().optional().nullable(),
   memory: z.string().optional().nullable(),
   next_goal: z.string().optional().nullable(),
+  current_plan_item: z.number().int().optional().nullable(),
+  plan_update: z.array(z.string()).optional().nullable(),
   action: z
     .array(z.record(z.string(), z.any()))
     .optional()
@@ -392,8 +405,13 @@ export class Agent<
       max_actions_per_step = 5,
       use_thinking = true,
       flash_mode = false,
+      use_judge = true,
+      ground_truth = null,
       max_history_items = null,
       page_extraction_llm = null,
+      enable_planning = true,
+      planning_replan_on_stall = 3,
+      planning_exploration_limit = 5,
       context = null,
       source = null,
       file_system_path = null,
@@ -417,6 +435,7 @@ export class Agent<
       throw new Error('Invalid llm, must be provided');
     }
     const effectivePageExtractionLlm = page_extraction_llm ?? llm;
+    const effectiveEnablePlanning = flash_mode ? false : enable_planning;
     const normalizedMessageCompaction =
       this._normalizeMessageCompactionSetting(message_compaction);
 
@@ -459,12 +478,17 @@ export class Agent<
       max_actions_per_step,
       use_thinking,
       flash_mode,
+      use_judge,
+      ground_truth,
       max_history_items,
       page_extraction_llm: effectivePageExtractionLlm,
       planner_llm: null,
       planner_interval: 1,
       is_planner_reasoning: false,
       extend_planner_system_message: null,
+      enable_planning: effectiveEnablePlanning,
+      planning_replan_on_stall,
+      planning_exploration_limit,
       calculate_cost,
       include_tool_call_examples,
       session_attachment_mode,
@@ -1814,10 +1838,13 @@ export class Agent<
       this.sensitive_data ?? null,
       this.available_file_paths,
       this.settings.include_recent_events,
+      this._render_plan_description(),
       true
     );
 
     this._inject_budget_warning(step_info);
+    this._inject_replan_nudge();
+    this._inject_exploration_nudge();
     this._update_loop_detector_page_state(browser_state_summary);
     this._inject_loop_detection_nudge();
     await this._handle_final_step(step_info);
@@ -1939,6 +1966,9 @@ export class Agent<
       throw new Error('BrowserSession is not set up');
     }
     await this._check_and_update_downloads('after executing actions');
+    if (this.state.last_model_output) {
+      this._update_plan_from_model_output(this.state.last_model_output);
+    }
     this._update_loop_detector_actions();
     this.state.consecutive_failures = 0;
   }
@@ -2885,6 +2915,124 @@ export class Agent<
     );
   }
 
+  private _update_plan_from_model_output(modelOutput: AgentOutput) {
+    if (!this.settings.enable_planning) {
+      return;
+    }
+
+    if (Array.isArray(modelOutput.plan_update)) {
+      this.state.plan = modelOutput.plan_update.map(
+        (stepText) =>
+          new PlanItem({
+            text: stepText,
+            status: 'pending',
+          })
+      );
+      this.state.current_plan_item_index = 0;
+      this.state.plan_generation_step = this.state.n_steps;
+      if (this.state.plan.length > 0) {
+        this.state.plan[0].status = 'current';
+      }
+      this.logger.info(
+        `📋 Plan updated with ${this.state.plan.length} steps`
+      );
+      return;
+    }
+
+    if (
+      typeof modelOutput.current_plan_item !== 'number' ||
+      !this.state.plan ||
+      this.state.plan.length === 0
+    ) {
+      return;
+    }
+
+    const oldIndex = this.state.current_plan_item_index;
+    const newIndex = Math.max(
+      0,
+      Math.min(modelOutput.current_plan_item, this.state.plan.length - 1)
+    );
+
+    for (let i = oldIndex; i < newIndex; i += 1) {
+      if (
+        this.state.plan[i] &&
+        (this.state.plan[i].status === 'current' ||
+          this.state.plan[i].status === 'pending')
+      ) {
+        this.state.plan[i].status = 'done';
+      }
+    }
+
+    if (this.state.plan[newIndex]) {
+      this.state.plan[newIndex].status = 'current';
+    }
+    this.state.current_plan_item_index = newIndex;
+  }
+
+  private _render_plan_description() {
+    if (!this.settings.enable_planning || !this.state.plan) {
+      return null;
+    }
+
+    const markers: Record<string, string> = {
+      done: '[x]',
+      current: '[>]',
+      pending: '[ ]',
+      skipped: '[-]',
+    };
+    return this.state.plan
+      .map(
+        (step, index) =>
+          `${markers[step.status] ?? '[ ]'} ${index}: ${step.text}`
+      )
+      .join('\n');
+  }
+
+  private _inject_replan_nudge() {
+    if (!this.settings.enable_planning || !this.state.plan) {
+      return;
+    }
+    if (this.settings.planning_replan_on_stall <= 0) {
+      return;
+    }
+    if (
+      this.state.consecutive_failures <
+      this.settings.planning_replan_on_stall
+    ) {
+      return;
+    }
+    const message =
+      'REPLAN SUGGESTED: You have failed ' +
+      `${this.state.consecutive_failures} consecutive times. ` +
+      'Your current plan may need revision. ' +
+      'Output a new `plan_update` with revised steps to recover.';
+    this.logger.info(
+      `📋 Replan nudge injected after ${this.state.consecutive_failures} consecutive failures`
+    );
+    this._message_manager._add_context_message(new UserMessage(message));
+  }
+
+  private _inject_exploration_nudge() {
+    if (!this.settings.enable_planning || this.state.plan) {
+      return;
+    }
+    if (this.settings.planning_exploration_limit <= 0) {
+      return;
+    }
+    if (this.state.n_steps < this.settings.planning_exploration_limit) {
+      return;
+    }
+    const message =
+      'PLANNING NUDGE: You have taken ' +
+      `${this.state.n_steps} steps without creating a plan. ` +
+      'If the task is complex, output a `plan_update` with clear todo items now. ' +
+      'If the task is already done or nearly done, call `done` instead.';
+    this.logger.info(
+      `📋 Exploration nudge injected after ${this.state.n_steps} steps without a plan`
+    );
+    this._message_manager._add_context_message(new UserMessage(message));
+  }
+
   private _inject_loop_detection_nudge() {
     if (!this.settings.loop_detection_enabled) {
       return;
@@ -3092,6 +3240,14 @@ export class Agent<
     const action = this._validateAndNormalizeActions(rawAction);
     const toNullableString = (value: unknown): string | null =>
       typeof value === 'string' ? value : null;
+    const toNullableNumber = (value: unknown): number | null =>
+      typeof value === 'number' && Number.isFinite(value)
+        ? Math.trunc(value)
+        : null;
+    const toNullablePlanUpdate = (value: unknown): string[] | null =>
+      Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === 'string')
+        : null;
     const AgentOutputModel = this.AgentOutput ?? AgentOutput;
     return new AgentOutputModel({
       thinking: toNullableString(parsed_completion?.thinking),
@@ -3100,6 +3256,8 @@ export class Agent<
       ),
       memory: toNullableString(parsed_completion?.memory),
       next_goal: toNullableString(parsed_completion?.next_goal),
+      current_plan_item: toNullableNumber(parsed_completion?.current_plan_item),
+      plan_update: toNullablePlanUpdate(parsed_completion?.plan_update),
       action,
     });
   }

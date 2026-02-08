@@ -340,6 +340,7 @@ export class MessageManager {
     > | null = null,
     available_file_paths: string[] | null = null,
     include_recent_events = false,
+    plan_description: string | null = null,
     skip_state_update = false
   ) {
     if (!skip_state_update) {
@@ -371,6 +372,7 @@ export class MessageManager {
       screenshots,
       vision_detail_level: this.visionDetailLevel,
       include_recent_events,
+      plan_description,
     });
     const message = prompt.get_user_message(use_vision);
     this.setMessageWithType(message, 'state');

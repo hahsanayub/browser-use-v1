@@ -83,6 +83,7 @@ interface AgentMessagePromptInit {
   screenshots?: string[] | null;
   vision_detail_level?: 'auto' | 'low' | 'high';
   include_recent_events?: boolean;
+  plan_description?: string | null;
 }
 
 export class AgentMessagePrompt {
@@ -100,6 +101,7 @@ export class AgentMessagePrompt {
   private readonly screenshots: string[];
   private readonly visionDetailLevel: 'auto' | 'low' | 'high';
   private readonly includeRecentEvents: boolean;
+  private readonly planDescription: string | null;
 
   constructor(init: AgentMessagePromptInit) {
     this.browserState = init.browser_state_summary;
@@ -117,6 +119,7 @@ export class AgentMessagePrompt {
     this.screenshots = init.screenshots ?? [];
     this.visionDetailLevel = init.vision_detail_level ?? 'auto';
     this.includeRecentEvents = init.include_recent_events ?? false;
+    this.planDescription = init.plan_description ?? null;
   }
 
   private browserStateDescription() {
@@ -282,6 +285,13 @@ ${todoText}
       agentState += `<sensitive_data>
 ${this.sensitiveData}
 </sensitive_data>
+`;
+    }
+
+    if (this.planDescription) {
+      agentState += `<plan>
+${this.planDescription}
+</plan>
 `;
     }
 
