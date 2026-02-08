@@ -74,6 +74,16 @@ export const UploadFileActionSchema = z.object({
 });
 export type UploadFileAction = z.infer<typeof UploadFileActionSchema>;
 
+export const ScreenshotActionSchema = z.object({
+  file_name: z.string().optional(),
+});
+export type ScreenshotAction = z.infer<typeof ScreenshotActionSchema>;
+
+export const EvaluateActionSchema = z.object({
+  code: z.string(),
+});
+export type EvaluateAction = z.infer<typeof EvaluateActionSchema>;
+
 export const ExtractPageContentActionSchema = z.object({
   value: z.string(),
 });

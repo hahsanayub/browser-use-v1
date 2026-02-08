@@ -8,6 +8,7 @@ import {
   ClickElementActionSchema,
   CloseTabActionSchema,
   DoneActionSchema,
+  EvaluateActionSchema,
   ExtractStructuredDataActionSchema,
   FindElementsActionSchema,
   DropdownOptionsActionSchema,
@@ -22,6 +23,7 @@ import {
   ScrollToTextActionSchema,
   SearchPageActionSchema,
   SearchGoogleActionSchema,
+  ScreenshotActionSchema,
   StructuredOutputActionSchema,
   SwitchTabActionSchema,
   UploadFileActionSchema,
@@ -223,6 +225,7 @@ export class Controller<Context = unknown> {
     this.registerExplorationActions();
     this.registerScrollActions();
     this.registerFileSystemActions();
+    this.registerUtilityActions();
     this.registerKeyboardActions();
     this.registerDropdownActions();
     this.registerSheetsActions();
@@ -1660,6 +1663,121 @@ Context: ${context}`;
         extracted_content: result,
         include_in_memory: true,
         long_term_memory: result,
+      });
+    });
+  }
+
+  private registerUtilityActions() {
+    type ScreenshotAction = z.infer<typeof ScreenshotActionSchema>;
+    this.registry.action(
+      'Capture a screenshot. Optionally save it to file_name and return the path.',
+      { param_model: ScreenshotActionSchema }
+    )(async function screenshot(
+      params: ScreenshotAction,
+      { browser_session, file_system, signal }
+    ) {
+      if (!browser_session) throw new Error('Browser session missing');
+      throwIfAborted(signal);
+
+      const screenshotB64 = await browser_session.take_screenshot?.(false);
+      if (!screenshotB64) {
+        return new ActionResult({
+          error: 'Failed to capture screenshot.',
+        });
+      }
+
+      if (params.file_name) {
+        const fsInstance = file_system ?? new FileSystem(process.cwd(), false);
+        const parsed = path.parse(params.file_name);
+        const safeBase = (parsed.name || 'screenshot').replace(
+          /[^a-zA-Z0-9_-]/g,
+          '_'
+        );
+        const ext = parsed.ext ? parsed.ext : '.png';
+        const fileName = `${safeBase}${ext}`;
+        const filePath = path.join(fsInstance.get_dir(), fileName);
+        await fsp.writeFile(filePath, Buffer.from(screenshotB64, 'base64'));
+        const msg = `📸 Saved screenshot to ${filePath}`;
+        return new ActionResult({
+          extracted_content: msg,
+          long_term_memory: msg,
+          attachments: [filePath],
+        });
+      }
+
+      return new ActionResult({
+        extracted_content:
+          '📸 Screenshot captured. It will be visible in the next browser state if vision is enabled.',
+        long_term_memory: 'Captured screenshot',
+      });
+    });
+
+    type EvaluateAction = z.infer<typeof EvaluateActionSchema>;
+    this.registry.action(
+      'Execute browser JavaScript on the current page and return the result.',
+      { param_model: EvaluateActionSchema }
+    )(async function evaluate(
+      params: EvaluateAction,
+      { browser_session, signal }
+    ) {
+      if (!browser_session) throw new Error('Browser session missing');
+      throwIfAborted(signal);
+      const page: Page | null = await browser_session.get_current_page();
+      if (!page?.evaluate) {
+        throw new BrowserError('No active page available for evaluate.');
+      }
+
+      const payload = (await page.evaluate(
+        async ({ code }: { code: string }) => {
+          const serialize = (value: unknown): unknown => {
+            if (value === undefined) {
+              return null;
+            }
+            try {
+              return JSON.parse(JSON.stringify(value));
+            } catch {
+              return String(value);
+            }
+          };
+
+          try {
+            const raw = await Promise.resolve((0, eval)(code));
+            return { ok: true, result: serialize(raw) };
+          } catch (error: unknown) {
+            return {
+              ok: false,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : String(error ?? 'Unknown evaluate error'),
+            };
+          }
+        },
+        { code: params.code }
+      )) as { ok: boolean; result?: unknown; error?: string } | null;
+
+      if (!payload) {
+        return new ActionResult({ error: 'evaluate returned no result' });
+      }
+      if (!payload.ok) {
+        return new ActionResult({
+          error: `JavaScript execution error: ${payload.error ?? 'Unknown error'}`,
+        });
+      }
+
+      const rendered =
+        typeof payload.result === 'string'
+          ? payload.result
+          : JSON.stringify(payload.result);
+      const maxChars = 20000;
+      const clipped =
+        rendered.length > maxChars
+          ? `${rendered.slice(0, maxChars)}\n... output truncated ...`
+          : rendered;
+      return new ActionResult({
+        extracted_content: clipped,
+        long_term_memory: `Executed JavaScript and returned ${Math.min(rendered.length, maxChars)} chars.`,
+        include_extracted_content_only_once: true,
       });
     });
   }

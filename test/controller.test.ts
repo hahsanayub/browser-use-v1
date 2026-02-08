@@ -11,6 +11,9 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { chromium, type Browser, type Page } from 'playwright';
 import { z } from 'zod';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 // Mock utils to avoid decorator issues
 vi.mock('../src/utils.js', () => {
@@ -808,6 +811,85 @@ describe('Regression Coverage', () => {
     expect(result.long_term_memory).toBe(
       'Queried selector "a" and found 3 elements.'
     );
+  });
+
+  it('evaluate executes JavaScript and returns serialized output', async () => {
+    const controller = new Controller();
+    const page = {
+      evaluate: vi.fn(async () => ({
+        ok: true,
+        result: { status: 'ok', count: 2 },
+      })),
+      url: vi.fn(() => 'https://example.com'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+    };
+
+    const result = await controller.registry.execute_action(
+      'evaluate',
+      { code: '(() => ({ status: "ok", count: 2 }))()' },
+      { browser_session: browserSession as any }
+    );
+
+    expect(page.evaluate).toHaveBeenCalled();
+    expect(result.error).toBeNull();
+    expect(result.extracted_content).toContain('"status":"ok"');
+    expect(result.include_extracted_content_only_once).toBe(true);
+  });
+
+  it('evaluate returns action error on JavaScript failure', async () => {
+    const controller = new Controller();
+    const page = {
+      evaluate: vi.fn(async () => ({
+        ok: false,
+        error: 'boom',
+      })),
+      url: vi.fn(() => 'https://example.com'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+    };
+
+    const result = await controller.registry.execute_action(
+      'evaluate',
+      { code: 'throw new Error("boom")' },
+      { browser_session: browserSession as any }
+    );
+
+    expect(result.error).toContain('JavaScript execution error: boom');
+  });
+
+  it('screenshot saves base64 image to requested file path', async () => {
+    const controller = new Controller();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-ss-'));
+    const browserSession = {
+      take_screenshot: vi.fn(async () =>
+        Buffer.from('fake_png_data').toString('base64')
+      ),
+    };
+    const fileSystem = {
+      get_dir: vi.fn(() => tempDir),
+    };
+
+    try {
+      const result = await controller.registry.execute_action(
+        'screenshot',
+        { file_name: 'capture.png' },
+        {
+          browser_session: browserSession as any,
+          file_system: fileSystem as any,
+        }
+      );
+
+      expect(browserSession.take_screenshot).toHaveBeenCalledWith(false);
+      expect(result.error).toBeNull();
+      expect(result.attachments).toHaveLength(1);
+      expect(result.attachments?.[0]).toContain('capture.png');
+      expect(fs.existsSync(result.attachments?.[0] as string)).toBe(true);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('extract_structured_data propagates abort during iframe extraction', async () => {
