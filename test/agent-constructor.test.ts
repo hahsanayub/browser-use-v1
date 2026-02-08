@@ -751,6 +751,32 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('formats follow-up tasks with initial and follow-up tags in message manager', async () => {
+    const agent = new Agent({
+      task: 'Original task instructions',
+      llm: createLlm(),
+    });
+
+    agent.addNewTask('Collect pricing details');
+
+    const messageManager = (agent as any)._message_manager;
+    expect((messageManager as any).task).toContain(
+      '<initial_user_request>Original task instructions</initial_user_request>'
+    );
+    expect((messageManager as any).task).toContain(
+      '<follow_up_user_request> Collect pricing details </follow_up_user_request>'
+    );
+
+    const lastHistoryItem = (messageManager as any).state.agent_history_items.at(
+      -1
+    );
+    expect(lastHistoryItem?.system_message).toBe(
+      '<follow_up_user_request> Collect pricing details </follow_up_user_request>'
+    );
+
+    await agent.close();
+  });
+
   it('bridges extraction_schema from output_model_schema when not provided', async () => {
     const outputSchema = {
       parse: (input: string) => JSON.parse(input),

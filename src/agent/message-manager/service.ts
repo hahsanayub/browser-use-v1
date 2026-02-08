@@ -90,7 +90,11 @@ export class MessageManager {
   }
 
   add_new_task(new_task: string) {
-    this.task = new_task;
+    const followUpTask = `<follow_up_user_request> ${new_task.trim()} </follow_up_user_request>`;
+    if (!this.task.includes('<initial_user_request>')) {
+      this.task = `<initial_user_request>${this.task}</initial_user_request>`;
+    }
+    this.task = `${this.task}\n${followUpTask}`;
     this.state.agent_history_items.push(
       new HistoryItem(
         null,
@@ -99,7 +103,7 @@ export class MessageManager {
         null,
         null,
         null,
-        `User updated <user_request> to: ${new_task}`
+        followUpTask
       )
     );
   }
