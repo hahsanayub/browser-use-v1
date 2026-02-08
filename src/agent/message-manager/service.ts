@@ -112,6 +112,7 @@ export class MessageManager {
     const results = result ?? [];
     const stepNumber = step_info?.step_number ?? null;
     this.state.read_state_description = '';
+    this.state.read_state_images = [];
 
     let actionText = '';
     results.forEach((action, idx) => {
@@ -121,6 +122,9 @@ export class MessageManager {
         action.extracted_content
       ) {
         this.state.read_state_description += `${action.extracted_content}\n`;
+      }
+      if (Array.isArray(action.images) && action.images.length > 0) {
+        this.state.read_state_images.push(...action.images);
       }
 
       if (action.long_term_memory) {
@@ -373,6 +377,7 @@ export class MessageManager {
       screenshots,
       vision_detail_level: this.visionDetailLevel,
       include_recent_events,
+      read_state_images: this.state.read_state_images,
       plan_description,
     });
     const message = prompt.get_user_message(use_vision);

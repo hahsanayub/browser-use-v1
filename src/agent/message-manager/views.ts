@@ -67,6 +67,7 @@ export class MessageManagerState {
     new HistoryItem(0, null, null, null, null, null, 'Agent initialized'),
   ];
   read_state_description = '';
+  read_state_images: Array<Record<string, unknown>> = [];
   compacted_memory: string | null = null;
   compaction_count = 0;
   last_compaction_step: number | null = null;

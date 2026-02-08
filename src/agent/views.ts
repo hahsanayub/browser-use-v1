@@ -38,8 +38,11 @@ const parseStructuredOutput = <T>(
 export interface ActionResultInit {
   is_done?: boolean | null;
   success?: boolean | null;
+  judgement?: Record<string, unknown> | null;
   error?: string | null;
   attachments?: string[] | null;
+  images?: Array<Record<string, unknown>> | null;
+  metadata?: Record<string, unknown> | null;
   long_term_memory?: string | null;
   extracted_content?: string | null;
   include_extracted_content_only_once?: boolean;
@@ -49,8 +52,11 @@ export interface ActionResultInit {
 export class ActionResult {
   is_done: boolean | null;
   success: boolean | null;
+  judgement: Record<string, unknown> | null;
   error: string | null;
   attachments: string[] | null;
+  images: Array<Record<string, unknown>> | null;
+  metadata: Record<string, unknown> | null;
   long_term_memory: string | null;
   extracted_content: string | null;
   include_extracted_content_only_once: boolean;
@@ -59,8 +65,11 @@ export class ActionResult {
   constructor(init: ActionResultInit = {}) {
     this.is_done = init.is_done ?? false;
     this.success = init.success ?? null;
+    this.judgement = init.judgement ?? null;
     this.error = init.error ?? null;
     this.attachments = init.attachments ?? null;
+    this.images = init.images ?? null;
+    this.metadata = init.metadata ?? null;
     this.long_term_memory = init.long_term_memory ?? null;
     this.extracted_content = init.extracted_content ?? null;
     this.include_extracted_content_only_once =
@@ -81,8 +90,11 @@ export class ActionResult {
     return {
       is_done: this.is_done,
       success: this.success,
+      judgement: this.judgement,
       error: this.error,
       attachments: this.attachments,
+      images: this.images,
+      metadata: this.metadata,
       long_term_memory: this.long_term_memory,
       extracted_content: this.extracted_content,
       include_extracted_content_only_once:

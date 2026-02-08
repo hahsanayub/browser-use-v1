@@ -83,6 +83,7 @@ interface AgentMessagePromptInit {
   screenshots?: string[] | null;
   vision_detail_level?: 'auto' | 'low' | 'high';
   include_recent_events?: boolean;
+  read_state_images?: Array<Record<string, unknown>> | null;
   plan_description?: string | null;
 }
 
@@ -101,6 +102,7 @@ export class AgentMessagePrompt {
   private readonly screenshots: string[];
   private readonly visionDetailLevel: 'auto' | 'low' | 'high';
   private readonly includeRecentEvents: boolean;
+  private readonly readStateImages: Array<Record<string, unknown>>;
   private readonly planDescription: string | null;
 
   constructor(init: AgentMessagePromptInit) {
@@ -119,6 +121,7 @@ export class AgentMessagePrompt {
     this.screenshots = init.screenshots ?? [];
     this.visionDetailLevel = init.vision_detail_level ?? 'auto';
     this.includeRecentEvents = init.include_recent_events ?? false;
+    this.readStateImages = init.read_state_images ?? [];
     this.planDescription = init.plan_description ?? null;
   }
 
@@ -354,10 +357,30 @@ ${this.pageFilteredActions}
 `;
     }
 
-    if (use_vision && this.screenshots.length > 0) {
+    const hasReadStateImages = this.readStateImages.length > 0;
+    if ((use_vision && this.screenshots.length > 0) || hasReadStateImages) {
       const parts: Array<ContentPartTextParam | ContentPartImageParam> = [
         new ContentPartTextParam(stateDescription),
       ];
+      for (const imageInfo of this.readStateImages) {
+        const imageName =
+          typeof imageInfo.name === 'string' ? imageInfo.name : 'read_state';
+        const imageData =
+          typeof imageInfo.data === 'string' ? imageInfo.data : null;
+        if (!imageData) {
+          continue;
+        }
+        parts.push(new ContentPartTextParam(`Read-state image: ${imageName}`));
+        parts.push(
+          new ContentPartImageParam(
+            new ImageURL(
+              `data:image/png;base64,${imageData}`,
+              this.visionDetailLevel,
+              'image/png'
+            )
+          )
+        );
+      }
       this.screenshots.forEach((shot, index) => {
         const label =
           index === this.screenshots.length - 1
