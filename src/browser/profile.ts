@@ -3,6 +3,7 @@ import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import https from 'node:https';
+import { randomUUID } from 'node:crypto';
 import AdmZip from 'adm-zip';
 import type {
   ClientCertificate,
@@ -579,6 +580,7 @@ export class BrowserProfile {
       window_position: init.window_position ?? defaults.window_position,
     };
     this.options.id = init.id ?? uuid7str();
+    this.ensureDefaultDownloadsPath();
     this.applyLegacyWindowSize();
     this.warnStorageStateUserDataDirConflict();
     this.warnUserDataDirNonDefault();
@@ -734,6 +736,25 @@ export class BrowserProfile {
         '⚠️ BrowserSession(deterministic_rendering=True) is NOT RECOMMENDED. It breaks many sites and increases chances of getting blocked by anti-bot systems. It hardcodes the JS random seed and forces browsers across Linux/Mac/Windows to use the same font rendering engine so that identical screenshots can be generated.'
       );
     }
+  }
+
+  private ensureDefaultDownloadsPath() {
+    if (this.options.downloads_path) {
+      return;
+    }
+
+    let downloadsPath = path.join(
+      os.tmpdir(),
+      `browser-use-downloads-${randomUUID().slice(0, 8)}`
+    );
+    while (fs.existsSync(downloadsPath)) {
+      downloadsPath = path.join(
+        os.tmpdir(),
+        `browser-use-downloads-${randomUUID().slice(0, 8)}`
+      );
+    }
+    fs.mkdirSync(downloadsPath, { recursive: true });
+    this.options.downloads_path = downloadsPath;
   }
 
   private getDefaultArgsList() {

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs';
 
 const importProfileModule = async () => {
   vi.resetModules();
@@ -62,5 +63,15 @@ describe('BrowserProfile alignment with latest py-browser-use defaults', () => {
     expect((profile.config.allowed_domains as Set<string>).has(domains[0])).toBe(
       true
     );
+  });
+
+  it('creates a unique default downloads_path when none is provided', async () => {
+    const { BrowserProfile } = await importProfileModule();
+    const profile = new BrowserProfile({});
+    const downloadsPath = profile.config.downloads_path;
+
+    expect(typeof downloadsPath).toBe('string');
+    expect(downloadsPath).toContain('browser-use-downloads-');
+    expect(fs.existsSync(downloadsPath!)).toBe(true);
   });
 });
