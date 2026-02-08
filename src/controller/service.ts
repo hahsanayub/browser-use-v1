@@ -1286,7 +1286,7 @@ ${content}`;
         Array.isArray(available_file_paths) &&
         available_file_paths.includes(params.file_name);
       const result = await fsInstance.read_file(params.file_name, allowed);
-      const MAX_MEMORY_SIZE = 10000;
+      const MAX_MEMORY_SIZE = 1000;
       let memory = result;
       if (result.length > MAX_MEMORY_SIZE) {
         const lines = result.split('\n');

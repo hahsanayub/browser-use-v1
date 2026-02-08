@@ -856,9 +856,11 @@ describe('Regression Coverage', () => {
     expect(pageExtractionLlm.ainvoke).not.toHaveBeenCalled();
   });
 
-  it('read_file keeps long content in long_term_memory up to 10k chars', async () => {
+  it('read_file truncates long-term memory above 1k chars', async () => {
     const controller = new Controller();
-    const content = 'x'.repeat(2000);
+    const content = Array.from({ length: 250 }, (_, idx) => `line-${idx}`).join(
+      '\n'
+    );
     const fileSystem = {
       read_file: vi.fn(async () => content),
     };
@@ -873,7 +875,9 @@ describe('Regression Coverage', () => {
     );
 
     expect(fileSystem.read_file).toHaveBeenCalledWith('sample.txt', true);
-    expect(result.long_term_memory).toBe(content);
+    expect(result.extracted_content).toBe(content);
+    expect(result.long_term_memory).not.toBe(content);
+    expect(result.long_term_memory).toContain('more lines...');
     expect(result.include_extracted_content_only_once).toBe(true);
   });
 
