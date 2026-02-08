@@ -222,7 +222,7 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
   vision_detail_level?: AgentSettings['vision_detail_level'];
   session_attachment_mode?: AgentSettings['session_attachment_mode'];
   allow_insecure_sensitive_data?: boolean;
-  llm_timeout?: number;
+  llm_timeout?: number | null;
   step_timeout?: number;
   final_response_after_failure?: boolean;
   message_compaction?: MessageCompactionSettings | boolean | null;
@@ -234,6 +234,28 @@ const ensureDir = (target: string) => {
   if (!fs.existsSync(target)) {
     fs.mkdirSync(target, { recursive: true });
   }
+};
+
+const get_model_timeout = (llm: BaseChatModel) => {
+  const modelName = String(llm?.model ?? '').toLowerCase();
+  if (modelName.includes('gemini')) {
+    if (modelName.includes('3-pro')) {
+      return 90;
+    }
+    return 75;
+  }
+  if (modelName.includes('groq')) {
+    return 30;
+  }
+  if (
+    modelName.includes('o3') ||
+    modelName.includes('claude') ||
+    modelName.includes('sonnet') ||
+    modelName.includes('deepseek')
+  ) {
+    return 90;
+  }
+  return 75;
 };
 
 const defaultAgentOptions = () => ({
@@ -276,7 +298,7 @@ const defaultAgentOptions = () => ({
   session_attachment_mode: 'copy' as const,
   allow_insecure_sensitive_data: false,
   vision_detail_level: 'auto' as const,
-  llm_timeout: 60,
+  llm_timeout: null as number | null,
   step_timeout: 180,
   final_response_after_failure: true,
   message_compaction: true as MessageCompactionSettings | boolean,
@@ -456,7 +478,7 @@ export class Agent<
       vision_detail_level = 'auto',
       session_attachment_mode = 'copy',
       allow_insecure_sensitive_data = false,
-      llm_timeout = 60,
+      llm_timeout = null,
       step_timeout = 180,
       final_response_after_failure = true,
       message_compaction = true,
@@ -469,7 +491,12 @@ export class Agent<
     }
     const effectivePageExtractionLlm = page_extraction_llm ?? llm;
     const effectiveJudgeLlm = judge_llm ?? llm;
-    const effectiveEnablePlanning = flash_mode ? false : enable_planning;
+    const effectiveFlashMode =
+      flash_mode || (llm as any)?.provider === 'browser-use';
+    const effectiveEnablePlanning = effectiveFlashMode
+      ? false
+      : enable_planning;
+    const effectiveLlmTimeout = llm_timeout ?? get_model_timeout(llm);
     const normalizedMessageCompaction =
       this._normalizeMessageCompactionSetting(message_compaction);
 
@@ -512,7 +539,7 @@ export class Agent<
       include_attributes: include_attributes ?? ['title', 'type', 'name'],
       max_actions_per_step,
       use_thinking,
-      flash_mode,
+      flash_mode: effectiveFlashMode,
       use_judge,
       ground_truth,
       max_history_items,
@@ -528,7 +555,7 @@ export class Agent<
       include_tool_call_examples,
       session_attachment_mode,
       allow_insecure_sensitive_data,
-      llm_timeout,
+      llm_timeout: effectiveLlmTimeout,
       step_timeout,
       final_response_after_failure,
       message_compaction: normalizedMessageCompaction,

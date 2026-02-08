@@ -5,11 +5,14 @@ import { ActionResult } from '../src/agent/views.js';
 import { BrowserSession } from '../src/browser/session.js';
 import { BrowserProfile } from '../src/browser/profile.js';
 
-const createLlm = (): BaseChatModel =>
+const createLlm = (
+  model = 'gpt-test',
+  provider = 'test'
+): BaseChatModel =>
   ({
-    model: 'gpt-test',
+    model,
     get provider() {
-      return 'test';
+      return provider;
     },
     get name() {
       return 'test';
@@ -55,6 +58,50 @@ describe('Agent constructor browser session alignment', () => {
     expect(agent.browser_session).toBe(browserSession);
 
     await agent.close();
+  });
+
+  it('auto-enables flash mode for browser-use provider and disables planning', async () => {
+    const agent = new Agent({
+      task: 'browser-use provider flash mode',
+      llm: createLlm('browser-use/agent', 'browser-use'),
+      flash_mode: false,
+      enable_planning: true,
+    });
+
+    expect(agent.settings.flash_mode).toBe(true);
+    expect(agent.settings.enable_planning).toBe(false);
+
+    await agent.close();
+  });
+
+  it('uses model-aware llm_timeout defaults when not explicitly set', async () => {
+    const geminiAgent = new Agent({
+      task: 'gemini timeout',
+      llm: createLlm('gemini-3-pro', 'google'),
+    });
+    const groqAgent = new Agent({
+      task: 'groq timeout',
+      llm: createLlm('groq/llama-3.1-70b', 'groq'),
+    });
+    const genericAgent = new Agent({
+      task: 'generic timeout',
+      llm: createLlm('gpt-4o-mini', 'openai'),
+    });
+    const overrideAgent = new Agent({
+      task: 'override timeout',
+      llm: createLlm('gemini-2.5-flash', 'google'),
+      llm_timeout: 123,
+    });
+
+    expect(geminiAgent.settings.llm_timeout).toBe(90);
+    expect(groqAgent.settings.llm_timeout).toBe(30);
+    expect(genericAgent.settings.llm_timeout).toBe(75);
+    expect(overrideAgent.settings.llm_timeout).toBe(123);
+
+    await geminiAgent.close();
+    await groqAgent.close();
+    await genericAgent.close();
+    await overrideAgent.close();
   });
 
   it('copies non-owning BrowserSession instances to avoid shared-agent state', async () => {
