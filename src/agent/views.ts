@@ -702,7 +702,8 @@ export class AgentHistory {
     public model_output: AgentOutput | null,
     public result: ActionResult[],
     public state: BrowserStateHistory,
-    public metadata: StepMetadata | null = null
+    public metadata: StepMetadata | null = null,
+    public state_message: string | null = null
   ) {}
 
   static get_interacted_element(
@@ -738,6 +739,7 @@ export class AgentHistory {
             step_interval: this.metadata.step_interval,
           }
         : null,
+      state_message: this.state_message,
     };
   }
 }
@@ -1009,7 +1011,13 @@ export class AgentHistoryList<TStructured = unknown> {
             entry.metadata.step_interval ?? null
           )
         : null;
-      return new AgentHistory(modelOutput, result, state, metadata);
+      return new AgentHistory(
+        modelOutput,
+        result,
+        state,
+        metadata,
+        entry.state_message ?? null
+      );
     });
     return new AgentHistoryList(historyItems);
   }

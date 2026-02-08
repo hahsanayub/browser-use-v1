@@ -75,4 +75,30 @@ describe('AgentMessagePrompt browser state enrichment', () => {
     const content = String(userMessage.content ?? '');
     expect(content).not.toContain('Recent browser events:');
   });
+
+  it('injects current plan block into agent state', () => {
+    const root = new DOMElementNode(true, null, 'body', '/body', {}, []);
+    const domState = new DOMState(root, {});
+    const browserState = new BrowserStateSummary(domState, {
+      url: 'https://example.com',
+      title: 'Example',
+      tabs: [{ page_id: 0, url: 'https://example.com', title: 'Example' }],
+    });
+
+    const prompt = new AgentMessagePrompt({
+      browser_state_summary: browserState,
+      file_system: {
+        describe: () => '/tmp',
+        get_todo_contents: () => '',
+      } as any,
+      task: 'test',
+      plan_description: '[>] 0: open page\n[ ] 1: extract table',
+    });
+
+    const userMessage = prompt.get_user_message(false) as any;
+    const content = String(userMessage.content ?? '');
+    expect(content).toContain('<plan>');
+    expect(content).toContain('[>] 0: open page');
+    expect(content).toContain('[ ] 1: extract table');
+  });
 });

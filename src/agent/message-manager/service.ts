@@ -26,6 +26,7 @@ export class MessageManager {
   private sensitiveDataDescription = '';
   private lastInputMessages: Message[] = [];
   private includeAttributes: string[];
+  last_state_message_text: string | null = null;
 
   constructor(
     task: string,
@@ -375,6 +376,7 @@ export class MessageManager {
       plan_description,
     });
     const message = prompt.get_user_message(use_vision);
+    this.last_state_message_text = this.extractStateMessageText(message);
     this.setMessageWithType(message, 'state');
   }
 
@@ -407,6 +409,24 @@ export class MessageManager {
 
   _add_context_message(message: SystemMessage | UserMessage) {
     this.addContextMessage(message);
+  }
+
+  private extractStateMessageText(message: UserMessage | SystemMessage) {
+    if (typeof message.content === 'string') {
+      return message.content;
+    }
+    if (!Array.isArray(message.content)) {
+      return null;
+    }
+    return message.content
+      .map((part) => {
+        if (part instanceof ContentPartTextParam) {
+          return part.text;
+        }
+        return null;
+      })
+      .filter((part): part is string => typeof part === 'string')
+      .join('\n');
   }
 
   private filterSensitiveData(message: SystemMessage | UserMessage) {

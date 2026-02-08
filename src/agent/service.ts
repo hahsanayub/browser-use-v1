@@ -2847,16 +2847,28 @@ export class Agent<
     }
 
     if (browser_state_summary) {
+      let stepInterval: number | null = null;
+      if (this.history.history.length > 0) {
+        const lastMetadata = this.history.history.at(-1)?.metadata;
+        if (lastMetadata) {
+          stepInterval = Math.max(
+            0,
+            lastMetadata.step_end_time - lastMetadata.step_start_time
+          );
+        }
+      }
       const metadata = new StepMetadata(
         this.step_start_time,
         step_end_time,
-        this.state.n_steps
+        this.state.n_steps,
+        stepInterval
       );
       await this._make_history_item(
         this.state.last_model_output,
         browser_state_summary,
         this.state.last_result,
-        metadata
+        metadata,
+        this._message_manager.last_state_message_text
       );
     }
 
@@ -3626,7 +3638,8 @@ export class Agent<
     model_output: AgentOutput | null,
     browser_state_summary: BrowserStateSummary,
     result: ActionResult[],
-    metadata: StepMetadata
+    metadata: StepMetadata,
+    state_message: string | null = null
   ) {
     const interacted_elements = model_output
       ? AgentHistory.get_interacted_element(
@@ -3642,7 +3655,7 @@ export class Agent<
       this._current_screenshot_path
     );
     this.history.add_item(
-      new AgentHistory(model_output, result, state, metadata)
+      new AgentHistory(model_output, result, state, metadata, state_message)
     );
   }
 
