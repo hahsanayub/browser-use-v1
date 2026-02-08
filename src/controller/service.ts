@@ -8,15 +8,18 @@ import {
   CloseTabActionSchema,
   DoneActionSchema,
   ExtractStructuredDataActionSchema,
+  FindElementsActionSchema,
   DropdownOptionsActionSchema,
   SelectDropdownActionSchema,
   GoToUrlActionSchema,
   InputTextActionSchema,
   NoParamsActionSchema,
+  ReadLongContentActionSchema,
   ReadFileActionSchema,
   ReplaceFileStrActionSchema,
   ScrollActionSchema,
   ScrollToTextActionSchema,
+  SearchPageActionSchema,
   SearchGoogleActionSchema,
   StructuredOutputActionSchema,
   SwitchTabActionSchema,
@@ -216,6 +219,7 @@ export class Controller<Context = unknown> {
     this.registerElementActions();
     this.registerTabActions();
     this.registerContentActions();
+    this.registerExplorationActions();
     this.registerScrollActions();
     this.registerFileSystemActions();
     this.registerKeyboardActions();
@@ -646,6 +650,300 @@ ${content}`;
         extracted_content,
         include_extracted_content_only_once: includeOnce,
         long_term_memory: memory,
+      });
+    });
+  }
+
+  private registerExplorationActions() {
+    type SearchPageAction = z.infer<typeof SearchPageActionSchema>;
+    this.registry.action(
+      'Search page text for a pattern (like grep). Zero LLM cost and instant.',
+      { param_model: SearchPageActionSchema }
+    )(async function search_page(
+      params: SearchPageAction,
+      { browser_session, signal }
+    ) {
+      if (!browser_session) throw new Error('Browser session missing');
+      throwIfAborted(signal);
+
+      const page: Page | null = await browser_session.get_current_page();
+      if (!page?.evaluate) {
+        throw new BrowserError('No active page for search_page.');
+      }
+
+      const searchResult = (await page.evaluate(
+        ({
+          pattern,
+          regex,
+          caseSensitive,
+          contextChars,
+          cssScope,
+          maxResults,
+        }: {
+          pattern: string;
+          regex: boolean;
+          caseSensitive: boolean;
+          contextChars: number;
+          cssScope: string | null;
+          maxResults: number;
+        }) => {
+          const sourceNode = cssScope
+            ? document.querySelector(cssScope)
+            : document.body;
+          if (!sourceNode) {
+            return {
+              error: `CSS scope not found: ${cssScope}`,
+              matches: [],
+              total: 0,
+            };
+          }
+          const sourceText =
+            (sourceNode as HTMLElement).innerText ||
+            sourceNode.textContent ||
+            '';
+          if (!sourceText.trim()) {
+            return {
+              matches: [],
+              total: 0,
+            };
+          }
+
+          const safePattern = regex
+            ? pattern
+            : pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const flags = caseSensitive ? 'g' : 'gi';
+
+          let matcher: RegExp;
+          try {
+            matcher = new RegExp(safePattern, flags);
+          } catch (error: unknown) {
+            return {
+              error: `Invalid regex pattern: ${String(error)}`,
+              matches: [],
+              total: 0,
+            };
+          }
+
+          const matches: Array<{
+            position: number;
+            match: string;
+            snippet: string;
+          }> = [];
+          let foundTotal = 0;
+          let m: RegExpExecArray | null;
+          while ((m = matcher.exec(sourceText)) !== null) {
+            foundTotal += 1;
+            if (matches.length < Math.max(1, maxResults)) {
+              const start = Math.max(0, m.index - Math.max(0, contextChars));
+              const end = Math.min(
+                sourceText.length,
+                m.index + m[0].length + Math.max(0, contextChars)
+              );
+              matches.push({
+                position: m.index,
+                match: m[0],
+                snippet: sourceText.slice(start, end),
+              });
+            }
+            if (m[0].length === 0) {
+              matcher.lastIndex += 1;
+            }
+          }
+
+          return {
+            matches,
+            total: foundTotal,
+            truncated: foundTotal > matches.length,
+          };
+        },
+        {
+          pattern: params.pattern,
+          regex: params.regex,
+          caseSensitive: params.case_sensitive,
+          contextChars: params.context_chars,
+          cssScope: params.css_scope ?? null,
+          maxResults: params.max_results,
+        }
+      )) as
+        | {
+            error?: string;
+            matches?: Array<{
+              position: number;
+              match: string;
+              snippet: string;
+            }>;
+            total?: number;
+            truncated?: boolean;
+          }
+        | null;
+
+      if (!searchResult) {
+        return new ActionResult({ error: 'search_page returned no result' });
+      }
+      if (searchResult.error) {
+        return new ActionResult({ error: `search_page: ${searchResult.error}` });
+      }
+
+      const total = searchResult.total ?? 0;
+      const matches = searchResult.matches ?? [];
+      if (total === 0 || !matches.length) {
+        const noMatchMessage = `No matches found for "${params.pattern}".`;
+        return new ActionResult({
+          extracted_content: noMatchMessage,
+          long_term_memory: `Searched page for "${params.pattern}": 0 matches found.`,
+        });
+      }
+
+      const lines: string[] = [
+        `Found ${total} matches for "${params.pattern}" in page text:`,
+      ];
+      for (let i = 0; i < matches.length; i += 1) {
+        const match = matches[i];
+        const compactSnippet = match.snippet.replace(/\s+/g, ' ').trim();
+        lines.push(
+          `${i + 1}. [pos ${match.position}] "${match.match}" -> ${compactSnippet}`
+        );
+      }
+      if (searchResult.truncated) {
+        lines.push(
+          `... showing first ${matches.length} matches (increase max_results to see more).`
+        );
+      }
+
+      const memory = `Searched page for "${params.pattern}": ${total} match${total === 1 ? '' : 'es'} found.`;
+      return new ActionResult({
+        extracted_content: lines.join('\n'),
+        long_term_memory: memory,
+      });
+    });
+
+    type FindElementsAction = z.infer<typeof FindElementsActionSchema>;
+    this.registry.action(
+      'Query DOM elements by CSS selector (like find). Zero LLM cost and instant.',
+      { param_model: FindElementsActionSchema }
+    )(async function find_elements(
+      params: FindElementsAction,
+      { browser_session, signal }
+    ) {
+      if (!browser_session) throw new Error('Browser session missing');
+      throwIfAborted(signal);
+
+      const page: Page | null = await browser_session.get_current_page();
+      if (!page?.evaluate) {
+        throw new BrowserError('No active page for find_elements.');
+      }
+
+      const result = (await page.evaluate(
+        ({
+          selector,
+          attributes,
+          maxResults,
+          includeText,
+        }: {
+          selector: string;
+          attributes: string[] | null;
+          maxResults: number;
+          includeText: boolean;
+        }) => {
+          let elements: Element[];
+          try {
+            elements = Array.from(document.querySelectorAll(selector));
+          } catch (error: unknown) {
+            return {
+              error: `Invalid selector: ${String(error)}`,
+              elements: [],
+              total: 0,
+            };
+          }
+
+          const selected = elements.slice(0, Math.max(1, maxResults));
+          const payload = selected.map((el, idx) => {
+            const attrs: Record<string, string> = {};
+            if (attributes?.length) {
+              for (const attr of attributes) {
+                const value = el.getAttribute(attr);
+                if (value != null) {
+                  attrs[attr] = value;
+                }
+              }
+            }
+            return {
+              index: idx + 1,
+              tag: el.tagName.toLowerCase(),
+              text: includeText
+                ? (el.textContent || '').replace(/\s+/g, ' ').trim()
+                : '',
+              attributes: attrs,
+            };
+          });
+
+          return {
+            elements: payload,
+            total: elements.length,
+            truncated: elements.length > selected.length,
+          };
+        },
+        {
+          selector: params.selector,
+          attributes: params.attributes ?? null,
+          maxResults: params.max_results,
+          includeText: params.include_text,
+        }
+      )) as
+        | {
+            error?: string;
+            elements?: Array<{
+              index: number;
+              tag: string;
+              text: string;
+              attributes: Record<string, string>;
+            }>;
+            total?: number;
+            truncated?: boolean;
+          }
+        | null;
+
+      if (!result) {
+        return new ActionResult({ error: 'find_elements returned no result' });
+      }
+      if (result.error) {
+        return new ActionResult({ error: `find_elements: ${result.error}` });
+      }
+
+      const elements = result.elements ?? [];
+      const total = result.total ?? 0;
+      if (!elements.length) {
+        const msg = `No elements found for selector "${params.selector}".`;
+        return new ActionResult({
+          extracted_content: msg,
+          long_term_memory: msg,
+        });
+      }
+
+      const lines: string[] = [
+        `Found ${total} element${total === 1 ? '' : 's'} for selector "${params.selector}":`,
+      ];
+      for (const el of elements) {
+        const attrs = Object.entries(el.attributes || {})
+          .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+          .join(' ');
+        const text =
+          params.include_text && el.text
+            ? ` text=${JSON.stringify(el.text)}`
+            : '';
+        lines.push(
+          `${el.index}. <${el.tag}>${text}${attrs ? ` ${attrs}` : ''}`.trim()
+        );
+      }
+      if (result.truncated) {
+        lines.push(
+          `... showing first ${elements.length} elements (increase max_results to see more).`
+        );
+      }
+
+      return new ActionResult({
+        extracted_content: lines.join('\n'),
+        long_term_memory: `Queried selector "${params.selector}" and found ${total} element${total === 1 ? '' : 's'}.`,
       });
     });
   }

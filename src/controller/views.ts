@@ -89,10 +89,35 @@ export type ExtractStructuredDataAction = z.infer<
   typeof ExtractStructuredDataActionSchema
 >;
 
+export const SearchPageActionSchema = z.object({
+  pattern: z.string(),
+  regex: z.boolean().default(false),
+  case_sensitive: z.boolean().default(false),
+  context_chars: z.number().int().default(150),
+  css_scope: z.string().optional(),
+  max_results: z.number().int().default(25),
+});
+export type SearchPageAction = z.infer<typeof SearchPageActionSchema>;
+
+export const FindElementsActionSchema = z.object({
+  selector: z.string(),
+  attributes: z.array(z.string()).optional(),
+  max_results: z.number().int().default(50),
+  include_text: z.boolean().default(true),
+});
+export type FindElementsAction = z.infer<typeof FindElementsActionSchema>;
+
 export const ReadFileActionSchema = z.object({
   file_name: z.string(),
 });
 export type ReadFileAction = z.infer<typeof ReadFileActionSchema>;
+
+export const ReadLongContentActionSchema = z.object({
+  goal: z.string(),
+  source: z.string().default('page'),
+  context: z.string().default(''),
+});
+export type ReadLongContentAction = z.infer<typeof ReadLongContentActionSchema>;
 
 export const WriteFileActionSchema = z.object({
   file_name: z.string(),

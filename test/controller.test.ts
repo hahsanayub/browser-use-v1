@@ -738,6 +738,78 @@ describe('Regression Coverage', () => {
     expect((includedModel as any).available_actions).toEqual(['domain_action']);
   });
 
+  it('search_page returns formatted matches with memory summary', async () => {
+    const controller = new Controller();
+    const page = {
+      evaluate: vi.fn(async () => ({
+        total: 2,
+        matches: [
+          { position: 12, match: 'price', snippet: 'The current price is $19' },
+          { position: 87, match: 'price', snippet: 'Lowest price this month' },
+        ],
+        truncated: false,
+      })),
+      url: vi.fn(() => 'https://example.com'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+    };
+
+    const result = await controller.registry.execute_action(
+      'search_page',
+      { pattern: 'price' },
+      { browser_session: browserSession as any }
+    );
+
+    expect(page.evaluate).toHaveBeenCalled();
+    expect(result.extracted_content).toContain(
+      'Found 2 matches for "price" in page text'
+    );
+    expect(result.extracted_content).toContain('[pos 12]');
+    expect(result.long_term_memory).toBe(
+      'Searched page for "price": 2 matches found.'
+    );
+  });
+
+  it('find_elements returns formatted selector results', async () => {
+    const controller = new Controller();
+    const page = {
+      evaluate: vi.fn(async () => ({
+        total: 3,
+        elements: [
+          {
+            index: 1,
+            tag: 'a',
+            text: 'Documentation',
+            attributes: { href: 'https://example.com/docs' },
+          },
+        ],
+        truncated: true,
+      })),
+      url: vi.fn(() => 'https://example.com'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+    };
+
+    const result = await controller.registry.execute_action(
+      'find_elements',
+      { selector: 'a', attributes: ['href'], max_results: 1 },
+      { browser_session: browserSession as any }
+    );
+
+    expect(page.evaluate).toHaveBeenCalled();
+    expect(result.extracted_content).toContain(
+      'Found 3 elements for selector "a"'
+    );
+    expect(result.extracted_content).toContain('<a>');
+    expect(result.extracted_content).toContain('href="https://example.com/docs"');
+    expect(result.extracted_content).toContain('showing first 1 elements');
+    expect(result.long_term_memory).toBe(
+      'Queried selector "a" and found 3 elements.'
+    );
+  });
+
   it('extract_structured_data propagates abort during iframe extraction', async () => {
     const controller = new Controller();
     const abortController = new AbortController();
