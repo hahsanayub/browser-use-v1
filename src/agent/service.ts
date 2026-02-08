@@ -209,6 +209,8 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
   allow_insecure_sensitive_data?: boolean;
   llm_timeout?: number;
   step_timeout?: number;
+  loop_detection_window?: number;
+  loop_detection_enabled?: boolean;
 }
 
 const ensureDir = (target: string) => {
@@ -253,6 +255,8 @@ const defaultAgentOptions = () => ({
   vision_detail_level: 'auto' as const,
   llm_timeout: 60,
   step_timeout: 180,
+  loop_detection_window: 20,
+  loop_detection_enabled: true,
 });
 
 const AgentLLMOutputSchema = z.object({
@@ -396,6 +400,8 @@ export class Agent<
       allow_insecure_sensitive_data = false,
       llm_timeout = 60,
       step_timeout = 180,
+      loop_detection_window = 20,
+      loop_detection_enabled = true,
     } = { ...defaultAgentOptions(), ...params };
 
     if (!llm) {
@@ -454,6 +460,8 @@ export class Agent<
       allow_insecure_sensitive_data,
       llm_timeout,
       step_timeout,
+      loop_detection_window,
+      loop_detection_enabled,
     };
 
     this.token_cost_service = new TokenCost(calculate_cost);
@@ -468,6 +476,7 @@ export class Agent<
     this.token_cost_service.register_llm(effectivePageExtractionLlm);
 
     this.state = params.injected_agent_state || new AgentState();
+    this.state.loop_detector.window_size = this.settings.loop_detection_window;
     this.history = new AgentHistoryList([], null);
     this.telemetry = productTelemetry;
 
@@ -1764,6 +1773,8 @@ export class Agent<
     );
 
     this._inject_budget_warning(step_info);
+    this._update_loop_detector_page_state(browser_state_summary);
+    this._inject_loop_detection_nudge();
     await this._handle_final_step(step_info);
     return browser_state_summary;
   }
@@ -1864,6 +1875,7 @@ export class Agent<
       throw new Error('BrowserSession is not set up');
     }
     await this._check_and_update_downloads('after executing actions');
+    this._update_loop_detector_actions();
     this.state.consecutive_failures = 0;
   }
 
@@ -2778,6 +2790,67 @@ export class Agent<
       this._message_manager._add_context_message(new UserMessage(message));
       this.logger.info('⚠️ Approaching last step. Enforcing done-only action.');
     }
+  }
+
+  private _inject_loop_detection_nudge() {
+    if (!this.settings.loop_detection_enabled) {
+      return;
+    }
+    const nudge = this.state.loop_detector.get_nudge_message();
+    if (!nudge) {
+      return;
+    }
+    this.logger.info(
+      `🔁 Loop detection nudge injected (repetition=${this.state.loop_detector.max_repetition_count}, stagnation=${this.state.loop_detector.consecutive_stagnant_pages})`
+    );
+    this._message_manager._add_context_message(new UserMessage(nudge));
+  }
+
+  private _update_loop_detector_actions() {
+    if (!this.settings.loop_detection_enabled || !this.state.last_model_output) {
+      return;
+    }
+    const exemptActions = new Set(['wait', 'done', 'go_back']);
+    for (const action of this.state.last_model_output.action) {
+      const actionData =
+        typeof (action as any)?.model_dump === 'function'
+          ? (action as any).model_dump()
+          : action;
+      if (!actionData || typeof actionData !== 'object') {
+        continue;
+      }
+      const actionName = Object.keys(actionData)[0] ?? 'unknown';
+      if (exemptActions.has(actionName)) {
+        continue;
+      }
+      const rawParams = (actionData as Record<string, unknown>)[actionName];
+      const params =
+        rawParams && typeof rawParams === 'object' && !Array.isArray(rawParams)
+          ? (rawParams as Record<string, unknown>)
+          : {};
+      this.state.loop_detector.record_action(actionName, params);
+    }
+  }
+
+  private _update_loop_detector_page_state(
+    browser_state_summary: BrowserStateSummary
+  ) {
+    if (!this.settings.loop_detection_enabled) {
+      return;
+    }
+    const url = browser_state_summary.url ?? '';
+    const elementCount = browser_state_summary.selector_map
+      ? Object.keys(browser_state_summary.selector_map).length
+      : 0;
+    let domText = '';
+    try {
+      domText =
+        browser_state_summary.element_tree?.clickable_elements_to_string?.() ??
+        '';
+    } catch {
+      domText = '';
+    }
+    this.state.loop_detector.record_page_state(url, domText, elementCount);
   }
 
   private _inject_budget_warning(step_info: AgentStepInfo | null = null) {

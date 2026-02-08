@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { ActionModel } from '../controller/registry/views.js';
 import { BrowserStateHistory } from '../browser/views.js';
 import type { DOMHistoryElement } from '../dom/history-tree-processor/view.js';
@@ -98,6 +99,205 @@ export class ActionResult {
   }
 }
 
+export class PageFingerprint {
+  constructor(
+    public readonly url: string,
+    public readonly element_count: number,
+    public readonly text_hash: string
+  ) {}
+
+  static from_browser_state(
+    url: string,
+    dom_text: string,
+    element_count: number
+  ) {
+    const text_hash = createHash('sha256')
+      .update(dom_text, 'utf8')
+      .digest('hex')
+      .slice(0, 16);
+    return new PageFingerprint(url, element_count, text_hash);
+  }
+
+  equals(other: PageFingerprint) {
+    return (
+      this.url === other.url &&
+      this.element_count === other.element_count &&
+      this.text_hash === other.text_hash
+    );
+  }
+}
+
+const stableSerialize = (value: unknown): string => {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  if (typeof value !== 'object') {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableSerialize(item)).join(',')}]`;
+  }
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, entryValue]) => entryValue !== null && entryValue !== undefined)
+    .sort(([a], [b]) => a.localeCompare(b));
+  return `{${entries
+    .map(([key, entryValue]) => `${key}:${stableSerialize(entryValue)}`)
+    .join(',')}}`;
+};
+
+const normalizeActionForHash = (
+  action_name: string,
+  params: Record<string, unknown>
+) => {
+  if (action_name === 'search' || action_name === 'search_google') {
+    const query = String(params.query ?? '');
+    const tokens = Array.from(
+      new Set(
+        query
+          .toLowerCase()
+          .replace(/[^\w\s]/g, ' ')
+          .split(/\s+/)
+          .filter(Boolean)
+      )
+    ).sort();
+    return `search|${tokens.join('|')}`;
+  }
+
+  if (
+    action_name === 'click' ||
+    action_name === 'click_element' ||
+    action_name === 'click_element_by_index'
+  ) {
+    return `click|${String(params.index ?? '')}`;
+  }
+
+  if (action_name === 'input' || action_name === 'input_text') {
+    const text = String(params.text ?? '').trim().toLowerCase();
+    return `input|${String(params.index ?? '')}|${text}`;
+  }
+
+  if (action_name === 'navigate' || action_name === 'go_to_url') {
+    return `navigate|${String(params.url ?? '')}`;
+  }
+
+  if (action_name.startsWith('scroll')) {
+    const direction =
+      typeof params.down === 'boolean'
+        ? params.down
+          ? 'down'
+          : 'up'
+        : action_name.includes('up')
+          ? 'up'
+          : 'down';
+    const index = String(params.index ?? '');
+    return `scroll|${action_name}|${direction}|${index}`;
+  }
+
+  return `${action_name}|${stableSerialize(params)}`;
+};
+
+export const compute_action_hash = (
+  action_name: string,
+  params: Record<string, unknown>
+) => {
+  const normalized = normalizeActionForHash(action_name, params);
+  return createHash('sha256').update(normalized, 'utf8').digest('hex').slice(0, 12);
+};
+
+export class ActionLoopDetector {
+  window_size: number;
+  recent_action_hashes: string[];
+  recent_page_fingerprints: PageFingerprint[];
+  max_repetition_count: number;
+  most_repeated_hash: string | null;
+  consecutive_stagnant_pages: number;
+
+  constructor(init?: Partial<ActionLoopDetector>) {
+    this.window_size = init?.window_size ?? 20;
+    this.recent_action_hashes = init?.recent_action_hashes ?? [];
+    this.recent_page_fingerprints = init?.recent_page_fingerprints ?? [];
+    this.max_repetition_count = init?.max_repetition_count ?? 0;
+    this.most_repeated_hash = init?.most_repeated_hash ?? null;
+    this.consecutive_stagnant_pages = init?.consecutive_stagnant_pages ?? 0;
+  }
+
+  record_action(action_name: string, params: Record<string, unknown>) {
+    const hash = compute_action_hash(action_name, params);
+    this.recent_action_hashes.push(hash);
+    if (this.recent_action_hashes.length > this.window_size) {
+      this.recent_action_hashes = this.recent_action_hashes.slice(
+        -this.window_size
+      );
+    }
+    this.update_repetition_stats();
+  }
+
+  record_page_state(url: string, dom_text: string, element_count: number) {
+    const fp = PageFingerprint.from_browser_state(url, dom_text, element_count);
+    const last = this.recent_page_fingerprints.at(-1);
+    if (last && last.equals(fp)) {
+      this.consecutive_stagnant_pages += 1;
+    } else {
+      this.consecutive_stagnant_pages = 0;
+    }
+    this.recent_page_fingerprints.push(fp);
+    if (this.recent_page_fingerprints.length > 5) {
+      this.recent_page_fingerprints = this.recent_page_fingerprints.slice(-5);
+    }
+  }
+
+  private update_repetition_stats() {
+    if (!this.recent_action_hashes.length) {
+      this.max_repetition_count = 0;
+      this.most_repeated_hash = null;
+      return;
+    }
+    const counts = new Map<string, number>();
+    for (const hash of this.recent_action_hashes) {
+      counts.set(hash, (counts.get(hash) ?? 0) + 1);
+    }
+    let maxHash: string | null = null;
+    let maxCount = 0;
+    for (const [hash, count] of counts.entries()) {
+      if (count > maxCount) {
+        maxHash = hash;
+        maxCount = count;
+      }
+    }
+    this.most_repeated_hash = maxHash;
+    this.max_repetition_count = maxCount;
+  }
+
+  get_nudge_message() {
+    const messages: string[] = [];
+
+    if (this.max_repetition_count >= 12) {
+      messages.push(
+        `Heads up: you have repeated a similar action ${this.max_repetition_count} times in the last ${this.recent_action_hashes.length} actions. If you are making progress with each repetition, keep going. If not, a different approach might get you there faster.`
+      );
+    } else if (this.max_repetition_count >= 8) {
+      messages.push(
+        `Heads up: you have repeated a similar action ${this.max_repetition_count} times in the last ${this.recent_action_hashes.length} actions. Are you still making progress with each attempt? If so, carry on. Otherwise, it might be worth trying a different approach.`
+      );
+    } else if (this.max_repetition_count >= 5) {
+      messages.push(
+        `Heads up: you have repeated a similar action ${this.max_repetition_count} times in the last ${this.recent_action_hashes.length} actions. If this is intentional and making progress, carry on. If not, it might be worth reconsidering your approach.`
+      );
+    }
+
+    if (this.consecutive_stagnant_pages >= 5) {
+      messages.push(
+        `The page content has not changed across ${this.consecutive_stagnant_pages} consecutive actions. Your actions might not be having the intended effect. It could be worth trying a different element or approach.`
+      );
+    }
+
+    if (!messages.length) {
+      return null;
+    }
+    return messages.join('\n\n');
+  }
+}
+
 export interface AgentSettings {
   session_attachment_mode: 'copy' | 'strict' | 'shared';
   allow_insecure_sensitive_data: boolean;
@@ -127,6 +327,8 @@ export interface AgentSettings {
   include_tool_call_examples: boolean;
   llm_timeout: number;
   step_timeout: number;
+  loop_detection_window: number;
+  loop_detection_enabled: boolean;
 }
 
 export const defaultAgentSettings = (): AgentSettings => ({
@@ -169,6 +371,8 @@ export const defaultAgentSettings = (): AgentSettings => ({
   include_tool_call_examples: false,
   llm_timeout: 60,
   step_timeout: 180,
+  loop_detection_window: 20,
+  loop_detection_enabled: true,
 });
 
 export class AgentState {
@@ -182,6 +386,7 @@ export class AgentState {
   stopped: boolean;
   message_manager_state: MessageManagerState;
   file_system_state: FileSystemState | null;
+  loop_detector: ActionLoopDetector;
 
   constructor(init?: Partial<AgentState>) {
     this.agent_id = init?.agent_id ?? '';
@@ -203,6 +408,16 @@ export class AgentState {
       this.message_manager_state = new MessageManagerState();
     }
     this.file_system_state = init?.file_system_state ?? null;
+    if (init?.loop_detector instanceof ActionLoopDetector) {
+      this.loop_detector = init.loop_detector;
+    } else if (init?.loop_detector) {
+      this.loop_detector = Object.assign(
+        new ActionLoopDetector(),
+        init.loop_detector
+      );
+    } else {
+      this.loop_detector = new ActionLoopDetector();
+    }
   }
 
   model_dump(): Record<string, unknown> {
@@ -220,6 +435,7 @@ export class AgentState {
         JSON.stringify(this.message_manager_state)
       ),
       file_system_state: this.file_system_state,
+      loop_detector: JSON.parse(JSON.stringify(this.loop_detector)),
     };
   }
 
