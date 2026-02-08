@@ -193,12 +193,61 @@ export class AgentMessagePrompt {
     const pdfMessage = this.browserState.is_pdf_viewer
       ? 'PDF viewer cannot be rendered. Do not use extract_structured_data here; use read_file on downloaded PDF via available_file_paths.\n\n'
       : '';
+    const recentEventsText = this.browserState.recent_events
+      ? `Recent browser events: ${this.browserState.recent_events}\n`
+      : '';
+
+    let closedPopupsText = '';
+    if (
+      Array.isArray(this.browserState.closed_popup_messages) &&
+      this.browserState.closed_popup_messages.length > 0
+    ) {
+      closedPopupsText = 'Auto-closed JavaScript dialogs:\n';
+      for (const popupMessage of this.browserState.closed_popup_messages) {
+        closedPopupsText += `  - ${popupMessage}\n`;
+      }
+      closedPopupsText += '\n';
+    }
+
+    let pendingRequestsText = '';
+    if (
+      Array.isArray(this.browserState.pending_network_requests) &&
+      this.browserState.pending_network_requests.length > 0
+    ) {
+      const requestLines = this.browserState.pending_network_requests
+        .slice(0, 5)
+        .map((request) => {
+          const method = request.method || 'GET';
+          const duration =
+            typeof request.loading_duration_ms === 'number'
+              ? ` (${Math.round(request.loading_duration_ms)}ms)`
+              : '';
+          return `  - ${method} ${request.url}${duration}`;
+        })
+        .join('\n');
+      pendingRequestsText = `Pending network requests:\n${requestLines}\n`;
+    }
+
+    let paginationButtonsText = '';
+    if (
+      Array.isArray(this.browserState.pagination_buttons) &&
+      this.browserState.pagination_buttons.length > 0
+    ) {
+      const buttonLines = this.browserState.pagination_buttons
+        .slice(0, 8)
+        .map(
+          (button) =>
+            `  - [${button.backend_node_id}] ${button.button_type}: ${button.text}`
+        )
+        .join('\n');
+      paginationButtonsText = `Detected pagination buttons:\n${buttonLines}\n`;
+    }
 
     return `${currentTabText}
 Available tabs:
 ${tabsText}
 ${pageInfoText}
-${pdfMessage}Interactive elements from top layer of the current page inside the viewport${truncatedText}:
+${recentEventsText}${pendingRequestsText}${paginationButtonsText}${closedPopupsText}${pdfMessage}Interactive elements from top layer of the current page inside the viewport${truncatedText}:
 ${elementsText}
 `;
   }

@@ -557,6 +557,10 @@ export class MCPServer {
           pixels_below: state.pixels_below,
           browser_errors: state.browser_errors,
           loading_status: state.loading_status,
+          recent_events: state.recent_events,
+          pending_network_requests: state.pending_network_requests,
+          pagination_buttons: state.pagination_buttons,
+          closed_popup_messages: state.closed_popup_messages,
           screenshot: state.screenshot,
           interactive_elements:
             state.element_tree.clickable_elements_to_string(),

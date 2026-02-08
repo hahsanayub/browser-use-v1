@@ -159,6 +159,64 @@ describe('MCPServer browser_click new_tab', () => {
   });
 });
 
+describe('MCPServer browser_get_state', () => {
+  it('returns enriched browser state fields for events/network/pagination/popups', async () => {
+    const server = new MCPServer('test-mcp', '1.0.0');
+    const browserSession = {
+      initialized: true,
+      start: vi.fn(),
+      get_browser_state_with_recovery: vi.fn(async () => ({
+        url: 'https://example.com/list',
+        title: 'List',
+        tabs: [],
+        page_info: null,
+        pixels_above: 0,
+        pixels_below: 0,
+        browser_errors: [],
+        loading_status: null,
+        recent_events:
+          '[{"event_type":"tab_switched","timestamp":"2026-01-01T00:00:00Z"}]',
+        pending_network_requests: [
+          {
+            url: 'https://example.com/api/items',
+            method: 'GET',
+            loading_duration_ms: 150,
+            resource_type: 'fetch',
+          },
+        ],
+        pagination_buttons: [
+          {
+            button_type: 'next',
+            backend_node_id: 8,
+            text: 'Next',
+            selector: '/html/body/nav/button[2]',
+            is_disabled: false,
+          },
+        ],
+        closed_popup_messages: ['[alert] Session expired soon'],
+        screenshot: null,
+        element_tree: {
+          clickable_elements_to_string: () => '',
+        },
+        selector_map: {},
+      })),
+    };
+
+    (server as any).ensureBrowserSession = vi.fn(async () => browserSession);
+
+    const result = await (server as any).tools.browser_get_state.handler({
+      include_screenshot: false,
+    });
+
+    expect(result.recent_events).toContain('tab_switched');
+    expect(result.pending_network_requests).toHaveLength(1);
+    expect(result.pagination_buttons).toHaveLength(1);
+    expect(result.closed_popup_messages).toEqual([
+      '[alert] Session expired soon',
+    ]);
+  });
+});
+
 describe('MCPServer retry_with_browser_use_agent', () => {
   it('runs retry tool with isolated session/profile and returns summary', async () => {
     mockAgentInstances.length = 0;
