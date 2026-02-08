@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { BaseChatModel } from '../src/llm/base.js';
 import { Agent } from '../src/agent/service.js';
-import { ActionResult } from '../src/agent/views.js';
+import { ActionResult, AgentStepInfo } from '../src/agent/views.js';
 import {
   ModelProviderError,
   ModelRateLimitError,
@@ -9,7 +9,11 @@ import {
 import { UserMessage } from '../src/llm/messages.js';
 import { BrowserSession } from '../src/browser/session.js';
 import { BrowserProfile } from '../src/browser/profile.js';
-import { DOMElementNode } from '../src/dom/views.js';
+import {
+  BrowserStateSummary,
+  PLACEHOLDER_4PX_SCREENSHOT,
+} from '../src/browser/views.js';
+import { DOMElementNode, DOMState } from '../src/dom/views.js';
 import { HistoryTreeProcessor } from '../src/dom/history-tree-processor/service.js';
 
 const createLlm = (
@@ -29,6 +33,29 @@ const createLlm = (
     },
     ainvoke: vi.fn(async () => ({ completion: 'ok', usage: null })),
   }) as unknown as BaseChatModel;
+
+const createBrowserStateSummary = (
+  overrides: Partial<{
+    url: string;
+    title: string;
+    tabs: Array<{ page_id: number; url: string; title: string }>;
+    screenshot: string | null;
+  }> = {}
+) => {
+  const root = new DOMElementNode(true, null, 'body', '/body', {}, []);
+  const domState = new DOMState(root, {});
+  return new BrowserStateSummary(domState, {
+    url: overrides.url ?? 'https://example.com',
+    title: overrides.title ?? 'Example',
+    tabs: overrides.tabs ?? [
+      { page_id: 0, url: 'https://example.com', title: 'Example' },
+    ],
+    screenshot:
+      overrides.screenshot === undefined
+        ? PLACEHOLDER_4PX_SCREENSHOT
+        : overrides.screenshot,
+  });
+};
 
 describe('Agent constructor browser session alignment', () => {
   it('creates BrowserSession from page/context when browser_session is omitted', async () => {
@@ -773,6 +800,136 @@ describe('Agent constructor browser session alignment', () => {
     expect(lastHistoryItem?.system_message).toBe(
       '<follow_up_user_request> Collect pricing details </follow_up_user_request>'
     );
+
+    await agent.close();
+  });
+
+  it('records step-0 action results with read_state tags and compact result text', async () => {
+    const agent = new Agent({
+      task: 'Message manager step-0 format',
+      llm: createLlm(),
+    });
+
+    const messageManager = (agent as any)._message_manager;
+    messageManager.prepare_step_state(
+      createBrowserStateSummary(),
+      null,
+      [
+        new ActionResult({
+          include_extracted_content_only_once: true,
+          extracted_content: 'Read-once content',
+        }),
+        new ActionResult({
+          long_term_memory: 'Persisted action memory',
+        }),
+      ],
+      new AgentStepInfo(0, 10)
+    );
+
+    const readState = (messageManager as any).state.read_state_description;
+    expect(readState).toContain('<read_state_0>');
+    expect(readState).toContain('Read-once content');
+    expect(readState).toContain('</read_state_0>');
+
+    const lastHistoryItem = (messageManager as any).state.agent_history_items.at(
+      -1
+    );
+    expect(lastHistoryItem?.step_number).toBe(0);
+    expect(lastHistoryItem?.action_results).toContain('Result');
+    expect(lastHistoryItem?.action_results).toContain('Persisted action memory');
+    expect(lastHistoryItem?.action_results).not.toContain('Action 1/');
+
+    await agent.close();
+  });
+
+  it('uses use_vision=auto to include screenshot only when requested by action metadata', async () => {
+    const agent = new Agent({
+      task: 'Auto screenshot inclusion',
+      llm: createLlm(),
+      use_vision: 'auto',
+    } as any);
+
+    const messageManager = (agent as any)._message_manager;
+
+    messageManager.create_state_messages(
+      createBrowserStateSummary(),
+      null,
+      [new ActionResult({ metadata: { include_screenshot: false } })],
+      new AgentStepInfo(1, 10),
+      'auto'
+    );
+    const noScreenshotStateMessage = (messageManager as any).state.history
+      .state_message as any;
+    expect(Array.isArray(noScreenshotStateMessage?.content)).toBe(false);
+
+    messageManager.create_state_messages(
+      createBrowserStateSummary(),
+      null,
+      [new ActionResult({ metadata: { include_screenshot: true } })],
+      new AgentStepInfo(2, 10),
+      'auto'
+    );
+    const screenshotStateMessage = (messageManager as any).state.history
+      .state_message as any;
+    expect(Array.isArray(screenshotStateMessage?.content)).toBe(true);
+    expect(
+      screenshotStateMessage.content.some((part: any) =>
+        String(part?.image_url?.url ?? '').startsWith('data:image/png;base64,')
+      )
+    ).toBe(true);
+
+    await agent.close();
+  });
+
+  it('filters sensitive data only in state messages (not system/context)', async () => {
+    const secret = 'secret-value-123';
+    const agent = new Agent({
+      task: 'Sensitive data filtering scope',
+      llm: createLlm(),
+      sensitive_data: {
+        'https://example.com': {
+          token: secret,
+        },
+      },
+      override_system_message: `System can reference ${secret}`,
+      browser_session: new BrowserSession({
+        browser_profile: new BrowserProfile({
+          allowed_domains: ['https://example.com'],
+        }),
+      }),
+    });
+
+    const messageManager = (agent as any)._message_manager;
+    const systemMessageText = String(
+      (messageManager as any).state.history.system_message?.text ?? ''
+    );
+    expect(systemMessageText).toContain(secret);
+
+    messageManager._add_context_message(new UserMessage(`Context has ${secret}`));
+    const lastContextMessageText = String(
+      (messageManager as any).state.history.context_messages.at(-1)?.text ?? ''
+    );
+    expect(lastContextMessageText).toContain(secret);
+
+    messageManager.create_state_messages(
+      createBrowserStateSummary(),
+      {
+        current_state: {
+          evaluation_previous_goal: 'checked previous step',
+          memory: `Memory contains ${secret}`,
+          next_goal: 'continue',
+        },
+        action: [],
+      } as any,
+      [new ActionResult({ long_term_memory: `Action used ${secret}` })],
+      new AgentStepInfo(1, 10),
+      false
+    );
+    const stateMessageText = String(
+      (messageManager as any).state.history.state_message?.text ?? ''
+    );
+    expect(stateMessageText).not.toContain(secret);
+    expect(stateMessageText).toContain('<secret>token</secret>');
 
     await agent.close();
   });

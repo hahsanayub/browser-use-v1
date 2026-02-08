@@ -1521,7 +1521,17 @@ Return valid JSON only, matching the schema exactly.`
       })();
 
       const extractSearchTerms = async () => {
-        if (!page_extraction_llm) {
+        const extractionLlm = page_extraction_llm as
+          | {
+              ainvoke: (
+                messages: UserMessage[],
+                options?: unknown,
+                callOptions?: { signal?: AbortSignal }
+              ) => Promise<{ completion?: string }>;
+            }
+          | null
+          | undefined;
+        if (!extractionLlm || typeof extractionLlm.ainvoke !== 'function') {
           return fallbackSearchTerms;
         }
         const prompt = `Extract 3-5 key search terms from this goal that would help find relevant sections.
@@ -1533,7 +1543,7 @@ Context: ${context}`;
         try {
           const response = await runWithTimeoutAndSignal(
             async () =>
-              (await page_extraction_llm.ainvoke(
+              (await extractionLlm.ainvoke(
                 [new UserMessage(prompt)],
                 undefined,
                 { signal: signal ?? undefined }

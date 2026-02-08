@@ -119,25 +119,26 @@ export class MessageManager {
     this.state.read_state_images = [];
 
     let actionText = '';
-    results.forEach((action, idx) => {
-      const suffix = `Action ${idx + 1}/${results.length}: `;
+    let readStateIdx = 0;
+    results.forEach((action) => {
       if (
         action.include_extracted_content_only_once &&
         action.extracted_content
       ) {
-        this.state.read_state_description += `${action.extracted_content}\n`;
+        this.state.read_state_description += `<read_state_${readStateIdx}>\n${action.extracted_content}\n</read_state_${readStateIdx}>\n`;
+        readStateIdx += 1;
       }
       if (Array.isArray(action.images) && action.images.length > 0) {
         this.state.read_state_images.push(...action.images);
       }
 
       if (action.long_term_memory) {
-        actionText += `${suffix}${action.long_term_memory}\n`;
+        actionText += `${action.long_term_memory}\n`;
       } else if (
         action.extracted_content &&
         !action.include_extracted_content_only_once
       ) {
-        actionText += `${suffix}${action.extracted_content}\n`;
+        actionText += `${action.extracted_content}\n`;
       }
 
       if (action.error) {
@@ -145,25 +146,53 @@ export class MessageManager {
           action.error.length > 200
             ? `${action.error.slice(0, 100)}......${action.error.slice(-100)}`
             : action.error;
-        actionText += `${suffix}${err}\n`;
+        actionText += `${err}\n`;
       }
     });
 
-    const normalizedActionText = actionText ? actionText.trim() : null;
+    const MAX_CONTENT_SIZE = 60000;
+    if (this.state.read_state_description.length > MAX_CONTENT_SIZE) {
+      this.state.read_state_description =
+        `${this.state.read_state_description.slice(0, MAX_CONTENT_SIZE)}\n... [Content truncated at 60k characters]`;
+    }
+    this.state.read_state_description = this.state.read_state_description.trim();
+
+    let normalizedActionText = actionText ? actionText.trim() : null;
+    if (normalizedActionText) {
+      normalizedActionText = `Result\n${normalizedActionText}`;
+      if (normalizedActionText.length > MAX_CONTENT_SIZE) {
+        normalizedActionText =
+          `${normalizedActionText.slice(0, MAX_CONTENT_SIZE)}\n... [Content truncated at 60k characters]`;
+      }
+    }
 
     if (!model_output) {
-      if (stepNumber != null && stepNumber > 0) {
-        this.state.agent_history_items.push(
-          new HistoryItem(
-            stepNumber,
-            null,
-            null,
-            null,
-            null,
-            'Agent failed to output in the right format.',
-            null
-          )
-        );
+      if (stepNumber != null) {
+        if (stepNumber === 0 && normalizedActionText) {
+          this.state.agent_history_items.push(
+            new HistoryItem(
+              stepNumber,
+              null,
+              null,
+              null,
+              normalizedActionText,
+              null,
+              null
+            )
+          );
+        } else if (stepNumber > 0) {
+          this.state.agent_history_items.push(
+            new HistoryItem(
+              stepNumber,
+              null,
+              null,
+              null,
+              null,
+              'Agent failed to output in the right format.',
+              null
+            )
+          );
+        }
       }
       return;
     }
@@ -341,7 +370,7 @@ export class MessageManager {
     model_output: AgentOutput | null = null,
     result: ActionResult[] | null = null,
     step_info: AgentStepInfo | null = null,
-    use_vision = true,
+    use_vision: boolean | 'auto' = true,
     page_filtered_actions: string | null = null,
     sensitive_data: Record<
       string,
@@ -363,9 +392,27 @@ export class MessageManager {
     }
 
     const screenshots: string[] = [];
-    if (browser_state_summary.screenshot) {
+    let includeScreenshotRequested = false;
+    if (result) {
+      for (const actionResult of result) {
+        if ((actionResult.metadata as any)?.include_screenshot) {
+          includeScreenshotRequested = true;
+          break;
+        }
+      }
+    }
+
+    let includeScreenshot = false;
+    if (use_vision === true) {
+      includeScreenshot = true;
+    } else if (use_vision === 'auto') {
+      includeScreenshot = includeScreenshotRequested;
+    }
+
+    if (includeScreenshot && browser_state_summary.screenshot) {
       screenshots.push(browser_state_summary.screenshot);
     }
+    const effectiveUseVision = screenshots.length > 0;
 
     const prompt = new AgentMessagePrompt({
       browser_state_summary,
@@ -384,7 +431,7 @@ export class MessageManager {
       read_state_images: this.state.read_state_images,
       plan_description,
     });
-    const message = prompt.get_user_message(use_vision);
+    const message = prompt.get_user_message(effectiveUseVision);
     this.last_state_message_text = this.extractStateMessageText(message);
     this.setMessageWithType(message, 'state');
   }
@@ -399,21 +446,18 @@ export class MessageManager {
     message: SystemMessage | UserMessage,
     messageType: 'system' | 'state'
   ) {
-    const filtered = this.sensitiveData
-      ? this.filterSensitiveData(message)
-      : message;
     if (messageType === 'system') {
-      this.state.history.system_message = filtered;
+      this.state.history.system_message = message;
     } else {
+      const filtered = this.sensitiveData
+        ? this.filterSensitiveData(message)
+        : message;
       this.state.history.state_message = filtered;
     }
   }
 
   private addContextMessage(message: SystemMessage | UserMessage) {
-    const filtered = this.sensitiveData
-      ? this.filterSensitiveData(message)
-      : message;
-    this.state.history.context_messages.push(filtered);
+    this.state.history.context_messages.push(message);
   }
 
   _add_context_message(message: SystemMessage | UserMessage) {

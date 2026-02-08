@@ -41,6 +41,7 @@ import {
 import {
   AssistantMessage,
   ContentPartTextParam,
+  SystemMessage,
   UserMessage,
 } from '../llm/messages.js';
 import type { UsageSummary } from '../tokens/views.js';
@@ -2993,7 +2994,7 @@ export class Agent<
       const actionPayload =
         typeof (originalAction as any)?.model_dump === 'function'
           ? (originalAction as any).model_dump({ exclude_unset: true })
-          : (originalAction as Record<string, unknown>);
+          : (originalAction as unknown as Record<string, unknown>);
       const actionName = Object.keys(actionPayload ?? {})[0] ?? null;
 
       if (
@@ -3082,7 +3083,7 @@ export class Agent<
       const payload =
         typeof (action as any).model_dump === 'function'
           ? (action as any).model_dump({ exclude_unset: true })
-          : (action as Record<string, unknown>);
+          : (action as unknown as Record<string, unknown>);
       const actionName = Object.keys(payload ?? {})[0] ?? null;
       if (!actionName) {
         continue;
