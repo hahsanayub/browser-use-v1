@@ -755,7 +755,7 @@ describe('Regression Coverage', () => {
   it('wait action uses object params and does not produce NaN', async () => {
     const controller = new Controller();
     const result = await controller.registry.execute_action('wait', {});
-    expect(result.extracted_content).toContain('Waiting for 3 seconds');
+    expect(result.extracted_content).toContain('Waited for 3 seconds');
     expect(result.extracted_content).not.toContain('NaN');
   });
 
@@ -767,6 +767,55 @@ describe('Regression Coverage', () => {
     expect(actions.has('input')).toBe(true);
     expect(actions.has('switch')).toBe(true);
     expect(actions.has('close')).toBe(true);
+    expect(actions.has('extract')).toBe(true);
+    expect(actions.has('find_text')).toBe(true);
+    expect(actions.has('dropdown_options')).toBe(true);
+    expect(actions.has('select_dropdown')).toBe(true);
+    expect(actions.has('replace_file')).toBe(true);
+  });
+
+  it('replace_file alias delegates to replace_file_str handler', async () => {
+    const controller = new Controller();
+    const fileSystem = {
+      replace_file_str: vi.fn(async () => 'Replaced 1 occurrence in notes.md'),
+    };
+
+    const result = await controller.registry.execute_action(
+      'replace_file',
+      {
+        file_name: 'notes.md',
+        old_str: 'todo',
+        new_str: 'done',
+      },
+      { file_system: fileSystem as any }
+    );
+
+    expect(fileSystem.replace_file_str).toHaveBeenCalledWith(
+      'notes.md',
+      'todo',
+      'done'
+    );
+    expect(result.extracted_content).toContain('Replaced 1 occurrence');
+  });
+
+  it('find_text alias delegates to scroll_to_text behavior', async () => {
+    const controller = new Controller();
+    const page = {
+      evaluate: vi.fn(async () => true),
+      url: vi.fn(() => 'https://example.com'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+    };
+
+    const result = await controller.registry.execute_action(
+      'find_text',
+      { text: 'checkout' },
+      { browser_session: browserSession as any }
+    );
+
+    expect(page.evaluate).toHaveBeenCalled();
+    expect(result.extracted_content).toContain('Scrolled to text: checkout');
   });
 
   it('page prompt description includes unfiltered and page-filtered actions', async () => {
@@ -824,13 +873,9 @@ describe('Regression Coverage', () => {
     expect((includedModel as any).available_actions).toEqual(['domain_action']);
   });
 
-  it('search action defaults to duckduckgo and opens a new tab', async () => {
+  it('search action defaults to duckduckgo and navigates current tab', async () => {
     const controller = new Controller();
-    const page = {
-      url: vi.fn(() => 'https://example.com'),
-    };
     const browserSession = {
-      get_current_page: vi.fn(async () => page),
       navigate_to: vi.fn(async () => {}),
       create_new_tab: vi.fn(async () => {}),
     };
@@ -841,11 +886,11 @@ describe('Regression Coverage', () => {
       { browser_session: browserSession as any }
     );
 
-    expect(browserSession.create_new_tab).toHaveBeenCalledTimes(1);
-    expect(browserSession.create_new_tab.mock.calls[0][0]).toContain(
+    expect(browserSession.navigate_to).toHaveBeenCalledTimes(1);
+    expect(browserSession.navigate_to.mock.calls[0][0]).toContain(
       'duckduckgo.com/?q=browser%20use'
     );
-    expect(browserSession.navigate_to).not.toHaveBeenCalled();
+    expect(browserSession.create_new_tab).not.toHaveBeenCalled();
     expect(result.long_term_memory).toContain("Searched duckduckgo for 'browser use'");
   });
 

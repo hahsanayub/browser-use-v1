@@ -50,8 +50,8 @@ type BaseChatModel = {
   ) => Promise<{ completion: string }>;
 };
 
-const DEFAULT_WAIT_OFFSET = 3;
-const MAX_WAIT_SECONDS = 10;
+const DEFAULT_WAIT_OFFSET = 1;
+const MAX_WAIT_SECONDS = 30;
 
 export interface ControllerOptions<Context = unknown> {
   exclude_actions?: string[];
@@ -249,19 +249,9 @@ export class Controller<Context = unknown> {
       };
       const searchUrl = searchUrlByEngine[engine];
 
-      const page = await browser_session.get_current_page();
-      const currentUrl = page?.url?.().replace(/\/+$/, '');
-      if (
-        currentUrl === 'https://www.google.com' ||
-        currentUrl === 'https://duckduckgo.com' ||
-        currentUrl === 'https://www.bing.com'
-      ) {
-        await browser_session.navigate_to(searchUrl, { signal });
-      } else {
-        await browser_session.create_new_tab(searchUrl, { signal });
-      }
+      await browser_session.navigate_to(searchUrl, { signal });
 
-      const msg = `🔍 Searched for "${params.query}" on ${engine}`;
+      const msg = `🔍 Searched ${engine} for "${params.query}"`;
       return new ActionResult({
         extracted_content: msg,
         include_in_memory: true,
@@ -369,7 +359,7 @@ export class Controller<Context = unknown> {
 
     type WaitAction = z.infer<typeof WaitActionSchema>;
     this.registry.action(
-      'Wait for x seconds default 3 (max 10 seconds). This can be used to wait until the page is fully loaded.',
+      'Wait for x seconds.',
       { param_model: WaitActionSchema }
     )(async function wait(params: WaitAction, { signal }) {
       const seconds = params.seconds ?? 3;
@@ -377,11 +367,14 @@ export class Controller<Context = unknown> {
         Math.max(seconds - DEFAULT_WAIT_OFFSET, 0),
         MAX_WAIT_SECONDS
       );
-      const msg = `🕒  Waiting for ${actualSeconds + DEFAULT_WAIT_OFFSET} seconds`;
+      const msg = `🕒 Waited for ${seconds} second${seconds === 1 ? '' : 's'}`;
       if (actualSeconds > 0) {
         await waitWithSignal(actualSeconds * 1000, signal);
       }
-      return new ActionResult({ extracted_content: msg });
+      return new ActionResult({
+        extracted_content: msg,
+        long_term_memory: `Waited for ${seconds} second${seconds === 1 ? '' : 's'}`,
+      });
     });
   }
 
@@ -805,6 +798,7 @@ export class Controller<Context = unknown> {
   }
 
   private registerContentActions() {
+    const registry = this.registry;
     type ExtractStructuredAction = z.infer<
       typeof ExtractStructuredDataActionSchema
     >;
@@ -1011,6 +1005,32 @@ Return valid JSON only, matching the schema exactly.`
         extracted_content,
         include_extracted_content_only_once: includeOnce,
         long_term_memory: memory,
+      });
+    });
+
+    this.registry.action(
+      'Extract structured, semantic data from the current webpage based on a textual query.',
+      { param_model: ExtractStructuredDataActionSchema, action_name: 'extract' }
+    )(async function extract(
+      params: ExtractStructuredAction,
+      {
+        browser_session,
+        page_extraction_llm,
+        extraction_schema,
+        file_system,
+        available_file_paths,
+        sensitive_data,
+        signal,
+      }
+    ) {
+      return registry.execute_action('extract_structured_data', params as any, {
+        browser_session,
+        page_extraction_llm,
+        extraction_schema,
+        file_system,
+        available_file_paths,
+        sensitive_data,
+        signal,
       });
     });
   }
@@ -1310,6 +1330,7 @@ Return valid JSON only, matching the schema exactly.`
   }
 
   private registerScrollActions() {
+    const registry = this.registry;
     const scrollLogger = this.logger; // Capture logger reference for use in named function
     type ScrollAction = z.infer<typeof ScrollActionSchema>;
 
@@ -1631,9 +1652,17 @@ Return valid JSON only, matching the schema exactly.`
         long_term_memory: msg,
       });
     });
+
+    this.registry.action('Scroll to text.', {
+      param_model: ScrollToTextActionSchema,
+      action_name: 'find_text',
+    })(async function find_text(params: ScrollToTextAction, ctx) {
+      return registry.execute_action('scroll_to_text', params as any, ctx as any);
+    });
   }
 
   private registerFileSystemActions() {
+    const registry = this.registry;
     type ReadFileAction = z.infer<typeof ReadFileActionSchema>;
     this.registry.action('Read file_name from file system', {
       param_model: ReadFileActionSchema,
@@ -1988,6 +2017,13 @@ Context: ${context}`;
         long_term_memory: result,
       });
     });
+
+    this.registry.action('Replace text within an existing file', {
+      param_model: ReplaceFileStrActionSchema,
+      action_name: 'replace_file',
+    })(async function replace_file(params: ReplaceAction, ctx) {
+      return registry.execute_action('replace_file_str', params as any, ctx as any);
+    });
   }
 
   private registerUtilityActions() {
@@ -2138,6 +2174,7 @@ Context: ${context}`;
   }
 
   private registerDropdownActions() {
+    const registry = this.registry;
     const formatAvailableOptions = (
       options: Array<{ index: number; text: string; value: string }>
     ) =>
@@ -2234,6 +2271,17 @@ Context: ${context}`;
         include_extracted_content_only_once: true,
         long_term_memory: `Found dropdown options for index ${params.index}.`,
       });
+    });
+
+    this.registry.action('Get all options from a native dropdown or ARIA menu', {
+      param_model: DropdownOptionsActionSchema,
+      action_name: 'dropdown_options',
+    })(async function dropdown_options(params: DropdownAction, ctx) {
+      return registry.execute_action(
+        'get_dropdown_options',
+        params as any,
+        ctx as any
+      );
     });
 
     type SelectAction = z.infer<typeof SelectDropdownActionSchema>;
@@ -2443,6 +2491,17 @@ Context: ${context}`;
 
       throw new BrowserError(
         `Could not select option '${params.text}' for index ${params.index}`
+      );
+    });
+
+    this.registry.action('Select dropdown option or ARIA menu item by text', {
+      param_model: SelectDropdownActionSchema,
+      action_name: 'select_dropdown',
+    })(async function select_dropdown(params: SelectAction, ctx) {
+      return registry.execute_action(
+        'select_dropdown_option',
+        params as any,
+        ctx as any
       );
     });
   }
