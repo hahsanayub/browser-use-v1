@@ -40,6 +40,19 @@ describe('Action loop detection', () => {
     expect(first).toBe(second);
   });
 
+  it('treats different search engines as different loop signatures', () => {
+    const googleHash = compute_action_hash('search', {
+      query: 'best headphones under 100',
+      engine: 'google',
+    });
+    const bingHash = compute_action_hash('search', {
+      query: 'best headphones under 100',
+      engine: 'bing',
+    });
+
+    expect(googleHash).not.toBe(bingHash);
+  });
+
   it('emits repeated-action nudge at threshold', () => {
     const detector = new ActionLoopDetector({ window_size: 20 });
     for (let i = 0; i < 5; i += 1) {

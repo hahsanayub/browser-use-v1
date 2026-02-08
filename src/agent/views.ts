@@ -175,7 +175,13 @@ const normalizeActionForHash = (
           .filter(Boolean)
       )
     ).sort();
-    return `search|${tokens.join('|')}`;
+    const engine =
+      typeof params.engine === 'string' && params.engine.trim()
+        ? params.engine.trim().toLowerCase()
+        : action_name === 'search_google'
+          ? 'google'
+          : 'google';
+    return `search|${engine}|${tokens.join('|')}`;
   }
 
   if (
