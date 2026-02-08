@@ -20,6 +20,7 @@ import { log_pretty_path, uuid7str } from '../utils.js';
 const logger = createLogger('browser_use.browser.profile');
 
 export const CHROME_DEBUG_PORT = 9242;
+export const DOMAIN_OPTIMIZATION_THRESHOLD = 100;
 
 export const CHROME_DISABLED_COMPONENTS = [
   'AcceptCHFrame',
@@ -51,6 +52,7 @@ export const CHROME_DISABLED_COMPONENTS = [
   'OverscrollHistoryNavigation',
   'InfiniteSessionRestore',
   'ExtensionDisableUnsupportedDeveloper',
+  'ExtensionManifestV2Unsupported',
 ];
 
 export const CHROME_HEADLESS_ARGS = ['--headless=new'];
@@ -103,8 +105,6 @@ export const CHROME_DEFAULT_ARGS = [
   '--disable-renderer-backgrounding',
   '--metrics-recording-only',
   '--no-first-run',
-  '--password-store=basic',
-  '--use-mock-keychain',
   '--no-service-autorun',
   '--export-tagged-pdf',
   '--disable-search-engine-choice-screen',
@@ -382,8 +382,8 @@ export interface BrowserProfileSpecificOptions {
   stealth: boolean;
   disable_security: boolean;
   deterministic_rendering: boolean;
-  allowed_domains: Nullable<string[]>;
-  prohibited_domains: Nullable<string[]>;
+  allowed_domains: Nullable<string[] | Set<string>>;
+  prohibited_domains: Nullable<string[] | Set<string>>;
   block_ip_addresses: boolean;
   keep_alive: Nullable<boolean>;
   enable_default_extensions: boolean;
@@ -521,6 +521,22 @@ const argsAsList = (args: Record<string, string>) =>
 const cloneDefaultOptions = (): BrowserProfileOptions =>
   JSON.parse(JSON.stringify(DEFAULT_BROWSER_PROFILE_OPTIONS));
 
+const normalizeDomainEntry = (entry: unknown) =>
+  String(entry ?? '')
+    .trim()
+    .toLowerCase();
+
+const optimizeDomainList = (value: unknown[]): string[] | Set<string> => {
+  const cleaned = value.map(normalizeDomainEntry).filter(Boolean);
+  if (cleaned.length >= DOMAIN_OPTIMIZATION_THRESHOLD) {
+    logger.warning(
+      `Optimizing domain list with ${cleaned.length} entries to a Set for O(1) matching`
+    );
+    return new Set(cleaned);
+  }
+  return cleaned;
+};
+
 export class BrowserProfile {
   private options: BrowserProfileOptions;
 
@@ -543,12 +559,22 @@ export class BrowserProfile {
         ? init.ignore_default_args.map(validate_cli_arg)
         : (init.ignore_default_args ?? defaults.ignore_default_args),
       allowed_domains: Array.isArray(init.allowed_domains)
-        ? init.allowed_domains.map((entry) => String(entry).trim()).filter(Boolean)
+        ? optimizeDomainList(init.allowed_domains)
+        : init.allowed_domains instanceof Set
+          ? new Set(
+              Array.from(init.allowed_domains)
+                .map(normalizeDomainEntry)
+                .filter(Boolean)
+            )
         : defaults.allowed_domains,
       prohibited_domains: Array.isArray(init.prohibited_domains)
-        ? init.prohibited_domains
-            .map((entry) => String(entry).trim())
-            .filter(Boolean)
+        ? optimizeDomainList(init.prohibited_domains)
+        : init.prohibited_domains instanceof Set
+          ? new Set(
+              Array.from(init.prohibited_domains)
+                .map(normalizeDomainEntry)
+                .filter(Boolean)
+            )
         : defaults.prohibited_domains,
       window_position: init.window_position ?? defaults.window_position,
     };

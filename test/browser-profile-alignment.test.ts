@@ -45,4 +45,22 @@ describe('BrowserProfile alignment with latest py-browser-use defaults', () => {
     });
     expect(profile.config.enable_default_extensions).toBe(true);
   });
+
+  it('optimizes large allowed/prohibited domain lists into sets', async () => {
+    const { BrowserProfile } = await importProfileModule();
+    const domains = Array.from({ length: 120 }, (_, idx) => {
+      return `site-${idx}.example.com`;
+    });
+
+    const profile = new BrowserProfile({
+      allowed_domains: domains,
+      prohibited_domains: domains,
+    });
+
+    expect(profile.config.allowed_domains).toBeInstanceOf(Set);
+    expect(profile.config.prohibited_domains).toBeInstanceOf(Set);
+    expect((profile.config.allowed_domains as Set<string>).has(domains[0])).toBe(
+      true
+    );
+  });
 });

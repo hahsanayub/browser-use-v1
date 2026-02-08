@@ -2954,6 +2954,14 @@ export class BrowserSession {
     return isIP(normalized) !== 0;
   }
 
+  private _get_domain_variants(hostname: string): [string, string] {
+    const host = hostname.toLowerCase();
+    if (host.startsWith('www.')) {
+      return [host, host.slice(4)];
+    }
+    return [host, `www.${host}`];
+  }
+
   /**
    * Check if page is displaying a PDF
    */
@@ -3301,6 +3309,7 @@ export class BrowserSession {
     if (!parsed.hostname) {
       return 'missing_host';
     }
+    const [hostVariant, hostAlt] = this._get_domain_variants(parsed.hostname);
 
     if (
       this.browser_profile.block_ip_addresses &&
@@ -3310,28 +3319,51 @@ export class BrowserSession {
     }
 
     const allowedDomains = this.browser_profile.allowed_domains;
-    if (allowedDomains && allowedDomains.length > 0) {
-      for (const allowedDomain of allowedDomains) {
-        try {
-          if (match_url_with_domain_pattern(url, allowedDomain, true)) {
-            return null;
+    if (
+      allowedDomains &&
+      ((Array.isArray(allowedDomains) && allowedDomains.length > 0) ||
+        (allowedDomains instanceof Set && allowedDomains.size > 0))
+    ) {
+      if (allowedDomains instanceof Set) {
+        if (allowedDomains.has(hostVariant) || allowedDomains.has(hostAlt)) {
+          return null;
+        }
+      } else {
+        for (const allowedDomain of allowedDomains) {
+          try {
+            if (match_url_with_domain_pattern(url, allowedDomain, true)) {
+              return null;
+            }
+          } catch {
+            this.logger.warning(`Invalid domain pattern: ${allowedDomain}`);
           }
-        } catch {
-          this.logger.warning(`Invalid domain pattern: ${allowedDomain}`);
         }
       }
       return 'not_in_allowed_domains';
     }
 
     const prohibitedDomains = this.browser_profile.prohibited_domains;
-    if (prohibitedDomains && prohibitedDomains.length > 0) {
-      for (const prohibitedDomain of prohibitedDomains) {
-        try {
-          if (match_url_with_domain_pattern(url, prohibitedDomain, true)) {
-            return 'in_prohibited_domains';
+    if (
+      prohibitedDomains &&
+      ((Array.isArray(prohibitedDomains) && prohibitedDomains.length > 0) ||
+        (prohibitedDomains instanceof Set && prohibitedDomains.size > 0))
+    ) {
+      if (prohibitedDomains instanceof Set) {
+        if (
+          prohibitedDomains.has(hostVariant) ||
+          prohibitedDomains.has(hostAlt)
+        ) {
+          return 'in_prohibited_domains';
+        }
+      } else {
+        for (const prohibitedDomain of prohibitedDomains) {
+          try {
+            if (match_url_with_domain_pattern(url, prohibitedDomain, true)) {
+              return 'in_prohibited_domains';
+            }
+          } catch {
+            this.logger.warning(`Invalid domain pattern: ${prohibitedDomain}`);
           }
-        } catch {
-          this.logger.warning(`Invalid domain pattern: ${prohibitedDomain}`);
         }
       }
     }
@@ -3341,6 +3373,15 @@ export class BrowserSession {
 
   private _is_url_allowed(url: string): boolean {
     return this._get_url_access_denial_reason(url) === null;
+  }
+
+  private _formatDomainCollection(
+    value: string[] | Set<string> | null | undefined
+  ) {
+    if (value instanceof Set) {
+      return JSON.stringify(Array.from(value));
+    }
+    return JSON.stringify(value ?? null);
   }
 
   private _assert_url_allowed(url: string) {
@@ -3355,7 +3396,7 @@ export class BrowserSession {
 
     if (denialReason === 'not_in_allowed_domains') {
       throw new URLNotAllowedError(
-        `URL ${url} is not in allowed_domains. Current allowed_domains: ${JSON.stringify(
+        `URL ${url} is not in allowed_domains. Current allowed_domains: ${this._formatDomainCollection(
           this.browser_profile.allowed_domains
         )}`
       );
@@ -3363,7 +3404,7 @@ export class BrowserSession {
 
     if (denialReason === 'in_prohibited_domains') {
       throw new URLNotAllowedError(
-        `URL ${url} is blocked by prohibited_domains. Current prohibited_domains: ${JSON.stringify(
+        `URL ${url} is blocked by prohibited_domains. Current prohibited_domains: ${this._formatDomainCollection(
           this.browser_profile.prohibited_domains
         )}`
       );

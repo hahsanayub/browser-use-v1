@@ -72,4 +72,44 @@ describe('Allowed Domains Security', () => {
     expect((session as any)._is_url_allowed('https://[::1]')).toBe(false);
     expect((session as any)._is_url_allowed('https://example.com')).toBe(true);
   });
+
+  it('uses optimized allowlist sets for large domain lists and matches www variants', () => {
+    const domains = Array.from({ length: 120 }, (_, idx) => {
+      return `site-${idx}.example.com`;
+    });
+    domains[0] = 'example.com';
+
+    const session = new BrowserSession({
+      browser_profile: new BrowserProfile({
+        allowed_domains: domains,
+      }),
+    });
+
+    expect((session as any)._is_url_allowed('https://www.example.com')).toBe(
+      true
+    );
+    expect((session as any)._is_url_allowed('https://unknown.example')).toBe(
+      false
+    );
+  });
+
+  it('uses optimized prohibited sets for large blocklists', () => {
+    const domains = Array.from({ length: 120 }, (_, idx) => {
+      return `blocked-${idx}.example.com`;
+    });
+    domains[0] = 'evil.example.com';
+
+    const session = new BrowserSession({
+      browser_profile: new BrowserProfile({
+        prohibited_domains: domains,
+      }),
+    });
+
+    expect((session as any)._is_url_allowed('https://www.evil.example.com')).toBe(
+      false
+    );
+    expect((session as any)._is_url_allowed('https://safe.example.com')).toBe(
+      true
+    );
+  });
 });
