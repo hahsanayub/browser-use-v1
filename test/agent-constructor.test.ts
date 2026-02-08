@@ -6,6 +6,7 @@ import {
   ModelProviderError,
   ModelRateLimitError,
 } from '../src/llm/exceptions.js';
+import { UserMessage } from '../src/llm/messages.js';
 import { BrowserSession } from '../src/browser/session.js';
 import { BrowserProfile } from '../src/browser/profile.js';
 import { DOMElementNode } from '../src/dom/views.js';
@@ -252,6 +253,57 @@ describe('Agent constructor browser session alignment', () => {
         files_to_display: [],
       },
     });
+
+    await agent.close();
+  });
+
+  it('shortens long URLs before invoke and restores original URLs in model output', async () => {
+    const longUrl = `https://example.com/path?token=${'x'.repeat(80)}`;
+    const seenMessages: any[] = [];
+    const llm = {
+      ...createLlm('primary-model'),
+      ainvoke: vi.fn(async (messages: any[]) => {
+        seenMessages.push(messages);
+        const promptText =
+          typeof messages?.[0]?.content === 'string'
+            ? messages[0].content
+            : '';
+        return {
+          completion: {
+            thinking: null,
+            evaluation_previous_goal: 'none',
+            memory: 'none',
+            next_goal: `Inspect ${promptText}`,
+            action: [
+              {
+                done: {
+                  text: `Processed ${promptText}`,
+                  success: true,
+                },
+              },
+            ],
+          },
+          usage: null,
+        };
+      }),
+    } as BaseChatModel;
+    const agent = new Agent({
+      task: 'url shortening',
+      llm,
+      _url_shortening_limit: 12,
+    });
+
+    const inputMessages = [new UserMessage(`Visit ${longUrl} and summarize.`)];
+    const output = await (agent as any)._get_model_output_with_retry(
+      inputMessages,
+      null
+    );
+
+    const forwardedPrompt = String(seenMessages[0]?.[0]?.content ?? '');
+    expect(forwardedPrompt).not.toContain(longUrl);
+    expect(forwardedPrompt).toContain('...');
+    expect(output.next_goal).toContain(longUrl);
+    expect(output.action[0].model_dump().done.text).toContain(longUrl);
 
     await agent.close();
   });

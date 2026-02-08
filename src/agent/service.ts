@@ -2,6 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import process from 'node:process';
+import { createHash } from 'node:crypto';
 import { config as loadEnv } from 'dotenv';
 import { z } from 'zod';
 import { createLogger } from '../logging-config.js';
@@ -37,7 +38,11 @@ import {
   ModelProviderError,
   ModelRateLimitError,
 } from '../llm/exceptions.js';
-import { UserMessage } from '../llm/messages.js';
+import {
+  AssistantMessage,
+  ContentPartTextParam,
+  UserMessage,
+} from '../llm/messages.js';
 import type { UsageSummary } from '../tokens/views.js';
 import {
   ActionResult,
@@ -76,6 +81,8 @@ import {
 loadEnv();
 
 const logger = createLogger('browser_use.agent');
+const URL_PATTERN =
+  /https?:\/\/[^\s<>"']+|www\.[^\s<>"']+|[^\s<>"']+\.[a-z]{2,}(?:\/[^\s<>"']*)?/gi;
 
 export const log_response = (
   response: AgentOutput,
@@ -244,6 +251,7 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
   message_compaction?: MessageCompactionSettings | boolean | null;
   loop_detection_window?: number;
   loop_detection_enabled?: boolean;
+  _url_shortening_limit?: number;
 }
 
 const ensureDir = (target: string) => {
@@ -322,6 +330,7 @@ const defaultAgentOptions = () => ({
   message_compaction: true as MessageCompactionSettings | boolean,
   loop_detection_window: 20,
   loop_detection_enabled: true,
+  _url_shortening_limit: 25,
 });
 
 const AgentLLMOutputSchema = z.object({
@@ -449,6 +458,7 @@ export class Agent<
   private _fallback_llm: BaseChatModel | null = null;
   private _using_fallback_llm = false;
   private _original_llm: BaseChatModel | null = null;
+  private _url_shortening_limit = 25;
 
   constructor(params: AgentConstructorParams<Context, AgentStructuredOutput>) {
     const {
@@ -508,6 +518,7 @@ export class Agent<
       message_compaction = true,
       loop_detection_window = 20,
       loop_detection_enabled = true,
+      _url_shortening_limit = 25,
     } = { ...defaultAgentOptions(), ...params };
 
     if (!llm) {
@@ -529,6 +540,7 @@ export class Agent<
     this._fallback_llm = fallback_llm;
     this._using_fallback_llm = false;
     this._original_llm = llm;
+    this._url_shortening_limit = Math.max(0, Math.trunc(_url_shortening_limit));
     this.id = task_id || uuid7str();
     this.task_id = this.id;
     this.session_id = uuid7str();
@@ -4454,6 +4466,130 @@ export class Agent<
     this.logger.info(judgeLog);
   }
 
+  private _replace_urls_in_text(text: string): [string, Record<string, string>] {
+    const replacedUrls: Record<string, string> = {};
+    const shortenedText = text.replace(URL_PATTERN, (originalUrl) => {
+      const queryStart = originalUrl.indexOf('?');
+      const fragmentStart = originalUrl.indexOf('#');
+      let afterPathStart = originalUrl.length;
+      if (queryStart !== -1) {
+        afterPathStart = Math.min(afterPathStart, queryStart);
+      }
+      if (fragmentStart !== -1) {
+        afterPathStart = Math.min(afterPathStart, fragmentStart);
+      }
+
+      const baseUrl = originalUrl.slice(0, afterPathStart);
+      const afterPath = originalUrl.slice(afterPathStart);
+      if (afterPath.length <= this._url_shortening_limit) {
+        return originalUrl;
+      }
+
+      const truncatedAfterPath = afterPath.slice(0, this._url_shortening_limit);
+      const shortHash = createHash('md5')
+        .update(afterPath, 'utf8')
+        .digest('hex')
+        .slice(0, 7);
+      const shortened = `${baseUrl}${truncatedAfterPath}...${shortHash}`;
+      if (shortened.length >= originalUrl.length) {
+        return originalUrl;
+      }
+
+      replacedUrls[shortened] = originalUrl;
+      return shortened;
+    });
+
+    return [shortenedText, replacedUrls];
+  }
+
+  private _process_messages_and_replace_long_urls_shorter_ones(
+    inputMessages: any[]
+  ): Record<string, string> {
+    const urlsReplaced: Record<string, string> = {};
+
+    for (const message of inputMessages) {
+      if (!message || typeof message !== 'object') {
+        continue;
+      }
+      const role = (message as any).role;
+      const isUserOrAssistant =
+        message instanceof UserMessage ||
+        message instanceof AssistantMessage ||
+        role === 'user' ||
+        role === 'assistant';
+      if (!isUserOrAssistant) {
+        continue;
+      }
+
+      if (typeof (message as any).content === 'string') {
+        const [updated, replaced] = this._replace_urls_in_text(
+          (message as any).content
+        );
+        (message as any).content = updated;
+        Object.assign(urlsReplaced, replaced);
+        continue;
+      }
+
+      if (!Array.isArray((message as any).content)) {
+        continue;
+      }
+      for (const part of (message as any).content) {
+        if (!part || typeof part !== 'object') {
+          continue;
+        }
+        const isTextPart =
+          part instanceof ContentPartTextParam || (part as any).type === 'text';
+        if (!isTextPart || typeof (part as any).text !== 'string') {
+          continue;
+        }
+        const [updated, replaced] = this._replace_urls_in_text(
+          (part as any).text
+        );
+        (part as any).text = updated;
+        Object.assign(urlsReplaced, replaced);
+      }
+    }
+
+    return urlsReplaced;
+  }
+
+  private _replace_shortened_urls_in_string(
+    text: string,
+    urlReplacements: Record<string, string>
+  ): string {
+    let result = text;
+    for (const [shortenedUrl, originalUrl] of Object.entries(urlReplacements)) {
+      result = result.split(shortenedUrl).join(originalUrl);
+    }
+    return result;
+  }
+
+  private _replace_shortened_urls_in_value(
+    value: unknown,
+    urlReplacements: Record<string, string>
+  ): unknown {
+    if (typeof value === 'string') {
+      return this._replace_shortened_urls_in_string(value, urlReplacements);
+    }
+    if (Array.isArray(value)) {
+      for (let i = 0; i < value.length; i += 1) {
+        value[i] = this._replace_shortened_urls_in_value(
+          value[i],
+          urlReplacements
+        );
+      }
+      return value;
+    }
+    if (!value || typeof value !== 'object') {
+      return value;
+    }
+    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+      (value as Record<string, unknown>)[key] =
+        this._replace_shortened_urls_in_value(nested, urlReplacements);
+    }
+    return value;
+  }
+
   private _parseCompletionPayload(
     rawCompletion: unknown
   ): Record<string, unknown> {
@@ -4520,6 +4656,9 @@ export class Agent<
     messages: any[],
     signal: AbortSignal | null = null
   ) {
+    const urlReplacements =
+      this._process_messages_and_replace_long_urls_shorter_ones(messages);
+
     const invokeAndParse = async (inputMessages: any[]) => {
       this._throwIfAborted(signal);
       const completion = await this.llm.ainvoke(
@@ -4528,7 +4667,11 @@ export class Agent<
         { signal: signal ?? undefined }
       );
       this._throwIfAborted(signal);
-      return this._parseCompletionPayload((completion as any).completion);
+      const parsed = this._parseCompletionPayload((completion as any).completion);
+      if (Object.keys(urlReplacements).length) {
+        this._replace_shortened_urls_in_value(parsed, urlReplacements);
+      }
+      return parsed;
     };
 
     const invokeAndParseWithFallback = async (inputMessages: any[]) => {
