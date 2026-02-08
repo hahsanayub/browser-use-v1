@@ -211,6 +211,7 @@ export class SpecialActionParameters {
   browser_context: BrowserSession | null = null;
   page: Page | null = null;
   page_extraction_llm: BaseChatModel | null = null;
+  extraction_schema: Record<string, unknown> | null = null;
   file_system: FileSystem | null = null;
   available_file_paths: string[] | null = null;
   signal: AbortSignal | null = null;

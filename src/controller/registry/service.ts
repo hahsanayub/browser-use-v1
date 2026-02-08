@@ -22,6 +22,7 @@ export interface ExecuteActionContext<Context> {
   context?: Context;
   browser_session?: BrowserSession | null;
   page_extraction_llm?: BaseChatModel | null;
+  extraction_schema?: Record<string, unknown> | null;
   file_system?: FileSystem | null;
   available_file_paths?: string[] | null;
   sensitive_data?: SensitiveDataMap | null;
@@ -127,6 +128,7 @@ export class Registry<Context = unknown> {
         {
           browser_session = null,
           page_extraction_llm = null,
+          extraction_schema = null,
           file_system = null,
           sensitive_data = null,
           available_file_paths = null,
@@ -176,6 +178,7 @@ export class Registry<Context = unknown> {
           browser_context: browser_session,
           page,
           page_extraction_llm,
+          extraction_schema,
           file_system,
           available_file_paths,
           signal,

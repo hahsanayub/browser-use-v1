@@ -204,6 +204,7 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
     | (() => Promise<boolean>)
     | null;
   output_model_schema?: StructuredOutputParser<AgentStructuredOutput> | null;
+  extraction_schema?: Record<string, unknown> | null;
   use_vision?: boolean;
   include_recent_events?: boolean;
   use_vision_for_planner?: boolean;
@@ -428,6 +429,7 @@ export class Agent<
     promise: Promise.resolve(),
   };
   output_model_schema: StructuredOutputParser<AgentStructuredOutput> | null;
+  extraction_schema: Record<string, unknown> | null;
   id: string;
   task_id: string;
   session_id: string;
@@ -477,6 +479,7 @@ export class Agent<
       register_done_callback = null,
       register_external_agent_status_raise_error_callback = null,
       output_model_schema = null,
+      extraction_schema = null,
       use_vision = true,
       include_recent_events = false,
       save_conversation_path = null,
@@ -545,6 +548,11 @@ export class Agent<
     this.task_id = this.id;
     this.session_id = uuid7str();
     this.output_model_schema = output_model_schema ?? null;
+    this.extraction_schema = extraction_schema ?? null;
+    if (!this.extraction_schema && this.output_model_schema) {
+      this.extraction_schema =
+        this._getOutputModelSchemaPayload(this.output_model_schema) ?? null;
+    }
     this.task = this._enhanceTaskWithSchema(task, this.output_model_schema);
     this.sensitive_data = sensitive_data;
     this.available_file_paths = available_file_paths || [];
@@ -1427,16 +1435,8 @@ export class Agent<
     }
 
     try {
-      let schemaPayload: unknown = null;
-      if (typeof outputModelSchema.model_json_schema === 'function') {
-        schemaPayload = outputModelSchema.model_json_schema();
-      } else if (outputModelSchema.schema != null) {
-        const schemaCandidate = outputModelSchema.schema as any;
-        schemaPayload =
-          typeof schemaCandidate?.toJSON === 'function'
-            ? schemaCandidate.toJSON()
-            : schemaCandidate;
-      }
+      const schemaPayload =
+        this._getOutputModelSchemaPayload(outputModelSchema);
 
       if (schemaPayload == null) {
         return task;
@@ -1461,6 +1461,28 @@ export class Agent<
       );
       return task;
     }
+  }
+
+  private _getOutputModelSchemaPayload(
+    outputModelSchema: StructuredOutputParser<AgentStructuredOutput>
+  ): Record<string, unknown> | null {
+    if (typeof outputModelSchema.model_json_schema === 'function') {
+      const schema = outputModelSchema.model_json_schema();
+      return schema && typeof schema === 'object'
+        ? (schema as Record<string, unknown>)
+        : null;
+    }
+    if (outputModelSchema.schema != null) {
+      const schemaCandidate = outputModelSchema.schema as any;
+      const schema =
+        typeof schemaCandidate?.toJSON === 'function'
+          ? schemaCandidate.toJSON()
+          : schemaCandidate;
+      return schema && typeof schema === 'object'
+        ? (schema as Record<string, unknown>)
+        : null;
+    }
+    return null;
   }
 
   private _extract_start_url(taskText: string): string | null {
@@ -2435,6 +2457,7 @@ export class Agent<
         ).execute_action(actionName, actionParams, {
           browser_session: this.browser_session,
           page_extraction_llm: this.settings.page_extraction_llm,
+          extraction_schema: this.extraction_schema,
           sensitive_data: this.sensitive_data,
           available_file_paths: this.available_file_paths,
           file_system: this.file_system,

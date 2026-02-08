@@ -690,6 +690,80 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('bridges extraction_schema from output_model_schema when not provided', async () => {
+    const outputSchema = {
+      parse: (input: string) => JSON.parse(input),
+      model_json_schema: () => ({
+        type: 'object',
+        properties: {
+          answer: { type: 'string' },
+        },
+      }),
+    };
+
+    const agent = new Agent({
+      task: 'Bridge extraction schema',
+      llm: createLlm(),
+      output_model_schema: outputSchema as any,
+    });
+
+    const executeActionSpy = vi
+      .spyOn(agent.controller.registry as any, 'execute_action')
+      .mockResolvedValue(new ActionResult({ extracted_content: 'ok' }));
+
+    await agent.multi_act([{ wait: { seconds: 0 } }], {
+      check_for_new_elements: false,
+    });
+
+    const executeContext = executeActionSpy.mock.calls[0]?.[2];
+    expect(executeContext?.extraction_schema).toEqual(
+      outputSchema.model_json_schema()
+    );
+
+    await agent.close();
+  });
+
+  it('prefers explicit extraction_schema over output_model_schema bridge', async () => {
+    const outputSchema = {
+      parse: (input: string) => JSON.parse(input),
+      model_json_schema: () => ({
+        type: 'object',
+        properties: {
+          answer: { type: 'string' },
+        },
+      }),
+    };
+    const explicitExtractionSchema = {
+      type: 'object',
+      properties: {
+        price: { type: 'number' },
+      },
+      required: ['price'],
+    };
+
+    const agent = new Agent({
+      task: 'Prefer explicit extraction schema',
+      llm: createLlm(),
+      output_model_schema: outputSchema as any,
+      extraction_schema: explicitExtractionSchema,
+    });
+
+    const executeActionSpy = vi
+      .spyOn(agent.controller.registry as any, 'execute_action')
+      .mockResolvedValue(new ActionResult({ extracted_content: 'ok' }));
+
+    await agent.multi_act([{ wait: { seconds: 0 } }], {
+      check_for_new_elements: false,
+    });
+
+    const executeContext = executeActionSpy.mock.calls[0]?.[2];
+    expect(executeContext?.extraction_schema).toEqual(
+      explicitExtractionSchema
+    );
+
+    await agent.close();
+  });
+
   it('clears timeout handles when timed execution rejects early', async () => {
     const agent = new Agent({
       task: 'test timeout cleanup',

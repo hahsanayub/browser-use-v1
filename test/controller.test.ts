@@ -1348,6 +1348,57 @@ describe('Regression Coverage', () => {
     expect(fileSystem.save_extracted_content).not.toHaveBeenCalled();
   });
 
+  it('extract_structured_data uses context extraction_schema when params.output_schema is omitted', async () => {
+    const controller = new Controller();
+    const pageExtractionLlm = {
+      ainvoke: vi.fn(async () => ({
+        completion: '{"name":"Alice","age":30}',
+      })),
+    };
+    const page = {
+      content: vi.fn(async () => '<html><body>Alice is 30 years old.</body></html>'),
+      frames: vi.fn(() => []),
+      url: vi.fn(() => 'https://example.com/profile'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+      agent_current_page: {
+        url: vi.fn(() => 'https://example.com/profile'),
+      },
+    };
+    const extractionSchema = {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        age: { type: 'number' },
+      },
+      required: ['name', 'age'],
+    };
+
+    const result = await controller.registry.execute_action(
+      'extract_structured_data',
+      {
+        query: 'Extract person profile',
+        extract_links: false,
+      },
+      {
+        browser_session: browserSession as any,
+        page_extraction_llm: pageExtractionLlm as any,
+        extraction_schema: extractionSchema,
+        file_system: {
+          save_extracted_content: vi.fn(async () => '/tmp/saved.txt'),
+        } as any,
+      }
+    );
+
+    expect(pageExtractionLlm.ainvoke).toHaveBeenCalled();
+    const promptMessage = pageExtractionLlm.ainvoke.mock.calls[0]?.[0]?.[0];
+    expect(promptMessage?.text ?? '').toContain('Output Schema (JSON Schema):');
+    expect(promptMessage?.text ?? '').toContain('"name"');
+    expect(result.error).toBeNull();
+    expect(result.extracted_content).toContain('{"name":"Alice","age":30}');
+  });
+
   it('controller.act maps BrowserError to ActionResult memory fields', async () => {
     const controller = new Controller();
 

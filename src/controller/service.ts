@@ -626,7 +626,7 @@ export class Controller<Context = unknown> {
       }
     )(async function extract_structured_data(
       params: ExtractStructuredAction,
-      { page, page_extraction_llm, file_system, signal }
+      { page, page_extraction_llm, extraction_schema, file_system, signal }
     ) {
       throwIfAborted(signal);
       if (!page) {
@@ -756,11 +756,13 @@ Content Stats: ${formatStats()}
 Website:
 ${content}`;
 
-      const prompt = params.output_schema
+      const effectiveOutputSchema = params.output_schema ?? extraction_schema;
+
+      const prompt = effectiveOutputSchema
         ? `${basePrompt}
 
 Output Schema (JSON Schema):
-${JSON.stringify(params.output_schema, null, 2)}
+${JSON.stringify(effectiveOutputSchema, null, 2)}
 
 Return valid JSON only, matching the schema exactly.`
         : basePrompt;
@@ -776,7 +778,7 @@ Return valid JSON only, matching the schema exactly.`
         typeof completion === 'string'
           ? completion
           : JSON.stringify(completion ?? {});
-      const normalizedResult = params.output_schema
+      const normalizedResult = effectiveOutputSchema
         ? (() => {
             try {
               return JSON.stringify(parseJsonFromCompletion(completionText));
