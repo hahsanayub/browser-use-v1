@@ -67,10 +67,86 @@ export const INVALID_FILENAME_ERROR_MESSAGE =
   'Error: Invalid filename format. Must be alphanumeric with supported extension.';
 export const DEFAULT_FILE_SYSTEM_PATH = 'browseruse_agent_data';
 
-const DEFAULT_EXTENSIONS = ['md', 'txt', 'json', 'csv', 'pdf'];
-const filenameRegex = new RegExp(
-  `^[a-zA-Z0-9_\\-]+\\.(${DEFAULT_EXTENSIONS.join('|')})$`
-);
+const UNSUPPORTED_BINARY_EXTENSIONS = new Set([
+  'png',
+  'jpg',
+  'jpeg',
+  'gif',
+  'bmp',
+  'svg',
+  'webp',
+  'ico',
+  'mp3',
+  'mp4',
+  'wav',
+  'avi',
+  'mov',
+  'zip',
+  'tar',
+  'gz',
+  'rar',
+  'exe',
+  'bin',
+  'dll',
+  'so',
+]);
+
+const DEFAULT_EXTENSIONS = [
+  'md',
+  'txt',
+  'json',
+  'jsonl',
+  'csv',
+  'pdf',
+  'html',
+  'xml',
+];
+
+const escapeRegex = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const buildFilenameRegex = (extensions: string[]) =>
+  new RegExp(
+    `^[a-zA-Z0-9_\\-.() \\u4e00-\\u9fff]+\\.(${extensions.map(escapeRegex).join('|')})$`
+  );
+
+const buildFilenameErrorMessage = (
+  fileName: string,
+  supportedExtensions: string[]
+) => {
+  const base = path.basename(fileName);
+  const supported = supportedExtensions.map((ext) => `.${ext}`).join(', ');
+
+  if (base.includes('.')) {
+    const ext = base.slice(base.lastIndexOf('.') + 1).toLowerCase();
+    if (UNSUPPORTED_BINARY_EXTENSIONS.has(ext)) {
+      return (
+        `Error: Cannot write binary/image file '${base}'. ` +
+        'The write_file tool only supports text-based files. ' +
+        `Supported extensions: ${supported}. ` +
+        'For screenshots, the browser automatically captures them - do not try to save screenshots as files.'
+      );
+    }
+    if (!supportedExtensions.includes(ext)) {
+      return (
+        `Error: Unsupported file extension '.${ext}' in '${base}'. ` +
+        `Supported extensions: ${supported}. ` +
+        'Please rename the file to use a supported extension.'
+      );
+    }
+  } else {
+    return (
+      `Error: Filename '${base}' has no extension. ` +
+      `Please add a supported extension: ${supported}.`
+    );
+  }
+
+  return (
+    `Error: Invalid filename '${base}'. ` +
+    'Filenames must contain only letters, numbers, underscores, hyphens, dots, parentheses, and spaces. ' +
+    `Supported extensions: ${supported}.`
+  );
+};
 
 export class FileSystemError extends Error {}
 
@@ -157,6 +233,12 @@ class JsonFile extends BaseFile {
   }
 }
 
+class JsonlFile extends BaseFile {
+  override get extension() {
+    return 'jsonl';
+  }
+}
+
 class CsvFile extends BaseFile {
   override get extension() {
     return 'csv';
@@ -211,22 +293,40 @@ stream.on('error', (err) => {
   }
 }
 
+class HtmlFile extends BaseFile {
+  override get extension() {
+    return 'html';
+  }
+}
+
+class XmlFile extends BaseFile {
+  override get extension() {
+    return 'xml';
+  }
+}
+
 type FileClass = new (name: string, content?: string) => BaseFile;
 
 const FILE_TYPES: Record<string, FileClass> = {
   md: MarkdownFile,
   txt: TxtFile,
   json: JsonFile,
+  jsonl: JsonlFile,
   csv: CsvFile,
   pdf: PdfFile,
+  html: HtmlFile,
+  xml: XmlFile,
 };
 
 const TYPE_NAME_MAP: Record<string, FileClass> = {
   MarkdownFile,
   TxtFile,
   JsonFile,
+  JsonlFile,
   CsvFile,
   PdfFile,
+  HtmlFile,
+  XmlFile,
 };
 
 export interface FileState {
@@ -274,7 +374,52 @@ export class FileSystem {
   }
 
   private isValidFilename(filename: string) {
-    return filenameRegex.test(filename);
+    const base = path.basename(filename);
+    const regex = buildFilenameRegex(this.get_allowed_extensions());
+    if (!regex.test(base)) {
+      return false;
+    }
+    const idx = base.lastIndexOf('.');
+    if (idx <= 0) {
+      return false;
+    }
+    return base.slice(0, idx).trim().length > 0;
+  }
+
+  static sanitize_filename(fileName: string) {
+    const base = path.basename(fileName);
+    const idx = base.lastIndexOf('.');
+    if (idx === -1) {
+      return base;
+    }
+
+    const ext = base.slice(idx + 1).toLowerCase();
+    let namePart = base.slice(0, idx);
+    namePart = namePart.replace(/ /g, '-');
+    namePart = namePart.replace(/[^a-zA-Z0-9_\-.()\u4e00-\u9fff]/g, '');
+    namePart = namePart.replace(/-{2,}/g, '-');
+    namePart = namePart.replace(/^[-.]+|[-.]+$/g, '');
+    if (!namePart) {
+      namePart = 'file';
+    }
+
+    return `${namePart}.${ext}`;
+  }
+
+  private resolveFilename(filename: string): [string, boolean] {
+    const base = path.basename(filename);
+    const wasChanged = base !== filename;
+
+    if (this.isValidFilename(base)) {
+      return [base, wasChanged];
+    }
+
+    const sanitized = FileSystem.sanitize_filename(base);
+    if (sanitized !== base && this.isValidFilename(sanitized)) {
+      return [sanitized, true];
+    }
+
+    return [base, wasChanged];
   }
 
   private parseFilename(filename: string): [string, string] {
@@ -309,7 +454,11 @@ export class FileSystem {
   }
 
   get_file(filename: string) {
-    return this.files.get(filename) ?? null;
+    const [resolved] = this.resolveFilename(filename);
+    if (!this.isValidFilename(resolved)) {
+      return null;
+    }
+    return this.files.get(resolved) ?? null;
   }
 
   list_files() {
@@ -317,21 +466,49 @@ export class FileSystem {
   }
 
   display_file(filename: string) {
-    if (!this.isValidFilename(filename)) {
+    const [resolved] = this.resolveFilename(filename);
+    if (!this.isValidFilename(resolved)) {
       return null;
     }
-    const file = this.get_file(filename);
+    const file = this.files.get(resolved) ?? null;
     return file ? file.read() : null;
   }
 
-  async read_file(filename: string, externalFile = false) {
+  async read_file_structured(filename: string, externalFile = false): Promise<{
+    message: string;
+    images: Array<{ name: string; data: string }> | null;
+  }> {
+    const result: {
+      message: string;
+      images: Array<{ name: string; data: string }> | null;
+    } = {
+      message: '',
+      images: null,
+    };
+
     if (externalFile) {
       try {
-        const [, extension] = this.parseFilename(filename);
-        if (['md', 'txt', 'json', 'csv'].includes(extension)) {
-          const content = await fsp.readFile(filename, 'utf-8');
-          return `Read from file ${filename}.\n<content>\n${content}\n</content>`;
+        const base = path.basename(filename);
+        const idx = base.lastIndexOf('.');
+        if (idx === -1) {
+          result.message =
+            `Error: Invalid filename format ${filename}. ` +
+            'Must be alphanumeric with a supported extension.';
+          return result;
         }
+
+        const extension = base.slice(idx + 1).toLowerCase();
+        const specialExtensions = new Set(['pdf', 'jpg', 'jpeg', 'png']);
+        const textExtensions = this.get_allowed_extensions().filter(
+          (ext) => !specialExtensions.has(ext)
+        );
+
+        if (textExtensions.includes(extension)) {
+          const content = await fsp.readFile(filename, 'utf-8');
+          result.message = `Read from file ${filename}.\n<content>\n${content}\n</content>`;
+          return result;
+        }
+
         if (extension === 'pdf') {
           const buffer = await fsp.readFile(filename);
           const parsed = await extractPdfText(buffer);
@@ -343,90 +520,178 @@ export class FileSystem {
             .slice(0, 10)
             .join('\n\n');
           const suffix = extraPages > 0 ? `\n${extraPages} more pages...` : '';
-          return `Read from file ${filename}.\n<content>\n${preview}${suffix}\n</content>`;
+          result.message =
+            `Read from file ${filename}.\n<content>\n${preview}${suffix}\n</content>`;
+          return result;
         }
-        return `Error: Cannot read file ${filename} as ${extension} extension is not supported.`;
+
+        if (extension === 'jpg' || extension === 'jpeg' || extension === 'png') {
+          const fileBuffer = await fsp.readFile(filename);
+          result.message = `Read image file ${filename}.`;
+          result.images = [
+            {
+              name: base,
+              data: fileBuffer.toString('base64'),
+            },
+          ];
+          return result;
+        }
+
+        result.message =
+          `Error: Cannot read file ${filename} as ${extension} extension is not supported.`;
+        return result;
       } catch (error: any) {
         if (error?.code === 'ENOENT') {
-          return `Error: File '${filename}' not found.`;
+          result.message = `Error: File '${filename}' not found.`;
+          return result;
         }
         if (error?.code === 'EACCES') {
-          return `Error: Permission denied to read file '${filename}'.`;
+          result.message = `Error: Permission denied to read file '${filename}'.`;
+          return result;
         }
-        return `Error: Could not read file '${filename}'.`;
+        result.message =
+          `Error: Could not read file '${filename}'. ${error instanceof Error ? error.message : ''}`.trim();
+        return result;
       }
     }
 
-    if (!this.isValidFilename(filename)) {
-      return INVALID_FILENAME_ERROR_MESSAGE;
+    const originalFilename = filename;
+    const [resolved, wasSanitized] = this.resolveFilename(filename);
+    if (!this.isValidFilename(resolved)) {
+      result.message = buildFilenameErrorMessage(
+        filename,
+        this.get_allowed_extensions()
+      );
+      return result;
     }
 
-    const file = this.get_file(filename);
+    const file = this.files.get(resolved) ?? null;
     if (!file) {
-      return `File '${filename}' not found.`;
+      if (wasSanitized) {
+        result.message =
+          `File '${resolved}' not found. ` +
+          `(Filename was auto-corrected from '${originalFilename}')`;
+      } else {
+        result.message = `File '${originalFilename}' not found.`;
+      }
+      return result;
     }
 
     try {
       const content = file.read();
-      return `Read from file ${filename}.\n<content>\n${content}\n</content>`;
+      const sanitizeNote = wasSanitized
+        ? `Note: filename was auto-corrected from '${originalFilename}' to '${resolved}'. `
+        : '';
+      result.message =
+        `${sanitizeNote}Read from file ${resolved}.\n<content>\n${content}\n</content>`;
+      return result;
     } catch (error) {
-      return error instanceof FileSystemError
-        ? error.message
-        : `Error: Could not read file '${filename}'.`;
+      result.message =
+        error instanceof FileSystemError
+          ? error.message
+          : `Error: Could not read file '${originalFilename}'.`;
+      return result;
     }
   }
 
+  async read_file(filename: string, externalFile = false) {
+    const result = await this.read_file_structured(filename, externalFile);
+    return result.message;
+  }
+
   async write_file(filename: string, content: string) {
-    if (!this.isValidFilename(filename)) {
-      return INVALID_FILENAME_ERROR_MESSAGE;
+    const originalFilename = filename;
+    const [resolved, wasSanitized] = this.resolveFilename(filename);
+    if (!this.isValidFilename(resolved)) {
+      return buildFilenameErrorMessage(
+        filename,
+        this.get_allowed_extensions()
+      );
     }
+    filename = resolved;
 
     const file = this.files.get(filename) ?? this.instantiateFile(filename);
     this.files.set(filename, file);
 
     try {
       await file.write(content, this.dataDir);
-      return `Data written to file ${filename} successfully.`;
+      const sanitizeNote = wasSanitized
+        ? ` (auto-corrected from '${originalFilename}')`
+        : '';
+      return `Data written to file ${filename} successfully.${sanitizeNote}`;
     } catch (error) {
       return `Error: Could not write to file '${filename}'. ${(error as Error).message}`;
     }
   }
 
   async append_file(filename: string, content: string) {
-    if (!this.isValidFilename(filename)) {
-      return INVALID_FILENAME_ERROR_MESSAGE;
+    const originalFilename = filename;
+    const [resolved, wasSanitized] = this.resolveFilename(filename);
+    if (!this.isValidFilename(resolved)) {
+      return buildFilenameErrorMessage(
+        filename,
+        this.get_allowed_extensions()
+      );
     }
+    filename = resolved;
 
     const file = this.get_file(filename);
     if (!file) {
+      if (wasSanitized) {
+        return (
+          `File '${filename}' not found. ` +
+          `(Filename was auto-corrected from '${originalFilename}')`
+        );
+      }
       return `File '${filename}' not found.`;
     }
 
     try {
       await file.append(content, this.dataDir);
-      return `Data appended to file ${filename} successfully.`;
+      const sanitizeNote = wasSanitized
+        ? ` (auto-corrected from '${originalFilename}')`
+        : '';
+      return `Data appended to file ${filename} successfully.${sanitizeNote}`;
     } catch (error) {
       return `Error: Could not append to file '${filename}'. ${(error as Error).message}`;
     }
   }
 
   async replace_file_str(filename: string, oldStr: string, newStr: string) {
-    if (!this.isValidFilename(filename)) {
-      return INVALID_FILENAME_ERROR_MESSAGE;
+    const originalFilename = filename;
+    const [resolved, wasSanitized] = this.resolveFilename(filename);
+    if (!this.isValidFilename(resolved)) {
+      return buildFilenameErrorMessage(
+        filename,
+        this.get_allowed_extensions()
+      );
     }
+    filename = resolved;
     if (!oldStr) {
       return 'Error: Cannot replace empty string. Please provide a non-empty string to replace.';
     }
 
     const file = this.get_file(filename);
     if (!file) {
+      if (wasSanitized) {
+        return (
+          `File '${filename}' not found. ` +
+          `(Filename was auto-corrected from '${originalFilename}')`
+        );
+      }
       return `File '${filename}' not found.`;
     }
 
     try {
       const content = file.read().replaceAll(oldStr, newStr);
       await file.write(content, this.dataDir);
-      return `Successfully replaced all occurrences of "${oldStr}" with "${newStr}" in file ${filename}`;
+      const sanitizeNote = wasSanitized
+        ? ` (auto-corrected from '${originalFilename}')`
+        : '';
+      return (
+        `Successfully replaced all occurrences of "${oldStr}" with "${newStr}" in file ${filename}` +
+        sanitizeNote
+      );
     } catch (error) {
       return `Error: Could not replace string in file '${filename}'. ${(error as Error).message}`;
     }
@@ -440,7 +705,7 @@ export class FileSystem {
     await file.write(content, this.dataDir);
     this.files.set(filename, file);
     this.extractedContentCount += 1;
-    return `Extracted content saved to file ${filename} successfully.`;
+    return filename;
   }
 
   describe() {

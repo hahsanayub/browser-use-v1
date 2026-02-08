@@ -50,6 +50,7 @@ import { Controller } from '../src/controller/service.js';
 import { StructuredOutputActionSchema } from '../src/controller/views.js';
 import { ActionResult } from '../src/agent/views.js';
 import { BrowserError } from '../src/browser/views.js';
+import { FileSystem } from '../src/filesystem/file-system.js';
 
 describe('Controller Registry Tests', () => {
   describe('Action Registration', () => {
@@ -1164,6 +1165,37 @@ describe('Regression Coverage', () => {
     expect(result.metadata).toEqual({ include_screenshot: true });
   });
 
+  it('screenshot sanitizes filename and appends .png when extension is missing', async () => {
+    const controller = new Controller();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-ss-'));
+    const browserSession = {
+      take_screenshot: vi.fn(async () =>
+        Buffer.from('fake_png_data').toString('base64')
+      ),
+    };
+    const fileSystem = {
+      get_dir: vi.fn(() => tempDir),
+    };
+
+    try {
+      const result = await controller.registry.execute_action(
+        'screenshot',
+        { file_name: 'My Screenshot !!' },
+        {
+          browser_session: browserSession as any,
+          file_system: fileSystem as any,
+        }
+      );
+
+      expect(result.error).toBeNull();
+      expect(result.attachments).toHaveLength(1);
+      expect(result.attachments?.[0]).toMatch(/My-Screenshot\.png$/);
+      expect(fs.existsSync(result.attachments?.[0] as string)).toBe(true);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('extract_structured_data propagates abort during iframe extraction', async () => {
     const controller = new Controller();
     const abortController = new AbortController();
@@ -1233,6 +1265,58 @@ describe('Regression Coverage', () => {
     expect(result.long_term_memory).not.toBe(content);
     expect(result.long_term_memory).toContain('more lines...');
     expect(result.include_extracted_content_only_once).toBe(true);
+  });
+
+  it('read_file returns image payload for external image files', async () => {
+    const controller = new Controller();
+    const imageData = Buffer.from('fake-image-bytes').toString('base64');
+    const fileSystem = {
+      read_file_structured: vi.fn(async () => ({
+        message: 'Read image file /tmp/chart.png.',
+        images: [{ name: 'chart.png', data: imageData }],
+      })),
+    };
+
+    const result = await controller.registry.execute_action(
+      'read_file',
+      { file_name: '/tmp/chart.png' },
+      {
+        file_system: fileSystem as any,
+        available_file_paths: ['/tmp/chart.png'],
+      }
+    );
+
+    expect(fileSystem.read_file_structured).toHaveBeenCalledWith(
+      '/tmp/chart.png',
+      true
+    );
+    expect(result.extracted_content).toBe('Read image file /tmp/chart.png.');
+    expect(result.long_term_memory).toBe('Read image file /tmp/chart.png');
+    expect(result.images).toEqual([{ name: 'chart.png', data: imageData }]);
+  });
+
+  it('write_file rejects binary/image extensions with actionable error', async () => {
+    const controller = new Controller();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-fs-'));
+    const fileSystem = new FileSystem(tempDir, false);
+    try {
+      const result = await controller.registry.execute_action(
+        'write_file',
+        { file_name: 'capture.png', content: 'hello' },
+        {
+          file_system: fileSystem as any,
+        }
+      );
+
+      expect(result.extracted_content).toContain(
+        "Error: Cannot write binary/image file 'capture.png'."
+      );
+      expect(result.extracted_content).toContain(
+        'For screenshots, the browser automatically captures them'
+      );
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('read_long_content blocks files outside available_file_paths', async () => {

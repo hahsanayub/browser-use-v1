@@ -1520,10 +1520,25 @@ Return valid JSON only, matching the schema exactly.`
       const allowed =
         Array.isArray(available_file_paths) &&
         available_file_paths.includes(params.file_name);
-      const result = await fsInstance.read_file(params.file_name, allowed);
+      const structuredResult =
+        typeof (fsInstance as any).read_file_structured === 'function'
+          ? await (fsInstance as any).read_file_structured(
+              params.file_name,
+              allowed
+            )
+          : {
+              message: await fsInstance.read_file(params.file_name, allowed),
+              images: null,
+            };
+      const result = String(structuredResult?.message ?? '');
+      const images = Array.isArray(structuredResult?.images)
+        ? structuredResult.images
+        : null;
       const MAX_MEMORY_SIZE = 1000;
       let memory = result;
-      if (result.length > MAX_MEMORY_SIZE) {
+      if (images && images.length > 0) {
+        memory = `Read image file ${params.file_name}`;
+      } else if (result.length > MAX_MEMORY_SIZE) {
         const lines = result.split('\n');
         let preview = '';
         let used = 0;
@@ -1540,6 +1555,7 @@ Return valid JSON only, matching the schema exactly.`
         extracted_content: result,
         include_in_memory: true,
         long_term_memory: memory,
+        images,
         include_extracted_content_only_once: true,
       });
     });
@@ -1800,9 +1816,16 @@ Context: ${context}`;
     });
 
     type WriteFileAction = z.infer<typeof WriteFileActionSchema>;
-    this.registry.action('Write content to file', {
-      param_model: WriteFileActionSchema,
-    })(async function write_file(params: WriteFileAction, { file_system }) {
+    this.registry.action(
+      'Write content to a file. By default this OVERWRITES the entire file - use append=true to add to an existing file, or use replace_file for targeted edits within a file. ' +
+        'FILENAME RULES: Use only letters, numbers, underscores, hyphens, dots, parentheses. Spaces are auto-converted to hyphens. ' +
+        'SUPPORTED EXTENSIONS: .txt, .md, .json, .jsonl, .csv, .html, .xml, .pdf. ' +
+        'CANNOT write binary/image files (.png, .jpg, .mp4, etc.) - do not attempt to save screenshots as files. ' +
+        'For PDF files, write content in markdown format and it will be auto-converted to PDF.',
+      {
+        param_model: WriteFileActionSchema,
+      }
+    )(async function write_file(params: WriteFileAction, { file_system }) {
       const fsInstance = file_system ?? new FileSystem(process.cwd(), false);
       let content = params.content;
       const trailing = params.trailing_newline ?? true;
@@ -1817,7 +1840,6 @@ Context: ${context}`;
       const result = append
         ? await fsInstance.append_file(params.file_name, content)
         : await fsInstance.write_file(params.file_name, content);
-      const msg = `📝  ${result}`;
       return new ActionResult({
         extracted_content: result,
         include_in_memory: true,
@@ -1864,13 +1886,11 @@ Context: ${context}`;
         }
 
         const fsInstance = file_system ?? new FileSystem(process.cwd(), false);
-        const parsed = path.parse(params.file_name);
-        const safeBase = (parsed.name || 'screenshot').replace(
-          /[^a-zA-Z0-9_-]/g,
-          '_'
-        );
-        const ext = parsed.ext ? parsed.ext : '.png';
-        const fileName = `${safeBase}${ext}`;
+        let fileName = params.file_name;
+        if (!fileName.toLowerCase().endsWith('.png')) {
+          fileName = `${fileName}.png`;
+        }
+        fileName = FileSystem.sanitize_filename(fileName);
         const filePath = path.join(fsInstance.get_dir(), fileName);
         await fsp.writeFile(filePath, Buffer.from(screenshotB64, 'base64'));
         const msg = `📸 Saved screenshot to ${filePath}`;
