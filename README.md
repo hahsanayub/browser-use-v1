@@ -49,12 +49,13 @@ This is **not** a fork or competing project—it's a respectful port to serve a 
 
 ### Upstream Parity Status
 
-This Node.js/TypeScript implementation is currently **strictly aligned** with the Python `browser-use` release
-[`v0.5.11`](https://github.com/browser-use/browser-use/releases/tag/0.5.11), published on **August 10, 2025**.
+This Node.js/TypeScript implementation is currently aligned with the Python `browser-use`
+baseline at commit [`c011d07`](https://github.com/browser-use/browser-use/commit/c011d07e7e9e41c06b5c72036c6e3efa5b9f287d),
+published on **February 5, 2026**.
 
-- 📦 Core features and behavior are aligned against that upstream tag baseline.
-- ✅ Our test strategy is maintained to be as equivalent as practical to the Python coverage and behavior checks.
-- 🔄 We expect to move this parity baseline forward to the Python **January 2026** release line very soon.
+- 📦 Core action behavior and schemas are aligned against that upstream baseline.
+- ✅ The test suite is maintained to keep parity checks practical and regression-focused.
+- 🔄 Upstream parity will continue to move forward as new Python changes stabilize.
 
 ## Features
 
