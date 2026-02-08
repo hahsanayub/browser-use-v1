@@ -1125,8 +1125,8 @@ Return valid JSON only, matching the schema exactly.`
       };
 
       const windowHeight = await getWindowHeight();
-      const scrollAmount = Math.floor(windowHeight * params.num_pages);
-      const pagesScrolled = params.num_pages;
+      const pagesScrolled = params.pages ?? params.num_pages ?? 1;
+      const scrollAmount = Math.floor(windowHeight * pagesScrolled);
       const dy = params.down ? scrollAmount : -scrollAmount;
       const direction = params.down ? 'down' : 'up';
       let scrollTarget = 'the page';

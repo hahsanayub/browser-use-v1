@@ -801,6 +801,27 @@ describe('Regression Coverage', () => {
     ).rejects.toThrow('Provide index or both coordinate_x and coordinate_y');
   });
 
+  it('scroll action accepts pages alias for num_pages', async () => {
+    const controller = new Controller();
+    const page = {
+      evaluate: vi.fn(async () => 1000),
+      url: vi.fn(() => 'https://example.com'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+      _scrollContainer: vi.fn(async () => {}),
+    };
+
+    const result = await controller.registry.execute_action(
+      'scroll',
+      { down: true, pages: 0.5 },
+      { browser_session: browserSession as any }
+    );
+
+    expect(browserSession._scrollContainer).toHaveBeenCalledWith(500);
+    expect(result.long_term_memory).toContain('by 0.5 pages');
+  });
+
   it('search_page returns formatted matches with memory summary', async () => {
     const controller = new Controller();
     const page = {
