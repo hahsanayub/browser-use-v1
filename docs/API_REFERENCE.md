@@ -59,6 +59,11 @@ new Agent(options: AgentOptions)
 | `llm_timeout`             | `number`                    | No       | `60`                        | LLM call timeout (seconds)               |
 | `step_timeout`            | `number`                    | No       | `180`                       | Step execution timeout (seconds)         |
 | `final_response_after_failure` | `boolean`             | No       | `true`                      | Allow one done-only recovery step after hitting `max_failures` |
+| `use_judge`               | `boolean`                   | No       | `true`                      | Run final trace judgement after task completion |
+| `ground_truth`            | `string \| null`            | No       | `null`                      | Optional expected answer or criteria for final judgement |
+| `enable_planning`         | `boolean`                   | No       | `true`                      | Allow plan tracking via `plan_update` / `current_plan_item` |
+| `planning_replan_on_stall`| `number`                    | No       | `3`                         | Inject replan nudge after N consecutive failures |
+| `planning_exploration_limit` | `number`                 | No       | `5`                         | Inject planning nudge after N steps without a plan |
 
 ### Methods
 

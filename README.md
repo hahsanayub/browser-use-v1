@@ -393,6 +393,13 @@ interface AgentOptions {
   llm_timeout?: number; // default: 60
   step_timeout?: number; // default: 180
   final_response_after_failure?: boolean; // default: true
+
+  // Planning / judgement
+  use_judge?: boolean; // default: true
+  ground_truth?: string | null; // default: null
+  enable_planning?: boolean; // default: true (auto-disabled in flash_mode)
+  planning_replan_on_stall?: number; // default: 3
+  planning_exploration_limit?: number; // default: 5
 }
 
 // Max step count is configured per run call:
