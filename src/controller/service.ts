@@ -296,12 +296,9 @@ export class Controller<Context = unknown> {
     });
 
     type GoToUrlAction = z.infer<typeof GoToUrlActionSchema>;
-    this.registry.action('Navigate to URL...', {
-      param_model: GoToUrlActionSchema,
-      terminates_sequence: true,
-    })(async function go_to_url(
+    const navigateImpl = async function (
       params: GoToUrlAction,
-      { browser_session, signal }
+      { browser_session, signal }: { browser_session?: any; signal?: AbortSignal | null }
     ) {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
@@ -338,6 +335,23 @@ export class Controller<Context = unknown> {
         }
         throw error;
       }
+    };
+
+    this.registry.action('Navigate to URL...', {
+      param_model: GoToUrlActionSchema,
+      terminates_sequence: true,
+    })(async function go_to_url(
+      params: GoToUrlAction,
+      { browser_session, signal }
+    ) {
+      return navigateImpl(params, { browser_session, signal });
+    });
+
+    this.registry.action('Navigate to URL...', {
+      param_model: GoToUrlActionSchema,
+      terminates_sequence: true,
+    })(async function navigate(params: GoToUrlAction, { browser_session, signal }) {
+      return navigateImpl(params, { browser_session, signal });
     });
 
     this.registry.action('Go back', {
@@ -550,12 +564,17 @@ export class Controller<Context = unknown> {
     });
 
     type InputTextAction = z.infer<typeof InputTextActionSchema>;
-    this.registry.action(
-      'Click and input text into an input interactive element',
-      { param_model: InputTextActionSchema }
-    )(async function input_text(
+    const inputImpl = async function (
       params: InputTextAction,
-      { browser_session, has_sensitive_data, signal }
+      {
+        browser_session,
+        has_sensitive_data,
+        signal,
+      }: {
+        browser_session?: any;
+        has_sensitive_data?: boolean;
+        signal?: AbortSignal | null;
+      }
     ) {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
@@ -580,6 +599,26 @@ export class Controller<Context = unknown> {
         include_in_memory: true,
         long_term_memory: `Input '${params.text}' into element ${params.index}.`,
       });
+    };
+
+    this.registry.action(
+      'Click and input text into an input interactive element',
+      { param_model: InputTextActionSchema }
+    )(async function input_text(
+      params: InputTextAction,
+      { browser_session, has_sensitive_data, signal }
+    ) {
+      return inputImpl(params, { browser_session, has_sensitive_data, signal });
+    });
+
+    this.registry.action(
+      'Click and input text into an input interactive element',
+      { param_model: InputTextActionSchema }
+    )(async function input(
+      params: InputTextAction,
+      { browser_session, has_sensitive_data, signal }
+    ) {
+      return inputImpl(params, { browser_session, has_sensitive_data, signal });
     });
 
     type UploadFileAction = z.infer<typeof UploadFileActionSchema>;
@@ -629,39 +668,60 @@ export class Controller<Context = unknown> {
 
   private registerTabActions() {
     type SwitchTabAction = z.infer<typeof SwitchTabActionSchema>;
+    const switchImpl = async function (
+      params: SwitchTabAction,
+      {
+        browser_session,
+        signal,
+      }: {
+        browser_session?: any;
+        signal?: AbortSignal | null;
+      }
+    ) {
+      if (!browser_session) throw new Error('Browser session missing');
+      throwIfAborted(signal);
+      await browser_session.switch_to_tab(params.page_id, { signal });
+      const page: Page | null = await browser_session.get_current_page();
+      try {
+        await page?.wait_for_load_state?.('domcontentloaded', {
+          timeout: 5000,
+        });
+      } catch {
+        /* ignore */
+      }
+      const msg = `🔄  Switched to tab #${params.page_id} with url ${page?.url ?? ''}`;
+      return new ActionResult({
+        extracted_content: msg,
+        include_in_memory: true,
+        long_term_memory: `Switched to tab ${params.page_id}`,
+      });
+    };
+
     this.registry.action('Switch tab', {
       param_model: SwitchTabActionSchema,
       terminates_sequence: true,
-    })(
-      async function switch_tab(params: SwitchTabAction, ctx) {
-        const { browser_session, signal } = ctx;
-        if (!browser_session) throw new Error('Browser session missing');
-        throwIfAborted(signal);
-        await browser_session.switch_to_tab(params.page_id, { signal });
-        const page: Page | null = await browser_session.get_current_page();
-        try {
-          await page?.wait_for_load_state?.('domcontentloaded', {
-            timeout: 5000,
-          });
-        } catch {
-          /* ignore */
-        }
-        const msg = `🔄  Switched to tab #${params.page_id} with url ${page?.url ?? ''}`;
-        return new ActionResult({
-          extracted_content: msg,
-          include_in_memory: true,
-          long_term_memory: `Switched to tab ${params.page_id}`,
-        });
-      }
-    );
+    })(async function switch_tab(params: SwitchTabAction, { browser_session, signal }) {
+      return switchImpl(params, { browser_session, signal });
+    });
+
+    this.registry.action('Switch tab', {
+      param_model: SwitchTabActionSchema,
+      terminates_sequence: true,
+      action_name: 'switch',
+    })(async function switch_alias(params: SwitchTabAction, { browser_session, signal }) {
+      return switchImpl(params, { browser_session, signal });
+    });
 
     type CloseTabAction = z.infer<typeof CloseTabActionSchema>;
-    this.registry.action('Close an existing tab', {
-      param_model: CloseTabActionSchema,
-      terminates_sequence: true,
-    })(async function close_tab(
+    const closeImpl = async function (
       params: CloseTabAction,
-      { browser_session, signal }
+      {
+        browser_session,
+        signal,
+      }: {
+        browser_session?: any;
+        signal?: AbortSignal | null;
+      }
     ) {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
@@ -677,6 +737,20 @@ export class Controller<Context = unknown> {
         include_in_memory: true,
         long_term_memory: `Closed tab ${params.page_id} with url ${url}, now focused on tab ${newIndex} with url ${newPage?.url ?? ''}.`,
       });
+    };
+
+    this.registry.action('Close an existing tab', {
+      param_model: CloseTabActionSchema,
+      terminates_sequence: true,
+    })(async function close_tab(params: CloseTabAction, { browser_session, signal }) {
+      return closeImpl(params, { browser_session, signal });
+    });
+
+    this.registry.action('Close an existing tab', {
+      param_model: CloseTabActionSchema,
+      terminates_sequence: true,
+    })(async function close(params: CloseTabAction, { browser_session, signal }) {
+      return closeImpl(params, { browser_session, signal });
     });
   }
 

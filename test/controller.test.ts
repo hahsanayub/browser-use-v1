@@ -95,6 +95,35 @@ describe('Controller Registry Tests', () => {
       // Excluded actions are not registered, so get_action returns null
       expect(action).toBeNull();
     });
+
+    it('registers actions with action_name override', async () => {
+      const registry = new Registry();
+
+      registry
+        .action('Alias action', {
+          action_name: 'navigate',
+        })
+        (async function go_to_url_alias() {
+          return new ActionResult({ extracted_content: 'ok' });
+        });
+
+      expect(registry.get_action('navigate')).toBeDefined();
+      expect(registry.get_action('go_to_url_alias')).toBeNull();
+    });
+
+    it('applies exclude_actions against action_name override', async () => {
+      const registry = new Registry(['switch']);
+
+      registry
+        .action('Excluded alias action', {
+          action_name: 'switch',
+        })
+        (async function switch_tab_alias() {
+          return new ActionResult({ extracted_content: 'ok' });
+        });
+
+      expect(registry.get_action('switch')).toBeNull();
+    });
   });
 
   describe('Action Execution', () => {
@@ -223,6 +252,30 @@ describe('Controller Registry Tests', () => {
       await expect(
         registry.execute_action('aborting_action', {})
       ).rejects.toMatchObject({ name: 'AbortError' });
+    });
+
+    it('treats input alias as sensitive action when sensitive data exists', async () => {
+      const registry = new Registry();
+
+      registry.action('Input alias', {
+        param_model: z.object({ text: z.string() }),
+      })(async function input(_params: { text: string }, ctx) {
+        return new ActionResult({
+          extracted_content: String(Boolean(ctx.has_sensitive_data)),
+        });
+      });
+
+      const result = await registry.execute_action(
+        'input',
+        { text: 'demo' },
+        {
+          sensitive_data: {
+            secret: 'demo',
+          },
+        }
+      );
+
+      expect(result.extracted_content).toBe('true');
     });
   });
 
@@ -704,6 +757,16 @@ describe('Regression Coverage', () => {
     const result = await controller.registry.execute_action('wait', {});
     expect(result.extracted_content).toContain('Waiting for 3 seconds');
     expect(result.extracted_content).not.toContain('NaN');
+  });
+
+  it('registers python-compatible default action aliases', async () => {
+    const controller = new Controller();
+    const actions = controller.registry.get_all_actions();
+
+    expect(actions.has('navigate')).toBe(true);
+    expect(actions.has('input')).toBe(true);
+    expect(actions.has('switch')).toBe(true);
+    expect(actions.has('close')).toBe(true);
   });
 
   it('page prompt description includes unfiltered and page-filtered actions', async () => {

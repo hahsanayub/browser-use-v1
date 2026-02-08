@@ -39,6 +39,7 @@ export type RegistryActionHandler<Params = any, Context = unknown> = (
 
 export interface ActionOptions {
   param_model?: ZodTypeAny;
+  action_name?: string;
   domains?: string[] | null;
   allowed_domains?: string[] | null;
   page_filter?: ((page: Page) => boolean) | null;
@@ -88,17 +89,19 @@ export class Registry<Context = unknown> {
 
   action(description: string, options: ActionOptions = {}) {
     const schema = options.param_model ?? z.object({}).strict();
+    const actionNameOverride = options.action_name ?? null;
     const domains = options.allowed_domains ?? options.domains ?? null;
     const pageFilter = options.page_filter ?? null;
     const terminatesSequence = options.terminates_sequence ?? false;
 
     return <Params = any>(handler: RegistryActionHandler<Params, Context>) => {
-      if (this.excludeActions.has(handler.name)) {
+      const actionName = actionNameOverride ?? handler.name;
+      if (this.excludeActions.has(actionName)) {
         return handler;
       }
 
       const action = new RegisteredAction(
-        handler.name,
+        actionName,
         description,
         handler,
         schema,
@@ -191,7 +194,8 @@ export class Registry<Context = unknown> {
           available_file_paths,
           signal,
           has_sensitive_data:
-            action_name === 'input_text' && Boolean(sensitive_data),
+            (action_name === 'input_text' || action_name === 'input') &&
+            Boolean(sensitive_data),
         };
 
         if (signal?.aborted) {

@@ -4925,6 +4925,17 @@ export class Agent<
   private _validateAndNormalizeActions(actions: unknown[]): ActionModel[] {
     const normalizedActions: ActionModel[] = [];
     const registryActions = this.controller.registry.get_all_actions();
+    const actionAliases: Record<string, string> = {
+      navigate: 'go_to_url',
+      input: 'input_text',
+      switch: 'switch_tab',
+      close: 'close_tab',
+      extract: 'extract_structured_data',
+      find_text: 'scroll_to_text',
+      dropdown_options: 'get_dropdown_options',
+      select_dropdown: 'select_dropdown_option',
+      replace_file: 'replace_file_str',
+    };
 
     const availableNames = new Set<string>();
     const modelForStep: typeof ActionModel = this._enforceDoneOnlyForCurrentStep
@@ -4970,24 +4981,33 @@ export class Agent<
         );
       }
 
-      const actionName = keys[0];
+      const requestedActionName = keys[0];
+      let actionName = requestedActionName;
+      if (!availableNames.has(actionName)) {
+        const aliasTarget = actionAliases[requestedActionName];
+        if (aliasTarget && availableNames.has(aliasTarget)) {
+          actionName = aliasTarget;
+        }
+      }
       if (!availableNames.has(actionName)) {
         const available = Array.from(availableNames).sort().join(', ');
         throw new Error(
-          `Action '${actionName}' is not available on the current page. Available actions: ${available}`
+          `Action '${requestedActionName}' is not available on the current page. Available actions: ${available}`
         );
       }
 
       const actionInfo = registryActions.get(actionName);
       if (!actionInfo) {
-        throw new Error(`Action '${actionName}' is not registered`);
+        throw new Error(`Action '${requestedActionName}' is not registered`);
       }
 
-      const rawParams = (actionObject[actionName] ?? {}) as unknown;
+      const rawParams = (actionObject[requestedActionName] ??
+        actionObject[actionName] ??
+        {}) as unknown;
       const paramsResult = actionInfo.paramSchema.safeParse(rawParams);
       if (!paramsResult.success) {
         throw new Error(
-          `Invalid parameters for action '${actionName}': ${paramsResult.error.message}`
+          `Invalid parameters for action '${requestedActionName}': ${paramsResult.error.message}`
         );
       }
 
