@@ -1763,6 +1763,7 @@ export class Agent<
       this.settings.include_recent_events
     );
 
+    this._inject_budget_warning(step_info);
     await this._handle_final_step(step_info);
     return browser_state_summary;
   }
@@ -2777,6 +2778,33 @@ export class Agent<
       this._message_manager._add_context_message(new UserMessage(message));
       this.logger.info('⚠️ Approaching last step. Enforcing done-only action.');
     }
+  }
+
+  private _inject_budget_warning(step_info: AgentStepInfo | null = null) {
+    if (!step_info) {
+      return;
+    }
+
+    const stepsUsed = step_info.step_number + 1;
+    const budgetRatio = stepsUsed / step_info.max_steps;
+    if (budgetRatio < 0.75 || step_info.is_last_step()) {
+      return;
+    }
+
+    const stepsRemaining = step_info.max_steps - stepsUsed;
+    const pct = Math.floor(budgetRatio * 100);
+    const message =
+      `BUDGET WARNING: You have used ${stepsUsed}/${step_info.max_steps} steps ` +
+      `(${pct}%). ${stepsRemaining} steps remaining. ` +
+      'If the task cannot be completed in the remaining steps, prioritize: ' +
+      '(1) consolidate your results (save to files if the file system is in use), ' +
+      '(2) call done with what you have. ' +
+      'Partial results are far more valuable than exhausting all steps with nothing saved.';
+
+    this.logger.info(
+      `Step budget warning: ${stepsUsed}/${step_info.max_steps} (${pct}%)`
+    );
+    this._message_manager._add_context_message(new UserMessage(message));
   }
 
   private _parseCompletionPayload(
