@@ -318,6 +318,7 @@ describe('BrowserSession Basic Operations', () => {
 
       const summary = await session.get_browser_state_with_recovery({
         include_screenshot: false,
+        include_recent_events: true,
       });
 
       expect(summary.recent_events).toContain('"event_type":"tab_switched"');
