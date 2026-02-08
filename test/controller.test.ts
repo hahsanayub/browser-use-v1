@@ -807,6 +807,36 @@ describe('Regression Coverage', () => {
     expect(result.extracted_content).toContain('Clicked at coordinates (42, 84)');
   });
 
+  it('click action rescales coordinates when llm_screenshot_size is configured', async () => {
+    const controller = new Controller();
+    const page = {
+      mouse: {
+        click: vi.fn(async () => {}),
+      },
+      url: vi.fn(() => 'https://example.com'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+      llm_screenshot_size: [1400, 850],
+      _original_viewport_size: [700, 425],
+    };
+
+    const result = await controller.registry.execute_action(
+      'click',
+      { coordinate_x: 280, coordinate_y: 170 },
+      { browser_session: browserSession as any }
+    );
+
+    expect(page.mouse.click).toHaveBeenCalledWith(140, 85);
+    expect(result.extracted_content).toContain(
+      'Clicked at coordinates (280, 170)'
+    );
+    expect(result.metadata).toEqual({
+      click_x: 140,
+      click_y: 85,
+    });
+  });
+
   it('click action by coordinate reports newly opened tab for follow-up switch', async () => {
     const controller = new Controller();
     const tabs = [{ page_id: 1, url: 'https://example.com', title: 'Example' }];
@@ -1111,6 +1141,27 @@ describe('Regression Coverage', () => {
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
+  });
+
+  it('screenshot without file_name requests inclusion in next observation', async () => {
+    const controller = new Controller();
+    const browserSession = {
+      take_screenshot: vi.fn(async () =>
+        Buffer.from('fake_png_data').toString('base64')
+      ),
+    };
+
+    const result = await controller.registry.execute_action(
+      'screenshot',
+      {},
+      {
+        browser_session: browserSession as any,
+      }
+    );
+
+    expect(browserSession.take_screenshot).not.toHaveBeenCalled();
+    expect(result.extracted_content).toBe('Requested screenshot for next observation');
+    expect(result.metadata).toEqual({ include_screenshot: true });
   });
 
   it('extract_structured_data propagates abort during iframe extraction', async () => {

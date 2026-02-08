@@ -282,24 +282,40 @@ describe('BrowserSession Basic Operations', () => {
         browser_profile: new BrowserProfile({}),
       });
 
-      const evaluate = vi
-        .fn()
-        .mockResolvedValueOnce({
-          viewportWidth: 1280,
-          viewportHeight: 720,
-          scrollX: 0,
-          scrollY: 0,
-          pageWidth: 1280,
-          pageHeight: 2000,
-        })
-        .mockResolvedValueOnce([
-          {
-            url: 'https://example.com/api/items',
-            method: 'GET',
-            loading_duration_ms: 120,
-            resource_type: 'fetch',
-          },
-        ]);
+      const evaluate = vi.fn(async (script: unknown) => {
+        const source =
+          typeof script === 'function' ? script.toString() : String(script);
+        if (source.includes('getEntriesByType')) {
+          return [
+            {
+              url: 'https://example.com/api/items',
+              method: 'GET',
+              loading_duration_ms: 120,
+              resource_type: 'fetch',
+            },
+          ];
+        }
+        if (
+          source.includes('viewportWidth') &&
+          source.includes('pageHeight')
+        ) {
+          return {
+            viewportWidth: 1280,
+            viewportHeight: 720,
+            scrollX: 0,
+            scrollY: 0,
+            pageWidth: 1280,
+            pageHeight: 2000,
+          };
+        }
+        if (
+          source.includes('embed[type="application/pdf"]') ||
+          source.includes('object[type="application/pdf"]')
+        ) {
+          return false;
+        }
+        return null;
+      });
 
       const fakePage = {
         url: () => 'https://example.com/list',
@@ -328,6 +344,7 @@ describe('BrowserSession Basic Operations', () => {
       );
       expect(summary.pagination_buttons).toHaveLength(1);
       expect(summary.pagination_buttons[0]?.button_type).toBe('next');
+      expect((session as any)._original_viewport_size).toEqual([1280, 720]);
     } finally {
       clickableSpy.mockRestore();
     }

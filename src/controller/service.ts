@@ -373,8 +373,54 @@ export class Controller<Context = unknown> {
 
   private registerElementActions() {
     type ClickElementAction = z.infer<typeof ClickElementActionSchema>;
+    const logger = this.logger;
     const clickDescription =
       'Click element by index or by viewport coordinates (coordinate_x/coordinate_y).';
+
+    const convertLlmCoordinatesToViewport = (
+      llmX: number,
+      llmY: number,
+      browserSession: any
+    ): [number, number] => {
+      const llmSize = browserSession?.llm_screenshot_size;
+      const viewportSize = browserSession?._original_viewport_size;
+      if (
+        !Array.isArray(llmSize) ||
+        llmSize.length !== 2 ||
+        !Array.isArray(viewportSize) ||
+        viewportSize.length !== 2
+      ) {
+        return [llmX, llmY];
+      }
+
+      const [llmWidth, llmHeight] = llmSize.map((value: unknown) =>
+        Number(value)
+      );
+      const [viewportWidth, viewportHeight] = viewportSize.map(
+        (value: unknown) => Number(value)
+      );
+
+      if (
+        !Number.isFinite(llmWidth) ||
+        !Number.isFinite(llmHeight) ||
+        !Number.isFinite(viewportWidth) ||
+        !Number.isFinite(viewportHeight) ||
+        llmWidth <= 0 ||
+        llmHeight <= 0 ||
+        viewportWidth <= 0 ||
+        viewportHeight <= 0
+      ) {
+        return [llmX, llmY];
+      }
+
+      const actualX = Math.floor((llmX / llmWidth) * viewportWidth);
+      const actualY = Math.floor((llmY / llmHeight) * viewportHeight);
+      logger.info(
+        `🔄 Converting coordinates: LLM (${llmX}, ${llmY}) @ ${llmWidth}x${llmHeight} -> Viewport (${actualX}, ${actualY}) @ ${viewportWidth}x${viewportHeight}`
+      );
+      return [actualX, actualY];
+    };
+
     const clickImpl = async (
       params: ClickElementAction,
       { browser_session, signal }: any
@@ -426,7 +472,12 @@ export class Controller<Context = unknown> {
             'Unable to perform coordinate click on the current page.'
           );
         }
-        await page.mouse.click(params.coordinate_x, params.coordinate_y);
+        const [actualX, actualY] = convertLlmCoordinatesToViewport(
+          params.coordinate_x,
+          params.coordinate_y,
+          browser_session
+        );
+        await page.mouse.click(actualX, actualY);
         const coordinateMessage =
           `🖱️ Clicked at coordinates (${params.coordinate_x}, ${params.coordinate_y})` +
           (await detectNewTabNote(tabsBefore));
@@ -434,6 +485,10 @@ export class Controller<Context = unknown> {
           extracted_content: coordinateMessage,
           include_in_memory: true,
           long_term_memory: coordinateMessage,
+          metadata: {
+            click_x: actualX,
+            click_y: actualY,
+          },
         });
       }
 
@@ -1791,7 +1846,7 @@ Context: ${context}`;
   private registerUtilityActions() {
     type ScreenshotAction = z.infer<typeof ScreenshotActionSchema>;
     this.registry.action(
-      'Capture a screenshot. Optionally save it to file_name and return the path.',
+      'Take a screenshot of the current viewport. If file_name is provided, saves to that file and returns the path. Otherwise, screenshot is included in the next browser_state observation.',
       { param_model: ScreenshotActionSchema }
     )(async function screenshot(
       params: ScreenshotAction,
@@ -1800,14 +1855,14 @@ Context: ${context}`;
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
 
-      const screenshotB64 = await browser_session.take_screenshot?.(false);
-      if (!screenshotB64) {
-        return new ActionResult({
-          error: 'Failed to capture screenshot.',
-        });
-      }
-
       if (params.file_name) {
+        const screenshotB64 = await browser_session.take_screenshot?.(false);
+        if (!screenshotB64) {
+          return new ActionResult({
+            error: 'Failed to capture screenshot.',
+          });
+        }
+
         const fsInstance = file_system ?? new FileSystem(process.cwd(), false);
         const parsed = path.parse(params.file_name);
         const safeBase = (parsed.name || 'screenshot').replace(
@@ -1827,9 +1882,10 @@ Context: ${context}`;
       }
 
       return new ActionResult({
-        extracted_content:
-          '📸 Screenshot captured. It will be visible in the next browser state if vision is enabled.',
-        long_term_memory: 'Captured screenshot',
+        extracted_content: 'Requested screenshot for next observation',
+        metadata: {
+          include_screenshot: true,
+        },
       });
     });
 

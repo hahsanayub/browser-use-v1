@@ -111,6 +111,7 @@ export class BrowserSession {
   private historyStack: string[] = [];
   downloaded_files: string[] = [];
   llm_screenshot_size: [number, number] | null = null;
+  _original_viewport_size: [number, number] | null = null;
   private ownsBrowserResources = true;
   private _autoDownloadPdfs = true;
   private tabPages = new Map<number, Page | null>();
@@ -1375,6 +1376,16 @@ export class BrowserSession {
     }
 
     const pendingNetworkRequests = await this._getPendingNetworkRequests(page);
+    if (
+      pageInfo &&
+      Number.isFinite(pageInfo.viewport_width) &&
+      Number.isFinite(pageInfo.viewport_height)
+    ) {
+      this._original_viewport_size = [
+        Math.floor(pageInfo.viewport_width),
+        Math.floor(pageInfo.viewport_height),
+      ];
+    }
     const paginationButtons = DomService.detect_pagination_buttons(
       domState.selector_map
     );
@@ -2693,6 +2704,7 @@ export class BrowserSession {
       };
 
       const dom_state = new DOMState(minimal_element_tree, {});
+      this._original_viewport_size = [viewport.width, viewport.height];
       return new BrowserStateSummary(dom_state, {
         url,
         title,
@@ -2771,6 +2783,7 @@ export class BrowserSession {
       };
 
       const dom_state = new DOMState(minimal_element_tree, {});
+      this._original_viewport_size = [viewport.width, viewport.height];
       return new BrowserStateSummary(dom_state, {
         url: page_url,
         title: this._is_new_tab_page(page_url) ? 'New Tab' : 'Chrome Page',
@@ -2875,6 +2888,16 @@ export class BrowserSession {
 
     // Get page info and scroll info
     const page_info = await this.get_page_info(page);
+    if (
+      page_info &&
+      Number.isFinite(page_info.viewport_width) &&
+      Number.isFinite(page_info.viewport_height)
+    ) {
+      this._original_viewport_size = [
+        Math.floor(page_info.viewport_width),
+        Math.floor(page_info.viewport_height),
+      ];
+    }
 
     let pixels_above = 0;
     let pixels_below = 0;
@@ -3870,7 +3893,7 @@ export class BrowserSession {
    * @returns A new BrowserSession instance with copied state
    */
   modelCopy(): BrowserSession {
-    return new BrowserSession({
+    const copy = new BrowserSession({
       id: this.id,
       browser_profile: this.browser_profile,
       browser: this.browser,
@@ -3885,6 +3908,13 @@ export class BrowserSession {
       downloaded_files: [...this.downloaded_files],
       closed_popup_messages: [...this._closedPopupMessages],
     });
+    copy.llm_screenshot_size = this.llm_screenshot_size
+      ? [...this.llm_screenshot_size]
+      : null;
+    copy._original_viewport_size = this._original_viewport_size
+      ? [...this._original_viewport_size]
+      : null;
+    return copy;
   }
 
   model_copy(): BrowserSession {
