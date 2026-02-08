@@ -26,7 +26,7 @@ import { InsecureSensitiveDataError } from '../exceptions.js';
 import { HistoryTreeProcessor } from '../dom/history-tree-processor/service.js';
 import { DOMHistoryElement } from '../dom/history-tree-processor/view.js';
 import type { BaseChatModel } from '../llm/base.js';
-import { SystemMessage, UserMessage } from '../llm/messages.js';
+import { UserMessage } from '../llm/messages.js';
 import type { UsageSummary } from '../tokens/views.js';
 import {
   ActionResult,
@@ -57,6 +57,10 @@ import { ScreenshotService } from '../screenshots/service.js';
 import { ProductTelemetry, productTelemetry } from '../telemetry/service.js';
 import { AgentTelemetryEvent } from '../telemetry/views.js';
 import { TokenCost } from '../tokens/service.js';
+import {
+  construct_judge_messages,
+  construct_simple_judge_messages,
+} from './judge.js';
 
 loadEnv();
 
@@ -197,6 +201,7 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
   ground_truth?: string | null;
   max_history_items?: number | null;
   page_extraction_llm?: BaseChatModel | null;
+  judge_llm?: BaseChatModel | null;
   planner_llm?: BaseChatModel | null;
   planner_interval?: number;
   is_planner_reasoning?: boolean;
@@ -251,6 +256,7 @@ const defaultAgentOptions = () => ({
   ground_truth: null as string | null,
   max_history_items: null as number | null,
   page_extraction_llm: null as BaseChatModel | null,
+  judge_llm: null as BaseChatModel | null,
   planner_llm: null as BaseChatModel | null,
   planner_interval: 1,
   is_planner_reasoning: false,
@@ -296,6 +302,14 @@ const SimpleJudgeSchema = z.object({
   reason: z.string().optional().default(''),
 });
 
+const JudgeSchema = z.object({
+  reasoning: z.string().optional().nullable().default(''),
+  verdict: z.boolean(),
+  failure_reason: z.string().optional().nullable().default(''),
+  impossible_task: z.boolean().optional().default(false),
+  reached_captcha: z.boolean().optional().default(false),
+});
+
 const AgentLLMOutputFormat =
   AgentLLMOutputSchema as typeof AgentLLMOutputSchema & {
     schema: typeof AgentLLMOutputSchema;
@@ -307,6 +321,11 @@ const SimpleJudgeOutputFormat =
     schema: typeof SimpleJudgeSchema;
   };
 SimpleJudgeOutputFormat.schema = SimpleJudgeSchema;
+
+const JudgeOutputFormat = JudgeSchema as typeof JudgeSchema & {
+  schema: typeof JudgeSchema;
+};
+JudgeOutputFormat.schema = JudgeSchema;
 
 export class Agent<
   Context = ControllerContext,
@@ -321,6 +340,7 @@ export class Agent<
 
   browser_session: BrowserSession | null = null;
   llm: BaseChatModel;
+  judge_llm: BaseChatModel;
   unfiltered_actions: string;
   initial_actions: Array<Record<string, Record<string, unknown>>> | null;
   register_new_step_callback: AgentConstructorParams<
@@ -420,6 +440,7 @@ export class Agent<
       ground_truth = null,
       max_history_items = null,
       page_extraction_llm = null,
+      judge_llm = null,
       enable_planning = true,
       planning_replan_on_stall = 3,
       planning_exploration_limit = 5,
@@ -446,11 +467,13 @@ export class Agent<
       throw new Error('Invalid llm, must be provided');
     }
     const effectivePageExtractionLlm = page_extraction_llm ?? llm;
+    const effectiveJudgeLlm = judge_llm ?? llm;
     const effectiveEnablePlanning = flash_mode ? false : enable_planning;
     const normalizedMessageCompaction =
       this._normalizeMessageCompactionSetting(message_compaction);
 
     this.llm = llm;
+    this.judge_llm = effectiveJudgeLlm;
     this.id = task_id || uuid7str();
     this.task_id = this.id;
     this.session_id = uuid7str();
@@ -522,6 +545,7 @@ export class Agent<
     }
     this.token_cost_service.register_llm(llm);
     this.token_cost_service.register_llm(effectivePageExtractionLlm);
+    this.token_cost_service.register_llm(effectiveJudgeLlm);
     if (normalizedMessageCompaction?.compaction_llm) {
       this.token_cost_service.register_llm(
         normalizedMessageCompaction.compaction_llm
@@ -1299,6 +1323,9 @@ export class Agent<
     if (this.history.is_done()) {
       await this._run_simple_judge();
       await this.log_completion();
+      if (this.settings.use_judge) {
+        await this._judge_and_log();
+      }
       if (this.register_done_callback) {
         await this.register_done_callback(this.history);
       }
@@ -1637,6 +1664,9 @@ export class Agent<
           this.logger.debug(`🎯 Task completed after ${step + 1} steps!`);
           await this._run_simple_judge();
           await this.log_completion();
+          if (this.settings.use_judge) {
+            await this._judge_and_log();
+          }
 
           if (this.register_done_callback) {
             const maybePromise = this.register_done_callback(this.history);
@@ -3146,21 +3176,6 @@ export class Agent<
     this._message_manager._add_context_message(new UserMessage(message));
   }
 
-  private _truncateJudgeText(
-    text: string,
-    maxLength: number,
-    fromBeginning = false
-  ) {
-    if (text.length <= maxLength) {
-      return text;
-    }
-    const marker = '...[text truncated]...';
-    if (fromBeginning) {
-      return `...[text truncated]${text.slice(-(maxLength - 20))}`;
-    }
-    return `${text.slice(0, maxLength - marker.length)}${marker}`;
-  }
-
   private async _run_simple_judge() {
     const lastHistoryItem = this.history.history[this.history.history.length - 1];
     if (!lastHistoryItem || !lastHistoryItem.result.length) {
@@ -3172,37 +3187,14 @@ export class Agent<
       return;
     }
 
-    const task = this._truncateJudgeText(this.task, 20000);
-    const finalResult = this._truncateJudgeText(
-      this.history.final_result() ?? '',
-      20000
-    );
-    const currentDate = new Date().toISOString().slice(0, 10);
-
-    const systemPrompt =
-      `You are a strict verifier checking whether a browser automation agent actually completed its task.\n\n` +
-      `Today's date is ${currentDate}. The agent ran recently — dates near today are expected and NOT fabricated.\n\n` +
-      'Given the task and the agent\'s final response, determine if the response genuinely satisfies ALL requirements.\n\n' +
-      'Check for these common failure patterns:\n' +
-      '1. Incorrect data: Wrong number of items, missing filters/criteria, wrong format\n' +
-      '2. Unverified actions: Agent claims completion without clear evidence\n' +
-      '3. Incomplete results: Some requirements from the task are not addressed\n' +
-      '4. Fabricated content: Plausible but unsupported claims\n' +
-      '5. Partial completion reported as success\n\n' +
-      'Respond with EXACTLY this JSON structure:\n' +
-      '{\n' +
-      '  "is_correct": true or false,\n' +
-      '  "reason": "Brief explanation if not correct, empty string if correct"\n' +
-      '}\n\n' +
-      'Be strict: if the response does not clearly satisfy every requirement, set is_correct to false.';
-
-    const userPrompt =
-      `<task>\n${task || 'No task provided'}\n</task>\n\n` +
-      `<final_result>\n${finalResult || 'No final result provided'}\n</final_result>`;
+    const messages = construct_simple_judge_messages({
+      task: this.task,
+      final_result: this.history.final_result() ?? '',
+    });
 
     try {
       const response = await this.llm.ainvoke(
-        [new SystemMessage(systemPrompt), new UserMessage(userPrompt)] as any,
+        messages as any,
         SimpleJudgeOutputFormat as any
       );
       const parsed = this._parseCompletionPayload((response as any).completion);
@@ -3237,6 +3229,80 @@ export class Agent<
         }`
       );
     }
+  }
+
+  private async _judge_trace(): Promise<z.infer<typeof JudgeSchema> | null> {
+    const messages = construct_judge_messages({
+      task: this.task,
+      final_result: this.history.final_result() ?? '',
+      agent_steps: this.history.agent_steps(),
+      screenshot_paths: this.history
+        .screenshot_paths()
+        .filter((value): value is string => typeof value === 'string'),
+      max_images: 10,
+      ground_truth: this.settings.ground_truth,
+      use_vision: this.settings.use_vision,
+    });
+
+    try {
+      const response = await this.judge_llm.ainvoke(
+        messages as any,
+        JudgeOutputFormat as any
+      );
+      const parsed = this._parseCompletionPayload((response as any).completion);
+      const validation = JudgeSchema.safeParse(parsed);
+      if (!validation.success) {
+        this.logger.warning(
+          'Judge trace response did not match expected schema; skipping judgement.'
+        );
+        return null;
+      }
+      return validation.data;
+    } catch (error) {
+      this.logger.warning(
+        `Judge trace failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      return null;
+    }
+  }
+
+  private async _judge_and_log() {
+    const lastHistoryItem = this.history.history[this.history.history.length - 1];
+    if (!lastHistoryItem || !lastHistoryItem.result.length) {
+      return;
+    }
+    const lastResult = lastHistoryItem.result[lastHistoryItem.result.length - 1];
+    if (!lastResult.is_done) {
+      return;
+    }
+
+    const judgement = await this._judge_trace();
+    lastResult.judgement = judgement;
+
+    if (!judgement) {
+      return;
+    }
+    if (lastResult.success === true && judgement.verdict === true) {
+      return;
+    }
+
+    let judgeLog = '\n';
+    if (lastResult.success === true && judgement.verdict === false) {
+      judgeLog += '⚠️  Agent reported success but judge thinks task failed\n';
+    }
+    judgeLog += `⚖️  Judge Verdict: ${judgement.verdict ? 'PASS' : 'FAIL'}\n`;
+    if (judgement.failure_reason) {
+      judgeLog += `   Failure Reason: ${judgement.failure_reason}\n`;
+    }
+    if (judgement.reached_captcha) {
+      judgeLog += '   Captcha Detected: Agent encountered captcha challenges\n';
+    }
+    if (judgement.reasoning) {
+      judgeLog += `   ${judgement.reasoning}\n`;
+    }
+    this.logger.info(judgeLog);
   }
 
   private _parseCompletionPayload(

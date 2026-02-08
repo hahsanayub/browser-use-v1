@@ -465,7 +465,7 @@ describe('Component Tests (Mocked Dependencies)', () => {
     tempResources.push(agent.agent_directory);
     const history = await agent.run(2);
 
-    expect(llm.calls.length).toBe(2);
+    expect(llm.calls.length).toBeGreaterThanOrEqual(2);
     expect(history.is_done()).toBe(true);
     expect(history.is_successful()).toBe(false);
     expect(history.final_result() ?? '').toContain(
