@@ -1515,6 +1515,64 @@ describe('Regression Coverage', () => {
     }
   });
 
+  it('upload_file resolves FileSystem-managed files outside available_file_paths', async () => {
+    const controller = new Controller();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-upload-'));
+    const fileSystem = new FileSystem(tempDir, false);
+    const locator = {
+      setInputFiles: vi.fn(async () => {}),
+    };
+    const browserSession = {
+      downloaded_files: [],
+      find_file_upload_element_by_index: vi.fn(async () => ({ xpath: '/html/body/input' })),
+      get_locate_element: vi.fn(async () => locator),
+    };
+
+    try {
+      await fileSystem.write_file('resume.txt', 'hello');
+
+      const result = await controller.registry.execute_action(
+        'upload_file',
+        { index: 1, path: 'resume.txt' },
+        {
+          browser_session: browserSession as any,
+          available_file_paths: [],
+          file_system: fileSystem as any,
+        }
+      );
+
+      const expectedPath = path.join(fileSystem.get_dir(), 'resume.txt');
+      expect(locator.setInputFiles).toHaveBeenCalledWith(expectedPath);
+      expect(result.long_term_memory).toContain(expectedPath);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('upload_file rejects zero-byte files', async () => {
+    const controller = new Controller();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-upload-'));
+    const emptyPath = path.join(tempDir, 'empty.txt');
+    fs.writeFileSync(emptyPath, '');
+
+    try {
+      await expect(
+        controller.registry.execute_action(
+          'upload_file',
+          { index: 1, path: emptyPath },
+          {
+            browser_session: {
+              downloaded_files: [],
+            } as any,
+            available_file_paths: [emptyPath],
+          }
+        )
+      ).rejects.toThrow('is empty (0 bytes)');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('read_long_content blocks files outside available_file_paths', async () => {
     const controller = new Controller();
 

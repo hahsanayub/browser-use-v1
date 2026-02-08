@@ -622,15 +622,42 @@ export class Controller<Context = unknown> {
       param_model: UploadFileActionSchema,
     })(async function upload_file(
       params: UploadFileAction,
-      { browser_session, available_file_paths, signal }
+      { browser_session, available_file_paths, file_system, signal }
     ) {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
-      if (!available_file_paths?.includes(params.path)) {
-        throw new BrowserError(`File path ${params.path} is not available`);
+      let uploadPath = params.path;
+
+      const allowedPaths = new Set<string>(available_file_paths ?? []);
+      const downloadedFiles = Array.isArray(browser_session?.downloaded_files)
+        ? browser_session.downloaded_files
+        : [];
+      for (const downloadedPath of downloadedFiles) {
+        allowedPaths.add(downloadedPath);
       }
-      if (!fs.existsSync(params.path)) {
-        throw new BrowserError(`File ${params.path} does not exist`);
+
+      if (!allowedPaths.has(uploadPath)) {
+        const fsInstance = file_system ?? null;
+        const managedFile =
+          fsInstance && typeof fsInstance.get_file === 'function'
+            ? fsInstance.get_file(uploadPath)
+            : null;
+        if (managedFile && fsInstance?.get_dir) {
+          uploadPath = path.join(fsInstance.get_dir(), uploadPath);
+        } else {
+          throw new BrowserError(
+            `File path ${params.path} is not available. To fix: add this file path to available_file_paths when creating the Agent.`
+          );
+        }
+      }
+
+      if (!fs.existsSync(uploadPath)) {
+        throw new BrowserError(`File ${uploadPath} does not exist`);
+      }
+      if (fs.statSync(uploadPath).size === 0) {
+        throw new BrowserError(
+          `File ${uploadPath} is empty (0 bytes). The file may not have been saved correctly.`
+        );
       }
 
       const node = await browser_session.find_file_upload_element_by_index(
@@ -652,12 +679,12 @@ export class Controller<Context = unknown> {
         );
       }
 
-      await locator.setInputFiles(params.path);
+      await locator.setInputFiles(uploadPath);
       const msg = `📁 Successfully uploaded file to index ${params.index}`;
       return new ActionResult({
         extracted_content: msg,
         include_in_memory: true,
-        long_term_memory: `Uploaded file ${params.path} to element ${params.index}`,
+        long_term_memory: `Uploaded file ${uploadPath} to element ${params.index}`,
       });
     });
   }
