@@ -30,7 +30,8 @@ export class RegisteredAction {
     public readonly handler: ActionHandler,
     public readonly paramSchema: ZodTypeAny,
     public readonly domains: string[] | null = null,
-    public readonly pageFilter: ((page: Page) => boolean) | null = null
+    public readonly pageFilter: ((page: Page) => boolean) | null = null,
+    public readonly terminates_sequence = false
   ) {}
 
   promptDescription() {

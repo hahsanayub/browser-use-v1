@@ -2327,15 +2327,6 @@ export class Agent<
     }
 
     await this._restore_shared_pinned_tab_if_needed();
-    const terminateSequenceActions = new Set([
-      'go_to_url',
-      'search',
-      'search_google',
-      'go_back',
-      'switch_tab',
-      'open_tab',
-      'close_tab',
-    ]);
 
     // ==================== Selector Map Caching ====================
     // Check if any action uses an index, if so cache the selector map
@@ -2481,7 +2472,13 @@ export class Agent<
           break;
         }
 
-        if (terminateSequenceActions.has(actionName)) {
+        const registeredAction = (this.controller.registry as any).get_action?.(
+          actionName
+        );
+        const terminatesSequence = Boolean(
+          (registeredAction as any)?.terminates_sequence
+        );
+        if (terminatesSequence) {
           this.logger.info(
             `Action "${actionName}" terminates sequence - skipping ${actions.length - i - 1} remaining action(s)`
           );

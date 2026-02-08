@@ -42,6 +42,7 @@ export interface ActionOptions {
   domains?: string[] | null;
   allowed_domains?: string[] | null;
   page_filter?: ((page: Page) => boolean) | null;
+  terminates_sequence?: boolean;
 }
 
 const isAbortError = (error: unknown): boolean =>
@@ -89,6 +90,7 @@ export class Registry<Context = unknown> {
     const schema = options.param_model ?? z.object({}).strict();
     const domains = options.allowed_domains ?? options.domains ?? null;
     const pageFilter = options.page_filter ?? null;
+    const terminatesSequence = options.terminates_sequence ?? false;
 
     return <Params = any>(handler: RegistryActionHandler<Params, Context>) => {
       if (this.excludeActions.has(handler.name)) {
@@ -101,7 +103,8 @@ export class Registry<Context = unknown> {
         handler,
         schema,
         domains,
-        pageFilter
+        pageFilter,
+        terminatesSequence
       );
       this.registry.register(action);
       return handler;

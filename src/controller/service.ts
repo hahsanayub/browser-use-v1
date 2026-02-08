@@ -236,7 +236,7 @@ export class Controller<Context = unknown> {
     type SearchAction = z.infer<typeof SearchActionSchema>;
     this.registry.action(
       'Search the query on a web search engine (duckduckgo, google, or bing).',
-      { param_model: SearchActionSchema }
+      { param_model: SearchActionSchema, terminates_sequence: true }
     )(async function search(params: SearchAction, { browser_session, signal }) {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
@@ -272,6 +272,7 @@ export class Controller<Context = unknown> {
     type SearchGoogleAction = z.infer<typeof SearchGoogleActionSchema>;
     this.registry.action('Search the query in Google...', {
       param_model: SearchGoogleActionSchema,
+      terminates_sequence: true,
     })(async function search_google(
       params: SearchGoogleAction,
       { browser_session, signal }
@@ -297,6 +298,7 @@ export class Controller<Context = unknown> {
     type GoToUrlAction = z.infer<typeof GoToUrlActionSchema>;
     this.registry.action('Navigate to URL...', {
       param_model: GoToUrlActionSchema,
+      terminates_sequence: true,
     })(async function go_to_url(
       params: GoToUrlAction,
       { browser_session, signal }
@@ -338,7 +340,10 @@ export class Controller<Context = unknown> {
       }
     });
 
-    this.registry.action('Go back', { param_model: NoParamsActionSchema })(
+    this.registry.action('Go back', {
+      param_model: NoParamsActionSchema,
+      terminates_sequence: true,
+    })(
       async function go_back(_params, { browser_session, signal }) {
         if (!browser_session) throw new Error('Browser session missing');
         throwIfAborted(signal);
@@ -568,7 +573,10 @@ export class Controller<Context = unknown> {
 
   private registerTabActions() {
     type SwitchTabAction = z.infer<typeof SwitchTabActionSchema>;
-    this.registry.action('Switch tab', { param_model: SwitchTabActionSchema })(
+    this.registry.action('Switch tab', {
+      param_model: SwitchTabActionSchema,
+      terminates_sequence: true,
+    })(
       async function switch_tab(params: SwitchTabAction, ctx) {
         const { browser_session, signal } = ctx;
         if (!browser_session) throw new Error('Browser session missing');
@@ -594,6 +602,7 @@ export class Controller<Context = unknown> {
     type CloseTabAction = z.infer<typeof CloseTabActionSchema>;
     this.registry.action('Close an existing tab', {
       param_model: CloseTabActionSchema,
+      terminates_sequence: true,
     })(async function close_tab(
       params: CloseTabAction,
       { browser_session, signal }

@@ -339,6 +339,36 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('multi_act respects registry terminates_sequence metadata for custom actions', async () => {
+    const agent = new Agent({
+      task: 'multi_act custom terminates_sequence guard',
+      llm: createLlm(),
+    });
+
+    (agent.controller.registry as any).action('Custom terminating action', {
+      terminates_sequence: true,
+    })(async function custom_terminate() {
+      return new ActionResult({ extracted_content: 'custom terminate' });
+    });
+
+    const executeActionSpy = vi.spyOn(
+      agent.controller.registry as any,
+      'execute_action'
+    );
+
+    const results = await agent.multi_act(
+      [{ custom_terminate: {} }, { wait: { seconds: 0 } }],
+      { check_for_new_elements: false }
+    );
+
+    expect(executeActionSpy).toHaveBeenCalledTimes(1);
+    expect(executeActionSpy.mock.calls[0]?.[0]).toBe('custom_terminate');
+    expect(results).toHaveLength(1);
+    expect(results[0]?.extracted_content).toContain('custom terminate');
+
+    await agent.close();
+  });
+
   it('multi_act skips remaining actions when page URL changes after an action', async () => {
     const agent = new Agent({
       task: 'multi_act runtime page-change guard',

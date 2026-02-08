@@ -445,6 +445,25 @@ describe('Controller Registry Tests', () => {
       expect(prompt).toContain('data');
       expect(prompt).not.toContain('"success"');
     });
+
+    it('stores terminates_sequence metadata on registered actions', async () => {
+      const registry = new Registry();
+      registry.action('Terminating action', {
+        terminates_sequence: true,
+      })(async function terminating_action() {
+        return new ActionResult({});
+      });
+      registry.action('Non-terminating action')(async function plain_action() {
+        return new ActionResult({});
+      });
+
+      expect(registry.get_action('terminating_action')?.terminates_sequence).toBe(
+        true
+      );
+      expect(registry.get_action('plain_action')?.terminates_sequence).toBe(
+        false
+      );
+    });
   });
 });
 
