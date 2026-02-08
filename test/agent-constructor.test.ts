@@ -965,6 +965,124 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('wait_for_elements skips minimum-element wait for non-element actions', async () => {
+    const agent = new Agent({
+      task: 'test conditional wait - skip',
+      llm: createLlm(),
+    });
+
+    const waitSpy = vi
+      .spyOn(agent as any, '_waitForMinimumElements')
+      .mockResolvedValue(null);
+    vi.spyOn(agent.browser_session as any, 'get_browser_state_with_recovery')
+      .mockResolvedValue({
+        element_tree: {
+          clickable_elements_to_string: () => '',
+        },
+        selector_map: {},
+      } as any);
+    vi.spyOn(agent, 'multi_act').mockResolvedValue([
+      new ActionResult({ extracted_content: 'done' }),
+    ]);
+    vi.spyOn(agent as any, '_sleep').mockResolvedValue(undefined);
+
+    await (agent as any)._execute_history_step(
+      {
+        model_output: {
+          action: [
+            {
+              get_index: () => null,
+              model_dump: () => ({ done: { text: 'ok', success: true } }),
+            },
+          ],
+        },
+        state: { interacted_element: [null] },
+      },
+      0,
+      null,
+      true,
+      null
+    );
+
+    expect(waitSpy).not.toHaveBeenCalled();
+
+    await agent.close();
+  });
+
+  it('wait_for_elements waits for element-targeting actions with history element', async () => {
+    const agent = new Agent({
+      task: 'test conditional wait - use',
+      llm: createLlm(),
+    });
+
+    const liveNode = new DOMElementNode(
+      true,
+      null,
+      'button',
+      '/html/body/button[1]',
+      { id: 'cta' },
+      []
+    );
+    liveNode.highlight_index = 0;
+
+    const waitedState = {
+      element_tree: {
+        clickable_elements_to_string: () => '',
+      },
+      selector_map: {
+        0: liveNode,
+      },
+    } as any;
+    const waitSpy = vi
+      .spyOn(agent as any, '_waitForMinimumElements')
+      .mockResolvedValue(waitedState);
+    const stateSpy = vi.spyOn(
+      agent.browser_session as any,
+      'get_browser_state_with_recovery'
+    );
+    vi.spyOn(agent as any, '_sleep').mockResolvedValue(undefined);
+    vi.spyOn(agent, 'multi_act').mockResolvedValue([
+      new ActionResult({ extracted_content: 'clicked' }),
+    ]);
+
+    const clickAction = {
+      _index: 0,
+      get_index() {
+        return this._index;
+      },
+      set_index(index: number) {
+        this._index = index;
+      },
+      model_dump() {
+        return { click: { index: this._index } };
+      },
+    };
+
+    await (agent as any)._execute_history_step(
+      {
+        model_output: { action: [clickAction] },
+        state: {
+          interacted_element: [
+            {
+              tag_name: 'button',
+              xpath: '/html/body/button[1]',
+              attributes: { id: 'cta' },
+            },
+          ],
+        },
+      },
+      0,
+      null,
+      true,
+      null
+    );
+
+    expect(waitSpy).toHaveBeenCalledWith(1, 15, 1, null);
+    expect(stateSpy).not.toHaveBeenCalled();
+
+    await agent.close();
+  });
+
   it('reopens dropdown menu once when rerun cannot match a menu item element', async () => {
     const agent = new Agent({
       task: 'test rerun dropdown reopen',

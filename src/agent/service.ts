@@ -2841,17 +2841,24 @@ export class Agent<
       throw new Error('BrowserSession is not set up');
     }
     await this._sleep(delaySeconds, signal);
+    const interactedElements = historyItem.state?.interacted_element ?? [];
 
     let browser_state_summary: BrowserStateSummary | null = null;
     if (wait_for_elements) {
-      const minElements = this._countExpectedElementsFromHistory(historyItem);
-      if (minElements > 0) {
-        browser_state_summary = await this._waitForMinimumElements(
-          minElements,
-          15,
-          1,
-          signal
-        );
+      const needsElementMatching = this._historyStepNeedsElementMatching(
+        historyItem,
+        interactedElements
+      );
+      if (needsElementMatching) {
+        const minElements = this._countExpectedElementsFromHistory(historyItem);
+        if (minElements > 0) {
+          browser_state_summary = await this._waitForMinimumElements(
+            minElements,
+            15,
+            1,
+            signal
+          );
+        }
       }
     }
     if (!browser_state_summary) {
@@ -2867,7 +2874,6 @@ export class Agent<
       throw new Error('Invalid browser state or model output');
     }
 
-    const interactedElements = historyItem.state?.interacted_element ?? [];
     const results: ActionResult[] = [];
     const pendingActions: Array<Record<string, Record<string, unknown>>> = [];
     for (
@@ -2957,6 +2963,49 @@ export class Agent<
     }
 
     return results;
+  }
+
+  private _historyStepNeedsElementMatching(
+    historyItem: AgentHistory,
+    interactedElements: Array<DOMHistoryElement | null | undefined>
+  ) {
+    const actions = historyItem.model_output?.action ?? [];
+    for (let index = 0; index < actions.length; index++) {
+      const action = actions[index];
+      if (!action) {
+        continue;
+      }
+
+      const payload =
+        typeof (action as any).model_dump === 'function'
+          ? (action as any).model_dump({ exclude_unset: true })
+          : (action as Record<string, unknown>);
+      const actionName = Object.keys(payload ?? {})[0] ?? null;
+      if (!actionName) {
+        continue;
+      }
+
+      if (
+        [
+          'click',
+          'input',
+          'input_text',
+          'hover',
+          'select_option',
+          'select_dropdown_option',
+          'drag_and_drop',
+        ].includes(actionName)
+      ) {
+        const historicalElement = this._coerceHistoryElement(
+          interactedElements[index] ?? null
+        );
+        if (historicalElement) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   private _countExpectedElementsFromHistory(historyItem: AgentHistory) {
