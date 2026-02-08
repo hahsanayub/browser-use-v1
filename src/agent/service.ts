@@ -39,6 +39,9 @@ import {
   AgentError,
   StepMetadata,
   ActionModel,
+  MessageCompactionSettings,
+  defaultMessageCompactionSettings,
+  normalizeMessageCompactionSettings,
 } from './views.js';
 import type { StructuredOutputParser } from './views.js';
 import {
@@ -209,6 +212,7 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
   allow_insecure_sensitive_data?: boolean;
   llm_timeout?: number;
   step_timeout?: number;
+  message_compaction?: MessageCompactionSettings | boolean | null;
   loop_detection_window?: number;
   loop_detection_enabled?: boolean;
 }
@@ -255,6 +259,7 @@ const defaultAgentOptions = () => ({
   vision_detail_level: 'auto' as const,
   llm_timeout: 60,
   step_timeout: 180,
+  message_compaction: true as MessageCompactionSettings | boolean,
   loop_detection_window: 20,
   loop_detection_enabled: true,
 });
@@ -400,6 +405,7 @@ export class Agent<
       allow_insecure_sensitive_data = false,
       llm_timeout = 60,
       step_timeout = 180,
+      message_compaction = true,
       loop_detection_window = 20,
       loop_detection_enabled = true,
     } = { ...defaultAgentOptions(), ...params };
@@ -408,6 +414,8 @@ export class Agent<
       throw new Error('Invalid llm, must be provided');
     }
     const effectivePageExtractionLlm = page_extraction_llm ?? llm;
+    const normalizedMessageCompaction =
+      this._normalizeMessageCompactionSetting(message_compaction);
 
     this.llm = llm;
     this.id = task_id || uuid7str();
@@ -460,6 +468,7 @@ export class Agent<
       allow_insecure_sensitive_data,
       llm_timeout,
       step_timeout,
+      message_compaction: normalizedMessageCompaction,
       loop_detection_window,
       loop_detection_enabled,
     };
@@ -474,6 +483,11 @@ export class Agent<
     }
     this.token_cost_service.register_llm(llm);
     this.token_cost_service.register_llm(effectivePageExtractionLlm);
+    if (normalizedMessageCompaction?.compaction_llm) {
+      this.token_cost_service.register_llm(
+        normalizedMessageCompaction.compaction_llm
+      );
+    }
 
     this.state = params.injected_agent_state || new AgentState();
     this.state.loop_detector.window_size = this.settings.loop_detection_window;
@@ -554,6 +568,24 @@ export class Agent<
 
     // Model-specific vision handling
     this._handleModelSpecificVision();
+  }
+
+  private _normalizeMessageCompactionSetting(
+    messageCompaction: MessageCompactionSettings | boolean | null | undefined
+  ): MessageCompactionSettings | null {
+    if (messageCompaction == null) {
+      return null;
+    }
+    if (typeof messageCompaction === 'boolean') {
+      return normalizeMessageCompactionSettings({
+        ...defaultMessageCompactionSettings(),
+        enabled: messageCompaction,
+      });
+    }
+    return normalizeMessageCompactionSettings({
+      ...defaultMessageCompactionSettings(),
+      ...messageCompaction,
+    });
   }
 
   private _createSessionIdWithAgentSuffix(): string {
@@ -1760,6 +1792,14 @@ export class Agent<
     this.logger.debug(
       `💬 Step ${this.state.n_steps}: Creating state messages for context...`
     );
+    this._message_manager.prepare_step_state(
+      browser_state_summary,
+      this.state.last_model_output,
+      this.state.last_result,
+      step_info,
+      this.sensitive_data ?? null
+    );
+    await this._maybe_compact_messages(step_info);
     this._message_manager.create_state_messages(
       browser_state_summary,
       this.state.last_model_output,
@@ -1769,7 +1809,8 @@ export class Agent<
       page_filtered_actions || null,
       this.sensitive_data ?? null,
       this.available_file_paths,
-      this.settings.include_recent_events
+      this.settings.include_recent_events,
+      true
     );
 
     this._inject_budget_warning(step_info);
@@ -1777,6 +1818,24 @@ export class Agent<
     this._inject_loop_detection_nudge();
     await this._handle_final_step(step_info);
     return browser_state_summary;
+  }
+
+  private async _maybe_compact_messages(step_info: AgentStepInfo | null = null) {
+    const settings = this.settings.message_compaction;
+    if (!settings || !settings.enabled) {
+      return;
+    }
+
+    const compactionLlm =
+      settings.compaction_llm ??
+      (this.settings.page_extraction_llm as BaseChatModel | null) ??
+      this.llm;
+
+    await this._message_manager.maybe_compact_messages(
+      compactionLlm,
+      settings,
+      step_info
+    );
   }
 
   private async _storeScreenshotForStep(

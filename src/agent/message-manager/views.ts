@@ -67,6 +67,9 @@ export class MessageManagerState {
     new HistoryItem(0, null, null, null, null, null, 'Agent initialized'),
   ];
   read_state_description = '';
+  compacted_memory: string | null = null;
+  compaction_count = 0;
+  last_compaction_step: number | null = null;
 
   get historyMessages() {
     return this.history.get_messages();

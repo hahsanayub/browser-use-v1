@@ -7,6 +7,7 @@ import type { DOMHistoryElement } from '../dom/history-tree-processor/view.js';
 import { HistoryTreeProcessor } from '../dom/history-tree-processor/service.js';
 import type { DOMElementNode, SelectorMap } from '../dom/views.js';
 import type { FileSystemState } from '../filesystem/file-system.js';
+import type { BaseChatModel } from '../llm/base.js';
 import { MessageManagerState } from './message-manager/views.js';
 import type { UsageSummary } from '../tokens/views.js';
 
@@ -298,6 +299,58 @@ export class ActionLoopDetector {
   }
 }
 
+export interface MessageCompactionSettings {
+  enabled: boolean;
+  compact_every_n_steps: number;
+  trigger_char_count: number | null;
+  trigger_token_count: number | null;
+  chars_per_token: number;
+  keep_last_items: number;
+  summary_max_chars: number;
+  include_read_state: boolean;
+  compaction_llm: BaseChatModel | null;
+}
+
+export const defaultMessageCompactionSettings = (): MessageCompactionSettings => ({
+  enabled: true,
+  compact_every_n_steps: 15,
+  trigger_char_count: 40000,
+  trigger_token_count: null,
+  chars_per_token: 4,
+  keep_last_items: 6,
+  summary_max_chars: 6000,
+  include_read_state: false,
+  compaction_llm: null,
+});
+
+export const normalizeMessageCompactionSettings = (
+  settings: Partial<MessageCompactionSettings> | MessageCompactionSettings
+): MessageCompactionSettings => {
+  const merged: MessageCompactionSettings = {
+    ...defaultMessageCompactionSettings(),
+    ...settings,
+  };
+
+  if (
+    merged.trigger_char_count != null &&
+    merged.trigger_token_count != null
+  ) {
+    throw new Error(
+      'Set trigger_char_count or trigger_token_count for message_compaction, not both.'
+    );
+  }
+
+  if (merged.trigger_token_count != null) {
+    merged.trigger_char_count = Math.floor(
+      merged.trigger_token_count * merged.chars_per_token
+    );
+  } else if (merged.trigger_char_count == null) {
+    merged.trigger_char_count = 40000;
+  }
+
+  return merged;
+};
+
 export interface AgentSettings {
   session_attachment_mode: 'copy' | 'strict' | 'shared';
   allow_insecure_sensitive_data: boolean;
@@ -327,6 +380,7 @@ export interface AgentSettings {
   include_tool_call_examples: boolean;
   llm_timeout: number;
   step_timeout: number;
+  message_compaction: MessageCompactionSettings | null;
   loop_detection_window: number;
   loop_detection_enabled: boolean;
 }
@@ -371,6 +425,7 @@ export const defaultAgentSettings = (): AgentSettings => ({
   include_tool_call_examples: false,
   llm_timeout: 60,
   step_timeout: 180,
+  message_compaction: null,
   loop_detection_window: 20,
   loop_detection_enabled: true,
 });

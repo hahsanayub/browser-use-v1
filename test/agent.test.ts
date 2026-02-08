@@ -80,6 +80,7 @@ const createAgentSettings = (
   flash_mode: false,
   max_steps: 100,
   llm_timeout: 60000,
+  message_compaction: null,
   loop_detection_window: 20,
   loop_detection_enabled: true,
   ...overrides,

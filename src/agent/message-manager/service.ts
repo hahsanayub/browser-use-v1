@@ -4,7 +4,13 @@ import {
   UserMessage,
   type Message,
 } from '../../llm/messages.js';
-import { ActionResult, AgentOutput, AgentStepInfo } from '../views.js';
+import type { BaseChatModel } from '../../llm/base.js';
+import {
+  ActionResult,
+  AgentOutput,
+  AgentStepInfo,
+  MessageCompactionSettings,
+} from '../views.js';
 import { BrowserStateSummary } from '../../browser/views.js';
 import { FileSystem } from '../../filesystem/file-system.js';
 import { AgentMessagePrompt } from '../prompts.js';
@@ -46,17 +52,27 @@ export class MessageManager {
   }
 
   get agent_history_description() {
+    const compactedPrefix = this.state.compacted_memory
+      ? `<compacted_memory>\n${this.state.compacted_memory}\n</compacted_memory>\n`
+      : '';
+
     if (this.maxHistoryItems == null) {
-      return this.state.agent_history_items
+      return (
+        compactedPrefix +
+        this.state.agent_history_items
         .map((item) => item.to_string())
-        .join('\n');
+        .join('\n')
+      );
     }
 
     const totalItems = this.state.agent_history_items.length;
     if (totalItems <= this.maxHistoryItems) {
-      return this.state.agent_history_items
+      return (
+        compactedPrefix +
+        this.state.agent_history_items
         .map((item) => item.to_string())
-        .join('\n');
+        .join('\n')
+      );
     }
 
     const omitted = totalItems - this.maxHistoryItems;
@@ -69,7 +85,7 @@ export class MessageManager {
         .slice(-keepRecent)
         .map((item) => item.to_string())
     );
-    return parts.join('\n');
+    return compactedPrefix + parts.join('\n');
   }
 
   add_new_task(new_task: string) {
@@ -157,12 +173,17 @@ export class MessageManager {
     );
   }
 
-  private getSensitiveDataDescription(currentUrl: string) {
+  private getSensitiveDataDescription(
+    currentUrl: string,
+    sensitiveData:
+      | Record<string, string | Record<string, string>>
+      | undefined = this.sensitiveData
+  ) {
     const placeholders = new Set<string>();
-    if (!this.sensitiveData) {
+    if (!sensitiveData) {
       return '';
     }
-    for (const [key, value] of Object.entries(this.sensitiveData)) {
+    for (const [key, value] of Object.entries(sensitiveData)) {
       if (value && typeof value === 'object' && !Array.isArray(value)) {
         if (
           currentUrl &&
@@ -180,6 +201,132 @@ export class MessageManager {
     return `Here are placeholders for sensitive data:\n${Array.from(placeholders).sort().join(', ')}\nTo use them, write <secret>the placeholder name</secret>`;
   }
 
+  prepare_step_state(
+    browser_state_summary: BrowserStateSummary,
+    model_output: AgentOutput | null = null,
+    result: ActionResult[] | null = null,
+    step_info: AgentStepInfo | null = null,
+    sensitive_data: Record<
+      string,
+      string | Record<string, string>
+    > | null = null
+  ) {
+    this.state.history.context_messages = [];
+    this.updateAgentHistoryDescription(model_output, result, step_info);
+
+    const effectiveSensitiveData = sensitive_data ?? this.sensitiveData;
+    if (effectiveSensitiveData) {
+      this.sensitiveDataDescription = this.getSensitiveDataDescription(
+        browser_state_summary.url,
+        effectiveSensitiveData
+      );
+    }
+  }
+
+  async maybe_compact_messages(
+    llm: BaseChatModel | null,
+    settings: MessageCompactionSettings | null,
+    step_info: AgentStepInfo | null = null
+  ) {
+    if (!settings || !settings.enabled || !llm || !step_info) {
+      return false;
+    }
+
+    const stepsSince =
+      step_info.step_number - (this.state.last_compaction_step ?? 0);
+    if (stepsSince < settings.compact_every_n_steps) {
+      return false;
+    }
+
+    const historyItems = this.state.agent_history_items;
+    const fullHistoryText = historyItems
+      .map((item) => item.to_string())
+      .join('\n')
+      .trim();
+    const triggerCharCount = settings.trigger_char_count ?? 40000;
+    if (fullHistoryText.length < triggerCharCount) {
+      return false;
+    }
+
+    logger.debug(
+      `Compacting message history (items=${historyItems.length}, chars=${fullHistoryText.length})`
+    );
+
+    const compactionSections: string[] = [];
+    if (this.state.compacted_memory) {
+      compactionSections.push(
+        `<previous_compacted_memory>\n${this.state.compacted_memory}\n</previous_compacted_memory>`
+      );
+    }
+    compactionSections.push(`<agent_history>\n${fullHistoryText}\n</agent_history>`);
+    if (settings.include_read_state && this.state.read_state_description) {
+      compactionSections.push(
+        `<read_state>\n${this.state.read_state_description}\n</read_state>`
+      );
+    }
+    let compactionInput = compactionSections.join('\n\n');
+
+    if (this.sensitiveData) {
+      const filtered = this.filterSensitiveData(new UserMessage(compactionInput));
+      compactionInput = filtered.text;
+    }
+
+    let systemPrompt =
+      'You are summarizing an agent run for prompt compaction.\n' +
+      'Capture task requirements, key facts, decisions, partial progress, errors, and next steps.\n' +
+      'Preserve important entities, values, URLs, and file paths.\n' +
+      'Return plain text only. Do not include tool calls or JSON.';
+    if (settings.summary_max_chars) {
+      systemPrompt += ` Keep under ${settings.summary_max_chars} characters if possible.`;
+    }
+
+    let summary = '';
+    try {
+      const response = await llm.ainvoke([
+        new SystemMessage(systemPrompt),
+        new UserMessage(compactionInput),
+      ]);
+      summary = String(response?.completion ?? '').trim();
+    } catch (error) {
+      logger.warning(
+        `Failed to compact messages: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      return false;
+    }
+
+    if (!summary) {
+      return false;
+    }
+
+    if (settings.summary_max_chars && summary.length > settings.summary_max_chars) {
+      summary = `${summary.slice(0, settings.summary_max_chars).trimEnd()}…`;
+    }
+
+    this.state.compacted_memory = summary;
+    this.state.compaction_count += 1;
+    this.state.last_compaction_step = step_info.step_number;
+
+    const keepLast = Math.max(0, settings.keep_last_items);
+    if (historyItems.length > keepLast + 1) {
+      if (keepLast === 0) {
+        this.state.agent_history_items = [historyItems[0]];
+      } else {
+        this.state.agent_history_items = [
+          historyItems[0],
+          ...historyItems.slice(-keepLast),
+        ];
+      }
+    }
+
+    logger.debug(
+      `Compaction complete (summary_chars=${summary.length}, history_items=${this.state.agent_history_items.length})`
+    );
+
+    return true;
+  }
+
   create_state_messages(
     browser_state_summary: BrowserStateSummary,
     model_output: AgentOutput | null = null,
@@ -192,13 +339,16 @@ export class MessageManager {
       string | Record<string, string>
     > | null = null,
     available_file_paths: string[] | null = null,
-    include_recent_events = false
+    include_recent_events = false,
+    skip_state_update = false
   ) {
-    this.state.history.context_messages = [];
-    this.updateAgentHistoryDescription(model_output, result, step_info);
-    if (sensitive_data) {
-      this.sensitiveDataDescription = this.getSensitiveDataDescription(
-        browser_state_summary.url
+    if (!skip_state_update) {
+      this.prepare_step_state(
+        browser_state_summary,
+        model_output,
+        result,
+        step_info,
+        sensitive_data
       );
     }
 
