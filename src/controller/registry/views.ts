@@ -42,17 +42,30 @@ export class RegisteredAction {
       (this.paramSchema instanceof z.ZodObject && this.paramSchema.shape) ||
       ('shape' in this.paramSchema ? (this.paramSchema as any).shape : null);
 
+    const hideStructuredDoneSuccess = Boolean(
+      this.name === 'done' &&
+        schemaShape &&
+        typeof schemaShape === 'object' &&
+        Object.prototype.hasOwnProperty.call(schemaShape, 'data') &&
+        Object.prototype.hasOwnProperty.call(schemaShape, 'success')
+    );
+    if (hideStructuredDoneSuccess) {
+      skipKeys.add('success');
+    }
+
     if (schemaShape) {
       const props = Object.fromEntries(
-        Object.entries(schemaShape).map(([key, value]) => {
-          const entries = value instanceof z.ZodType ? value._def : value;
-          const cleanEntries = Object.fromEntries(
-            Object.entries(entries as Record<string, unknown>).filter(
-              ([propKey]) => !skipKeys.has(propKey)
-            )
-          );
-          return [key, cleanEntries];
-        })
+        Object.entries(schemaShape)
+          .filter(([key]) => !skipKeys.has(key))
+          .map(([key, value]) => {
+            const entries = value instanceof z.ZodType ? value._def : value;
+            const cleanEntries = Object.fromEntries(
+              Object.entries(entries as Record<string, unknown>).filter(
+                ([propKey]) => !skipKeys.has(propKey)
+              )
+            );
+            return [key, cleanEntries];
+          })
       );
       description += JSON.stringify(props);
     } else {

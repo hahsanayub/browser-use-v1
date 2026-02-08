@@ -44,6 +44,7 @@ vi.mock('../src/utils.js', () => {
 // Import after mocks
 import { Registry } from '../src/controller/registry/service.js';
 import { Controller } from '../src/controller/service.js';
+import { StructuredOutputActionSchema } from '../src/controller/views.js';
 import { ActionResult } from '../src/agent/views.js';
 import { BrowserError } from '../src/browser/views.js';
 
@@ -420,6 +421,26 @@ describe('Controller Registry Tests', () => {
 
       const prompt = registry.get_prompt_description();
       expect(prompt).toContain('described_action');
+    });
+
+    it('hides top-level success in structured done prompt schema', async () => {
+      const registry = new Registry();
+      const structuredDoneSchema = StructuredOutputActionSchema(
+        z.object({
+          value: z.string(),
+        })
+      );
+
+      registry.action('Structured done action', {
+        param_model: structuredDoneSchema,
+      })(async function done() {
+        return new ActionResult({ is_done: true, success: true });
+      });
+
+      const prompt = registry.get_prompt_description();
+      expect(prompt).toContain('done');
+      expect(prompt).toContain('data');
+      expect(prompt).not.toContain('"success"');
     });
   });
 });
