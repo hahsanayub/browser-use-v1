@@ -167,6 +167,7 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
   controller?: Controller<Context> | null;
   sensitive_data?: Record<string, string | Record<string, string>> | null;
   initial_actions?: Array<Record<string, Record<string, unknown>>> | null;
+  directly_open_url?: boolean;
   register_new_step_callback?:
     | ((
         summary: BrowserStateSummary,
@@ -267,6 +268,7 @@ const defaultAgentOptions = () => ({
   save_conversation_path_encoding: 'utf-8' as BufferEncoding,
   max_failures: 3,
   retry_delay: 10,
+  directly_open_url: true,
   override_system_message: null,
   extend_system_message: null,
   validate_output: false,
@@ -367,6 +369,7 @@ export class Agent<
   judge_llm: BaseChatModel;
   unfiltered_actions: string;
   initial_actions: Array<Record<string, Record<string, unknown>>> | null;
+  initial_url: string | null = null;
   register_new_step_callback: AgentConstructorParams<
     Context,
     AgentStructuredOutput
@@ -441,6 +444,7 @@ export class Agent<
       controller = null,
       sensitive_data = null,
       initial_actions = null,
+      directly_open_url = true,
       register_new_step_callback = null,
       register_done_callback = null,
       register_external_agent_status_raise_error_callback = null,
@@ -514,8 +518,22 @@ export class Agent<
       new DefaultController({
         display_files_in_done_text,
       })) as Controller<Context>;
-    this.initial_actions = initial_actions
-      ? this._convertInitialActions(initial_actions)
+    let resolvedInitialActions = initial_actions;
+    if (directly_open_url && !resolvedInitialActions?.length) {
+      const extractedUrl = this._extract_start_url(task);
+      if (extractedUrl) {
+        this.initial_url = extractedUrl;
+        this.logger.info(
+          `Found URL in task: ${extractedUrl}, adding as initial action`
+        );
+        resolvedInitialActions = [
+          { go_to_url: { url: extractedUrl, new_tab: false } },
+        ];
+      }
+    }
+
+    this.initial_actions = resolvedInitialActions
+      ? this._convertInitialActions(resolvedInitialActions)
       : null;
     this.register_new_step_callback = register_new_step_callback;
     this.register_done_callback = register_done_callback;
@@ -1348,6 +1366,130 @@ export class Agent<
     // The task continues with new instructions, it doesn't end and start a new one
     this.task = newTask;
     this._message_manager.add_new_task(newTask);
+  }
+
+  private _extract_start_url(taskText: string): string | null {
+    const taskWithoutEmails = taskText.replace(
+      /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
+      ''
+    );
+    const urlPatterns = [
+      /https?:\/\/[^\s<>"']+/g,
+      /(?:www\.)?[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.[a-zA-Z]{2,}(?:\/[^\s<>"']*)?/g,
+    ];
+
+    const excludedExtensions = new Set([
+      'pdf',
+      'doc',
+      'docx',
+      'xls',
+      'xlsx',
+      'ppt',
+      'pptx',
+      'odt',
+      'ods',
+      'odp',
+      'txt',
+      'md',
+      'csv',
+      'json',
+      'xml',
+      'yaml',
+      'yml',
+      'zip',
+      'rar',
+      '7z',
+      'tar',
+      'gz',
+      'bz2',
+      'xz',
+      'jpg',
+      'jpeg',
+      'png',
+      'gif',
+      'bmp',
+      'svg',
+      'webp',
+      'ico',
+      'mp3',
+      'mp4',
+      'avi',
+      'mkv',
+      'mov',
+      'wav',
+      'flac',
+      'ogg',
+      'py',
+      'js',
+      'css',
+      'java',
+      'cpp',
+      'bib',
+      'bibtex',
+      'tex',
+      'latex',
+      'cls',
+      'sty',
+      'exe',
+      'msi',
+      'dmg',
+      'pkg',
+      'deb',
+      'rpm',
+      'iso',
+      'polynomial',
+    ]);
+    const excludedWords = ['never', 'dont', "don't", 'not'];
+
+    const foundUrls: string[] = [];
+    for (const pattern of urlPatterns) {
+      for (const match of taskWithoutEmails.matchAll(pattern)) {
+        const original = match[0];
+        const startIndex = match.index ?? 0;
+        let url = original.replace(/[.,;:!?()[\]]+$/g, '');
+        const lowerUrl = url.toLowerCase();
+
+        let shouldExclude = false;
+        for (const ext of excludedExtensions) {
+          if (lowerUrl.includes(`.${ext}`)) {
+            shouldExclude = true;
+            break;
+          }
+        }
+        if (shouldExclude) {
+          this.logger.debug(
+            `Excluding URL with file extension from auto-navigation: ${url}`
+          );
+          continue;
+        }
+
+        const contextStart = Math.max(0, startIndex - 20);
+        const contextText = taskWithoutEmails
+          .slice(contextStart, startIndex)
+          .toLowerCase();
+        if (excludedWords.some((word) => contextText.includes(word))) {
+          this.logger.debug(
+            `Excluding URL due to negation context "${contextText.trim()}": ${url}`
+          );
+          continue;
+        }
+
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+          url = `https://${url}`;
+        }
+        foundUrls.push(url);
+      }
+    }
+
+    const uniqueUrls = Array.from(new Set(foundUrls));
+    if (uniqueUrls.length > 1) {
+      this.logger.debug(
+        `Multiple URLs found (${uniqueUrls.length}), skipping automatic open URL`
+      );
+      return null;
+    }
+
+    return uniqueUrls.length === 1 ? uniqueUrls[0] : null;
   }
 
   /**

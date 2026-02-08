@@ -372,6 +372,61 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('auto-adds go_to_url initial action when task contains a single navigable URL', async () => {
+    const agent = new Agent({
+      task: 'Open https://example.com and verify the page title.',
+      llm: createLlm(),
+    });
+
+    expect(agent.initial_actions).toHaveLength(1);
+    expect(agent.initial_url).toBe('https://example.com');
+    expect(agent.initial_actions?.[0]).toEqual({
+      go_to_url: {
+        url: 'https://example.com',
+        new_tab: false,
+      },
+    });
+
+    await agent.close();
+  });
+
+  it('does not auto-open URL when multiple URLs are present in task text', async () => {
+    const agent = new Agent({
+      task: 'Compare https://example.com with https://example.org and summarize.',
+      llm: createLlm(),
+    });
+
+    expect(agent.initial_url).toBeNull();
+    expect(agent.initial_actions).toBeNull();
+
+    await agent.close();
+  });
+
+  it('respects directly_open_url=false and skips URL auto-navigation', async () => {
+    const agent = new Agent({
+      task: 'Open https://example.com and verify the page title.',
+      llm: createLlm(),
+      directly_open_url: false,
+    });
+
+    expect(agent.initial_url).toBeNull();
+    expect(agent.initial_actions).toBeNull();
+
+    await agent.close();
+  });
+
+  it('ignores file-like URLs for automatic navigation', async () => {
+    const agent = new Agent({
+      task: 'Read data from https://example.com/report.pdf and summarize it.',
+      llm: createLlm(),
+    });
+
+    expect(agent.initial_url).toBeNull();
+    expect(agent.initial_actions).toBeNull();
+
+    await agent.close();
+  });
+
   it('clears timeout handles when timed execution rejects early', async () => {
     const agent = new Agent({
       task: 'test timeout cleanup',
