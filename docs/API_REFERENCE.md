@@ -71,7 +71,7 @@ async run(max_steps?: number): Promise<AgentHistoryList>
 
 **Parameters:**
 
-- `max_steps` (optional): Maximum steps to execute. Defaults to `100`.
+- `max_steps` (optional): Maximum steps to execute. Defaults to `500`.
 
 **Returns:** `AgentHistoryList` containing the execution history.
 

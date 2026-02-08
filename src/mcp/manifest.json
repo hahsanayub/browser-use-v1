@@ -238,7 +238,7 @@
       "type": "number",
       "title": "Max Agent Steps",
       "description": "Maximum number of steps the agent can take in a single task",
-      "default": 100,
+      "default": 500,
       "minimum": 1,
       "maximum": 1000,
       "required": false

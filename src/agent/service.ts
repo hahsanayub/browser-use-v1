@@ -1420,7 +1420,7 @@ export class Agent<
   }
 
   async run(
-    max_steps = 100,
+    max_steps = 500,
     on_step_start: AgentHookFunc<Context, AgentStructuredOutput> | null = null,
     on_step_end: AgentHookFunc<Context, AgentStructuredOutput> | null = null
   ) {

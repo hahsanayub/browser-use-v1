@@ -49,7 +49,7 @@ Execute an autonomous browser task.
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | `task` | `string` | Yes | Task description in natural language |
-| `max_steps` | `number` | No | Maximum steps (default: 50) |
+| `max_steps` | `number` | No | Maximum steps (default: 500) |
 | `use_vision` | `boolean` | No | Enable screenshots (default: true) |
 
 **Example:**

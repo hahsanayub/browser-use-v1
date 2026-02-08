@@ -67,12 +67,14 @@ vi.mock('../src/filesystem/file-system.js', () => {
 vi.mock('../src/agent/service.js', () => {
   class Agent {
     params: any;
+    runMaxSteps: number | null = null;
     constructor(params: any) {
       this.params = params;
       mockAgentInstances.push(this);
     }
 
-    async run(_maxSteps: number) {
+    async run(maxSteps: number) {
+      this.runMaxSteps = maxSteps;
       return {
         history: [{}, {}],
         number_of_steps: () => 2,
@@ -287,6 +289,7 @@ describe('MCPServer retry_with_browser_use_agent', () => {
     expect(
       instance.params.browser_session.browser_profile.config.keep_alive
     ).toBe(false);
+    expect(instance.runMaxSteps).toBe(7);
   });
 
   it('defaults allowed_domains override to empty list when omitted', async () => {
@@ -302,6 +305,7 @@ describe('MCPServer retry_with_browser_use_agent', () => {
     expect(
       instance.params.browser_session.browser_profile.config.allowed_domains
     ).toEqual([]);
+    expect(instance.runMaxSteps).toBe(500);
   });
 
   it('returns explicit error when OpenAI key is missing', async () => {

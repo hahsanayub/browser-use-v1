@@ -83,7 +83,7 @@ The configuration file is located at `~/.config/browseruse/config.json`.
     "default-agent-id": {
       "id": "default-agent-id",
       "default": true,
-      "max_steps": 100,
+      "max_steps": 500,
       "use_vision": true,
       "max_failures": 3
     }
@@ -149,7 +149,7 @@ The configuration file is located at `~/.config/browseruse/config.json`.
     "default": {
       "id": "default",
       "default": true,
-      "max_steps": 100,
+      "max_steps": 500,
       "use_vision": true,
       "vision_detail_level": "auto",
       "max_failures": 3,
