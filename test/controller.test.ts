@@ -925,7 +925,7 @@ describe('Regression Coverage', () => {
 
     expect(result.extracted_content).toContain('Clicked at coordinates (12, 34)');
     expect(result.extracted_content).toContain('opened a new tab');
-    expect(result.extracted_content).toContain('tab_id: 7');
+    expect(result.extracted_content).toContain('tab_id: 0007');
   });
 
   it('click action by index reports newly opened tab without auto-switching', async () => {
@@ -953,8 +953,68 @@ describe('Regression Coverage', () => {
 
     expect(result.extracted_content).toContain('Clicked button with index 3');
     expect(result.extracted_content).toContain('opened a new tab');
-    expect(result.extracted_content).toContain('tab_id: 8');
+    expect(result.extracted_content).toContain('tab_id: 0008');
     expect(browserSession.switch_to_tab).not.toHaveBeenCalled();
+  });
+
+  it('switch action accepts tab_id identifiers', async () => {
+    const controller = new Controller();
+    const page = {
+      url: vi.fn(() => 'https://switched.test'),
+      wait_for_load_state: vi.fn(async () => {}),
+    };
+    const browserSession = {
+      switch_to_tab: vi.fn(async () => {}),
+      get_current_page: vi.fn(async () => page),
+      tabs: [{ page_id: 7, tab_id: '0007', url: 'https://switched.test', title: 'Switched' }],
+    };
+
+    const result = await controller.registry.execute_action(
+      'switch',
+      { tab_id: '0007' },
+      { browser_session: browserSession as any }
+    );
+
+    expect(browserSession.switch_to_tab).toHaveBeenCalledWith('0007', {
+      signal: null,
+    });
+    expect(result.extracted_content).toContain('Switched to tab #0007');
+  });
+
+  it('close action accepts tab_id identifiers', async () => {
+    const controller = new Controller();
+    const closingPage = {
+      url: vi.fn(() => 'https://closing.test'),
+      close: vi.fn(async () => {}),
+    };
+    const focusedPage = {
+      url: vi.fn(() => 'https://focused.test'),
+    };
+    const browserSession = {
+      switch_to_tab: vi.fn(async () => {}),
+      get_current_page: vi
+        .fn()
+        .mockResolvedValueOnce(closingPage)
+        .mockResolvedValueOnce(closingPage)
+        .mockResolvedValueOnce(closingPage)
+        .mockResolvedValueOnce(focusedPage),
+      active_tab: { page_id: 1, tab_id: '0001', url: 'https://focused.test', title: 'Focused' },
+      active_tab_index: 0,
+      tabs: [{ page_id: 7, tab_id: '0007', url: 'https://closing.test', title: 'Closing' }],
+    };
+
+    const result = await controller.registry.execute_action(
+      'close',
+      { tab_id: '0007' },
+      { browser_session: browserSession as any }
+    );
+
+    expect(browserSession.switch_to_tab).toHaveBeenCalledWith('0007', {
+      signal: null,
+    });
+    expect(closingPage.close).toHaveBeenCalled();
+    expect(result.extracted_content).toContain('Closed tab #0007');
+    expect(result.extracted_content).toContain('focused on tab #0001');
   });
 
   it('click action validation requires index or coordinates', async () => {

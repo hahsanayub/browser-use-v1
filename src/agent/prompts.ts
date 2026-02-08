@@ -223,19 +223,23 @@ export class AgentMessagePrompt {
     }
 
     let tabsText = '';
-    const currentTabCandidates: number[] = [];
+    const resolveTabIdentifier = (tab: { page_id: number; tab_id?: string }) =>
+      typeof tab.tab_id === 'string' && tab.tab_id.trim()
+        ? tab.tab_id.trim()
+        : String(tab.page_id);
+    const currentTabCandidates: string[] = [];
     for (const tab of this.browserState.tabs) {
       if (
         tab.url === this.browserState.url &&
         tab.title === this.browserState.title
       ) {
-        currentTabCandidates.push(tab.page_id);
+        currentTabCandidates.push(resolveTabIdentifier(tab));
       }
     }
     const currentTabId =
       currentTabCandidates.length === 1 ? currentTabCandidates[0] : null;
     for (const tab of this.browserState.tabs) {
-      tabsText += `Tab ${tab.page_id}: ${tab.url} - ${tab.title.slice(0, 30)}\n`;
+      tabsText += `Tab ${resolveTabIdentifier(tab)}: ${tab.url} - ${tab.title.slice(0, 30)}\n`;
     }
 
     const currentTabText =

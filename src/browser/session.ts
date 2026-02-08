@@ -86,6 +86,7 @@ interface RecentBrowserEvent {
   url?: string;
   error_message?: string;
   page_id?: number;
+  tab_id?: string;
 }
 
 export class BrowserSession {
@@ -155,19 +156,45 @@ export class BrowserSession {
     if (typeof (init as any)?.auto_download_pdfs === 'boolean') {
       this._autoDownloadPdfs = Boolean((init as any).auto_download_pdfs);
     }
+    const initialPageId = this._tabCounter++;
     this._tabs = [
-      {
-        page_id: this._tabCounter++,
+      this._createTabInfo({
+        page_id: initialPageId,
         url: this.currentUrl,
         title: this.currentTitle || this.currentUrl,
-        parent_page_id: null,
-      },
+      }),
     ];
     this.historyStack.push(this.currentUrl);
     this.ownsBrowserResources = this._determineOwnership();
     this.tabPages.set(this._tabs[0].page_id, this.agent_current_page ?? null);
     this._attachDialogHandler(this.agent_current_page);
     this._recordRecentEvent('session_initialized', { url: this.currentUrl });
+  }
+
+  private _formatTabId(pageId: number): string {
+    const normalized =
+      Number.isFinite(pageId) && pageId >= 0 ? Math.floor(pageId) : 0;
+    return String(normalized).padStart(4, '0').slice(-4);
+  }
+
+  private _createTabInfo({
+    page_id,
+    url,
+    title,
+    parent_page_id = null,
+  }: {
+    page_id: number;
+    url: string;
+    title: string;
+    parent_page_id?: number | null;
+  }): TabInfo {
+    return {
+      page_id,
+      tab_id: this._formatTabId(page_id),
+      url,
+      title,
+      parent_page_id,
+    };
   }
 
   private async _waitForStableNetwork(
@@ -434,6 +461,9 @@ export class BrowserSession {
     }
     if (typeof details.page_id === 'number' && Number.isFinite(details.page_id)) {
       event.page_id = details.page_id;
+    }
+    if (typeof details.tab_id === 'string' && details.tab_id.trim()) {
+      event.tab_id = details.tab_id.trim();
     }
 
     this._recentEvents.push(event);
@@ -1471,14 +1501,19 @@ export class BrowserSession {
 
   private _buildTabs(): TabInfo[] {
     if (!this._tabs.length) {
-      this._tabs.push({
-        page_id: this._tabCounter++,
-        url: this.currentUrl,
-        title: this.currentTitle || this.currentUrl,
-        parent_page_id: null,
-      });
+      const pageId = this._tabCounter++;
+      this._tabs.push(
+        this._createTabInfo({
+          page_id: pageId,
+          url: this.currentUrl,
+          title: this.currentTitle || this.currentUrl,
+        })
+      );
     } else {
       const tab = this._tabs[this.currentTabIndex];
+      if (tab && !tab.tab_id) {
+        tab.tab_id = this._formatTabId(tab.page_id);
+      }
       tab.url = this.currentUrl;
       tab.title = this.currentTitle || this.currentUrl;
     }
@@ -1533,12 +1568,11 @@ export class BrowserSession {
     this._throwIfAborted(signal);
     this._assert_url_allowed(url);
     const normalized = normalize_url(url);
-    const newTab: TabInfo = {
+    const newTab: TabInfo = this._createTabInfo({
       page_id: this._tabCounter++,
       url: normalized,
       title: normalized,
-      parent_page_id: null,
-    };
+    });
     this._tabs.push(newTab);
     this.currentTabIndex = this._tabs.length - 1;
     this.currentUrl = normalized;
@@ -1547,6 +1581,7 @@ export class BrowserSession {
     this._recordRecentEvent('tab_created', {
       url: normalized,
       page_id: newTab.page_id,
+      tab_id: newTab.tab_id,
     });
     let page: Page | null = null;
     try {
@@ -1572,6 +1607,7 @@ export class BrowserSession {
       this._recordRecentEvent('tab_navigation_failed', {
         url: normalized,
         page_id: newTab.page_id,
+        tab_id: newTab.tab_id,
         error_message: (error as Error).message ?? 'Failed to open new tab',
       });
       this.logger.debug(
@@ -1587,12 +1623,32 @@ export class BrowserSession {
     this._recordRecentEvent('tab_ready', {
       url: normalized,
       page_id: newTab.page_id,
+      tab_id: newTab.tab_id,
     });
     this.cachedBrowserState = null;
     return this.agent_current_page;
   }
 
-  private _resolveTabIndex(identifier: number) {
+  private _resolveTabIndex(identifier: number | string): number {
+    if (typeof identifier === 'string') {
+      const normalized = identifier.trim();
+      if (!normalized) {
+        return -1;
+      }
+      if (normalized === '-1') {
+        return Math.max(0, this._tabs.length - 1);
+      }
+      const byTabId = this._tabs.findIndex((tab) => tab.tab_id === normalized);
+      if (byTabId !== -1) {
+        return byTabId;
+      }
+      const numeric = Number.parseInt(normalized, 10);
+      if (Number.isFinite(numeric)) {
+        return this._resolveTabIndex(numeric);
+      }
+      return -1;
+    }
+
     if (identifier === -1) {
       return Math.max(0, this._tabs.length - 1);
     }
@@ -1606,13 +1662,19 @@ export class BrowserSession {
     return -1;
   }
 
-  async switch_to_tab(identifier: number, options: BrowserActionOptions = {}) {
+  async switch_to_tab(
+    identifier: number | string,
+    options: BrowserActionOptions = {}
+  ) {
     const signal = options.signal ?? null;
     this._throwIfAborted(signal);
     const index = this._resolveTabIndex(identifier);
     const tab = index >= 0 ? (this._tabs[index] ?? null) : null;
     if (!tab) {
-      throw new Error(`Tab index ${identifier} does not exist`);
+      throw new Error(`Tab '${identifier}' does not exist`);
+    }
+    if (!tab.tab_id) {
+      tab.tab_id = this._formatTabId(tab.page_id);
     }
     this.currentTabIndex = index;
     this.currentUrl = tab.url;
@@ -1633,17 +1695,21 @@ export class BrowserSession {
     this._recordRecentEvent('tab_switched', {
       url: tab.url,
       page_id: tab.page_id,
+      tab_id: tab.tab_id,
     });
     this.cachedBrowserState = null;
     return page;
   }
 
-  async close_tab(identifier: number) {
+  async close_tab(identifier: number | string) {
     const index = this._resolveTabIndex(identifier);
     if (index < 0 || index >= this._tabs.length) {
-      throw new Error(`Tab index ${identifier} does not exist`);
+      throw new Error(`Tab '${identifier}' does not exist`);
     }
     const closingTab = this._tabs[index];
+    if (!closingTab.tab_id) {
+      closingTab.tab_id = this._formatTabId(closingTab.page_id);
+    }
     const closingPage = this.tabPages.get(closingTab.page_id) ?? null;
     if (closingPage?.close) {
       try {
@@ -1656,6 +1722,7 @@ export class BrowserSession {
     this._recordRecentEvent('tab_closed', {
       url: closingTab.url,
       page_id: closingTab.page_id,
+      tab_id: closingTab.tab_id,
     });
     this._tabs.splice(index, 1);
     if (this.currentTabIndex >= this._tabs.length) {
@@ -2451,21 +2518,28 @@ export class BrowserSession {
 
   /**
    * Get information about all open tabs
-   * @returns Array of tab information including page_id, url, and title
+   * @returns Array of tab information including page_id, tab_id, url, and title
    */
   async get_tabs_info(): Promise<
-    Array<{ page_id: number; url: string; title: string }>
+    Array<{ page_id: number; tab_id: string; url: string; title: string }>
   > {
     if (!this.browser_context) {
       return [];
     }
 
-    const tabs_info: Array<{ page_id: number; url: string; title: string }> =
-      [];
+    const tabs_info: Array<{
+      page_id: number;
+      tab_id: string;
+      url: string;
+      title: string;
+    }> = [];
     const pages = this.browser_context.pages();
 
     for (let page_id = 0; page_id < pages.length; page_id++) {
       const page = pages[page_id];
+      const tab_id =
+        this._tabs.find((tab) => tab.page_id === page_id)?.tab_id ??
+        this._formatTabId(page_id);
       this._attachDialogHandler(page ?? null);
 
       // Skip chrome:// pages and new tab pages
@@ -2476,12 +2550,14 @@ export class BrowserSession {
         if (isNewTab) {
           tabs_info.push({
             page_id,
+            tab_id,
             url: page.url(),
             title: 'ignore this tab and do not use it',
           });
         } else {
           tabs_info.push({
             page_id,
+            tab_id,
             url: page.url(),
             title: page.url(),
           });
@@ -2497,7 +2573,7 @@ export class BrowserSession {
         });
 
         const title = await Promise.race([titlePromise, timeoutPromise]);
-        tabs_info.push({ page_id, url: page.url(), title });
+        tabs_info.push({ page_id, tab_id, url: page.url(), title });
       } catch (error) {
         this.logger.debug(
           `⚠️ Failed to get tab info for tab #${page_id}: ${page.url()} (using fallback title)`
@@ -2506,12 +2582,14 @@ export class BrowserSession {
         if (isNewTab) {
           tabs_info.push({
             page_id,
+            tab_id,
             url: page.url(),
             title: 'ignore this tab and do not use it',
           });
         } else {
           tabs_info.push({
             page_id,
+            tab_id,
             url: page.url(),
             title: page.url(), // Use URL as fallback title
           });

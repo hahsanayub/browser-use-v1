@@ -467,7 +467,10 @@ export class Controller<Context = unknown> {
           if (!newTab) {
             return '';
           }
-          const tabId = String(newTab.page_id);
+          const tabId =
+            typeof newTab?.tab_id === 'string' && newTab.tab_id.trim()
+              ? newTab.tab_id.trim()
+              : String(newTab.page_id).padStart(4, '0').slice(-4);
           return `. Note: This opened a new tab (tab_id: ${tabId}) - switch to it if you need to interact with the new page.`;
         } catch {
           return '';
@@ -668,6 +671,40 @@ export class Controller<Context = unknown> {
 
   private registerTabActions() {
     type SwitchTabAction = z.infer<typeof SwitchTabActionSchema>;
+    const resolveTabIdentifier = (params: {
+      tab_id?: string;
+      page_id?: number;
+    }): string | number => {
+      if (typeof params.tab_id === 'string' && params.tab_id.trim()) {
+        return params.tab_id.trim();
+      }
+      if (typeof params.page_id === 'number' && Number.isFinite(params.page_id)) {
+        return params.page_id;
+      }
+      return -1;
+    };
+    const formatTabId = (identifier: string | number, browser_session: any) => {
+      if (typeof identifier === 'string' && identifier.trim()) {
+        return identifier.trim();
+      }
+      const numericIdentifier =
+        typeof identifier === 'number' && Number.isFinite(identifier)
+          ? Math.floor(identifier)
+          : -1;
+      if (numericIdentifier >= 0) {
+        const matchedTab = Array.isArray(browser_session?.tabs)
+          ? browser_session.tabs.find(
+              (tab: any) => tab?.page_id === numericIdentifier
+            )
+          : null;
+        const matchedTabId =
+          typeof matchedTab?.tab_id === 'string' && matchedTab.tab_id.trim()
+            ? matchedTab.tab_id.trim()
+            : null;
+        return matchedTabId ?? String(numericIdentifier).padStart(4, '0').slice(-4);
+      }
+      return 'unknown';
+    };
     const switchImpl = async function (
       params: SwitchTabAction,
       {
@@ -680,7 +717,8 @@ export class Controller<Context = unknown> {
     ) {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
-      await browser_session.switch_to_tab(params.page_id, { signal });
+      const identifier = resolveTabIdentifier(params);
+      await browser_session.switch_to_tab(identifier, { signal });
       const page: Page | null = await browser_session.get_current_page();
       try {
         await page?.wait_for_load_state?.('domcontentloaded', {
@@ -689,11 +727,13 @@ export class Controller<Context = unknown> {
       } catch {
         /* ignore */
       }
-      const msg = `🔄  Switched to tab #${params.page_id} with url ${page?.url ?? ''}`;
+      const tabId = formatTabId(identifier, browser_session);
+      const pageUrl = typeof page?.url === 'function' ? page.url() : page?.url ?? '';
+      const msg = `🔄  Switched to tab #${tabId} with url ${pageUrl}`;
       return new ActionResult({
         extracted_content: msg,
         include_in_memory: true,
-        long_term_memory: `Switched to tab ${params.page_id}`,
+        long_term_memory: `Switched to tab ${tabId}`,
       });
     };
 
@@ -725,17 +765,27 @@ export class Controller<Context = unknown> {
     ) {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
-      await browser_session.switch_to_tab(params.page_id, { signal });
+      const identifier = resolveTabIdentifier(params);
+      await browser_session.switch_to_tab(identifier, { signal });
       const page: Page | null = await browser_session.get_current_page();
-      const url = page?.url ?? '';
+      const url = typeof page?.url === 'function' ? page.url() : page?.url ?? '';
+      const closedTabId = formatTabId(identifier, browser_session);
       await page?.close?.();
       const newPage = await browser_session.get_current_page();
-      const newIndex = browser_session.active_tab_index;
-      const msg = `❌  Closed tab #${params.page_id} with ${url}, now focused on tab #${newIndex} with url ${newPage?.url ?? ''}`;
+      const activeTab = browser_session.active_tab ?? null;
+      const focusedTabId =
+        typeof activeTab?.tab_id === 'string' && activeTab.tab_id.trim()
+          ? activeTab.tab_id.trim()
+          : typeof activeTab?.page_id === 'number'
+            ? String(activeTab.page_id).padStart(4, '0').slice(-4)
+            : String(browser_session.active_tab_index ?? '');
+      const newPageUrl =
+        typeof newPage?.url === 'function' ? newPage.url() : newPage?.url ?? '';
+      const msg = `❌  Closed tab #${closedTabId} with ${url}, now focused on tab #${focusedTabId} with url ${newPageUrl}`;
       return new ActionResult({
         extracted_content: msg,
         include_in_memory: true,
-        long_term_memory: `Closed tab ${params.page_id} with url ${url}, now focused on tab ${newIndex} with url ${newPage?.url ?? ''}.`,
+        long_term_memory: `Closed tab ${closedTabId} with url ${url}, now focused on tab ${focusedTabId} with url ${newPageUrl}.`,
       });
     };
 

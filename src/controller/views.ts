@@ -64,14 +64,19 @@ export type StructuredOutputAction<T> = {
   data: T;
 };
 
-export const SwitchTabActionSchema = z.object({
-  page_id: z.number().int(),
-});
+const TabIdentifierActionSchema = z
+  .object({
+    page_id: z.number().int().optional(),
+    tab_id: z.string().trim().length(4).optional(),
+  })
+  .refine((value) => value.page_id != null || value.tab_id != null, {
+    message: 'Provide tab_id or page_id',
+  });
+
+export const SwitchTabActionSchema = TabIdentifierActionSchema;
 export type SwitchTabAction = z.infer<typeof SwitchTabActionSchema>;
 
-export const CloseTabActionSchema = z.object({
-  page_id: z.number().int(),
-});
+export const CloseTabActionSchema = TabIdentifierActionSchema;
 export type CloseTabAction = z.infer<typeof CloseTabActionSchema>;
 
 export const ScrollActionSchema = z.object({

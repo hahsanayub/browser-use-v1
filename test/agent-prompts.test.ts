@@ -78,6 +78,38 @@ describe('AgentMessagePrompt browser state enrichment', () => {
     expect(content).not.toContain('Recent browser events:');
   });
 
+  it('renders tab_id values in tab listings when available', () => {
+    const root = new DOMElementNode(true, null, 'body', '/body', {}, []);
+    const domState = new DOMState(root, {});
+    const browserState = new BrowserStateSummary(domState, {
+      url: 'https://example.com/list',
+      title: 'List',
+      tabs: [
+        {
+          page_id: 0,
+          tab_id: 'a1b2',
+          url: 'https://example.com/list',
+          title: 'List',
+        },
+      ],
+    });
+
+    const prompt = new AgentMessagePrompt({
+      browser_state_summary: browserState,
+      file_system: {
+        describe: () => '/tmp',
+        get_todo_contents: () => '',
+      } as any,
+      task: 'test',
+    });
+
+    const userMessage = prompt.get_user_message(false) as any;
+    const content = String(userMessage.content ?? '');
+
+    expect(content).toContain('Tab a1b2: https://example.com/list');
+    expect(content).toContain('Current tab: a1b2');
+  });
+
   it('injects current plan block into agent state', () => {
     const root = new DOMElementNode(true, null, 'body', '/body', {}, []);
     const domState = new DOMState(root, {});

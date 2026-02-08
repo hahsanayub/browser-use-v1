@@ -201,6 +201,37 @@ describe('BrowserSession Basic Operations', () => {
     expect(session.active_tab?.url).toBe('about:blank');
   });
 
+  it('switches tabs by 4-char tab_id aliases', async () => {
+    const session = new BrowserSession({
+      browser_profile: new BrowserProfile({}),
+    });
+
+    const pageA = {
+      bringToFront: vi.fn(async () => {}),
+      waitForLoadState: vi.fn(async () => {}),
+      url: vi.fn(() => 'https://a.test'),
+    } as any;
+    const pageB = {
+      bringToFront: vi.fn(async () => {}),
+      waitForLoadState: vi.fn(async () => {}),
+      url: vi.fn(() => 'https://b.test'),
+    } as any;
+
+    (session as any)._tabs = [
+      { page_id: 0, tab_id: '0000', url: 'https://a.test', title: 'A' },
+      { page_id: 7, tab_id: '0007', url: 'https://b.test', title: 'B' },
+    ];
+    (session as any).tabPages.set(0, pageA);
+    (session as any).tabPages.set(7, pageB);
+    (session as any).currentTabIndex = 0;
+
+    await session.switch_to_tab('0007');
+
+    expect(session.active_tab?.tab_id).toBe('0007');
+    expect(session.active_tab?.page_id).toBe(7);
+    expect(pageB.bringToFront).toHaveBeenCalledTimes(1);
+  });
+
   it('aborts browser state capture when signal is already aborted', async () => {
     const session = new BrowserSession({
       browser_profile: new BrowserProfile({}),

@@ -8,6 +8,7 @@ export const PLACEHOLDER_4PX_SCREENSHOT =
 
 export interface TabInfo {
   page_id: number;
+  tab_id?: string;
   url: string;
   title: string;
   parent_page_id?: number | null;
