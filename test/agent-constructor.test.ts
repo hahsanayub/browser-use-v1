@@ -399,6 +399,37 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('multi_act skips remaining actions when focus target changes after an action', async () => {
+    const agent = new Agent({
+      task: 'multi_act runtime focus-change guard',
+      llm: createLlm(),
+    });
+    let currentUrl = 'https://same.test';
+    (agent.browser_session as any).agent_focus_target_id = 100;
+    vi.spyOn(agent.browser_session as any, 'get_current_page').mockImplementation(
+      async () =>
+        ({
+          url: () => currentUrl,
+        }) as any
+    );
+    const executeActionSpy = vi
+      .spyOn(agent.controller.registry as any, 'execute_action')
+      .mockImplementation(async () => {
+        (agent.browser_session as any).agent_focus_target_id = 101;
+        return new ActionResult({ extracted_content: 'ok' });
+      });
+
+    const results = await agent.multi_act(
+      [{ wait: { seconds: 0 } }, { wait: { seconds: 0 } }],
+      { check_for_new_elements: false }
+    );
+
+    expect(executeActionSpy).toHaveBeenCalledTimes(1);
+    expect(results).toHaveLength(1);
+
+    await agent.close();
+  });
+
   it('copies non-owning BrowserSession instances to avoid shared-agent state', async () => {
     const sharedSession = new BrowserSession({
       browser_profile: new BrowserProfile({}),

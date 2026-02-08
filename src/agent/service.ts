@@ -2441,7 +2441,10 @@ export class Agent<
         const preActionPage = await this.browser_session.get_current_page?.();
         const preActionUrl =
           typeof preActionPage?.url === 'function' ? preActionPage.url() : '';
-        const preActionTabId = this.browser_session.active_tab?.page_id ?? null;
+        const preActionFocusTargetId =
+          (this.browser_session as any).agent_focus_target_id ??
+          this.browser_session.active_tab?.page_id ??
+          null;
 
         const actResult = await (
           this.controller.registry as any
@@ -2489,8 +2492,14 @@ export class Agent<
         const postActionPage = await this.browser_session.get_current_page?.();
         const postActionUrl =
           typeof postActionPage?.url === 'function' ? postActionPage.url() : '';
-        const postActionTabId = this.browser_session.active_tab?.page_id ?? null;
-        if (postActionUrl !== preActionUrl || postActionTabId !== preActionTabId) {
+        const postActionFocusTargetId =
+          (this.browser_session as any).agent_focus_target_id ??
+          this.browser_session.active_tab?.page_id ??
+          null;
+        if (
+          postActionUrl !== preActionUrl ||
+          postActionFocusTargetId !== preActionFocusTargetId
+        ) {
           this.logger.info(
             `Page changed after "${actionName}" - skipping ${actions.length - i - 1} remaining action(s)`
           );
