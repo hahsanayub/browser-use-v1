@@ -601,22 +601,66 @@ export class Controller<Context = unknown> {
       // Replace multiple sequential \n with a single \n
       content = content.replace(/\n+/g, '\n');
 
-      const maxChars = 30000;
-      if (content.length > maxChars) {
-        const head = content.slice(0, maxChars / 2);
-        const tail = content.slice(-maxChars / 2);
-        content = `${head}\n... left out the middle because it was too long ...\n${tail}`;
+      const startFromChar = Math.max(0, params.start_from_char ?? 0);
+      if (startFromChar >= content.length) {
+        return new ActionResult({
+          error: `start_from_char (${startFromChar}) exceeds content length ${content.length} characters.`,
+        });
       }
 
-      const prompt = `You convert websites into structured information. Extract information from this webpage based on the query. Focus only on content relevant to the query. If 
+      if (startFromChar > 0) {
+        content = content.slice(startFromChar);
+      }
+
+      const maxChars = 100000;
+      let wasTruncated = false;
+      let nextStartChar: number | null = null;
+      if (content.length > maxChars) {
+        wasTruncated = true;
+        nextStartChar = startFromChar + maxChars;
+        content = content.slice(0, maxChars);
+      }
+
+      const formatStats = () => {
+        const stats = [
+          `processed_chars=${content.length.toLocaleString()}`,
+          `start_from_char=${startFromChar.toLocaleString()}`,
+        ];
+        if (wasTruncated && nextStartChar != null) {
+          stats.push(
+            `truncated=true`,
+            `next_start_char=${nextStartChar.toLocaleString()}`
+          );
+        }
+        return stats.join(', ');
+      };
+
+      const parseJsonFromCompletion = (completion: string) => {
+        const trimmed = completion.trim();
+        const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+        const candidate = fencedMatch?.[1]?.trim() || trimmed;
+        return JSON.parse(candidate);
+      };
+
+      const basePrompt = `You convert websites into structured information. Extract information from this webpage based on the query. Focus only on content relevant to the query. If 
 1. The query is vague
 2. Does not make sense for the page
 3. Some/all of the information is not available
 
 Explain the content of the page and that the requested information is not available in the page. Respond in JSON format.
 Query: ${params.query}
+Content Stats: ${formatStats()}
 Website:
 ${content}`;
+
+      const prompt = params.output_schema
+        ? `${basePrompt}
+
+Output Schema (JSON Schema):
+${JSON.stringify(params.output_schema, null, 2)}
+
+Return valid JSON only, matching the schema exactly.`
+        : basePrompt;
 
       const extraction = await (page_extraction_llm as any).ainvoke(
         [new UserMessage(prompt)],
@@ -625,7 +669,29 @@ ${content}`;
       );
       throwIfAborted(signal);
       const completion = extraction?.completion ?? '';
-      const extracted_content = `Page Link: ${page.url}\nQuery: ${params.query}\nExtracted Content:\n${completion}`;
+      const completionText =
+        typeof completion === 'string'
+          ? completion
+          : JSON.stringify(completion ?? {});
+      const normalizedResult = params.output_schema
+        ? (() => {
+            try {
+              return JSON.stringify(parseJsonFromCompletion(completionText));
+            } catch (error) {
+              throw new BrowserError(
+                `Structured extraction returned invalid JSON: ${(error as Error).message}`
+              );
+            }
+          })()
+        : completionText;
+      const continuationNote =
+        wasTruncated && nextStartChar != null
+          ? `\n\nContent was truncated. Use start_from_char=${nextStartChar} to continue extraction.`
+          : '';
+      const extracted_content =
+        `Page Link: ${page.url}\n` +
+        `Query: ${params.query}\n` +
+        `Extracted Content:\n${normalizedResult}${continuationNote}`;
 
       let includeOnce = false;
       let memory = extracted_content;

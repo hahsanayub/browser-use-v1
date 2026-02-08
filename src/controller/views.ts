@@ -84,6 +84,8 @@ export type ExtractPageContentAction = z.infer<
 export const ExtractStructuredDataActionSchema = z.object({
   query: z.string(),
   extract_links: z.boolean().default(false),
+  start_from_char: z.number().int().default(0),
+  output_schema: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 export type ExtractStructuredDataAction = z.infer<
   typeof ExtractStructuredDataActionSchema

@@ -978,6 +978,92 @@ describe('Regression Coverage', () => {
     expect(fileSystem.save_extracted_content).not.toHaveBeenCalled();
   });
 
+  it('extract_structured_data validates start_from_char against content length', async () => {
+    const controller = new Controller();
+    const pageExtractionLlm = {
+      ainvoke: vi.fn(async () => ({ completion: '{}' })),
+    };
+    const page = {
+      content: vi.fn(async () => '<html><body>Short content</body></html>'),
+      frames: vi.fn(() => []),
+      url: vi.fn(() => 'https://example.com'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+      agent_current_page: {
+        url: vi.fn(() => 'https://example.com'),
+      },
+    };
+
+    const result = await controller.registry.execute_action(
+      'extract_structured_data',
+      {
+        query: 'Extract data',
+        extract_links: false,
+        start_from_char: 9999,
+      },
+      {
+        browser_session: browserSession as any,
+        page_extraction_llm: pageExtractionLlm as any,
+        file_system: {
+          save_extracted_content: vi.fn(async () => ''),
+        } as any,
+      }
+    );
+
+    expect(result.error).toContain('start_from_char (9999) exceeds content length');
+    expect(pageExtractionLlm.ainvoke).not.toHaveBeenCalled();
+  });
+
+  it('extract_structured_data enforces output_schema JSON response parsing', async () => {
+    const controller = new Controller();
+    const pageExtractionLlm = {
+      ainvoke: vi.fn(async () => ({
+        completion: '```json\n{"name":"Alice","age":30}\n```',
+      })),
+    };
+    const page = {
+      content: vi.fn(async () => '<html><body>Alice is 30 years old.</body></html>'),
+      frames: vi.fn(() => []),
+      url: vi.fn(() => 'https://example.com/profile'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+      agent_current_page: {
+        url: vi.fn(() => 'https://example.com/profile'),
+      },
+    };
+    const fileSystem = {
+      save_extracted_content: vi.fn(async () => '/tmp/saved.txt'),
+    };
+
+    const result = await controller.registry.execute_action(
+      'extract_structured_data',
+      {
+        query: 'Extract person profile',
+        extract_links: false,
+        output_schema: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            age: { type: 'number' },
+          },
+          required: ['name', 'age'],
+        },
+      },
+      {
+        browser_session: browserSession as any,
+        page_extraction_llm: pageExtractionLlm as any,
+        file_system: fileSystem as any,
+      }
+    );
+
+    expect(pageExtractionLlm.ainvoke).toHaveBeenCalled();
+    expect(result.error).toBeNull();
+    expect(result.extracted_content).toContain('{"name":"Alice","age":30}');
+    expect(fileSystem.save_extracted_content).not.toHaveBeenCalled();
+  });
+
   it('controller.act maps BrowserError to ActionResult memory fields', async () => {
     const controller = new Controller();
 
