@@ -167,6 +167,11 @@ export class MCPServer {
         .map((entry) => String(entry).trim())
         .filter(Boolean);
     }
+    if (Array.isArray(merged.prohibited_domains)) {
+      merged.prohibited_domains = merged.prohibited_domains
+        .map((entry) => String(entry).trim())
+        .filter(Boolean);
+    }
 
     return new BrowserProfile(merged as any);
   }
@@ -195,6 +200,11 @@ export class MCPServer {
     }
     if (Array.isArray(merged.allowed_domains)) {
       merged.allowed_domains = merged.allowed_domains
+        .map((entry) => String(entry).trim())
+        .filter(Boolean);
+    }
+    if (Array.isArray(merged.prohibited_domains)) {
+      merged.prohibited_domains = merged.prohibited_domains
         .map((entry) => String(entry).trim())
         .filter(Boolean);
     }

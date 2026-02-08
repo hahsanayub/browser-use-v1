@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { isIP } from 'node:net';
 import { spawn, exec, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createLogger } from '../logging-config.js';
@@ -18,7 +19,12 @@ import {
   type BrowserProfileOptions,
   DEFAULT_BROWSER_PROFILE,
 } from './profile.js';
-import { BrowserStateSummary, type TabInfo, BrowserError } from './views.js';
+import {
+  BrowserStateSummary,
+  type TabInfo,
+  BrowserError,
+  URLNotAllowedError,
+} from './views.js';
 import { DOMElementNode, DOMState, type SelectorMap } from '../dom/views.js';
 import { normalize_url } from './utils.js';
 import { DomService } from '../dom/service.js';
@@ -1214,6 +1220,7 @@ export class BrowserSession {
   async navigate_to(url: string, options: BrowserActionOptions = {}) {
     const signal = options.signal ?? null;
     this._throwIfAborted(signal);
+    this._assert_url_allowed(url);
     const normalized = normalize_url(url);
     const page = await this._withAbort(this.get_current_page(), signal);
     if (page?.goto) {
@@ -1223,6 +1230,8 @@ export class BrowserSession {
           page.goto(normalized, { waitUntil: 'domcontentloaded' }),
           signal
         );
+        const finalUrl = page.url();
+        this._assert_url_allowed(finalUrl);
         await this._waitForStableNetwork(page, signal);
       } catch (error) {
         if (this._isAbortError(error)) {
@@ -1248,6 +1257,7 @@ export class BrowserSession {
   async create_new_tab(url: string, options: BrowserActionOptions = {}) {
     const signal = options.signal ?? null;
     this._throwIfAborted(signal);
+    this._assert_url_allowed(url);
     const normalized = normalize_url(url);
     const newTab: TabInfo = {
       page_id: this._tabCounter++,
@@ -1273,6 +1283,8 @@ export class BrowserSession {
           page.goto(normalized, { waitUntil: 'domcontentloaded' }),
           signal
         );
+        const finalUrl = page.url();
+        this._assert_url_allowed(finalUrl);
         await this._waitForStableNetwork(page, signal);
       }
     } catch (error) {
@@ -2630,8 +2642,18 @@ export class BrowserSession {
     return (
       url === 'about:blank' ||
       url === 'about:newtab' ||
-      url === 'chrome://newtab/'
+      url === 'chrome://newtab/' ||
+      url === 'chrome://new-tab-page/' ||
+      url === 'chrome://new-tab-page'
     );
+  }
+
+  private _is_ip_address_host(hostname: string): boolean {
+    const normalized =
+      hostname.startsWith('[') && hostname.endsWith(']')
+        ? hostname.slice(1, -1)
+        : hostname;
+    return isIP(normalized) !== 0;
   }
 
   /**
@@ -2961,45 +2983,104 @@ export class BrowserSession {
    * Check if a URL is allowed based on allowed_domains configuration
    * @param url - URL to check
    */
-  private _is_url_allowed(url: string): boolean {
-    if (
-      !this.browser_profile.allowed_domains ||
-      this.browser_profile.allowed_domains.length === 0
-    ) {
-      return true; // No restrictions if allowed_domains not configured
-    }
-
-    // Always allow new tab pages
+  private _get_url_access_denial_reason(url: string): string | null {
+    // Always allow new tab pages and browser-internal pages we intentionally use.
     if (this._is_new_tab_page(url)) {
-      return true;
+      return null;
     }
 
-    // Check against allowed domains
-    for (const allowed_domain of this.browser_profile.allowed_domains) {
-      try {
-        if (match_url_with_domain_pattern(url, allowed_domain, true)) {
-          return true;
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return 'invalid_url';
+    }
+
+    if (parsed.protocol === 'data:' || parsed.protocol === 'blob:') {
+      return null;
+    }
+
+    if (!parsed.hostname) {
+      return 'missing_host';
+    }
+
+    if (
+      this.browser_profile.block_ip_addresses &&
+      this._is_ip_address_host(parsed.hostname)
+    ) {
+      return 'ip_address_blocked';
+    }
+
+    const allowedDomains = this.browser_profile.allowed_domains;
+    if (allowedDomains && allowedDomains.length > 0) {
+      for (const allowedDomain of allowedDomains) {
+        try {
+          if (match_url_with_domain_pattern(url, allowedDomain, true)) {
+            return null;
+          }
+        } catch {
+          this.logger.warning(`Invalid domain pattern: ${allowedDomain}`);
         }
-      } catch (error) {
-        this.logger.warning(`Invalid domain pattern: ${allowed_domain}`);
+      }
+      return 'not_in_allowed_domains';
+    }
+
+    const prohibitedDomains = this.browser_profile.prohibited_domains;
+    if (prohibitedDomains && prohibitedDomains.length > 0) {
+      for (const prohibitedDomain of prohibitedDomains) {
+        try {
+          if (match_url_with_domain_pattern(url, prohibitedDomain, true)) {
+            return 'in_prohibited_domains';
+          }
+        } catch {
+          this.logger.warning(`Invalid domain pattern: ${prohibitedDomain}`);
+        }
       }
     }
 
-    return false;
+    return null;
+  }
+
+  private _is_url_allowed(url: string): boolean {
+    return this._get_url_access_denial_reason(url) === null;
+  }
+
+  private _assert_url_allowed(url: string) {
+    const denialReason = this._get_url_access_denial_reason(url);
+    if (!denialReason) {
+      return;
+    }
+
+    if (denialReason === 'not_in_allowed_domains') {
+      throw new URLNotAllowedError(
+        `URL ${url} is not in allowed_domains. Current allowed_domains: ${JSON.stringify(
+          this.browser_profile.allowed_domains
+        )}`
+      );
+    }
+
+    if (denialReason === 'in_prohibited_domains') {
+      throw new URLNotAllowedError(
+        `URL ${url} is blocked by prohibited_domains. Current prohibited_domains: ${JSON.stringify(
+          this.browser_profile.prohibited_domains
+        )}`
+      );
+    }
+
+    if (denialReason === 'ip_address_blocked') {
+      throw new URLNotAllowedError(
+        `URL ${url} is blocked because block_ip_addresses=true`
+      );
+    }
+
+    throw new URLNotAllowedError(`URL ${url} is not allowed (${denialReason})`);
   }
 
   /**
    * Navigate helper with URL validation
    */
   async navigate(url: string): Promise<void> {
-    // Validate URL is allowed
-    if (!this._is_url_allowed(url)) {
-      throw new Error(
-        `URL ${url} is not in allowed_domains. ` +
-          `Current allowed_domains: ${JSON.stringify(this.browser_profile.allowed_domains)}`
-      );
-    }
-
+    this._assert_url_allowed(url);
     await this.navigate_to(url);
   }
 

@@ -360,6 +360,8 @@ export interface BrowserProfileSpecificOptions {
   disable_security: boolean;
   deterministic_rendering: boolean;
   allowed_domains: Nullable<string[]>;
+  prohibited_domains: Nullable<string[]>;
+  block_ip_addresses: boolean;
   keep_alive: Nullable<boolean>;
   enable_default_extensions: boolean;
   window_size: Nullable<ViewportSize>;
@@ -455,6 +457,8 @@ const DEFAULT_BROWSER_PROFILE_OPTIONS: BrowserProfileOptions = {
   disable_security: false,
   deterministic_rendering: false,
   allowed_domains: null,
+  prohibited_domains: null,
+  block_ip_addresses: false,
   keep_alive: null,
   enable_default_extensions: true,
   window_size: null,
@@ -515,6 +519,14 @@ export class BrowserProfile {
       ignore_default_args: Array.isArray(init.ignore_default_args)
         ? init.ignore_default_args.map(validate_cli_arg)
         : (init.ignore_default_args ?? defaults.ignore_default_args),
+      allowed_domains: Array.isArray(init.allowed_domains)
+        ? init.allowed_domains.map((entry) => String(entry).trim()).filter(Boolean)
+        : defaults.allowed_domains,
+      prohibited_domains: Array.isArray(init.prohibited_domains)
+        ? init.prohibited_domains
+            .map((entry) => String(entry).trim())
+            .filter(Boolean)
+        : defaults.prohibited_domains,
       window_position: init.window_position ?? defaults.window_position,
     };
     this.options.id = init.id ?? uuid7str();
@@ -542,6 +554,14 @@ export class BrowserProfile {
   // Public getters for commonly accessed properties
   public get allowed_domains() {
     return this.options.allowed_domains;
+  }
+
+  public get prohibited_domains() {
+    return this.options.prohibited_domains;
+  }
+
+  public get block_ip_addresses() {
+    return this.options.block_ip_addresses;
   }
 
   public get cookies_file() {

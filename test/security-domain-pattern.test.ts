@@ -37,4 +37,39 @@ describe('Allowed Domains Security', () => {
     expect((session as any)._is_url_allowed('https://example.com')).toBe(true);
     expect((session as any)._is_url_allowed('http://example.com')).toBe(true);
   });
+
+  it('blocks prohibited domains when allowlist is not configured', () => {
+    const session = new BrowserSession({
+      browser_profile: new BrowserProfile({
+        prohibited_domains: ['https://evil.com'],
+      }),
+    });
+
+    expect((session as any)._is_url_allowed('https://evil.com')).toBe(false);
+    expect((session as any)._is_url_allowed('https://example.com')).toBe(true);
+  });
+
+  it('lets allowed_domains take precedence over prohibited_domains', () => {
+    const session = new BrowserSession({
+      browser_profile: new BrowserProfile({
+        allowed_domains: ['https://example.com'],
+        prohibited_domains: ['https://example.com'],
+      }),
+    });
+
+    expect((session as any)._is_url_allowed('https://example.com')).toBe(true);
+    expect((session as any)._is_url_allowed('https://other.com')).toBe(false);
+  });
+
+  it('blocks ip-address URLs when block_ip_addresses is enabled', () => {
+    const session = new BrowserSession({
+      browser_profile: new BrowserProfile({
+        block_ip_addresses: true,
+      }),
+    });
+
+    expect((session as any)._is_url_allowed('https://127.0.0.1')).toBe(false);
+    expect((session as any)._is_url_allowed('https://[::1]')).toBe(false);
+    expect((session as any)._is_url_allowed('https://example.com')).toBe(true);
+  });
 });
