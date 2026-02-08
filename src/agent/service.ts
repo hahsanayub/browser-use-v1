@@ -2235,6 +2235,26 @@ export class Agent<
         continue;
       }
 
+      const originalErrors = Array.isArray(historyItem.result)
+        ? historyItem.result
+            .map((result) => result?.error)
+            .filter((error): error is string => typeof error === 'string')
+        : [];
+      if (originalErrors.length && skip_failures) {
+        const firstError = originalErrors[0] ?? 'unknown';
+        const preview =
+          firstError.length > 100 ? `${firstError.slice(0, 100)}...` : firstError;
+        this.logger.warning(
+          `${stepName}: Original step had error(s), skipping (skip_failures=true): ${preview}`
+        );
+        results.push(
+          new ActionResult({
+            error: `Skipped - original step had error: ${preview}`,
+          })
+        );
+        continue;
+      }
+
       let attempt = 0;
       while (attempt < max_retries) {
         this._throwIfAborted(signal);

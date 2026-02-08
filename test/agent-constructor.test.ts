@@ -505,4 +505,38 @@ describe('Agent constructor browser session alignment', () => {
 
     await agent.close();
   });
+
+  it('skips originally failed history steps when skip_failures=true', async () => {
+    const agent = new Agent({
+      task: 'test rerun skip original failures',
+      llm: createLlm(),
+    });
+    const executeSpy = vi
+      .spyOn(agent as any, '_execute_history_step')
+      .mockResolvedValue([new ActionResult({ extracted_content: 'should not run' })]);
+    const history = {
+      history: [
+        {
+          model_output: {
+            current_state: { next_goal: 'Replay action' },
+            action: [{}],
+          },
+          metadata: {
+            step_number: 1,
+          },
+          result: [new ActionResult({ error: 'element not found in previous run' })],
+        },
+      ],
+    } as any;
+
+    const results = await agent.rerun_history(history, {
+      skip_failures: true,
+    });
+
+    expect(executeSpy).not.toHaveBeenCalled();
+    expect(results).toHaveLength(1);
+    expect(results[0]?.error).toContain('Skipped - original step had error');
+
+    await agent.close();
+  });
 });
