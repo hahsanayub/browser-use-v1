@@ -392,6 +392,7 @@ interface AgentOptions {
   // Runtime limits (seconds)
   llm_timeout?: number; // default: 60
   step_timeout?: number; // default: 180
+  final_response_after_failure?: boolean; // default: true
 }
 
 // Max step count is configured per run call:

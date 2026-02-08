@@ -380,6 +380,7 @@ export interface AgentSettings {
   include_tool_call_examples: boolean;
   llm_timeout: number;
   step_timeout: number;
+  final_response_after_failure: boolean;
   message_compaction: MessageCompactionSettings | null;
   loop_detection_window: number;
   loop_detection_enabled: boolean;
@@ -425,6 +426,7 @@ export const defaultAgentSettings = (): AgentSettings => ({
   include_tool_call_examples: false,
   llm_timeout: 60,
   step_timeout: 180,
+  final_response_after_failure: true,
   message_compaction: null,
   loop_detection_window: 20,
   loop_detection_enabled: true,

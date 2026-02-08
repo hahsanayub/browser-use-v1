@@ -154,6 +154,7 @@ The configuration file is located at `~/.config/browseruse/config.json`.
       "vision_detail_level": "auto",
       "max_failures": 3,
       "retry_delay": 10,
+      "final_response_after_failure": true,
       "max_actions_per_step": 5,
       "use_thinking": true,
       "flash_mode": false,
@@ -327,6 +328,7 @@ const agent = new Agent({
   // Failure handling
   max_failures: 3,
   retry_delay: 10, // seconds
+  final_response_after_failure: true,
 });
 
 // Overall step cap is set when running:

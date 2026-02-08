@@ -58,6 +58,7 @@ new Agent(options: AgentOptions)
 | `allow_insecure_sensitive_data` | `boolean`            | No       | `false`                     | Allow `sensitive_data` without `allowed_domains` (unsafe) |
 | `llm_timeout`             | `number`                    | No       | `60`                        | LLM call timeout (seconds)               |
 | `step_timeout`            | `number`                    | No       | `180`                       | Step execution timeout (seconds)         |
+| `final_response_after_failure` | `boolean`             | No       | `true`                      | Allow one done-only recovery step after hitting `max_failures` |
 
 ### Methods
 

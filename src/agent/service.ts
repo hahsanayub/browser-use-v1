@@ -212,6 +212,7 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
   allow_insecure_sensitive_data?: boolean;
   llm_timeout?: number;
   step_timeout?: number;
+  final_response_after_failure?: boolean;
   message_compaction?: MessageCompactionSettings | boolean | null;
   loop_detection_window?: number;
   loop_detection_enabled?: boolean;
@@ -259,6 +260,7 @@ const defaultAgentOptions = () => ({
   vision_detail_level: 'auto' as const,
   llm_timeout: 60,
   step_timeout: 180,
+  final_response_after_failure: true,
   message_compaction: true as MessageCompactionSettings | boolean,
   loop_detection_window: 20,
   loop_detection_enabled: true,
@@ -405,6 +407,7 @@ export class Agent<
       allow_insecure_sensitive_data = false,
       llm_timeout = 60,
       step_timeout = 180,
+      final_response_after_failure = true,
       message_compaction = true,
       loop_detection_window = 20,
       loop_detection_enabled = true,
@@ -468,6 +471,7 @@ export class Agent<
       allow_insecure_sensitive_data,
       llm_timeout,
       step_timeout,
+      final_response_after_failure,
       message_compaction: normalizedMessageCompaction,
       loop_detection_window,
       loop_detection_enabled,
@@ -1521,7 +1525,7 @@ export class Agent<
           signal_handler.reset();
         }
 
-        if (this.state.consecutive_failures >= this.settings.max_failures) {
+        if (this.state.consecutive_failures >= this._max_total_failures()) {
           this.logger.error(
             `❌ Stopping due to ${this.settings.max_failures} consecutive failures`
           );
@@ -1817,6 +1821,7 @@ export class Agent<
     this._update_loop_detector_page_state(browser_state_summary);
     this._inject_loop_detection_nudge();
     await this._handle_final_step(step_info);
+    await this._handle_failure_limit_recovery();
     return browser_state_summary;
   }
 
@@ -2614,7 +2619,8 @@ export class Agent<
   private async _handle_step_error(error: Error) {
     const include_trace = this.logger.level === 'debug';
     let error_msg = AgentError.format_error(error, include_trace);
-    const prefix = `❌ Result failed ${this.state.consecutive_failures + 1}/${this.settings.max_failures} times:\n `;
+    const prefix =
+      `❌ Result failed ${this.state.consecutive_failures + 1}/${this._max_total_failures()} times:\n `;
     this.state.consecutive_failures += 1;
 
     // 1. Handle Validation Errors (Pydantic/Zod)
@@ -2849,6 +2855,34 @@ export class Agent<
       this._message_manager._add_context_message(new UserMessage(message));
       this.logger.info('⚠️ Approaching last step. Enforcing done-only action.');
     }
+  }
+
+  private _max_total_failures() {
+    return (
+      this.settings.max_failures +
+      Number(this.settings.final_response_after_failure)
+    );
+  }
+
+  private async _handle_failure_limit_recovery() {
+    if (
+      !this.settings.final_response_after_failure ||
+      this.state.consecutive_failures < this.settings.max_failures
+    ) {
+      return;
+    }
+
+    const message =
+      `You failed ${this.settings.max_failures} times. Therefore we terminate the agent.\n` +
+      'Your only tool available is the "done" tool. No other tools are available.\n' +
+      'If the task is not fully finished as requested, set success in "done" to false.\n' +
+      'If the task is fully finished, set success in "done" to true.\n' +
+      'Include everything you found out for the task in the done text.';
+    this._message_manager._add_context_message(new UserMessage(message));
+    this._enforceDoneOnlyForCurrentStep = true;
+    this.logger.info(
+      '⚠️ Max failures reached. Enforcing done-only recovery step.'
+    );
   }
 
   private _inject_loop_detection_nudge() {
