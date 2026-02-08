@@ -11,6 +11,10 @@ export class HistoryTreeProcessor {
     css_selector: string | null = null
   ) {
     const parent_branch_path = this._get_parent_branch_path(dom_element);
+    const axName =
+      dom_element.attributes?.['aria-label']?.trim() ||
+      dom_element.attributes?.title?.trim() ||
+      null;
     return new DOMHistoryElement(
       dom_element.tag_name,
       dom_element.xpath,
@@ -21,7 +25,10 @@ export class HistoryTreeProcessor {
       css_selector,
       dom_element.page_coordinates,
       dom_element.viewport_coordinates,
-      dom_element.viewport_info
+      dom_element.viewport_info,
+      null,
+      null,
+      axName
     );
   }
 

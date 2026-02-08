@@ -50,7 +50,10 @@ export class DOMHistoryElement {
     public css_selector: string | null = null,
     public page_coordinates: CoordinateSet | null = null,
     public viewport_coordinates: CoordinateSet | null = null,
-    public viewport_info: ViewportInfo | null = null
+    public viewport_info: ViewportInfo | null = null,
+    public element_hash: string | null = null,
+    public stable_hash: string | null = null,
+    public ax_name: string | null = null
   ) {}
 
   to_dict() {
@@ -65,6 +68,9 @@ export class DOMHistoryElement {
       page_coordinates: this.page_coordinates,
       viewport_coordinates: this.viewport_coordinates,
       viewport_info: this.viewport_info,
+      element_hash: this.element_hash,
+      stable_hash: this.stable_hash,
+      ax_name: this.ax_name,
     };
   }
 }

@@ -2502,6 +2502,7 @@ export class Agent<
 
       let attempt = 0;
       let stepSucceeded = false;
+      let menuReopened = false;
       while (attempt < max_retries) {
         this._throwIfAborted(signal);
         try {
@@ -2515,6 +2516,8 @@ export class Agent<
           stepSucceeded = true;
           break;
         } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
           if (
             signal?.aborted ||
             (error instanceof Error && error.name === 'AbortError')
@@ -2522,9 +2525,39 @@ export class Agent<
             throw this._createAbortError();
           }
           attempt += 1;
+
+          if (
+            !menuReopened &&
+            errorMessage.includes('Could not find matching element') &&
+            previousItem &&
+            this._is_menu_opener_step(previousItem)
+          ) {
+            const currentElement = this._coerceHistoryElement(
+              historyItem.state?.interacted_element?.[0]
+            );
+            if (this._is_menu_item_element(currentElement)) {
+              this.logger.info(
+                'Dropdown may have closed. Attempting to re-open by re-executing previous step...'
+              );
+              const reopened = await this._reexecute_menu_opener(
+                previousItem,
+                signal
+              );
+              if (reopened) {
+                menuReopened = true;
+                attempt -= 1;
+                stepDelay = 0.5;
+                this.logger.info(
+                  'Dropdown re-opened, retrying element match...'
+                );
+                continue;
+              }
+            }
+          }
+
           if (attempt === max_retries) {
             const message = `Step ${index + 1} failed after ${max_retries} attempts: ${
-              (error as Error).message ?? error
+              errorMessage
             }`;
             this.logger.error(message);
             const failure = new ActionResult({ error: message });
@@ -2616,7 +2649,7 @@ export class Agent<
           `Could not find matching element for action ${actionIndex} in current page.\n` +
             `  Looking for: ${this._formatHistoryElementForError(historicalElement)}\n` +
             `  Page has ${selectorCount} interactive elements.\n` +
-            '  Tried: EXACT hash → XPATH → ATTRIBUTE matching'
+            '  Tried: EXACT hash → XPATH → AX_NAME → ATTRIBUTE matching'
         );
       }
 
@@ -2757,6 +2790,22 @@ export class Agent<
       return false;
     }
 
+    if (
+      current.element_hash &&
+      previous.element_hash &&
+      current.element_hash === previous.element_hash
+    ) {
+      return true;
+    }
+
+    if (
+      current.stable_hash &&
+      previous.stable_hash &&
+      current.stable_hash === previous.stable_hash
+    ) {
+      return true;
+    }
+
     if (current.xpath && previous.xpath && current.xpath === previous.xpath) {
       return true;
     }
@@ -2820,6 +2869,101 @@ export class Agent<
     return true;
   }
 
+  private _is_menu_opener_step(historyItem: AgentHistory | null) {
+    const element = this._coerceHistoryElement(
+      historyItem?.state?.interacted_element?.[0]
+    );
+    if (!element) {
+      return false;
+    }
+
+    const attrs = element.attributes ?? {};
+    if (['true', 'menu', 'listbox'].includes(String(attrs['aria-haspopup']))) {
+      return true;
+    }
+    if (attrs['data-gw-click'] === 'toggleSubMenu') {
+      return true;
+    }
+    if (String(attrs.class ?? '').includes('expand-button')) {
+      return true;
+    }
+    if (
+      attrs.role === 'menuitem' &&
+      ['false', 'true'].includes(String(attrs['aria-expanded']))
+    ) {
+      return true;
+    }
+    if (
+      attrs.role === 'button' &&
+      ['false', 'true'].includes(String(attrs['aria-expanded']))
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  private _is_menu_item_element(element: DOMHistoryElement | null) {
+    if (!element) {
+      return false;
+    }
+
+    const attrs = element.attributes ?? {};
+    const role = String(attrs.role ?? '');
+    if (
+      [
+        'menuitem',
+        'option',
+        'menuitemcheckbox',
+        'menuitemradio',
+        'treeitem',
+      ].includes(role)
+    ) {
+      return true;
+    }
+
+    const className = String(attrs.class ?? '');
+    if (className.includes('gw-action--inner')) {
+      return true;
+    }
+    if (className.toLowerCase().includes('menuitem')) {
+      return true;
+    }
+
+    if (element.ax_name && element.ax_name.trim()) {
+      const lowered = className.toLowerCase();
+      if (
+        ['dropdown', 'popup', 'menu', 'submenu', 'action'].some((needle) =>
+          lowered.includes(needle)
+        )
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private async _reexecute_menu_opener(
+    openerItem: AgentHistory,
+    signal: AbortSignal | null = null
+  ) {
+    try {
+      this.logger.info(
+        'Re-opening dropdown/menu by re-executing previous step...'
+      );
+      await this._execute_history_step(openerItem, 0.5, signal, false);
+      await this._sleep(0.3, signal);
+      return true;
+    } catch (error) {
+      this.logger.warning(
+        `Failed to re-open dropdown: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      return false;
+    }
+  }
+
   private _formatHistoryElementForError(element: DOMHistoryElement | null) {
     if (!element) {
       return '<no element recorded>';
@@ -2838,6 +2982,12 @@ export class Agent<
           : element.xpath;
       parts.push(`xpath="${xpath}"`);
     }
+    if (element.element_hash) {
+      parts.push(`hash=${element.element_hash}`);
+    }
+    if (element.stable_hash) {
+      parts.push(`stable_hash=${element.stable_hash}`);
+    }
     return parts.join(' ');
   }
 
@@ -2850,18 +3000,41 @@ export class Agent<
       return action;
     }
 
+    let matchLevel: string | null = null;
     let currentNode = HistoryTreeProcessor.find_history_element_in_tree(
       historicalElement,
       browserStateSummary.element_tree
     );
+    if (currentNode) {
+      matchLevel = 'EXACT';
+    }
 
     if (!currentNode && historicalElement.xpath) {
       for (const node of Object.values(browserStateSummary.selector_map ?? {})) {
         if (node?.xpath === historicalElement.xpath) {
           currentNode = node;
+          matchLevel = 'XPATH';
           this.logger.info(
             `Element matched at XPATH fallback: ${historicalElement.xpath}`
           );
+          break;
+        }
+      }
+    }
+
+    if (!currentNode && historicalElement.ax_name) {
+      const tagName = historicalElement.tag_name?.toLowerCase();
+      const targetAxName = historicalElement.ax_name;
+      for (const node of Object.values(browserStateSummary.selector_map ?? {})) {
+        const nodeAxName = node?.attributes?.['aria-label'];
+        if (
+          node?.tag_name?.toLowerCase() === tagName &&
+          typeof nodeAxName === 'string' &&
+          nodeAxName === targetAxName
+        ) {
+          currentNode = node;
+          matchLevel = 'AX_NAME';
+          this.logger.info(`Element matched at AX_NAME fallback: ${targetAxName}`);
           break;
         }
       }
@@ -2881,6 +3054,7 @@ export class Agent<
         );
         if (matches.length === 1) {
           currentNode = matches[0];
+          matchLevel = 'ATTRIBUTE';
           this.logger.info(
             `Element matched via ${attrKey} attribute fallback: ${attrValue}`
           );
@@ -2901,7 +3075,7 @@ export class Agent<
     ) {
       action.set_index(currentNode.highlight_index);
       this.logger.info(
-        `Element moved in DOM, updated index from ${currentIndex} to ${currentNode.highlight_index}`
+        `Element moved in DOM, updated index from ${currentIndex} to ${currentNode.highlight_index} (matched at ${matchLevel ?? 'UNKNOWN'} level)`
       );
     }
 
@@ -2946,7 +3120,10 @@ export class Agent<
       payload.css_selector ?? null,
       payload.page_coordinates ?? null,
       payload.viewport_coordinates ?? null,
-      payload.viewport_info ?? null
+      payload.viewport_info ?? null,
+      payload.element_hash != null ? String(payload.element_hash) : null,
+      payload.stable_hash != null ? String(payload.stable_hash) : null,
+      payload.ax_name != null ? String(payload.ax_name) : null
     );
   }
 

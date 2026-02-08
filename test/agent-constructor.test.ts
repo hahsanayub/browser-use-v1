@@ -4,6 +4,7 @@ import { Agent } from '../src/agent/service.js';
 import { ActionResult } from '../src/agent/views.js';
 import { BrowserSession } from '../src/browser/session.js';
 import { BrowserProfile } from '../src/browser/profile.js';
+import { HistoryTreeProcessor } from '../src/dom/history-tree-processor/service.js';
 
 const createLlm = (
   model = 'gpt-test',
@@ -817,6 +818,139 @@ describe('Agent constructor browser session alignment', () => {
 
     expect(executeSpy.mock.calls[0]?.[3]).toBe(true);
 
+    await agent.close();
+  });
+
+  it('reopens dropdown menu once when rerun cannot match a menu item element', async () => {
+    const agent = new Agent({
+      task: 'test rerun dropdown reopen',
+      llm: createLlm(),
+    });
+
+    const executeSpy = vi
+      .spyOn(agent as any, '_execute_history_step')
+      .mockResolvedValueOnce([new ActionResult({ extracted_content: 'opened' })])
+      .mockRejectedValueOnce(
+        new Error('Could not find matching element for action 0')
+      )
+      .mockResolvedValueOnce([
+        new ActionResult({ extracted_content: 'menu reopened' }),
+      ])
+      .mockResolvedValueOnce([
+        new ActionResult({ extracted_content: 'menu item clicked' }),
+      ]);
+    const sleepSpy = vi.spyOn(agent as any, '_sleep').mockResolvedValue(undefined);
+
+    const clickAction = {
+      get_index: () => 1,
+      model_dump: () => ({ click: { index: 1 } }),
+    };
+
+    const history = {
+      history: [
+        {
+          model_output: {
+            current_state: { next_goal: 'Open menu' },
+            action: [clickAction],
+          },
+          state: {
+            interacted_element: [
+              {
+                tag_name: 'button',
+                xpath: '/html/body/button[1]',
+                attributes: {
+                  role: 'button',
+                  'aria-haspopup': 'true',
+                  'aria-expanded': 'false',
+                },
+              },
+            ],
+          },
+          result: [],
+        },
+        {
+          model_output: {
+            current_state: { next_goal: 'Click menu item' },
+            action: [clickAction],
+          },
+          state: {
+            interacted_element: [
+              {
+                tag_name: 'div',
+                xpath: '/html/body/div[2]',
+                attributes: {
+                  role: 'menuitem',
+                  class: 'dropdown-menu-item',
+                },
+                ax_name: 'Settings',
+              },
+            ],
+          },
+          result: [],
+        },
+      ],
+    } as any;
+
+    const results = await agent.rerun_history(history, {
+      max_retries: 2,
+    });
+
+    expect(executeSpy).toHaveBeenCalledTimes(4);
+    expect(results).toHaveLength(2);
+    expect(results[1]?.extracted_content).toBe('menu item clicked');
+    expect(sleepSpy).toHaveBeenCalledWith(0.3, null);
+
+    await agent.close();
+  });
+
+  it('matches history elements with ax_name fallback when hash and xpath differ', async () => {
+    const agent = new Agent({
+      task: 'test ax_name fallback',
+      llm: createLlm(),
+    });
+
+    const findSpy = vi
+      .spyOn(HistoryTreeProcessor, 'find_history_element_in_tree')
+      .mockReturnValue(null as any);
+
+    const action = {
+      _index: 4,
+      get_index() {
+        return this._index;
+      },
+      set_index(index: number) {
+        this._index = index;
+      },
+      model_dump() {
+        return { click: { index: this._index } };
+      },
+    };
+
+    const updatedAction = await (agent as any)._update_action_indices(
+      {
+        tag_name: 'div',
+        xpath: '/html/body/div[4]',
+        attributes: {},
+        ax_name: 'Open Settings',
+      },
+      action,
+      {
+        element_tree: {},
+        selector_map: {
+          11: {
+            tag_name: 'div',
+            xpath: '/html/body/div[99]',
+            attributes: { 'aria-label': 'Open Settings' },
+            highlight_index: 11,
+          },
+        },
+      }
+    );
+
+    expect(updatedAction).toBe(action);
+    expect(action._index).toBe(11);
+
+    findSpy.mockRestore();
     await agent.close();
   });
 });
