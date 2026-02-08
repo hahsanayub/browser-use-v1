@@ -115,6 +115,11 @@ export class Registry<Context = unknown> {
     return this.registry.get(action_name);
   }
 
+  public exclude_action(action_name: string) {
+    this.excludeActions.add(action_name);
+    this.registry.remove(action_name);
+  }
+
   public get_all_actions() {
     return this.registry.actionsMap;
   }

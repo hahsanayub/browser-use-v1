@@ -40,6 +40,7 @@ import {
 } from '../llm/exceptions.js';
 import {
   AssistantMessage,
+  ContentPartImageParam,
   ContentPartTextParam,
   SystemMessage,
   UserMessage,
@@ -206,8 +207,12 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
     | null;
   output_model_schema?: StructuredOutputParser<AgentStructuredOutput> | null;
   extraction_schema?: Record<string, unknown> | null;
-  use_vision?: boolean;
+  use_vision?: boolean | 'auto';
   include_recent_events?: boolean;
+  sample_images?:
+    | Array<ContentPartTextParam | ContentPartImageParam>
+    | null;
+  llm_screenshot_size?: [number, number] | null;
   use_vision_for_planner?: boolean;
   save_conversation_path?: string | null;
   save_conversation_path_encoding?: BufferEncoding | null;
@@ -287,6 +292,8 @@ const get_model_timeout = (llm: BaseChatModel) => {
 const defaultAgentOptions = () => ({
   use_vision: true,
   include_recent_events: false,
+  sample_images: null as Array<ContentPartTextParam | ContentPartImageParam> | null,
+  llm_screenshot_size: null as [number, number] | null,
   use_vision_for_planner: false,
   save_conversation_path: null,
   save_conversation_path_encoding: 'utf-8' as BufferEncoding,
@@ -483,6 +490,8 @@ export class Agent<
       extraction_schema = null,
       use_vision = true,
       include_recent_events = false,
+      sample_images = null,
+      llm_screenshot_size = null,
       save_conversation_path = null,
       save_conversation_path_encoding = 'utf-8',
       max_failures = 3,
@@ -538,6 +547,39 @@ export class Agent<
     const effectiveLlmTimeout = llm_timeout ?? get_model_timeout(llm);
     const normalizedMessageCompaction =
       this._normalizeMessageCompactionSetting(message_compaction);
+    let resolvedLlmScreenshotSize: [number, number] | null =
+      llm_screenshot_size ?? null;
+    if (resolvedLlmScreenshotSize !== null) {
+      if (
+        !Array.isArray(resolvedLlmScreenshotSize) ||
+        resolvedLlmScreenshotSize.length !== 2
+      ) {
+        throw new Error(
+          'llm_screenshot_size must be a tuple of [width, height]'
+        );
+      }
+      const [width, height] = resolvedLlmScreenshotSize;
+      if (!Number.isInteger(width) || !Number.isInteger(height)) {
+        throw new Error(
+          'llm_screenshot_size dimensions must be integers'
+        );
+      }
+      if (width < 100 || height < 100) {
+        throw new Error(
+          'llm_screenshot_size dimensions must be at least 100 pixels'
+        );
+      }
+      logger.info(`LLM screenshot resizing enabled: ${width}x${height}`);
+    }
+    if (resolvedLlmScreenshotSize == null) {
+      const modelName = String((llm as any)?.model ?? '');
+      if (modelName.startsWith('claude-sonnet')) {
+        resolvedLlmScreenshotSize = [1400, 850];
+        logger.info(
+          'Auto-configured LLM screenshot size for Claude Sonnet: 1400x850'
+        );
+      }
+    }
 
     this.llm = llm;
     this.judge_llm = effectiveJudgeLlm;
@@ -559,8 +601,12 @@ export class Agent<
     this.available_file_paths = available_file_paths || [];
     this.controller = (controller ??
       new DefaultController({
+        exclude_actions: use_vision !== 'auto' ? ['screenshot'] : [],
         display_files_in_done_text,
       })) as Controller<Context>;
+    if (use_vision !== 'auto') {
+      (this.controller.registry as any).exclude_action?.('screenshot');
+    }
     let resolvedInitialActions = initial_actions;
     if (directly_open_url && !resolvedInitialActions?.length) {
       const extractedUrl = this._extract_start_url(task);
@@ -660,6 +706,9 @@ export class Agent<
       browser_profile,
       browser_session,
     });
+    if (this.browser_session) {
+      this.browser_session.llm_screenshot_size = resolvedLlmScreenshotSize;
+    }
     this.has_downloads_path = Boolean(
       this.browser_session?.browser_profile?.downloads_path
     );
@@ -692,7 +741,10 @@ export class Agent<
       sensitive_data ?? undefined,
       this.settings.max_history_items,
       this.settings.vision_detail_level,
-      this.settings.include_tool_call_examples
+      this.settings.include_tool_call_examples,
+      this.settings.include_recent_events,
+      sample_images ?? null,
+      resolvedLlmScreenshotSize
     );
 
     this.unfiltered_actions = this.controller.registry.get_prompt_description();
@@ -2133,7 +2185,7 @@ export class Agent<
     const browser_state_summary: BrowserStateSummary =
       await this.browser_session.get_browser_state_with_recovery?.({
         cache_clickable_elements_hashes: true,
-        include_screenshot: this.settings.use_vision,
+        include_screenshot: true,
         include_recent_events: this.settings.include_recent_events,
         signal,
       });

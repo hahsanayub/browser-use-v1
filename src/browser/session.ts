@@ -110,6 +110,7 @@ export class BrowserSession {
   private currentTabIndex = 0;
   private historyStack: string[] = [];
   downloaded_files: string[] = [];
+  llm_screenshot_size: [number, number] | null = null;
   private ownsBrowserResources = true;
   private _autoDownloadPdfs = true;
   private tabPages = new Map<number, Page | null>();

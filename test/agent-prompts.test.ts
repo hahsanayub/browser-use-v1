@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { AgentMessagePrompt, SystemPrompt } from '../src/agent/prompts.js';
 import { BrowserStateSummary } from '../src/browser/views.js';
 import { DOMElementNode, DOMState } from '../src/dom/views.js';
+import { ContentPartTextParam } from '../src/llm/messages.js';
+import { Image, createCanvas } from 'canvas';
 
 describe('AgentMessagePrompt browser state enrichment', () => {
   it('includes recent events, pending requests, pagination, and popup messages', () => {
@@ -128,6 +130,56 @@ describe('AgentMessagePrompt browser state enrichment', () => {
       (part: any) => part?.image_url?.url?.startsWith?.('data:image/png;base64,')
     );
     expect(imageParts).toHaveLength(1);
+  });
+
+  it('includes sample_images and resizes screenshots for llm_screenshot_size', () => {
+    const root = new DOMElementNode(true, null, 'body', '/body', {}, []);
+    const domState = new DOMState(root, {});
+    const browserState = new BrowserStateSummary(domState, {
+      url: 'https://example.com',
+      title: 'Example',
+      tabs: [{ page_id: 0, url: 'https://example.com', title: 'Example' }],
+    });
+
+    const sourceCanvas = createCanvas(4, 2);
+    const sourceCtx = sourceCanvas.getContext('2d');
+    sourceCtx.fillStyle = '#ff0000';
+    sourceCtx.fillRect(0, 0, 4, 2);
+    const screenshotB64 = sourceCanvas.toBuffer('image/png').toString('base64');
+
+    const prompt = new AgentMessagePrompt({
+      browser_state_summary: browserState,
+      file_system: {
+        describe: () => '/tmp',
+        get_todo_contents: () => '',
+      } as any,
+      task: 'test',
+      screenshots: [screenshotB64],
+      sample_images: [new ContentPartTextParam('Sample image context')],
+      llm_screenshot_size: [2, 1],
+    });
+
+    const userMessage = prompt.get_user_message(true) as any;
+    expect(Array.isArray(userMessage.content)).toBe(true);
+
+    const parts = userMessage.content as any[];
+    const sampleTextPart = parts.find(
+      (part) => part?.type === 'text' && part?.text === 'Sample image context'
+    );
+    expect(sampleTextPart).toBeTruthy();
+
+    const screenshotPart = parts.find(
+      (part) =>
+        part?.type === 'image_url' &&
+        String(part?.image_url?.url ?? '').startsWith('data:image/png;base64,')
+    );
+    expect(screenshotPart).toBeTruthy();
+
+    const resizedBase64 = String(screenshotPart.image_url.url).split(',')[1];
+    const resizedImage = new Image();
+    resizedImage.src = Buffer.from(resizedBase64, 'base64');
+    expect(resizedImage.width).toBe(2);
+    expect(resizedImage.height).toBe(1);
   });
 });
 

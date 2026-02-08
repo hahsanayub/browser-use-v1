@@ -1,4 +1,5 @@
 import {
+  ContentPartImageParam,
   ContentPartTextParam,
   SystemMessage,
   UserMessage,
@@ -41,7 +42,12 @@ export class MessageManager {
     >,
     private readonly maxHistoryItems: number | null = null,
     private readonly visionDetailLevel: 'auto' | 'low' | 'high' = 'auto',
-    private readonly includeToolCallExamples = false
+    private readonly includeToolCallExamples = false,
+    private readonly includeRecentEvents = false,
+    private readonly sampleImages:
+      | Array<ContentPartTextParam | ContentPartImageParam>
+      | null = null,
+    private readonly llmScreenshotSize: [number, number] | null = null
   ) {
     this.task = task;
     this.systemPrompt = systemMessage;
@@ -377,7 +383,7 @@ export class MessageManager {
       string | Record<string, string>
     > | null = null,
     available_file_paths: string[] | null = null,
-    include_recent_events = false,
+    include_recent_events: boolean | null = null,
     plan_description: string | null = null,
     skip_state_update = false
   ) {
@@ -414,6 +420,9 @@ export class MessageManager {
     }
     const effectiveUseVision = screenshots.length > 0;
 
+    const includeRecentEvents =
+      include_recent_events ?? this.includeRecentEvents;
+
     const prompt = new AgentMessagePrompt({
       browser_state_summary,
       file_system: this.fileSystem,
@@ -427,8 +436,10 @@ export class MessageManager {
       available_file_paths,
       screenshots,
       vision_detail_level: this.visionDetailLevel,
-      include_recent_events,
+      include_recent_events: includeRecentEvents,
+      sample_images: this.sampleImages,
       read_state_images: this.state.read_state_images,
+      llm_screenshot_size: this.llmScreenshotSize,
       plan_description,
     });
     const message = prompt.get_user_message(effectiveUseVision);

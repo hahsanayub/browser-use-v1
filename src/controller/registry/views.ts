@@ -133,6 +133,10 @@ export class ActionRegistry {
     this.actions.set(action.name, action);
   }
 
+  remove(name: string) {
+    this.actions.delete(name);
+  }
+
   get(name: string) {
     return this.actions.get(name) ?? null;
   }

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { Image, createCanvas } from 'canvas';
 import {
   SystemMessage,
   UserMessage,
@@ -10,9 +11,12 @@ import {
 } from '../llm/messages.js';
 import { observe_debug } from '../observability.js';
 import { is_new_tab_page } from '../utils.js';
+import { createLogger } from '../logging-config.js';
 import type { AgentStepInfo } from './views.js';
 import type { BrowserStateSummary } from '../browser/views.js';
 import type { FileSystem } from '../filesystem/file-system.js';
+
+const logger = createLogger('browser_use.agent.prompts');
 
 const readPromptTemplate = (filename: string) => {
   const filePath = fileURLToPath(new URL(filename, import.meta.url));
@@ -114,7 +118,9 @@ interface AgentMessagePromptInit {
   screenshots?: string[] | null;
   vision_detail_level?: 'auto' | 'low' | 'high';
   include_recent_events?: boolean;
+  sample_images?: Array<ContentPartTextParam | ContentPartImageParam> | null;
   read_state_images?: Array<Record<string, unknown>> | null;
+  llm_screenshot_size?: [number, number] | null;
   plan_description?: string | null;
 }
 
@@ -133,7 +139,9 @@ export class AgentMessagePrompt {
   private readonly screenshots: string[];
   private readonly visionDetailLevel: 'auto' | 'low' | 'high';
   private readonly includeRecentEvents: boolean;
+  private readonly sampleImages: Array<ContentPartTextParam | ContentPartImageParam>;
   private readonly readStateImages: Array<Record<string, unknown>>;
+  private readonly llmScreenshotSize: [number, number] | null;
   private readonly planDescription: string | null;
 
   constructor(init: AgentMessagePromptInit) {
@@ -152,7 +160,9 @@ export class AgentMessagePrompt {
     this.screenshots = init.screenshots ?? [];
     this.visionDetailLevel = init.vision_detail_level ?? 'auto';
     this.includeRecentEvents = init.include_recent_events ?? false;
+    this.sampleImages = init.sample_images ?? [];
     this.readStateImages = init.read_state_images ?? [];
+    this.llmScreenshotSize = init.llm_screenshot_size ?? null;
     this.planDescription = init.plan_description ?? null;
   }
 
@@ -344,6 +354,36 @@ ${this.availableFilePaths.join('\n')}
     return agentState;
   }
 
+  private resizeScreenshotForLlm(screenshotB64: string) {
+    if (!this.llmScreenshotSize) {
+      return screenshotB64;
+    }
+
+    try {
+      const [targetWidth, targetHeight] = this.llmScreenshotSize;
+      const image = new Image();
+      image.src = Buffer.from(screenshotB64, 'base64');
+
+      if (image.width === targetWidth && image.height === targetHeight) {
+        return screenshotB64;
+      }
+
+      logger.info(
+        `Resizing screenshot from ${image.width}x${image.height} to ${targetWidth}x${targetHeight} for LLM`
+      );
+
+      const canvas = createCanvas(targetWidth, targetHeight);
+      const context = canvas.getContext('2d');
+      context.drawImage(image, 0, 0, targetWidth, targetHeight);
+      return canvas.toBuffer('image/png').toString('base64');
+    } catch (error) {
+      logger.warning(
+        `Failed to resize screenshot: ${(error as Error).message}, using original`
+      );
+      return screenshotB64;
+    }
+  }
+
   // @ts-ignore - Decorator type mismatch with TypeScript strict mode
   @observe_debug({
     name: 'agent_message_prompt:get_user_message',
@@ -389,45 +429,55 @@ ${this.pageFilteredActions}
     }
 
     const hasReadStateImages = this.readStateImages.length > 0;
-    if ((use_vision && this.screenshots.length > 0) || hasReadStateImages) {
+    if (
+      (use_vision === true && this.screenshots.length > 0) ||
+      hasReadStateImages
+    ) {
       const parts: Array<ContentPartTextParam | ContentPartImageParam> = [
         new ContentPartTextParam(stateDescription),
       ];
-      for (const imageInfo of this.readStateImages) {
-        const imageName =
-          typeof imageInfo.name === 'string' ? imageInfo.name : 'read_state';
-        const imageData =
-          typeof imageInfo.data === 'string' ? imageInfo.data : null;
-        if (!imageData) {
-          continue;
-        }
-        parts.push(new ContentPartTextParam(`Read-state image: ${imageName}`));
-        parts.push(
-          new ContentPartImageParam(
-            new ImageURL(
-              `data:image/png;base64,${imageData}`,
-              this.visionDetailLevel,
-              'image/png'
-            )
-          )
-        );
-      }
+      parts.push(...this.sampleImages);
+
       this.screenshots.forEach((shot, index) => {
         const label =
           index === this.screenshots.length - 1
             ? 'Current screenshot:'
             : 'Previous screenshot:';
+        const processedScreenshot = this.resizeScreenshotForLlm(shot);
         parts.push(new ContentPartTextParam(label));
         parts.push(
           new ContentPartImageParam(
             new ImageURL(
-              `data:image/png;base64,${shot}`,
+              `data:image/png;base64,${processedScreenshot}`,
               this.visionDetailLevel,
               'image/png'
             )
           )
         );
       });
+
+      for (const imageInfo of this.readStateImages) {
+        const imageName =
+          typeof imageInfo.name === 'string' ? imageInfo.name : 'unknown';
+        const imageData =
+          typeof imageInfo.data === 'string' ? imageInfo.data : null;
+        if (!imageData) {
+          continue;
+        }
+        const mediaType = imageName.toLowerCase().endsWith('.png')
+          ? 'image/png'
+          : 'image/jpeg';
+        parts.push(new ContentPartTextParam(`Image from file: ${imageName}`));
+        parts.push(
+          new ContentPartImageParam(
+            new ImageURL(
+              `data:${mediaType};base64,${imageData}`,
+              this.visionDetailLevel,
+              mediaType
+            )
+          )
+        );
+      }
       const message = new UserMessage(parts);
       message.cache = true;
       return message;

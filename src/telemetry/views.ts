@@ -18,7 +18,7 @@ export interface AgentTelemetryPayload {
   planner_llm: string | null;
   max_steps: number;
   max_actions_per_step: number;
-  use_vision: boolean;
+  use_vision: boolean | 'auto';
   use_validation: boolean;
   version: string;
   source: string;
@@ -50,7 +50,7 @@ export class AgentTelemetryEvent
   planner_llm: string | null;
   max_steps: number;
   max_actions_per_step: number;
-  use_vision: boolean;
+  use_vision: boolean | 'auto';
   use_validation: boolean;
   version: string;
   source: string;
