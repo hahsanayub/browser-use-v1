@@ -741,6 +741,31 @@ describe('Regression Coverage', () => {
     expect((includedModel as any).available_actions).toEqual(['domain_action']);
   });
 
+  it('search action defaults to duckduckgo and opens a new tab', async () => {
+    const controller = new Controller();
+    const page = {
+      url: vi.fn(() => 'https://example.com'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+      navigate_to: vi.fn(async () => {}),
+      create_new_tab: vi.fn(async () => {}),
+    };
+
+    const result = await controller.registry.execute_action(
+      'search',
+      { query: 'browser use' },
+      { browser_session: browserSession as any }
+    );
+
+    expect(browserSession.create_new_tab).toHaveBeenCalledTimes(1);
+    expect(browserSession.create_new_tab.mock.calls[0][0]).toContain(
+      'duckduckgo.com/?q=browser%20use'
+    );
+    expect(browserSession.navigate_to).not.toHaveBeenCalled();
+    expect(result.long_term_memory).toContain("Searched duckduckgo for 'browser use'");
+  });
+
   it('search_page returns formatted matches with memory summary', async () => {
     const controller = new Controller();
     const page = {

@@ -5,6 +5,12 @@ export const SearchGoogleActionSchema = z.object({
 });
 export type SearchGoogleAction = z.infer<typeof SearchGoogleActionSchema>;
 
+export const SearchActionSchema = z.object({
+  query: z.string(),
+  engine: z.enum(['duckduckgo', 'google', 'bing']).default('duckduckgo'),
+});
+export type SearchAction = z.infer<typeof SearchActionSchema>;
+
 export const GoToUrlActionSchema = z.object({
   url: z.string(),
   new_tab: z.boolean().default(false),

@@ -21,6 +21,7 @@ import {
   ReplaceFileStrActionSchema,
   ScrollActionSchema,
   ScrollToTextActionSchema,
+  SearchActionSchema,
   SearchPageActionSchema,
   SearchGoogleActionSchema,
   ScreenshotActionSchema,
@@ -232,6 +233,42 @@ export class Controller<Context = unknown> {
   }
 
   private registerNavigationActions() {
+    type SearchAction = z.infer<typeof SearchActionSchema>;
+    this.registry.action(
+      'Search the query on a web search engine (duckduckgo, google, or bing).',
+      { param_model: SearchActionSchema }
+    )(async function search(params: SearchAction, { browser_session, signal }) {
+      if (!browser_session) throw new Error('Browser session missing');
+      throwIfAborted(signal);
+
+      const engine = params.engine ?? 'duckduckgo';
+      const searchUrlByEngine: Record<SearchAction['engine'], string> = {
+        duckduckgo: `https://duckduckgo.com/?q=${encodeURIComponent(params.query)}`,
+        google: `https://www.google.com/search?q=${encodeURIComponent(params.query)}&udm=14`,
+        bing: `https://www.bing.com/search?q=${encodeURIComponent(params.query)}`,
+      };
+      const searchUrl = searchUrlByEngine[engine];
+
+      const page = await browser_session.get_current_page();
+      const currentUrl = page?.url?.().replace(/\/+$/, '');
+      if (
+        currentUrl === 'https://www.google.com' ||
+        currentUrl === 'https://duckduckgo.com' ||
+        currentUrl === 'https://www.bing.com'
+      ) {
+        await browser_session.navigate_to(searchUrl, { signal });
+      } else {
+        await browser_session.create_new_tab(searchUrl, { signal });
+      }
+
+      const msg = `🔍 Searched for "${params.query}" on ${engine}`;
+      return new ActionResult({
+        extracted_content: msg,
+        include_in_memory: true,
+        long_term_memory: `Searched ${engine} for '${params.query}'`,
+      });
+    });
+
     type SearchGoogleAction = z.infer<typeof SearchGoogleActionSchema>;
     this.registry.action('Search the query in Google...', {
       param_model: SearchGoogleActionSchema,
