@@ -1331,10 +1331,18 @@ export class Agent<
 
   get logger() {
     if (!this._logger) {
+      const taskIdSuffix =
+        typeof this.task_id === 'string' && this.task_id.length
+          ? this.task_id.slice(-4)
+          : '----';
       const browserSessionId =
-        (this.browser_session && this.browser_session.id) || this.id;
+        typeof this.browser_session?.id === 'string'
+          ? this.browser_session.id
+          : typeof this.id === 'string'
+            ? this.id
+            : '----';
       this._logger = createLogger(
-        `browser_use.Agent🅰 ${this.task_id.slice(-4)} on 🆂 ${String(browserSessionId).slice(-4)}`
+        `browser_use.Agent🅰 ${taskIdSuffix} on 🆂 ${String(browserSessionId).slice(-4)}`
       );
     }
     return this._logger;

@@ -256,6 +256,13 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('logger getter works on partially initialized agent instances', () => {
+    const partialAgent = Object.create(Agent.prototype) as Agent<any, any>;
+    (partialAgent as any)._logger = null;
+
+    expect(() => (partialAgent as any).logger).not.toThrow();
+  });
+
   it('copies non-owning BrowserSession instances to avoid shared-agent state', async () => {
     const sharedSession = new BrowserSession({
       browser_profile: new BrowserProfile({}),
