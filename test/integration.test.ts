@@ -667,6 +667,7 @@ describe('Component Tests (Mocked Dependencies)', () => {
       use_vision: false,
       step_timeout: 5,
       max_failures: 2,
+      final_response_after_failure: false,
     });
 
     tempResources.push(agent.agent_directory);
