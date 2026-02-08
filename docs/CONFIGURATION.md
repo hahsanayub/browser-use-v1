@@ -157,6 +157,7 @@ The configuration file is located at `~/.config/browseruse/config.json`.
       "final_response_after_failure": true,
       "max_actions_per_step": 5,
       "use_judge": true,
+      "judge_llm": null,
       "ground_truth": null,
       "enable_planning": true,
       "planning_replan_on_stall": 3,

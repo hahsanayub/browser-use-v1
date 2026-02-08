@@ -60,6 +60,7 @@ new Agent(options: AgentOptions)
 | `step_timeout`            | `number`                    | No       | `180`                       | Step execution timeout (seconds)         |
 | `final_response_after_failure` | `boolean`             | No       | `true`                      | Allow one done-only recovery step after hitting `max_failures` |
 | `use_judge`               | `boolean`                   | No       | `true`                      | Run final trace judgement after task completion |
+| `judge_llm`               | `BaseChatModel \| null`     | No       | `null`                      | Optional dedicated model for final trace judgement (defaults to `llm`) |
 | `ground_truth`            | `string \| null`            | No       | `null`                      | Optional expected answer or criteria for final judgement |
 | `enable_planning`         | `boolean`                   | No       | `true`                      | Allow plan tracking via `plan_update` / `current_plan_item` |
 | `planning_replan_on_stall`| `number`                    | No       | `3`                         | Inject replan nudge after N consecutive failures |
@@ -135,10 +136,19 @@ async rerun_history(
   history: AgentHistoryList,
   options?: {
     max_retries?: number;
+    delay_between_actions?: number;
+    max_step_interval?: number;
     skip_failures?: boolean;
+    signal?: AbortSignal | null;
   }
-): Promise<AgentHistoryList>
+): Promise<ActionResult[]>
 ```
+
+Defaults:
+- `max_retries`: `3`
+- `delay_between_actions`: `2`
+- `max_step_interval`: `45`
+- `skip_failures`: `false`
 
 ### Properties
 

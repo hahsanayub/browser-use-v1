@@ -396,6 +396,7 @@ interface AgentOptions {
 
   // Planning / judgement
   use_judge?: boolean; // default: true
+  judge_llm?: BaseChatModel | null; // default: null (falls back to llm)
   ground_truth?: string | null; // default: null
   enable_planning?: boolean; // default: true (auto-disabled in flash_mode)
   planning_replan_on_stall?: number; // default: 3
