@@ -354,6 +354,34 @@ export const check_latest_browser_use_version = async (): Promise<
   }
 };
 
+export interface CreateTaskWithErrorHandlingOptions {
+  name?: string;
+  logger_instance?: ReturnType<typeof createLogger>;
+  suppress_exceptions?: boolean;
+}
+
+export const create_task_with_error_handling = <T>(
+  promise: Promise<T>,
+  options: CreateTaskWithErrorHandlingOptions = {}
+): Promise<T | undefined> => {
+  const {
+    name = 'unnamed',
+    logger_instance,
+    suppress_exceptions = false,
+  } = options;
+  const log = logger_instance ?? logger;
+
+  return promise.catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    if (suppress_exceptions) {
+      log.error(`Exception in background task [${name}]: ${message}`);
+      return undefined;
+    }
+    log.warning(`Exception in background task [${name}]: ${message}`);
+    throw error;
+  });
+};
+
 let cached_git_info: Record<string, string> | null | undefined;
 
 export const get_git_info = () => {

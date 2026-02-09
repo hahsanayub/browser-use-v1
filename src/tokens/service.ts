@@ -6,6 +6,7 @@ import { CONFIG } from '../config.js';
 import { createLogger } from '../logging-config.js';
 import type { BaseChatModel } from '../llm/base.js';
 import type { ChatInvokeUsage } from '../llm/views.js';
+import { create_task_with_error_handling } from '../utils.js';
 import {
   CachedPricingData,
   ModelPricing,
@@ -223,7 +224,10 @@ export class TokenCost {
       const result = await original(...args);
       if (result?.usage) {
         const usageEntry = this.addUsage(llm.model, result.usage);
-        this.logUsage(llm.model, usageEntry).catch(() => undefined);
+        create_task_with_error_handling(this.logUsage(llm.model, usageEntry), {
+          name: 'log_token_usage',
+          suppress_exceptions: true,
+        });
       }
       return result;
     }) as BaseChatModel['ainvoke'];
