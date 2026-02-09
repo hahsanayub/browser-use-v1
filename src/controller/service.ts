@@ -1808,7 +1808,22 @@ You will be given a query and the markdown of a webpage that has been filtered t
       param_model: ScrollToTextActionSchema,
       action_name: 'find_text',
     })(async function find_text(params: ScrollToTextAction, ctx) {
-      return registry.execute_action('scroll_to_text', params as any, ctx as any);
+      try {
+        return await registry.execute_action(
+          'scroll_to_text',
+          params as any,
+          ctx as any
+        );
+      } catch (error) {
+        if (isAbortError(error)) {
+          throw error;
+        }
+        const msg = `Text '${params.text}' not found or not visible on page`;
+        return new ActionResult({
+          extracted_content: msg,
+          long_term_memory: `Tried scrolling to text '${params.text}' but it was not found`,
+        });
+      }
     });
   }
 

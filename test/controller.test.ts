@@ -842,6 +842,31 @@ describe('Regression Coverage', () => {
     expect(result.extracted_content).toContain('Scrolled to text: checkout');
   });
 
+  it('find_text returns informative result when text is not found', async () => {
+    const controller = new Controller();
+    const page = {
+      evaluate: vi.fn(async () => false),
+      url: vi.fn(() => 'https://example.com'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+    };
+
+    const result = await controller.registry.execute_action(
+      'find_text',
+      { text: 'missing phrase' },
+      { browser_session: browserSession as any }
+    );
+
+    expect(result.error).toBeNull();
+    expect(result.extracted_content).toContain(
+      "Text 'missing phrase' not found or not visible on page"
+    );
+    expect(result.long_term_memory).toContain(
+      "Tried scrolling to text 'missing phrase' but it was not found"
+    );
+  });
+
   it('page prompt description includes unfiltered and page-filtered actions', async () => {
     const registry = new Registry();
 
