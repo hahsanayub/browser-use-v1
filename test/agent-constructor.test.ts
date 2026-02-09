@@ -208,18 +208,10 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
-  it('uses model-aware llm_timeout defaults when not explicitly set', async () => {
-    const geminiAgent = new Agent({
-      task: 'gemini timeout',
+  it('uses python-aligned llm_timeout defaults when not explicitly set', async () => {
+    const defaultAgent = new Agent({
+      task: 'default timeout',
       llm: createLlm('gemini-3-pro', 'google'),
-    });
-    const groqAgent = new Agent({
-      task: 'groq timeout',
-      llm: createLlm('groq/llama-3.1-70b', 'groq'),
-    });
-    const genericAgent = new Agent({
-      task: 'generic timeout',
-      llm: createLlm('gpt-4o-mini', 'openai'),
     });
     const overrideAgent = new Agent({
       task: 'override timeout',
@@ -227,14 +219,10 @@ describe('Agent constructor browser session alignment', () => {
       llm_timeout: 123,
     });
 
-    expect(geminiAgent.settings.llm_timeout).toBe(90);
-    expect(groqAgent.settings.llm_timeout).toBe(30);
-    expect(genericAgent.settings.llm_timeout).toBe(75);
+    expect(defaultAgent.settings.llm_timeout).toBe(60);
     expect(overrideAgent.settings.llm_timeout).toBe(123);
 
-    await geminiAgent.close();
-    await groqAgent.close();
-    await genericAgent.close();
+    await defaultAgent.close();
     await overrideAgent.close();
   });
 

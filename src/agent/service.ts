@@ -293,28 +293,6 @@ const ensureDir = (target: string) => {
   }
 };
 
-const get_model_timeout = (llm: BaseChatModel) => {
-  const modelName = String(llm?.model ?? '').toLowerCase();
-  if (modelName.includes('gemini')) {
-    if (modelName.includes('3-pro')) {
-      return 90;
-    }
-    return 75;
-  }
-  if (modelName.includes('groq')) {
-    return 30;
-  }
-  if (
-    modelName.includes('o3') ||
-    modelName.includes('claude') ||
-    modelName.includes('sonnet') ||
-    modelName.includes('deepseek')
-  ) {
-    return 90;
-  }
-  return 75;
-};
-
 const resolve_agent_llm = (llm: BaseChatModel | null | undefined): BaseChatModel => {
   if (llm) {
     return llm;
@@ -375,7 +353,7 @@ const defaultAgentOptions = () => ({
   session_attachment_mode: 'copy' as const,
   allow_insecure_sensitive_data: false,
   vision_detail_level: 'auto' as const,
-  llm_timeout: null as number | null,
+  llm_timeout: 60,
   step_timeout: 180,
   final_response_after_failure: true,
   message_compaction: true as MessageCompactionSettings | boolean,
@@ -572,7 +550,7 @@ export class Agent<
       vision_detail_level = 'auto',
       session_attachment_mode = 'copy',
       allow_insecure_sensitive_data = false,
-      llm_timeout = null,
+      llm_timeout = 60,
       step_timeout = 180,
       final_response_after_failure = true,
       message_compaction = true,
@@ -589,7 +567,8 @@ export class Agent<
     const effectiveEnablePlanning = effectiveFlashMode
       ? false
       : enable_planning;
-    const effectiveLlmTimeout = llm_timeout ?? get_model_timeout(resolvedLlm);
+    const effectiveLlmTimeout =
+      typeof llm_timeout === 'number' ? llm_timeout : 60;
     const normalizedMessageCompaction =
       this._normalizeMessageCompactionSetting(message_compaction);
     let resolvedLlmScreenshotSize: [number, number] | null =
