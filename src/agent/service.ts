@@ -35,7 +35,6 @@ import { BrowserStateSummary, BrowserStateHistory } from '../browser/views.js';
 import { BrowserSession } from '../browser/session.js';
 import { BrowserProfile, DEFAULT_BROWSER_PROFILE } from '../browser/profile.js';
 import type { Browser, BrowserContext, Page } from '../browser/types.js';
-import { InsecureSensitiveDataError } from '../exceptions.js';
 import { HistoryTreeProcessor } from '../dom/history-tree-processor/service.js';
 import { DOMHistoryElement } from '../dom/history-tree-processor/view.js';
 import { DEFAULT_INCLUDE_ATTRIBUTES, type DOMElementNode } from '../dom/views.js';
@@ -1144,23 +1143,6 @@ export class Agent<
     );
   }
 
-  private _sleep_blocking(ms: number) {
-    if (ms <= 0) {
-      return;
-    }
-
-    if (typeof SharedArrayBuffer === 'function' && Atomics?.wait) {
-      const lock = new Int32Array(new SharedArrayBuffer(4));
-      Atomics.wait(lock, 0, 0, ms);
-      return;
-    }
-
-    const end = Date.now() + ms;
-    while (Date.now() < end) {
-      // Intentional busy-wait fallback for runtimes without Atomics.wait.
-    }
-  }
-
   /**
    * Convert dictionary-based actions to ActionModel instances
    */
@@ -1295,26 +1277,10 @@ export class Agent<
 
     // If no allowed_domains are configured, show a security warning
     if (!hasAllowedDomains) {
-      if (!this.settings.allow_insecure_sensitive_data) {
-        throw new InsecureSensitiveDataError();
-      }
-
-      this.logger.error(
-        '⚠️⚠️⚠️ Agent(sensitive_data=••••••••) was provided but BrowserSession(allowed_domains=[...]) is not locked down! ⚠️⚠️⚠️\n' +
-          '          ☠️ If the agent visits a malicious website and encounters a prompt-injection attack, your sensitive_data may be exposed!\n\n' +
-          '             https://docs.browser-use.com/customize/browser-settings#restrict-urls\n' +
-          'Waiting 10 seconds before continuing... Press [Ctrl+C] to abort.'
-      );
-
-      // Check if we're in an interactive shell (TTY)
-      if (process.stdin.isTTY) {
-        // Block startup for 10 seconds to match Python warning behavior.
-        // User can still abort process with Ctrl+C.
-        this._sleep_blocking(10_000);
-      }
-
       this.logger.warning(
-        '‼️ Continuing with insecure settings because allow_insecure_sensitive_data=true is enabled.'
+        '⚠️ Agent(sensitive_data=••••••••) was provided but Browser(allowed_domains=[...]) is not locked down! ⚠️\n' +
+          '          ☠️ If the agent visits a malicious website and encounters a prompt-injection attack, your sensitive_data may be exposed!\n\n' +
+          '   \n'
       );
     }
     // If we're using domain-specific credentials, validate domain patterns

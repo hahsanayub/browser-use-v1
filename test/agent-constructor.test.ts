@@ -1469,7 +1469,7 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
-  it('throws when sensitive_data is used without allowed_domains lock-down', async () => {
+  it('warns when sensitive_data is used without allowed_domains lock-down (python c011 parity)', async () => {
     const agent = new Agent({
       task: 'test allowed domains empty',
       llm: createLlm(),
@@ -1486,18 +1486,23 @@ describe('Agent constructor browser session alignment', () => {
       },
     };
 
-    expect(() => (agent as any)._validateSecuritySettings()).toThrow(
-      /allowed_domains/
-    );
+    const warningSpy = vi.spyOn(agent.logger, 'warning');
+    expect(() => (agent as any)._validateSecuritySettings()).not.toThrow();
+    expect(
+      warningSpy.mock.calls.some((call) =>
+        String(call[0] ?? '').includes(
+          'Browser(allowed_domains=[...]) is not locked down'
+        )
+      )
+    ).toBe(true);
 
     await agent.close();
   });
 
-  it('triggers blocking warning delay in TTY mode for unlocked sensitive_data', async () => {
+  it('does not block startup with TTY delay for unlocked sensitive_data (python c011 parity)', async () => {
     const agent = new Agent({
       task: 'test tty delay',
       llm: createLlm(),
-      allow_insecure_sensitive_data: true,
       browser_session: new BrowserSession({
         browser_profile: new BrowserProfile({
           allowed_domains: [],
@@ -1511,39 +1516,32 @@ describe('Agent constructor browser session alignment', () => {
       },
     };
 
-    const originalIsTTY = (process.stdin as any).isTTY;
-    const sleepSpy = vi
-      .spyOn(agent as any, '_sleep_blocking')
-      .mockImplementation(() => {});
-
-    (process.stdin as any).isTTY = true;
-    try {
-      (agent as any)._validateSecuritySettings();
-      expect(sleepSpy).toHaveBeenCalledWith(10_000);
-    } finally {
-      (process.stdin as any).isTTY = originalIsTTY;
-      sleepSpy.mockRestore();
-    }
+    const warningSpy = vi.spyOn(agent.logger, 'warning');
+    expect(() => (agent as any)._validateSecuritySettings()).not.toThrow();
+    expect(
+      warningSpy.mock.calls.some((call) =>
+        String(call[0] ?? '').includes('Waiting 10 seconds before continuing')
+      )
+    ).toBe(false);
 
     await agent.close();
   });
 
-  it('fails fast at construction when sensitive_data is provided without domain restrictions', () => {
-    expect(
-      () =>
-        new Agent({
-          task: 'constructor strict security',
-          llm: createLlm(),
-          sensitive_data: {
-            password: 'secret',
-          },
-          browser_session: new BrowserSession({
-            browser_profile: new BrowserProfile({
-              allowed_domains: [],
-            }),
-          }),
-        })
-    ).toThrow(/allowed_domains/);
+  it('does not fail fast at construction when sensitive_data lacks domain restrictions (python c011 parity)', async () => {
+    const agent = new Agent({
+      task: 'constructor strict security',
+      llm: createLlm(),
+      sensitive_data: {
+        password: 'secret',
+      },
+      browser_session: new BrowserSession({
+        browser_profile: new BrowserProfile({
+          allowed_domains: [],
+        }),
+      }),
+    });
+
+    await agent.close();
   });
 
   it('starts and closes browser session during rerun_history (python c011 parity)', async () => {
