@@ -86,6 +86,11 @@
       "import": "./dist/llm/messages.js",
       "default": "./dist/llm/messages.js"
     },
+    "./llm/models": {
+      "types": "./dist/llm/models.d.ts",
+      "import": "./dist/llm/models.js",
+      "default": "./dist/llm/models.js"
+    },
     "./llm/ollama": {
       "types": "./dist/llm/ollama/index.d.ts",
       "import": "./dist/llm/ollama/index.js",
