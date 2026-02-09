@@ -1885,7 +1885,7 @@ You will be given a query and the markdown of a webpage that has been filtered t
 
     type ReadLongContentAction = z.infer<typeof ReadLongContentActionSchema>;
     this.registry.action(
-      'Intelligently read long page or file content to find goal-relevant information.',
+      'Intelligently read long content to find specific information. Works on current page (source="page") or files. For large content, uses search to identify relevant sections. Best for long articles, documents, or any content where you know what you are looking for.',
       { param_model: ReadLongContentActionSchema }
     )(async function read_long_content(
       params: ReadLongContentAction,
@@ -2376,9 +2376,12 @@ Context: ${context}`;
     });
 
     type ReplaceAction = z.infer<typeof ReplaceFileStrActionSchema>;
-    this.registry.action('Replace text within an existing file', {
+    this.registry.action(
+      'Replace specific text within a file by searching for old_str and replacing with new_str. Use this for targeted edits like updating todo checkboxes or modifying specific lines without rewriting the entire file.',
+      {
       param_model: ReplaceFileStrActionSchema,
-    })(async function replace_file_str(params: ReplaceAction, { file_system }) {
+      }
+    )(async function replace_file_str(params: ReplaceAction, { file_system }) {
       const fsInstance = file_system ?? new FileSystem(process.cwd(), false);
       const result = await fsInstance.replace_file_str(
         params.file_name,
@@ -2392,10 +2395,13 @@ Context: ${context}`;
       });
     });
 
-    this.registry.action('Replace text within an existing file', {
+    this.registry.action(
+      'Replace specific text within a file by searching for old_str and replacing with new_str. Use this for targeted edits like updating todo checkboxes or modifying specific lines without rewriting the entire file.',
+      {
       param_model: ReplaceFileStrActionSchema,
       action_name: 'replace_file',
-    })(async function replace_file(params: ReplaceAction, ctx) {
+      }
+    )(async function replace_file(params: ReplaceAction, ctx) {
       return registry.execute_action('replace_file_str', params as any, ctx as any);
     });
   }
