@@ -1994,6 +1994,53 @@ describe('Regression Coverage', () => {
     expect(fileSystem.save_extracted_content).not.toHaveBeenCalled();
   });
 
+  it('extract_structured_data rejects responses that violate output_schema', async () => {
+    const controller = new Controller();
+    const pageExtractionLlm = {
+      ainvoke: vi.fn(async () => ({
+        completion: '{"name":"Alice","age":"30"}',
+      })),
+    };
+    const page = {
+      content: vi.fn(async () => '<html><body>Alice is 30 years old.</body></html>'),
+      frames: vi.fn(() => []),
+      url: vi.fn(() => 'https://example.com/profile'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+      agent_current_page: {
+        url: vi.fn(() => 'https://example.com/profile'),
+      },
+    };
+
+    await expect(
+      controller.registry.execute_action(
+        'extract_structured_data',
+        {
+          query: 'Extract person profile',
+          extract_links: false,
+          output_schema: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              age: { type: 'number' },
+            },
+            required: ['name', 'age'],
+          },
+        },
+        {
+          browser_session: browserSession as any,
+          page_extraction_llm: pageExtractionLlm as any,
+          file_system: {
+            save_extracted_content: vi.fn(async () => '/tmp/saved.txt'),
+          } as any,
+        }
+      )
+    ).rejects.toThrow(
+      /Structured extraction result does not match output_schema/
+    );
+  });
+
   it('extract_structured_data uses context extraction_schema when params.output_schema is omitted', async () => {
     const controller = new Controller();
     const pageExtractionLlm = {

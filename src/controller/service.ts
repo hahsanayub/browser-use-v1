@@ -1,5 +1,6 @@
 import fs, { promises as fsp } from 'node:fs';
 import path from 'node:path';
+import { validate as validateJsonSchema } from '@cfworker/json-schema';
 import { z } from 'zod';
 import { ActionResult } from '../agent/views.js';
 import { BrowserError } from '../browser/views.js';
@@ -1078,6 +1079,22 @@ You will be given a query, a JSON Schema, and the markdown of a webpage that has
         } catch (error) {
           throw new BrowserError(
             `Structured extraction returned invalid JSON: ${(error as Error).message}`
+          );
+        }
+
+        const schemaValidation = validateJsonSchema(
+          parsedResult as any,
+          effectiveOutputSchema as any
+        );
+        if (!schemaValidation.valid) {
+          const details = (schemaValidation.errors ?? [])
+            .slice(0, 3)
+            .map((item) => String((item as any)?.error ?? '').trim())
+            .filter(Boolean)
+            .join('; ');
+          const suffix = details ? `: ${details}` : '';
+          throw new BrowserError(
+            `Structured extraction result does not match output_schema${suffix}`
           );
         }
 
