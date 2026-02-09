@@ -8,6 +8,7 @@ import {
 } from '../exceptions.js';
 import type { Message } from '../messages.js';
 import { OpenAIMessageSerializer } from '../openai/serializer.js';
+import { ResponsesAPIMessageSerializer } from '../openai/responses-serializer.js';
 import { SchemaOptimizer } from '../schema.js';
 import { ChatInvokeCompletion, type ChatInvokeUsage } from '../views.js';
 
@@ -445,15 +446,8 @@ export class ChatAzure implements BaseChatModel {
     zodSchemaCandidate: any,
     options: ChatInvokeOptions
   ): Promise<ChatInvokeCompletion<T | string>> {
-    const serializer = new OpenAIMessageSerializer();
-    const openaiMessages = serializer.serialize(messages);
-    const inputMessages = openaiMessages.map((message: any) => ({
-      role: message.role,
-      content:
-        typeof message.content === 'string'
-          ? message.content
-          : JSON.stringify(message.content),
-    }));
+    const serializer = new ResponsesAPIMessageSerializer();
+    const inputMessages = serializer.serialize(messages);
 
     const request: Record<string, unknown> = {
       model: this.model,
@@ -480,11 +474,21 @@ export class ChatAzure implements BaseChatModel {
           inputMessages.length > 0 &&
           inputMessages[0]?.role === 'system'
         ) {
+          const schemaText = `\n<json_schema>\n${JSON.stringify(optimizedJsonSchema)}\n</json_schema>`;
+          const firstInput = inputMessages[0] as any;
+          const firstContent = firstInput?.content;
+          let patchedContent: unknown = firstContent ?? '';
+          if (typeof firstContent === 'string') {
+            patchedContent = firstContent + schemaText;
+          } else if (Array.isArray(firstContent)) {
+            patchedContent = [
+              ...firstContent,
+              { type: 'input_text', text: schemaText },
+            ];
+          }
           inputMessages[0] = {
             ...inputMessages[0],
-            content:
-              (inputMessages[0].content ?? '') +
-              `\n<json_schema>\n${JSON.stringify(optimizedJsonSchema)}\n</json_schema>`,
+            content: patchedContent as any,
           };
           request.input = inputMessages;
         }

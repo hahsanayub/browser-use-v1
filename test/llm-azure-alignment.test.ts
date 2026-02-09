@@ -25,7 +25,13 @@ vi.mock('openai', () => {
   return { AzureOpenAI };
 });
 
-import { SystemMessage, UserMessage } from '../src/llm/messages.js';
+import {
+  ContentPartImageParam,
+  ContentPartTextParam,
+  ImageURL,
+  SystemMessage,
+  UserMessage,
+} from '../src/llm/messages.js';
 import { ChatAzure } from '../src/llm/azure/chat.js';
 
 const buildChatResponse = (content: string) => ({
@@ -166,5 +172,31 @@ describe('ChatAzure alignment', () => {
     );
     expect(request.text?.format?.type).toBe('json_schema');
     expect((response.completion as any).value).toBe('ok');
+  });
+
+  it('serializes multimodal user content for responses api input', async () => {
+    const llm = new ChatAzure({
+      model: 'gpt-5.1-codex',
+      useResponsesApi: true,
+    });
+
+    await llm.ainvoke([
+      new UserMessage([
+        new ContentPartTextParam('hello'),
+        new ContentPartImageParam(new ImageURL('https://example.com/image.png', 'low')),
+      ]),
+    ]);
+
+    const request = responsesCreateMock.mock.calls[0]?.[0] ?? {};
+    expect(Array.isArray(request.input?.[0]?.content)).toBe(true);
+    expect(request.input?.[0]?.content?.[0]).toEqual({
+      type: 'input_text',
+      text: 'hello',
+    });
+    expect(request.input?.[0]?.content?.[1]).toMatchObject({
+      type: 'input_image',
+      image_url: 'https://example.com/image.png',
+      detail: 'low',
+    });
   });
 });
