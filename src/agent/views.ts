@@ -385,8 +385,6 @@ export interface AgentSettings {
   save_conversation_path: string | null;
   save_conversation_path_encoding: string | null;
   max_failures: number;
-  retry_delay: number;
-  validate_output: boolean;
   generate_gif: boolean | string;
   override_system_message: string | null;
   extend_system_message: string | null;
@@ -425,8 +423,6 @@ export const defaultAgentSettings = (): AgentSettings => ({
   save_conversation_path: null,
   save_conversation_path_encoding: 'utf-8',
   max_failures: 3,
-  retry_delay: 10,
-  validate_output: false,
   generate_gif: false,
   override_system_message: null,
   extend_system_message: null,

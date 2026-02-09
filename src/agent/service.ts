@@ -242,10 +242,8 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
   save_conversation_path?: string | null;
   save_conversation_path_encoding?: BufferEncoding | null;
   max_failures?: number;
-  retry_delay?: number;
   override_system_message?: string | null;
   extend_system_message?: string | null;
-  validate_output?: boolean;
   generate_gif?: boolean | string;
   available_file_paths?: string[] | null;
   include_attributes?: string[];
@@ -339,11 +337,9 @@ const defaultAgentOptions = () => ({
   save_conversation_path: null,
   save_conversation_path_encoding: 'utf-8' as BufferEncoding,
   max_failures: 3,
-  retry_delay: 10,
   directly_open_url: true,
   override_system_message: null,
   extend_system_message: null,
-  validate_output: false,
   generate_gif: false,
   available_file_paths: [] as string[],
   include_attributes: undefined as string[] | undefined,
@@ -541,10 +537,8 @@ export class Agent<
       save_conversation_path = null,
       save_conversation_path_encoding = 'utf-8',
       max_failures = 3,
-      retry_delay = 10,
       override_system_message = null,
       extend_system_message = null,
-      validate_output = false,
       generate_gif = false,
       available_file_paths = [],
       include_attributes,
@@ -703,8 +697,6 @@ export class Agent<
       save_conversation_path,
       save_conversation_path_encoding,
       max_failures,
-      retry_delay,
-      validate_output,
       generate_gif,
       override_system_message,
       extend_system_message,

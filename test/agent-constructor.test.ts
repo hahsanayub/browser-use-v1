@@ -294,7 +294,6 @@ describe('Agent constructor browser session alignment', () => {
     const agent = new Agent({
       task: 'rate-limit step error parity',
       llm: createLlm(),
-      retry_delay: 123,
     });
     const sleepSpy = vi
       .spyOn(agent as any, '_sleep')

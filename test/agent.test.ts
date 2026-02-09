@@ -70,8 +70,6 @@ const createAgentSettings = (
   save_conversation_path: null,
   save_conversation_path_encoding: null,
   max_failures: 3,
-  retry_delay: 10,
-  validate_output: false,
   generate_gif: false,
   override_system_message: null,
   extend_system_message: null,
