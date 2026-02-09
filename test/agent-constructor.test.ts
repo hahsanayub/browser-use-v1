@@ -108,6 +108,24 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('uses 500 max_steps by default when run() omits max_steps', async () => {
+    const agent = new Agent({
+      task: 'default max steps',
+      llm: createLlm(),
+    });
+    const logAgentEventSpy = vi
+      .spyOn(agent as any, '_log_agent_event')
+      .mockImplementation(() => {});
+
+    agent.state.stopped = true;
+    await agent.run();
+
+    const lastCall = logAgentEventSpy.mock.calls.at(-1);
+    expect(lastCall?.[0]).toBe(500);
+
+    await agent.close();
+  });
+
   it('uses model-aware llm_timeout defaults when not explicitly set', async () => {
     const geminiAgent = new Agent({
       task: 'gemini timeout',
