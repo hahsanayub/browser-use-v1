@@ -130,7 +130,7 @@ export class DeviceAuthClient {
     const response = await this.postForm('/api/v1/oauth/device/authorize', {
       client_id: this.clientId,
       scope: this.scope,
-      agent_session_id: agent_session_id ?? undefined,
+      agent_session_id: agent_session_id ?? '',
       device_id: this.device_id,
     });
     return response.data as Record<string, any>;
@@ -202,7 +202,7 @@ export class DeviceAuthClient {
         deviceAuth.verification_uri_complete
       );
 
-      if (show_instructions) {
+      if (show_instructions && CONFIG.BROWSER_USE_CLOUD_SYNC) {
         const divider = '─'.repeat(terminalWidth());
         logger.info(divider);
         logger.info('🌐  View the details of this run in Browser Use Cloud:');
@@ -246,6 +246,10 @@ export class DeviceAuthClient {
 
   clear_auth() {
     this.authConfig = { api_token: null, user_id: null, authorized_at: null };
-    saveAuthConfig(this.authConfig);
+    try {
+      fs.unlinkSync(CLOUD_AUTH_PATH());
+    } catch {
+      /* noop */
+    }
   }
 }
