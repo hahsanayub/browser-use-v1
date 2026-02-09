@@ -671,13 +671,13 @@ export class BrowserProfile {
     const { window_width, window_height } = this.options;
     if (window_width || window_height) {
       logger.warning(
-        '⚠️ BrowserProfile(window_width=..., window_height=...) are deprecated, use BrowserProfile(window_size={"width": 1280, "height": 1100}) instead.'
+        '⚠️ BrowserProfile(window_width=..., window_height=...) are deprecated, use BrowserProfile(window_size={"width": 1920, "height": 1080}) instead.'
       );
       const newSize = {
         ...(this.options.window_size ?? { width: 0, height: 0 }),
       };
-      newSize.width = newSize.width || window_width || 1280;
-      newSize.height = newSize.height || window_height || 1100;
+      newSize.width = newSize.width || window_width || 1920;
+      newSize.height = newSize.height || window_height || 1080;
       this.options.window_size = newSize;
     }
   }
@@ -983,7 +983,7 @@ export class BrowserProfile {
       const displaySize = get_display_size();
       const hasScreen = Boolean(displaySize);
       this.options.screen = this.options.screen ||
-        displaySize || { width: 1280, height: 1100 };
+        displaySize || { width: 1920, height: 1080 };
 
       if (this.options.headless === null) {
         this.options.headless = !hasScreen;
@@ -1017,7 +1017,7 @@ export class BrowserProfile {
 
       if (useViewport) {
         this.options.viewport = this.options.viewport ||
-          this.options.screen || { width: 1280, height: 1100 };
+          this.options.screen || { width: 1920, height: 1080 };
         this.options.device_scale_factor =
           this.options.device_scale_factor || 1.0;
       } else {

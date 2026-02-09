@@ -17,6 +17,16 @@ describe('BrowserProfile alignment with latest py-browser-use defaults', () => {
     expect(profile.config.wait_between_actions).toBe(0.1);
   });
 
+  it('uses 1920x1080 fallback for deprecated window_width/window_height options', async () => {
+    const { BrowserProfile } = await importProfileModule();
+    const profile = new BrowserProfile({
+      window_width: 1600,
+    });
+
+    expect(profile.config.window_size?.width).toBe(1600);
+    expect(profile.config.window_size?.height).toBe(1080);
+  });
+
   it('keeps default extensions enabled when env var is unset', async () => {
     delete process.env.BROWSER_USE_DISABLE_EXTENSIONS;
     const { BrowserProfile } = await importProfileModule();
