@@ -235,10 +235,9 @@ export class AgentMessagePrompt {
     statsText += `, ${pageStats.total_elements} total elements`;
     statsText += '</page_stats>\n';
 
-    let elementsText =
-      this.browserState.element_tree.clickable_elements_to_string(
-        this.includeAttributes ?? undefined
-      );
+    let elementsText = this.browserState.llm_representation(
+      this.includeAttributes ?? undefined
+    );
     let truncatedText = '';
     if (elementsText.length > this.maxClickableElementsLength) {
       elementsText = elementsText.slice(0, this.maxClickableElementsLength);

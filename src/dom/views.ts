@@ -340,4 +340,8 @@ export class DOMState {
     public element_tree: DOMElementNode,
     public selector_map: SelectorMap
   ) {}
+
+  llm_representation(include_attributes?: string[]) {
+    return this.element_tree.clickable_elements_to_string(include_attributes);
+  }
 }
