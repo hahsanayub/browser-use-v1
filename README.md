@@ -382,7 +382,7 @@ interface AgentOptions {
   // Error handling
   max_failures?: number; // default: 3
   retry_delay?: number; // seconds, default: 10
-  max_actions_per_step?: number; // default: 10
+  max_actions_per_step?: number; // default: 5
 
   // Persistence / output
   save_conversation_path?: string | null;

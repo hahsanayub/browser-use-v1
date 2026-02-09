@@ -155,7 +155,7 @@ The configuration file is located at `~/.config/browseruse/config.json`.
       "max_failures": 3,
       "retry_delay": 10,
       "final_response_after_failure": true,
-      "max_actions_per_step": 10,
+      "max_actions_per_step": 5,
       "use_judge": true,
       "judge_llm": null,
       "ground_truth": null,
@@ -329,7 +329,7 @@ const agent = new Agent({
   llm,
 
   // Per-step limits
-  max_actions_per_step: 10,
+  max_actions_per_step: 5,
 
   // Failure handling
   max_failures: 3,

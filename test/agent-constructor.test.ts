@@ -13,7 +13,11 @@ import {
   BrowserStateSummary,
   PLACEHOLDER_4PX_SCREENSHOT,
 } from '../src/browser/views.js';
-import { DOMElementNode, DOMState } from '../src/dom/views.js';
+import {
+  DEFAULT_INCLUDE_ATTRIBUTES,
+  DOMElementNode,
+  DOMState,
+} from '../src/dom/views.js';
 import { HistoryTreeProcessor } from '../src/dom/history-tree-processor/service.js';
 
 const createLlm = (
@@ -114,18 +118,7 @@ describe('Agent constructor browser session alignment', () => {
       llm: createLlm(),
     });
 
-    expect(agent.settings.include_attributes).toEqual([
-      'title',
-      'type',
-      'name',
-      'role',
-      'tabindex',
-      'aria-label',
-      'placeholder',
-      'value',
-      'alt',
-      'aria-expanded',
-    ]);
+    expect(agent.settings.include_attributes).toEqual(DEFAULT_INCLUDE_ATTRIBUTES);
 
     await agent.close();
   });
@@ -190,7 +183,7 @@ describe('Agent constructor browser session alignment', () => {
     }
   });
 
-  it('uses 100 max_steps by default when run() omits max_steps', async () => {
+  it('uses 500 max_steps by default when run() omits max_steps', async () => {
     const agent = new Agent({
       task: 'default max steps',
       llm: createLlm(),
@@ -203,12 +196,12 @@ describe('Agent constructor browser session alignment', () => {
     await agent.run();
 
     const lastCall = logAgentEventSpy.mock.calls.at(-1);
-    expect(lastCall?.[0]).toBe(100);
+    expect(lastCall?.[0]).toBe(500);
 
     await agent.close();
   });
 
-  it('uses python-aligned llm_timeout defaults when not explicitly set', async () => {
+  it('uses python-aligned model-based llm_timeout defaults when not explicitly set', async () => {
     const defaultAgent = new Agent({
       task: 'default timeout',
       llm: createLlm('gemini-3-pro', 'google'),
@@ -219,7 +212,7 @@ describe('Agent constructor browser session alignment', () => {
       llm_timeout: 123,
     });
 
-    expect(defaultAgent.settings.llm_timeout).toBe(60);
+    expect(defaultAgent.settings.llm_timeout).toBe(90);
     expect(overrideAgent.settings.llm_timeout).toBe(123);
 
     await defaultAgent.close();

@@ -5,7 +5,11 @@ import { ActionModel } from '../controller/registry/views.js';
 import { BrowserStateHistory } from '../browser/views.js';
 import type { DOMHistoryElement } from '../dom/history-tree-processor/view.js';
 import { HistoryTreeProcessor } from '../dom/history-tree-processor/service.js';
-import type { DOMElementNode, SelectorMap } from '../dom/views.js';
+import {
+  DEFAULT_INCLUDE_ATTRIBUTES,
+  type DOMElementNode,
+  type SelectorMap,
+} from '../dom/views.js';
 import type { FileSystemState } from '../filesystem/file-system.js';
 import type { BaseChatModel } from '../llm/base.js';
 import { MessageManagerState } from './message-manager/views.js';
@@ -426,19 +430,8 @@ export const defaultAgentSettings = (): AgentSettings => ({
   generate_gif: false,
   override_system_message: null,
   extend_system_message: null,
-  include_attributes: [
-    'title',
-    'type',
-    'name',
-    'role',
-    'tabindex',
-    'aria-label',
-    'placeholder',
-    'value',
-    'alt',
-    'aria-expanded',
-  ],
-  max_actions_per_step: 10,
+  include_attributes: [...DEFAULT_INCLUDE_ATTRIBUTES],
+  max_actions_per_step: 5,
   use_thinking: true,
   flash_mode: false,
   use_judge: true,

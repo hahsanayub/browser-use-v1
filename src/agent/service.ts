@@ -37,7 +37,7 @@ import type { Browser, BrowserContext, Page } from '../browser/types.js';
 import { InsecureSensitiveDataError } from '../exceptions.js';
 import { HistoryTreeProcessor } from '../dom/history-tree-processor/service.js';
 import { DOMHistoryElement } from '../dom/history-tree-processor/view.js';
-import type { DOMElementNode } from '../dom/views.js';
+import { DEFAULT_INCLUDE_ATTRIBUTES, type DOMElementNode } from '../dom/views.js';
 import type { BaseChatModel } from '../llm/base.js';
 import { ChatBrowserUse } from '../llm/browser-use/chat.js';
 import {
@@ -306,6 +306,28 @@ const resolve_agent_llm = (llm: BaseChatModel | null | undefined): BaseChatModel
   return new ChatBrowserUse();
 };
 
+const get_model_timeout = (llm: BaseChatModel): number => {
+  const modelName = String((llm as any)?.model ?? '').toLowerCase();
+  if (modelName.includes('gemini')) {
+    if (modelName.includes('3-pro')) {
+      return 90;
+    }
+    return 75;
+  }
+  if (modelName.includes('groq')) {
+    return 30;
+  }
+  if (
+    modelName.includes('o3') ||
+    modelName.includes('claude') ||
+    modelName.includes('sonnet') ||
+    modelName.includes('deepseek')
+  ) {
+    return 90;
+  }
+  return 75;
+};
+
 const defaultAgentOptions = () => ({
   use_vision: true,
   include_recent_events: false,
@@ -323,7 +345,7 @@ const defaultAgentOptions = () => ({
   generate_gif: false,
   available_file_paths: [] as string[],
   include_attributes: undefined as string[] | undefined,
-  max_actions_per_step: 10,
+  max_actions_per_step: 5,
   use_thinking: true,
   flash_mode: false,
   use_judge: true,
@@ -353,7 +375,7 @@ const defaultAgentOptions = () => ({
   session_attachment_mode: 'copy' as const,
   allow_insecure_sensitive_data: false,
   vision_detail_level: 'auto' as const,
-  llm_timeout: 60,
+  llm_timeout: null as number | null,
   step_timeout: 180,
   final_response_after_failure: true,
   message_compaction: true as MessageCompactionSettings | boolean,
@@ -524,7 +546,7 @@ export class Agent<
       generate_gif = false,
       available_file_paths = [],
       include_attributes,
-      max_actions_per_step = 10,
+      max_actions_per_step = 5,
       use_thinking = true,
       flash_mode = false,
       use_judge = true,
@@ -550,7 +572,7 @@ export class Agent<
       vision_detail_level = 'auto',
       session_attachment_mode = 'copy',
       allow_insecure_sensitive_data = false,
-      llm_timeout = 60,
+      llm_timeout = null,
       step_timeout = 180,
       final_response_after_failure = true,
       message_compaction = true,
@@ -568,7 +590,9 @@ export class Agent<
       ? false
       : enable_planning;
     const effectiveLlmTimeout =
-      typeof llm_timeout === 'number' ? llm_timeout : 60;
+      typeof llm_timeout === 'number'
+        ? llm_timeout
+        : get_model_timeout(resolvedLlm);
     const normalizedMessageCompaction =
       this._normalizeMessageCompactionSetting(message_compaction);
     let resolvedLlmScreenshotSize: [number, number] | null =
@@ -682,18 +706,7 @@ export class Agent<
       generate_gif,
       override_system_message,
       extend_system_message,
-      include_attributes: include_attributes ?? [
-        'title',
-        'type',
-        'name',
-        'role',
-        'tabindex',
-        'aria-label',
-        'placeholder',
-        'value',
-        'alt',
-        'aria-expanded',
-      ],
+      include_attributes: include_attributes ?? [...DEFAULT_INCLUDE_ATTRIBUTES],
       max_actions_per_step,
       use_thinking,
       flash_mode: effectiveFlashMode,
@@ -2138,7 +2151,7 @@ export class Agent<
   }
 
   async run(
-    max_steps = 100,
+    max_steps = 500,
     on_step_start: AgentHookFunc<Context, AgentStructuredOutput> | null = null,
     on_step_end: AgentHookFunc<Context, AgentStructuredOutput> | null = null
   ) {
