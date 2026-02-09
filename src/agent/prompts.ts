@@ -15,6 +15,7 @@ import { createLogger } from '../logging-config.js';
 import type { AgentStepInfo } from './views.js';
 import type { BrowserStateSummary } from '../browser/views.js';
 import type { FileSystem } from '../filesystem/file-system.js';
+import { DOMElementNode } from '../dom/views.js';
 
 const logger = createLogger('browser_use.agent.prompts');
 
@@ -169,7 +170,72 @@ export class AgentMessagePrompt {
     this.planDescription = init.plan_description ?? null;
   }
 
+  private extractPageStatistics() {
+    const stats = {
+      links: 0,
+      iframes: 0,
+      shadow_open: 0,
+      shadow_closed: 0,
+      scroll_containers: 0,
+      images: 0,
+      interactive_elements: 0,
+      total_elements: 0,
+    };
+
+    const root = this.browserState.element_tree;
+    if (!root) {
+      return stats;
+    }
+
+    const traverseNode = (node: DOMElementNode) => {
+      stats.total_elements += 1;
+
+      const tag = String(node.tag_name ?? '').toLowerCase();
+      if (tag === 'a') {
+        stats.links += 1;
+      } else if (tag === 'iframe' || tag === 'frame') {
+        stats.iframes += 1;
+      } else if (tag === 'img') {
+        stats.images += 1;
+      }
+
+      if (node.is_interactive) {
+        stats.interactive_elements += 1;
+      }
+
+      if (node.shadow_root) {
+        // The TS DOM snapshot currently tracks presence of a shadow root, but
+        // does not expose open-vs-closed mode; count these as open for parity.
+        stats.shadow_open += 1;
+      }
+
+      for (const child of node.children) {
+        if (child instanceof DOMElementNode) {
+          traverseNode(child);
+        }
+      }
+    };
+
+    traverseNode(root);
+    return stats;
+  }
+
   private browserStateDescription() {
+    const pageStats = this.extractPageStatistics();
+    let statsText = '<page_stats>';
+    if (pageStats.total_elements < 10) {
+      statsText += 'Page appears empty (SPA not loaded?) - ';
+    }
+    statsText += `${pageStats.links} links, ${pageStats.interactive_elements} interactive, ${pageStats.iframes} iframes`;
+    if (pageStats.shadow_open > 0 || pageStats.shadow_closed > 0) {
+      statsText += `, ${pageStats.shadow_open} shadow(open), ${pageStats.shadow_closed} shadow(closed)`;
+    }
+    if (pageStats.images > 0) {
+      statsText += `, ${pageStats.images} images`;
+    }
+    statsText += `, ${pageStats.total_elements} total elements`;
+    statsText += '</page_stats>\n';
+
     let elementsText =
       this.browserState.element_tree.clickable_elements_to_string(
         this.includeAttributes ?? undefined
@@ -301,7 +367,7 @@ export class AgentMessagePrompt {
       paginationButtonsText = `Detected pagination buttons:\n${buttonLines}\n`;
     }
 
-    return `${currentTabText}
+    return `${statsText}${currentTabText}
 Available tabs:
 ${tabsText}
 ${pageInfoText}

@@ -54,6 +54,56 @@ describe('AgentMessagePrompt browser state enrichment', () => {
     expect(content).toContain('Auto-closed JavaScript dialogs:');
   });
 
+  it('includes python-style page stats summary', () => {
+    const root = new DOMElementNode(true, null, 'body', '/body', {}, []);
+    const link = new DOMElementNode(true, root, 'a', '/body/a[1]', {}, []);
+    link.is_interactive = true;
+    const iframe = new DOMElementNode(
+      true,
+      root,
+      'iframe',
+      '/body/iframe[1]',
+      {},
+      []
+    );
+    const image = new DOMElementNode(true, root, 'img', '/body/img[1]', {}, []);
+    const button = new DOMElementNode(
+      true,
+      root,
+      'button',
+      '/body/button[1]',
+      {},
+      []
+    );
+    button.is_interactive = true;
+    button.shadow_root = true;
+    root.children = [link, iframe, image, button];
+
+    const domState = new DOMState(root, {});
+    const browserState = new BrowserStateSummary(domState, {
+      url: 'https://example.com/list',
+      title: 'List',
+      tabs: [{ page_id: 0, url: 'https://example.com/list', title: 'List' }],
+    });
+
+    const prompt = new AgentMessagePrompt({
+      browser_state_summary: browserState,
+      file_system: {
+        describe: () => '/tmp',
+        get_todo_contents: () => '',
+      } as any,
+      task: 'test',
+    });
+
+    const userMessage = prompt.get_user_message(false) as any;
+    const content = String(userMessage.content ?? '');
+
+    expect(content).toContain('<page_stats>');
+    expect(content).toContain('1 links, 2 interactive, 1 iframes');
+    expect(content).toContain('1 shadow(open), 0 shadow(closed)');
+    expect(content).toContain('1 images, 5 total elements');
+  });
+
   it('does not include recent events by default', () => {
     const root = new DOMElementNode(true, null, 'body', '/body', {}, []);
     const domState = new DOMState(root, {});
