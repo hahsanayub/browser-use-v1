@@ -202,6 +202,38 @@ const runWithTimeoutAndSignal = async <T>(
   });
 };
 
+const validateAndFixJavaScript = (code: string): string => {
+  let fixedCode = code;
+
+  // Fix double-escaped quotes often produced in tool-argument JSON.
+  fixedCode = fixedCode.replace(/\\"/g, '"');
+
+  // Fix over-escaped regex tokens (e.g. \\d -> \d).
+  fixedCode = fixedCode.replace(/\\\\([dDsSwWbBnrtfv])/g, '\\$1');
+  fixedCode = fixedCode.replace(/\\\\([.*+?^${}()|[\]])/g, '\\$1');
+
+  // Convert brittle mixed-quote selectors/XPaths into template literals.
+  fixedCode = fixedCode.replace(
+    /document\.evaluate\s*\(\s*"([^"]*)"\s*,/g,
+    (_match, xpath: string) => `document.evaluate(\`${xpath}\`,`
+  );
+  fixedCode = fixedCode.replace(
+    /(querySelector(?:All)?)\s*\(\s*"([^"]*)"\s*\)/g,
+    (_match, methodName: string, selector: string) =>
+      `${methodName}(\`${selector}\`)`
+  );
+  fixedCode = fixedCode.replace(
+    /\.closest\s*\(\s*"([^"]*)"\s*\)/g,
+    (_match, selector: string) => `.closest(\`${selector}\`)`
+  );
+  fixedCode = fixedCode.replace(
+    /\.matches\s*\(\s*"([^"]*)"\s*\)/g,
+    (_match, selector: string) => `.matches(\`${selector}\`)`
+  );
+
+  return fixedCode;
+};
+
 export class Controller<Context = unknown> {
   public registry: Registry<Context>;
   private displayFilesInDoneText: boolean;
@@ -2412,6 +2444,8 @@ Context: ${context}`;
         throw new BrowserError('No active page available for evaluate.');
       }
 
+      const validatedCode = validateAndFixJavaScript(params.code);
+
       const payload = (await page.evaluate(
         async ({ code }: { code: string }) => {
           const serialize = (value: unknown): unknown => {
@@ -2438,15 +2472,22 @@ Context: ${context}`;
             };
           }
         },
-        { code: params.code }
+        { code: validatedCode }
       )) as { ok: boolean; result?: unknown; error?: string } | null;
 
       if (!payload) {
         return new ActionResult({ error: 'evaluate returned no result' });
       }
       if (!payload.ok) {
+        const codePreview =
+          validatedCode.length > 500
+            ? `${validatedCode.slice(0, 500)}...`
+            : validatedCode;
         return new ActionResult({
-          error: `JavaScript execution error: ${payload.error ?? 'Unknown error'}`,
+          error:
+            `JavaScript Execution Failed:\n` +
+            `JavaScript execution error: ${payload.error ?? 'Unknown error'}\n\n` +
+            `Validated Code (after quote fixing):\n${codePreview}`,
         });
       }
 

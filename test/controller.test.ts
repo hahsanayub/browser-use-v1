@@ -1310,6 +1310,38 @@ describe('Regression Coverage', () => {
     expect(result.include_extracted_content_only_once).toBe(false);
   });
 
+  it('evaluate normalizes over-escaped JavaScript before execution', async () => {
+    const controller = new Controller();
+    const rawCode =
+      '(() => { const el = document.querySelector(\\\\\"#value\\\\\"); return el ? el.textContent : "missing"; })()';
+    const page = {
+      evaluate: vi.fn(async (_handler: unknown, args: { code: string }) => ({
+        ok: true,
+        result: args.code,
+      })),
+      url: vi.fn(() => 'https://example.com'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+    };
+
+    const result = await controller.registry.execute_action(
+      'evaluate',
+      {
+        code: rawCode,
+      },
+      { browser_session: browserSession as any }
+    );
+
+    expect(page.evaluate).toHaveBeenCalled();
+    const evaluatedCode = (page.evaluate.mock.calls[0]?.[1] as { code: string })
+      ?.code;
+    expect(evaluatedCode).toContain('document.querySelector(\\"#value\\")');
+    expect(evaluatedCode).not.toContain('\\\\\\"#value\\\\\\"');
+    expect((evaluatedCode ?? '').length).toBeLessThan(rawCode.length);
+    expect(result.error).toBeNull();
+  });
+
   it('evaluate returns action error on JavaScript failure', async () => {
     const controller = new Controller();
     const page = {
