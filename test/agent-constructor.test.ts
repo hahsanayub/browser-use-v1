@@ -355,23 +355,21 @@ describe('Agent constructor browser session alignment', () => {
       .mockImplementation(() => {});
 
     agent.state.stopped = true;
-    try {
-      (agent as any)._raise_if_stopped_or_paused();
-      throw new Error('Expected stop guard to throw');
-    } catch (error) {
-      expect((error as Error).name).toBe('InterruptedError');
-      expect((error as Error).message).toBe('Agent stopped');
-    }
+    await expect(
+      (agent as any)._raise_if_stopped_or_paused()
+    ).rejects.toMatchObject({
+      name: 'InterruptedError',
+      message: 'Agent stopped',
+    });
 
     agent.state.stopped = false;
     agent.state.paused = true;
-    try {
-      (agent as any)._raise_if_stopped_or_paused();
-      throw new Error('Expected pause guard to throw');
-    } catch (error) {
-      expect((error as Error).name).toBe('InterruptedError');
-      expect((error as Error).message).toBe('Agent paused');
-    }
+    await expect(
+      (agent as any)._raise_if_stopped_or_paused()
+    ).rejects.toMatchObject({
+      name: 'InterruptedError',
+      message: 'Agent paused',
+    });
 
     agent.state.paused = false;
     const interrupted = new Error('Agent paused');

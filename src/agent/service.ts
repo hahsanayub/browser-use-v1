@@ -2238,29 +2238,22 @@ export class Agent<
           break;
         }
 
-        if (this.state.stopped) {
-          this.logger.info('🛑 Agent stopped');
-          agent_run_error = 'Agent stopped programmatically';
-          break;
-        }
-
-        if (this.register_should_stop_callback) {
-          const shouldStop = await this.register_should_stop_callback();
-          if (shouldStop) {
-            this.logger.info('External callback requested stop');
-            this.state.stopped = true;
-            agent_run_error = 'Agent stopped programmatically';
+        try {
+          await this._raise_if_stopped_or_paused();
+        } catch (error) {
+          if ((error as Error)?.name === 'InterruptedError') {
+            if (this.state.paused) {
+              continue;
+            }
+            if (this.state.stopped) {
+              this.logger.info('🛑 Agent stopped');
+              agent_run_error = 'Agent stopped programmatically';
+            } else {
+              agent_run_error = 'Agent stopped due to external request';
+            }
             break;
           }
-        }
-
-        if (this.register_external_agent_status_raise_error_callback) {
-          const shouldRaise =
-            await this.register_external_agent_status_raise_error_callback();
-          if (shouldRaise) {
-            agent_run_error = 'Agent stopped due to external request';
-            break;
-          }
+          throw error;
         }
 
         if (on_step_start) {
@@ -4322,13 +4315,30 @@ export class Agent<
     }
   }
 
-  private _createInterruptedError(message: string) {
+  private _createInterruptedError(message = '') {
     const interruptedError = new Error(message);
     interruptedError.name = 'InterruptedError';
     return interruptedError;
   }
 
-  private _raise_if_stopped_or_paused() {
+  private async _raise_if_stopped_or_paused() {
+    if (this.register_should_stop_callback) {
+      const shouldStop = await this.register_should_stop_callback();
+      if (shouldStop) {
+        this.logger.info('External callback requested stop');
+        this.state.stopped = true;
+        throw this._createInterruptedError();
+      }
+    }
+
+    if (this.register_external_agent_status_raise_error_callback) {
+      const shouldRaise =
+        await this.register_external_agent_status_raise_error_callback();
+      if (shouldRaise) {
+        throw this._createInterruptedError();
+      }
+    }
+
     if (this.state.stopped) {
       throw this._createInterruptedError('Agent stopped');
     }
