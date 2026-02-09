@@ -324,6 +324,36 @@ export const get_browser_use_version = () => {
   return 'unknown';
 };
 
+export const check_latest_browser_use_version = async (): Promise<
+  string | null
+> => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3000);
+  timeout.unref?.();
+
+  try {
+    const response = await fetch('https://registry.npmjs.org/browser-use/latest', {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const payload = (await response.json()) as { version?: unknown };
+    if (typeof payload.version === 'string' && payload.version.trim()) {
+      return payload.version.trim();
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
 let cached_git_info: Record<string, string> | null | undefined;
 
 export const get_git_info = () => {

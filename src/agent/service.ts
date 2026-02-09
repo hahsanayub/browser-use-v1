@@ -8,7 +8,12 @@ import { z } from 'zod';
 import { createLogger } from '../logging-config.js';
 import { CONFIG } from '../config.js';
 import { EventBus } from '../event-bus.js';
-import { uuid7str, SignalHandler, get_browser_use_version } from '../utils.js';
+import {
+  uuid7str,
+  SignalHandler,
+  get_browser_use_version,
+  check_latest_browser_use_version,
+} from '../utils.js';
 import type { Controller } from '../controller/service.js';
 import { Controller as DefaultController } from '../controller/service.js';
 import type { FileSystem } from '../filesystem/file-system.js';
@@ -1919,7 +1924,7 @@ export class Agent<
     signal_handler.register();
 
     try {
-      this._log_agent_run();
+      await this._log_agent_run();
 
       this.logger.debug(
         `🔧 Agent setup: Task ID ${this.task_id.slice(-4)}, Session ID ${this.session_id.slice(-4)}, Browser Session ID ${
@@ -4033,8 +4038,24 @@ export class Agent<
     return { trace, trace_details };
   }
 
-  private _log_agent_run() {
-    this.logger.info(`🧠 Starting agent for task: ${this.task}`);
+  private async _log_agent_run() {
+    this.logger.info(`\x1b[34m🎯 Task: ${this.task}\x1b[0m`);
+    this.logger.debug(
+      `🤖 Browser-Use Library Version ${this.version} (${this.source})`
+    );
+
+    if (
+      CONFIG.BROWSER_USE_VERSION_CHECK &&
+      process.env.NODE_ENV !== 'test' &&
+      !process.env.VITEST
+    ) {
+      const latestVersion = await check_latest_browser_use_version();
+      if (latestVersion && latestVersion !== this.version) {
+        this.logger.info(
+          `📦 Newer version available: ${latestVersion} (current: ${this.version}). Upgrade with: npm install browser-use@${latestVersion}`
+        );
+      }
+    }
   }
 
   private _raise_if_stopped_or_paused() {
