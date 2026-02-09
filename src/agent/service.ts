@@ -1692,7 +1692,7 @@ export class Agent<
           .toLowerCase();
         if (excludedWords.some((word) => contextText.includes(word))) {
           this.logger.debug(
-            `Excluding URL due to negation context "${contextText.trim()}": ${url}`
+            `Excluding URL with word in excluded words from auto-navigation: ${url} (context: "${contextText.trim()}")`
           );
           continue;
         }
@@ -1707,7 +1707,7 @@ export class Agent<
     const uniqueUrls = Array.from(new Set(foundUrls));
     if (uniqueUrls.length > 1) {
       this.logger.debug(
-        `Multiple URLs found (${uniqueUrls.length}), skipping directly_open_url to avoid ambiguity`
+        `Multiple URLs found (${foundUrls.length}), skipping directly_open_url to avoid ambiguity`
       );
       return null;
     }

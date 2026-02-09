@@ -1145,7 +1145,7 @@ describe('Agent constructor browser session alignment', () => {
 
     expect(extracted).toBeNull();
     expect(debugSpy).toHaveBeenCalledWith(
-      'Multiple URLs found (2), skipping directly_open_url to avoid ambiguity'
+      'Multiple URLs found (4), skipping directly_open_url to avoid ambiguity'
     );
 
     await agent.close();
