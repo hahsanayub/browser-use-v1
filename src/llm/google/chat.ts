@@ -17,6 +17,7 @@ export interface ChatGoogleOptions {
   thinkingBudget?: number | null;
   thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high' | null;
   maxOutputTokens?: number | null;
+  config?: Record<string, unknown> | null;
   includeSystemInUser?: boolean;
   supportsStructuredOutput?: boolean;
   maxRetries?: number;
@@ -35,6 +36,7 @@ export class ChatGoogle implements BaseChatModel {
   private thinkingBudget: number | null;
   private thinkingLevel: 'minimal' | 'low' | 'medium' | 'high' | null;
   private maxOutputTokens: number | null;
+  private config: Record<string, unknown> | null;
   private includeSystemInUser: boolean;
   private supportsStructuredOutput: boolean;
   private maxRetries: number;
@@ -56,6 +58,7 @@ export class ChatGoogle implements BaseChatModel {
       thinkingBudget = null,
       thinkingLevel = null,
       maxOutputTokens = 8096,
+      config = null,
       includeSystemInUser = false,
       supportsStructuredOutput = true,
       maxRetries = 5,
@@ -71,6 +74,7 @@ export class ChatGoogle implements BaseChatModel {
     this.thinkingBudget = thinkingBudget;
     this.thinkingLevel = thinkingLevel;
     this.maxOutputTokens = maxOutputTokens;
+    this.config = config ? { ...config } : null;
     this.includeSystemInUser = includeSystemInUser;
     this.supportsStructuredOutput = supportsStructuredOutput;
     this.maxRetries = Math.max(1, maxRetries);
@@ -257,7 +261,7 @@ export class ChatGoogle implements BaseChatModel {
       this.includeSystemInUser
     );
 
-    const generationConfig: any = {};
+    const generationConfig: any = this.config ? { ...this.config } : {};
     if (this.temperature !== null) {
       generationConfig.temperature = this.temperature;
     }

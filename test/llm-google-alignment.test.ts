@@ -88,6 +88,9 @@ describe('Google LLM alignment', () => {
       topP: 0.8,
       seed: 7,
       maxOutputTokens: 512,
+      config: {
+        stopSequences: ['DONE'],
+      },
     });
 
     const response = await llm.ainvoke([
@@ -99,6 +102,7 @@ describe('Google LLM alignment', () => {
     expect(request.generationConfig.temperature).toBe(0.3);
     expect(request.generationConfig.topP).toBe(0.8);
     expect(request.generationConfig.seed).toBe(7);
+    expect(request.generationConfig.stopSequences).toEqual(['DONE']);
     expect(request.generationConfig.thinkingConfig.thinkingBudget).toBe(-1);
     expect(request.generationConfig.maxOutputTokens).toBe(512);
     expect(request.systemInstruction.parts[0].text).toBe('sys');
