@@ -2831,6 +2831,36 @@ export class Agent<
         `🔄 Step ${this.state.n_steps}: Consecutive failures reset to: ${this.state.consecutive_failures}`
       );
     }
+
+    if (lastResult && lastResult.length > 0 && lastResult[lastResult.length - 1]?.is_done) {
+      const finalResult = lastResult[lastResult.length - 1];
+      const success = Boolean(finalResult.success);
+      const renderedContent =
+        typeof finalResult.extracted_content === 'string'
+          ? finalResult.extracted_content
+          : String(finalResult.extracted_content ?? '');
+
+      if (success) {
+        this.logger.info(
+          `\n📄 \x1b[32m Final Result:\x1b[0m \n${renderedContent}\n\n`
+        );
+      } else {
+        this.logger.info(
+          `\n📄 \x1b[31m Final Result:\x1b[0m \n${renderedContent}\n\n`
+        );
+      }
+
+      const attachments = Array.isArray(finalResult.attachments)
+        ? finalResult.attachments
+        : [];
+      const totalAttachments = attachments.length;
+      for (let i = 0; i < attachments.length; i++) {
+        const suffix = totalAttachments > 1 ? String(i + 1) : '';
+        this.logger.info(
+          `👉 Attachment${suffix ? ` ${suffix}` : ''}: ${attachments[i]}`
+        );
+      }
+    }
   }
 
   async multi_act(

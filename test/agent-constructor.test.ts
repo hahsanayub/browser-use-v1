@@ -1891,6 +1891,43 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('logs c011 final-result block and attachment list in _post_process', async () => {
+    const agent = new Agent({
+      task: 'final result logging',
+      llm: createLlm(),
+    });
+
+    agent.browser_session = {} as any;
+    vi.spyOn(agent as any, '_check_and_update_downloads').mockResolvedValue(
+      undefined
+    );
+    vi.spyOn(agent as any, '_update_loop_detector_actions').mockImplementation(
+      () => {}
+    );
+
+    agent.state.last_result = [
+      new ActionResult({
+        is_done: true,
+        success: false,
+        extracted_content: 'partial completion',
+        attachments: ['/tmp/a.txt', '/tmp/b.txt'],
+      }),
+    ];
+
+    const infoSpy = vi.spyOn(agent.logger, 'info');
+    await (agent as any)._post_process();
+
+    expect(
+      infoSpy.mock.calls.some((call) =>
+        String(call[0] ?? '').includes('\u001b[31m Final Result:')
+      )
+    ).toBe(true);
+    expect(infoSpy).toHaveBeenCalledWith('👉 Attachment 1: /tmp/a.txt');
+    expect(infoSpy).toHaveBeenCalledWith('👉 Attachment 2: /tmp/b.txt');
+
+    await agent.close();
+  });
+
   it('warns when sensitive_data is used without allowed_domains lock-down (python c011 parity)', async () => {
     const agent = new Agent({
       task: 'test allowed domains empty',
