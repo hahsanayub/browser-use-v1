@@ -34,7 +34,6 @@ const formatConversation = (messages: Message[], response: unknown) => {
     );
     lines.push('');
   });
-  lines.push(' RESPONSE');
   lines.push(serializeResponse(response));
   return lines.join('\n');
 };

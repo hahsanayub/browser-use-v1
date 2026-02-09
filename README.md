@@ -391,7 +391,7 @@ interface AgentOptions {
   include_attributes?: string[];
 
   // Runtime limits (seconds)
-  llm_timeout?: number; // default: 60
+  llm_timeout?: number; // default: auto (model-dependent)
   step_timeout?: number; // default: 180
   final_response_after_failure?: boolean; // default: true
 
