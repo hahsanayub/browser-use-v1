@@ -1249,6 +1249,21 @@ export class AgentError extends Error {
     if (error.name === 'RateLimitError') {
       return AgentError.RATE_LIMIT_ERROR;
     }
+    const errorStr = error.message ?? String(error);
+    if (
+      errorStr.includes('LLM response missing required fields') ||
+      errorStr.includes('Expected format: AgentOutput')
+    ) {
+      const [mainError] = errorStr.split('\n');
+      let helpfulMessage =
+        `${mainError}\n\n` +
+        'The previous response had an invalid output structure. ' +
+        'Please stick to the required output format. \n\n';
+      if (include_trace && (error as any)?.stack) {
+        helpfulMessage += `\n\nFull stacktrace:\n${(error as any).stack}`;
+      }
+      return helpfulMessage;
+    }
     if (include_trace && (error as any)?.stack) {
       return `${error.message}\nStacktrace:\n${(error as any).stack}`;
     }
