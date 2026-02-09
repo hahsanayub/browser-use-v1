@@ -438,7 +438,7 @@ export const defaultAgentSettings = (): AgentSettings => ({
     'alt',
     'aria-expanded',
   ],
-  max_actions_per_step: 5,
+  max_actions_per_step: 10,
   use_thinking: true,
   flash_mode: false,
   use_judge: true,

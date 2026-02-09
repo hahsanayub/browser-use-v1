@@ -345,7 +345,7 @@ const defaultAgentOptions = () => ({
   generate_gif: false,
   available_file_paths: [] as string[],
   include_attributes: undefined as string[] | undefined,
-  max_actions_per_step: 5,
+  max_actions_per_step: 10,
   use_thinking: true,
   flash_mode: false,
   use_judge: true,
@@ -546,7 +546,7 @@ export class Agent<
       generate_gif = false,
       available_file_paths = [],
       include_attributes,
-      max_actions_per_step = 5,
+      max_actions_per_step = 10,
       use_thinking = true,
       flash_mode = false,
       use_judge = true,
@@ -2148,7 +2148,7 @@ export class Agent<
   }
 
   async run(
-    max_steps = 500,
+    max_steps = 100,
     on_step_start: AgentHookFunc<Context, AgentStructuredOutput> | null = null,
     on_step_end: AgentHookFunc<Context, AgentStructuredOutput> | null = null
   ) {

@@ -46,7 +46,7 @@ new Agent(options: AgentOptions)
 | `flash_mode`              | `boolean`                   | No       | `false`                     | Use optimized prompts for speed          |
 | `max_failures`            | `number`                    | No       | `3`                         | Max consecutive failures before stopping |
 | `retry_delay`             | `number`                    | No       | `10`                        | Delay (seconds) between retries          |
-| `max_actions_per_step`    | `number`                    | No       | `5`                         | Max actions per step                     |
+| `max_actions_per_step`    | `number`                    | No       | `10`                        | Max actions per step                     |
 | `validate_output`         | `boolean`                   | No       | `false`                     | Validate LLM output strictly             |
 | `generate_gif`            | `boolean \| string`         | No       | `false`                     | Generate GIF of session                  |
 | `save_conversation_path`  | `string`                    | No       | `null`                      | Path to save conversation logs           |
@@ -78,7 +78,7 @@ async run(max_steps?: number): Promise<AgentHistoryList>
 
 **Parameters:**
 
-- `max_steps` (optional): Maximum steps to execute. Defaults to `500`.
+- `max_steps` (optional): Maximum steps to execute. Defaults to `100`.
 
 **Returns:** `AgentHistoryList` containing the execution history.
 

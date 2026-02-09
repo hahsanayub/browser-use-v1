@@ -168,7 +168,7 @@ describe('Agent constructor browser session alignment', () => {
     }
   });
 
-  it('uses 500 max_steps by default when run() omits max_steps', async () => {
+  it('uses 100 max_steps by default when run() omits max_steps', async () => {
     const agent = new Agent({
       task: 'default max steps',
       llm: createLlm(),
@@ -181,7 +181,7 @@ describe('Agent constructor browser session alignment', () => {
     await agent.run();
 
     const lastCall = logAgentEventSpy.mock.calls.at(-1);
-    expect(lastCall?.[0]).toBe(500);
+    expect(lastCall?.[0]).toBe(100);
 
     await agent.close();
   });

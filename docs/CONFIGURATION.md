@@ -83,7 +83,7 @@ The configuration file is located at `~/.config/browseruse/config.json`.
     "default-agent-id": {
       "id": "default-agent-id",
       "default": true,
-      "max_steps": 500,
+      "max_steps": 100,
       "use_vision": true,
       "max_failures": 3
     }
@@ -149,13 +149,13 @@ The configuration file is located at `~/.config/browseruse/config.json`.
     "default": {
       "id": "default",
       "default": true,
-      "max_steps": 500,
+      "max_steps": 100,
       "use_vision": true,
       "vision_detail_level": "auto",
       "max_failures": 3,
       "retry_delay": 10,
       "final_response_after_failure": true,
-      "max_actions_per_step": 5,
+      "max_actions_per_step": 10,
       "use_judge": true,
       "judge_llm": null,
       "ground_truth": null,
@@ -329,7 +329,7 @@ const agent = new Agent({
   llm,
 
   // Per-step limits
-  max_actions_per_step: 5,
+  max_actions_per_step: 10,
 
   // Failure handling
   max_failures: 3,
