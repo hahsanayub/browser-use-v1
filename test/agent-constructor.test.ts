@@ -1469,6 +1469,33 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('uses c011 split step-context logging with debug evaluation details', async () => {
+    const agent = new Agent({
+      task: 'step context logging',
+      llm: createLlm(),
+    });
+
+    agent.state.n_steps = 3;
+    const infoSpy = vi.spyOn(agent.logger, 'info');
+    const debugSpy = vi.spyOn(agent.logger, 'debug');
+
+    (agent as any)._log_step_context(null, {
+      url: 'https://example.com/some/really/long/path/that/should/be/truncated/by-logger',
+      selector_map: {
+        1: {},
+        2: {},
+      },
+    });
+
+    expect(infoSpy).toHaveBeenCalledWith('\n');
+    expect(infoSpy).toHaveBeenCalledWith('📍 Step 3:');
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Evaluating page with 2 interactive elements on:')
+    );
+
+    await agent.close();
+  });
+
   it('warns when sensitive_data is used without allowed_domains lock-down (python c011 parity)', async () => {
     const agent = new Agent({
       task: 'test allowed domains empty',

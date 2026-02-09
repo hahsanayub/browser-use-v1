@@ -5346,14 +5346,15 @@ export class Agent<
     current_page: Page | null,
     browser_state_summary: BrowserStateSummary | null
   ) {
-    const url =
-      typeof current_page?.url === 'function' ? current_page.url() : '';
+    const url = browser_state_summary?.url ?? '';
     const url_short = url.length > 50 ? `${url.slice(0, 50)}...` : url;
     const interactive_count = browser_state_summary?.selector_map
       ? Object.keys(browser_state_summary.selector_map).length
       : 0;
-    this.logger.info(
-      `📍 Step ${this.state.n_steps}: Evaluating page with ${interactive_count} interactive elements on: ${url_short}`
+    this.logger.info('\n');
+    this.logger.info(`📍 Step ${this.state.n_steps}:`);
+    this.logger.debug(
+      `Evaluating page with ${interactive_count} interactive elements on: ${url_short}`
     );
   }
 
