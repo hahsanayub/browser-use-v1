@@ -311,6 +311,7 @@ describe('Schema Optimizer', () => {
           items: {
             type: 'array',
             minItems: 1,
+            min_items: 1,
             default: ['seed'],
             items: { type: 'string' },
           },
@@ -323,6 +324,7 @@ describe('Schema Optimizer', () => {
       });
 
       expect(JSON.stringify(optimized)).not.toContain('minItems');
+      expect(JSON.stringify(optimized)).not.toContain('min_items');
       expect(JSON.stringify(optimized)).not.toContain('"default"');
     });
   });

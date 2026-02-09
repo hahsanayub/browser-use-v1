@@ -24,7 +24,12 @@ export class SchemaOptimizer {
         for (const [key, value] of Object.entries(obj)) {
           if (key === '$defs' || key === 'additionalProperties') continue;
           if (key === 'title' && !inProperties) continue;
-          if (removeMinItems && key === 'minItems') continue;
+          if (
+            removeMinItems &&
+            (key === 'minItems' || key === 'min_items')
+          ) {
+            continue;
+          }
           if (removeDefaults && key === 'default') continue;
 
           if (key === '$ref' && typeof value === 'string') {

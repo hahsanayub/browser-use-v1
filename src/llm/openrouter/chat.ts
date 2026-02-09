@@ -1,20 +1,68 @@
 import OpenAI from 'openai';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
-import { ChatInvokeCompletion } from '../views.js';
+import { ModelProviderError } from '../exceptions.js';
 import type { Message } from '../messages.js';
+import { SchemaOptimizer } from '../schema.js';
+import { ChatInvokeCompletion, type ChatInvokeUsage } from '../views.js';
 import { OpenRouterMessageSerializer } from './serializer.js';
+
+export interface ChatOpenRouterOptions {
+  model?: string;
+  apiKey?: string;
+  baseURL?: string;
+  temperature?: number | null;
+  topP?: number | null;
+  seed?: number | null;
+  maxRetries?: number;
+  httpReferer?: string | null;
+  extraBody?: Record<string, unknown> | null;
+  removeMinItemsFromSchema?: boolean;
+  removeDefaultsFromSchema?: boolean;
+}
 
 export class ChatOpenRouter implements BaseChatModel {
   public model: string;
   public provider = 'openrouter';
   private client: OpenAI;
+  private temperature: number | null;
+  private topP: number | null;
+  private seed: number | null;
+  private httpReferer: string | null;
+  private extraBody: Record<string, unknown> | null;
+  private removeMinItemsFromSchema: boolean;
+  private removeDefaultsFromSchema: boolean;
 
-  constructor(model: string = 'openai/gpt-4o') {
+  constructor(options: string | ChatOpenRouterOptions = {}) {
+    const normalizedOptions =
+      typeof options === 'string' ? { model: options } : options;
+    const {
+      model = 'openai/gpt-4o',
+      apiKey = process.env.OPENROUTER_API_KEY,
+      baseURL = 'https://openrouter.ai/api/v1',
+      temperature = null,
+      topP = null,
+      seed = null,
+      maxRetries = 10,
+      httpReferer = null,
+      extraBody = null,
+      removeMinItemsFromSchema = false,
+      removeDefaultsFromSchema = false,
+    } = normalizedOptions;
+
     this.model = model;
+    this.temperature = temperature;
+    this.topP = topP;
+    this.seed = seed;
+    this.httpReferer = httpReferer;
+    this.extraBody = extraBody;
+    this.removeMinItemsFromSchema = removeMinItemsFromSchema;
+    this.removeDefaultsFromSchema = removeDefaultsFromSchema;
+
     this.client = new OpenAI({
-      apiKey: process.env.OPENROUTER_API_KEY,
-      baseURL: 'https://openrouter.ai/api/v1',
+      apiKey,
+      baseURL,
+      maxRetries,
     });
   }
 
@@ -24,6 +72,24 @@ export class ChatOpenRouter implements BaseChatModel {
 
   get model_name(): string {
     return this.model;
+  }
+
+  private getUsage(
+    response: OpenAI.Chat.Completions.ChatCompletion
+  ): ChatInvokeUsage | null {
+    if (!response.usage) {
+      return null;
+    }
+
+    return {
+      prompt_tokens: response.usage.prompt_tokens,
+      prompt_cached_tokens:
+        (response.usage as any).prompt_tokens_details?.cached_tokens ?? null,
+      prompt_cache_creation_tokens: null,
+      prompt_image_tokens: null,
+      completion_tokens: response.usage.completion_tokens,
+      total_tokens: response.usage.total_tokens,
+    };
   }
 
   async ainvoke(
@@ -44,62 +110,131 @@ export class ChatOpenRouter implements BaseChatModel {
     const serializer = new OpenRouterMessageSerializer();
     const openRouterMessages = serializer.serialize(messages);
 
+    const modelParams: Record<string, unknown> = {};
+    if (this.temperature !== null) {
+      modelParams.temperature = this.temperature;
+    }
+    if (this.topP !== null) {
+      modelParams.top_p = this.topP;
+    }
+    if (this.seed !== null) {
+      modelParams.seed = this.seed;
+    }
+
+    const zodSchemaCandidate = (() => {
+      const output = output_format as any;
+      if (
+        output &&
+        typeof output === 'object' &&
+        typeof output.safeParse === 'function' &&
+        typeof output.parse === 'function'
+      ) {
+        return output;
+      }
+      if (
+        output &&
+        typeof output === 'object' &&
+        output.schema &&
+        typeof output.schema.safeParse === 'function' &&
+        typeof output.schema.parse === 'function'
+      ) {
+        return output.schema;
+      }
+      return null;
+    })();
+
     let responseFormat: OpenAI.Chat.Completions.ChatCompletionCreateParams['response_format'] =
       undefined;
-    if (output_format && 'schema' in output_format && output_format.schema) {
-      // OpenRouter supports structured outputs for some models, but it depends on the underlying provider.
-      // We'll try to use json_schema if possible, or json_object.
+    if (zodSchemaCandidate) {
       try {
-        const jsonSchema = zodToJsonSchema(output_format as any, {
-          name: 'Response',
+        const rawJsonSchema = zodToJsonSchema(zodSchemaCandidate, {
+          name: 'agent_output',
           target: 'jsonSchema7',
         });
+        const optimizedJsonSchema = SchemaOptimizer.createOptimizedJsonSchema(
+          rawJsonSchema as Record<string, unknown>,
+          {
+            removeMinItems: this.removeMinItemsFromSchema,
+            removeDefaults: this.removeDefaultsFromSchema,
+          }
+        );
 
         responseFormat = {
           type: 'json_schema',
           json_schema: {
-            name: 'Response',
-            schema: jsonSchema as any,
+            name: 'agent_output',
+            schema: optimizedJsonSchema as any,
             strict: true,
           },
         };
-      } catch (e) {
-        console.warn(
-          'Failed to convert output_format to JSON schema for OpenRouter',
-          e
+      } catch {
+        responseFormat = undefined;
+      }
+    }
+
+    const request: Record<string, unknown> = {
+      model: this.model,
+      messages: openRouterMessages,
+      response_format: responseFormat,
+      ...modelParams,
+      ...(this.extraBody ?? {}),
+    };
+    if (this.httpReferer) {
+      request.extra_headers = {
+        'HTTP-Referer': this.httpReferer,
+      };
+    }
+
+    try {
+      const response = await this.client.chat.completions.create(
+        request as any,
+        options.signal ? { signal: options.signal } : undefined
+      );
+
+      const content = response.choices[0].message.content || '';
+      const usage = this.getUsage(response);
+
+      let completion: T | string = content;
+      if (output_format) {
+        if (zodSchemaCandidate) {
+          const parsedJson = JSON.parse(content);
+          const output = output_format as any;
+          if (
+            output &&
+            typeof output === 'object' &&
+            output.schema &&
+            typeof output.schema.parse === 'function'
+          ) {
+            completion = output.schema.parse(parsedJson);
+          } else {
+            completion = (output_format as any).parse(parsedJson);
+          }
+        } else {
+          completion = (output_format as any).parse(content);
+        }
+      }
+
+      return new ChatInvokeCompletion(completion, usage);
+    } catch (error: any) {
+      if (error?.status === 429) {
+        throw new ModelProviderError(
+          error?.message ?? 'Rate limit exceeded',
+          429,
+          this.model
         );
       }
-    }
-
-    const response = await this.client.chat.completions.create(
-      {
-        model: this.model,
-        messages: openRouterMessages,
-        response_format: responseFormat,
-      },
-      options.signal ? { signal: options.signal } : undefined
-    );
-
-    const content = response.choices[0].message.content || '';
-
-    let completion: T | string = content;
-    if (output_format) {
-      try {
-        if (responseFormat?.type === 'json_schema') {
-          completion = output_format.parse(JSON.parse(content));
-        } else {
-          completion = output_format.parse(content);
-        }
-      } catch (e) {
-        console.error('Failed to parse completion', e);
-        throw e;
+      if (error?.status >= 500) {
+        throw new ModelProviderError(
+          error?.message ?? 'Server error',
+          error.status,
+          this.model
+        );
       }
+      throw new ModelProviderError(
+        error?.message ?? String(error),
+        error?.status ?? 500,
+        this.model
+      );
     }
-
-    return new ChatInvokeCompletion(completion, {
-      prompt_tokens: response.usage?.prompt_tokens ?? 0,
-      completion_tokens: response.usage?.completion_tokens ?? 0,
-      total_tokens: response.usage?.total_tokens ?? 0,
-    });
   }
 }

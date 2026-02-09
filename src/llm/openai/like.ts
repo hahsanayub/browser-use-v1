@@ -1,4 +1,4 @@
-import { ChatOpenAI } from './chat.js';
+import { ChatOpenAI, type ChatOpenAIOptions } from './chat.js';
 
 /**
  * A class to interact with any provider using the OpenAI API schema.
@@ -12,9 +12,13 @@ import { ChatOpenAI } from './chat.js';
  */
 export class ChatOpenAILike extends ChatOpenAI {
   /**
-   * @param model - The name of the model to use (any OpenAI-compatible model)
+   * @param options - A model name or ChatOpenAI-compatible options
    */
-  constructor(model: string) {
-    super({ model });
+  constructor(options: string | (ChatOpenAIOptions & { model: string })) {
+    if (typeof options === 'string') {
+      super({ model: options });
+      return;
+    }
+    super(options);
   }
 }
