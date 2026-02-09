@@ -6,9 +6,9 @@
 
 import { z } from 'zod';
 import { createLogger } from '../../logging-config.js';
-import type { Controller } from '../../controller/service.js';
 import { ActionResult } from '../../agent/views.js';
 import { GmailService } from './service.js';
+import type { Tools } from '../../tools/service.js';
 
 const logger = createLogger('browser_use.gmail.actions');
 
@@ -33,13 +33,13 @@ const GetRecentEmailsParamsSchema = z.object({
 type GetRecentEmailsParams = z.infer<typeof GetRecentEmailsParamsSchema>;
 
 /**
- * Register Gmail actions with the provided controller
+ * Register Gmail actions with the provided tools registry
  */
 export function registerGmailActions(
-  controller: Controller,
+  tools: Tools,
   gmailService?: GmailService | null,
   accessToken?: string | null
-): Controller {
+): Tools {
   // Use provided service or create a new one with access token if provided
   if (gmailService) {
     _gmailService = gmailService;
@@ -50,7 +50,7 @@ export function registerGmailActions(
   }
 
   // Register get_recent_emails action
-  controller.registry.action(
+  tools.registry.action(
     'Get recent emails from the mailbox with a keyword to retrieve verification codes, OTP, 2FA tokens, magic links, or any recent email content. Keep your query a single keyword.',
     GetRecentEmailsParamsSchema as any
   )(async (params: GetRecentEmailsParams): Promise<ActionResult> => {
@@ -131,7 +131,7 @@ export function registerGmailActions(
     }
   });
 
-  return controller;
+  return tools;
 }
 
 // Backward compatibility export
