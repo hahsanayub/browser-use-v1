@@ -997,6 +997,37 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('runs initial_actions with default multi_act options (python c011 parity)', async () => {
+    const agent = new Agent({
+      task: 'Execute provided initial actions',
+      llm: createLlm(),
+      initial_actions: [
+        {
+          go_to_url: {
+            url: 'https://example.com',
+            new_tab: false,
+          },
+        },
+      ],
+    });
+
+    const multiActSpy = vi
+      .spyOn(agent, 'multi_act')
+      .mockResolvedValue([new ActionResult({ extracted_content: 'ok' })] as any);
+    const logAgentEventSpy = vi
+      .spyOn(agent as any, '_log_agent_event')
+      .mockImplementation(() => {});
+
+    agent.state.stopped = true;
+    await agent.run(1);
+
+    expect(multiActSpy).toHaveBeenCalledTimes(1);
+    expect(multiActSpy.mock.calls[0]).toHaveLength(1);
+
+    logAgentEventSpy.mockRestore();
+    await agent.close();
+  });
+
   it('stores step-0 action results and read_state blocks using python c011 semantics', async () => {
     const agent = new Agent({
       task: 'Message manager step-0 format',

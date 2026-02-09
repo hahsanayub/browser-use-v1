@@ -2160,9 +2160,7 @@ export class Agent<
     this.logger.debug(
       `⚡ Executing ${this.initial_actions.length} initial actions...`
     );
-    const result = await this.multi_act(this.initial_actions, {
-      check_for_new_elements: false,
-    });
+    const result = await this.multi_act(this.initial_actions);
 
     if (result.length > 0 && this.initial_url && result[0]?.long_term_memory) {
       result[0].long_term_memory =
