@@ -1384,7 +1384,7 @@ export class Agent<
           this.state.file_system_state
         );
         this._file_system_path = this.state.file_system_state.base_dir;
-        this.logger.info(
+        this.logger.debug(
           `💾 File system restored from state to: ${this._file_system_path}`
         );
         const timestamp = Date.now();
@@ -1424,14 +1424,14 @@ export class Agent<
     ensureDir(this.agent_directory);
 
     this.state.file_system_state = this.file_system.get_state();
-    this.logger.info(`💾 File system path: ${this._file_system_path}`);
+    this.logger.debug(`💾 File system path: ${this._file_system_path}`);
     return this.file_system;
   }
 
   private _setScreenshotService() {
     try {
       this.screenshot_service = new ScreenshotService(this.agent_directory);
-      this.logger.info(
+      this.logger.debug(
         `📸 Screenshot service initialized in: ${path.join(this.agent_directory, 'screenshots')}`
       );
     } catch (error) {
