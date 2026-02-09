@@ -312,12 +312,16 @@ ${elementsText}
     const todoText =
       todoContents ||
       '[Current todo.md is empty, fill it with your plan when applicable]';
-    const timestamp = new Date().toISOString().slice(0, 10);
-    const stepInfo =
+    const now = new Date();
+    const pad = (value: number) => String(value).padStart(2, '0');
+    const timeString =
+      `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ` +
+      `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    let stepInfoDescription =
       this.stepInfo != null
-        ? `Step${this.stepInfo.step_number + 1} maximum:${this.stepInfo.max_steps}\n`
+        ? `Step ${this.stepInfo.step_number + 1} of ${this.stepInfo.max_steps} max possible steps\n`
         : '';
-    const stepInfoDescription = `${stepInfo}Today:${timestamp}`;
+    stepInfoDescription += `Current date and time: ${timeString}`;
 
     let agentState = `<user_request>
 ${this.task ?? ''}

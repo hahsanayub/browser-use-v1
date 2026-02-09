@@ -236,10 +236,11 @@ describe('AgentMessagePrompt browser state enrichment', () => {
 
     const userMessage = prompt.get_user_message(false) as any;
     const content = String(userMessage.content ?? '');
-    const today = new Date().toISOString().slice(0, 10);
 
-    expect(content).toContain('<step_info>Step1 maximum:5');
-    expect(content).toContain(`Today:${today}</step_info>`);
+    expect(content).toContain('<step_info>Step 1 of 5 max possible steps');
+    expect(content).toMatch(
+      /Current date and time: \d{4}-\d{2}-\d{2} \d{2}:\d{2}<\/step_info>/
+    );
     expect(content).toContain('Use with absolute paths');
   });
 });
