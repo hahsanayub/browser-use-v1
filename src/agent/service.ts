@@ -2248,12 +2248,14 @@ export class Agent<
       await this._execute_initial_actions();
 
       this.logger.debug(
-        `🔄 Starting main execution loop with max ${max_steps} steps...`
+        `🔄 Starting main execution loop with max ${max_steps} steps (currently at step ${this.state.n_steps})...`
       );
-      for (let step = 0; step < max_steps; step += 1) {
+      while (this.state.n_steps <= max_steps) {
+        const currentStep = this.state.n_steps - 1;
+
         if (this.state.paused) {
           this.logger.debug(
-            `⏸️ Step ${step}: Agent paused, waiting to resume...`
+            `⏸️ Step ${this.state.n_steps}: Agent paused, waiting to resume...`
           );
           await this.wait_until_resumed();
           signal_handler.reset();
@@ -2286,8 +2288,8 @@ export class Agent<
           await on_step_start(this);
         }
 
-        this.logger.debug(`🚶 Starting step ${step + 1}/${max_steps}...`);
-        const step_info = new AgentStepInfo(step, max_steps);
+        this.logger.debug(`🚶 Starting step ${currentStep + 1}/${max_steps}...`);
+        const step_info = new AgentStepInfo(currentStep, max_steps);
         const stepAbortController = new AbortController();
 
         try {
@@ -2296,14 +2298,14 @@ export class Agent<
             this.settings.step_timeout ?? 0,
             () => stepAbortController.abort()
           );
-          this.logger.debug(`✅ Completed step ${step + 1}/${max_steps}`);
+          this.logger.debug(`✅ Completed step ${currentStep + 1}/${max_steps}`);
         } catch (error) {
           const message =
             error instanceof Error ? error.message : String(error);
           const isTimeout = error instanceof ExecutionTimeoutError;
 
           if (isTimeout) {
-            const timeoutMessage = `Step ${step + 1} timed out after ${this.settings.step_timeout} seconds`;
+            const timeoutMessage = `Step ${currentStep + 1} timed out after ${this.settings.step_timeout} seconds`;
             this.logger.error(`⏰ ${timeoutMessage}`);
             this.state.consecutive_failures += 1;
             this.state.last_result = [
@@ -2317,12 +2319,12 @@ export class Agent<
           }
 
           this.logger.error(
-            `❌ Unhandled step error at step ${step + 1}: ${message}`
+            `❌ Unhandled step error at step ${currentStep + 1}: ${message}`
           );
           this.state.consecutive_failures += 1;
           this.state.last_result = [
             new ActionResult({
-              error: message || `Unhandled step error at step ${step + 1}`,
+              error: message || `Unhandled step error at step ${currentStep + 1}`,
             }),
           ];
         }
@@ -2332,7 +2334,9 @@ export class Agent<
         }
 
         if (this.history.is_done()) {
-          this.logger.debug(`🎯 Task completed after ${step + 1} steps!`);
+          this.logger.debug(
+            `🎯 Task completed after ${currentStep + 1} steps!`
+          );
           await this._run_simple_judge();
           await this.log_completion();
           if (this.settings.use_judge) {
@@ -2350,24 +2354,28 @@ export class Agent<
           }
           break;
         }
+      }
 
-        if (step === max_steps - 1) {
-          agent_run_error = 'Failed to complete task in maximum steps';
-          this.history.add_item(
-            new AgentHistory(
-              null,
-              [
-                new ActionResult({
-                  error: agent_run_error,
-                  include_in_memory: true,
-                }),
-              ],
-              new BrowserStateHistory('', '', [], [], null),
-              null
-            )
-          );
-          this.logger.info(`❌ ${agent_run_error}`);
-        }
+      if (
+        this.state.n_steps > max_steps &&
+        !this.history.is_done() &&
+        !agent_run_error
+      ) {
+        agent_run_error = 'Failed to complete task in maximum steps';
+        this.history.add_item(
+          new AgentHistory(
+            null,
+            [
+              new ActionResult({
+                error: agent_run_error,
+                include_in_memory: true,
+              }),
+            ],
+            new BrowserStateHistory('', '', [], [], null),
+            null
+          )
+        );
+        this.logger.info(`❌ ${agent_run_error}`);
       }
 
       this.logger.debug('📊 Collecting usage summary...');

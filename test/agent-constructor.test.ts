@@ -201,6 +201,32 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('continues run loop from state.n_steps for resumed runs', async () => {
+    const agent = new Agent({
+      task: 'resume run loop from saved step',
+      llm: createLlm(),
+    });
+    const logAgentEventSpy = vi
+      .spyOn(agent as any, '_log_agent_event')
+      .mockImplementation(() => {});
+    const stepSpy = vi
+      .spyOn(agent as any, '_step')
+      .mockImplementation(async () => {
+        agent.state.stopped = true;
+      });
+
+    agent.state.n_steps = 3;
+    await agent.run(3);
+
+    expect(stepSpy).toHaveBeenCalledTimes(1);
+    const stepInfo = stepSpy.mock.calls[0]?.[0] as AgentStepInfo;
+    expect(stepInfo.step_number).toBe(2);
+    expect(stepInfo.max_steps).toBe(3);
+
+    logAgentEventSpy.mockRestore();
+    await agent.close();
+  });
+
   it('uses python-aligned model-based llm_timeout defaults when not explicitly set', async () => {
     const defaultAgent = new Agent({
       task: 'default timeout',
