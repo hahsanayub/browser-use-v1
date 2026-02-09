@@ -25,7 +25,7 @@ vi.mock('openai', () => {
   return { AzureOpenAI };
 });
 
-import { UserMessage } from '../src/llm/messages.js';
+import { SystemMessage, UserMessage } from '../src/llm/messages.js';
 import { ChatAzure } from '../src/llm/azure/chat.js';
 
 const buildChatResponse = (content: string) => ({
@@ -142,5 +142,29 @@ describe('ChatAzure alignment', () => {
 
     expect(chatCreateMock).toHaveBeenCalledTimes(1);
     expect(responsesCreateMock).not.toHaveBeenCalled();
+  });
+
+  it('injects schema into system input for responses api when configured', async () => {
+    responsesCreateMock.mockResolvedValue(
+      buildResponsesResponse(JSON.stringify({ value: 'ok' }))
+    );
+    const schema = z.object({ value: z.string() });
+    const llm = new ChatAzure({
+      model: 'gpt-5.1-codex',
+      useResponsesApi: true,
+      addSchemaToSystemPrompt: true,
+    });
+
+    const response = await llm.ainvoke(
+      [new SystemMessage('sys'), new UserMessage('extract')],
+      schema as any
+    );
+    const request = responsesCreateMock.mock.calls[0]?.[0] ?? {};
+
+    expect((request.input?.[0]?.content as string) ?? '').toContain(
+      '<json_schema>'
+    );
+    expect(request.text?.format?.type).toBe('json_schema');
+    expect((response.completion as any).value).toBe('ok');
   });
 });

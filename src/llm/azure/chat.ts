@@ -475,6 +475,20 @@ export class ChatAzure implements BaseChatModel {
           }
         );
 
+        if (
+          this.addSchemaToSystemPrompt &&
+          inputMessages.length > 0 &&
+          inputMessages[0]?.role === 'system'
+        ) {
+          inputMessages[0] = {
+            ...inputMessages[0],
+            content:
+              (inputMessages[0].content ?? '') +
+              `\n<json_schema>\n${JSON.stringify(optimizedJsonSchema)}\n</json_schema>`,
+          };
+          request.input = inputMessages;
+        }
+
         if (!this.dontForceStructuredOutput) {
           request.text = {
             format: {
