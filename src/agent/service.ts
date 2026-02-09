@@ -682,7 +682,7 @@ export class Agent<
       if (extractedUrl) {
         this.initial_url = extractedUrl;
         this.logger.info(
-          `Found URL in task: ${extractedUrl}, adding as initial action`
+          `🔗 Found URL in task: ${extractedUrl}, adding as initial action...`
         );
         resolvedInitialActions = [
           { go_to_url: { url: extractedUrl, new_tab: false } },
