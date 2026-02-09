@@ -99,12 +99,59 @@ describe('Google LLM alignment', () => {
     expect(request.generationConfig.temperature).toBe(0.3);
     expect(request.generationConfig.topP).toBe(0.8);
     expect(request.generationConfig.seed).toBe(7);
+    expect(request.generationConfig.thinkingConfig.thinkingBudget).toBe(-1);
     expect(request.generationConfig.maxOutputTokens).toBe(512);
     expect(request.systemInstruction.parts[0].text).toBe('sys');
     expect(response.completion).toBe('plain response');
     expect(response.usage?.completion_tokens).toBe(6);
     expect(response.usage?.prompt_cached_tokens).toBe(3);
     expect(response.usage?.prompt_image_tokens).toBe(5);
+  });
+
+  it('applies Gemini 3 thinking-level defaults and safeguards for pro models', async () => {
+    const llmDefault = new ChatGoogle({
+      model: 'gemini-3-pro-preview',
+    });
+    await llmDefault.ainvoke([new UserMessage('hello')]);
+    const defaultRequest = generateContentMock.mock.calls[0]?.[0] ?? {};
+    expect(defaultRequest.generationConfig.thinkingConfig.thinkingLevel).toBe(
+      'LOW'
+    );
+
+    generateContentMock.mockClear();
+
+    const llmMinimal = new ChatGoogle({
+      model: 'gemini-3-pro-preview',
+      thinkingLevel: 'minimal',
+    });
+    await llmMinimal.ainvoke([new UserMessage('hello')]);
+    const minimalRequest = generateContentMock.mock.calls[0]?.[0] ?? {};
+    expect(minimalRequest.generationConfig.thinkingConfig.thinkingLevel).toBe(
+      'LOW'
+    );
+  });
+
+  it('supports Gemini 3 flash thinking level and budget behavior', async () => {
+    const llmWithLevel = new ChatGoogle({
+      model: 'gemini-3-flash-preview',
+      thinkingLevel: 'high',
+    });
+    await llmWithLevel.ainvoke([new UserMessage('hello')]);
+    const levelRequest = generateContentMock.mock.calls[0]?.[0] ?? {};
+    expect(levelRequest.generationConfig.thinkingConfig).toEqual({
+      thinkingLevel: 'HIGH',
+    });
+
+    generateContentMock.mockClear();
+
+    const llmWithDefaultBudget = new ChatGoogle({
+      model: 'gemini-3-flash-preview',
+    });
+    await llmWithDefaultBudget.ainvoke([new UserMessage('hello')]);
+    const budgetRequest = generateContentMock.mock.calls[0]?.[0] ?? {};
+    expect(budgetRequest.generationConfig.thinkingConfig).toEqual({
+      thinkingBudget: -1,
+    });
   });
 
   it('enforces structured output with includeSystemInUser mode', async () => {

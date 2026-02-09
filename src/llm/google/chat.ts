@@ -14,6 +14,8 @@ export interface ChatGoogleOptions {
   temperature?: number | null;
   topP?: number | null;
   seed?: number | null;
+  thinkingBudget?: number | null;
+  thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high' | null;
   maxOutputTokens?: number | null;
   includeSystemInUser?: boolean;
   supportsStructuredOutput?: boolean;
@@ -26,6 +28,8 @@ export class ChatGoogle implements BaseChatModel {
   private temperature: number | null;
   private topP: number | null;
   private seed: number | null;
+  private thinkingBudget: number | null;
+  private thinkingLevel: 'minimal' | 'low' | 'medium' | 'high' | null;
   private maxOutputTokens: number | null;
   private includeSystemInUser: boolean;
   private supportsStructuredOutput: boolean;
@@ -41,6 +45,8 @@ export class ChatGoogle implements BaseChatModel {
       temperature = 0.5,
       topP = null,
       seed = null,
+      thinkingBudget = null,
+      thinkingLevel = null,
       maxOutputTokens = 8096,
       includeSystemInUser = false,
       supportsStructuredOutput = true,
@@ -50,6 +56,8 @@ export class ChatGoogle implements BaseChatModel {
     this.temperature = temperature;
     this.topP = topP;
     this.seed = seed;
+    this.thinkingBudget = thinkingBudget;
+    this.thinkingLevel = thinkingLevel;
     this.maxOutputTokens = maxOutputTokens;
     this.includeSystemInUser = includeSystemInUser;
     this.supportsStructuredOutput = supportsStructuredOutput;
@@ -172,6 +180,43 @@ export class ChatGoogle implements BaseChatModel {
     if (this.seed !== null) {
       generationConfig.seed = this.seed;
     }
+
+    const isGemini3Pro = this.model.includes('gemini-3-pro');
+    const isGemini3Flash = this.model.includes('gemini-3-flash');
+
+    if (isGemini3Pro) {
+      let level = this.thinkingLevel ?? 'low';
+      if (level === 'minimal' || level === 'medium') {
+        level = 'low';
+      }
+      generationConfig.thinkingConfig = {
+        thinkingLevel: level.toUpperCase(),
+      };
+    } else if (isGemini3Flash) {
+      if (this.thinkingLevel !== null) {
+        generationConfig.thinkingConfig = {
+          thinkingLevel: this.thinkingLevel.toUpperCase(),
+        };
+      } else {
+        generationConfig.thinkingConfig = {
+          thinkingBudget:
+            this.thinkingBudget === null ? -1 : this.thinkingBudget,
+        };
+      }
+    } else {
+      let budget = this.thinkingBudget;
+      if (
+        budget === null &&
+        (this.model.includes('gemini-2.5') ||
+          this.model.includes('gemini-flash'))
+      ) {
+        budget = -1;
+      }
+      if (budget !== null) {
+        generationConfig.thinkingConfig = { thinkingBudget: budget };
+      }
+    }
+
     if (this.maxOutputTokens !== null) {
       generationConfig.maxOutputTokens = this.maxOutputTokens;
     }
