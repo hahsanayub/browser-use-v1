@@ -3638,7 +3638,7 @@ export class Agent<
 
   save_history(file_path: string | null = null) {
     const target = file_path ?? 'AgentHistory.json';
-    this.history.save_to_file(target);
+    this.history.save_to_file(target, this.sensitive_data ?? null);
   }
 
   private _coerceHistoryElement(

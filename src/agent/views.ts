@@ -746,9 +746,93 @@ export class AgentHistory {
     return elements;
   }
 
-  toJSON() {
+  private static _filterSensitiveDataFromString(
+    value: string,
+    sensitive_data: Record<string, string | Record<string, string>> | null
+  ) {
+    if (!sensitive_data) {
+      return value;
+    }
+
+    const placeholders: Record<string, string> = {};
+    for (const [keyOrDomain, content] of Object.entries(sensitive_data)) {
+      if (typeof content === 'string' && content) {
+        placeholders[keyOrDomain] = content;
+      } else if (content && typeof content === 'object') {
+        for (const [key, val] of Object.entries(content)) {
+          if (val) {
+            placeholders[key] = val;
+          }
+        }
+      }
+    }
+
+    if (!Object.keys(placeholders).length) {
+      return value;
+    }
+
+    let filtered = value;
+    for (const [key, secret] of Object.entries(placeholders)) {
+      filtered = filtered.split(secret).join(`<secret>${key}</secret>`);
+    }
+    return filtered;
+  }
+
+  private static _filterSensitiveDataFromDict(
+    data: Record<string, unknown>,
+    sensitive_data: Record<string, string | Record<string, string>> | null
+  ): Record<string, unknown> {
+    if (!sensitive_data) {
+      return data;
+    }
+
+    const filtered: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(data)) {
+      if (typeof value === 'string') {
+        filtered[key] = this._filterSensitiveDataFromString(
+          value,
+          sensitive_data
+        );
+      } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+        filtered[key] = this._filterSensitiveDataFromDict(
+          value as Record<string, unknown>,
+          sensitive_data
+        );
+      } else if (Array.isArray(value)) {
+        filtered[key] = value.map((item) => {
+          if (typeof item === 'string') {
+            return this._filterSensitiveDataFromString(item, sensitive_data);
+          }
+          if (item && typeof item === 'object' && !Array.isArray(item)) {
+            return this._filterSensitiveDataFromDict(
+              item as Record<string, unknown>,
+              sensitive_data
+            );
+          }
+          return item;
+        });
+      } else {
+        filtered[key] = value;
+      }
+    }
+    return filtered;
+  }
+
+  toJSON(
+    sensitive_data: Record<string, string | Record<string, string>> | null = null
+  ) {
+    let modelOutput = this.model_output?.toJSON() ?? null;
+    if (modelOutput && Array.isArray((modelOutput as any).action) && sensitive_data) {
+      (modelOutput as any).action = (modelOutput as any).action.map(
+        (action: Record<string, unknown>) =>
+          Object.prototype.hasOwnProperty.call(action, 'input')
+            ? AgentHistory._filterSensitiveDataFromDict(action, sensitive_data)
+            : action
+      );
+    }
+
     return {
-      model_output: this.model_output?.toJSON() ?? null,
+      model_output: modelOutput,
       result: this.result.map((r) => r.toJSON()),
       state: this.state.to_dict(),
       metadata: this.metadata
@@ -1057,10 +1141,17 @@ export class AgentHistoryList<TStructured = unknown> {
     return parseStructuredOutput(this._output_model_schema, final_result);
   }
 
-  save_to_file(filepath: string) {
+  save_to_file(
+    filepath: string,
+    sensitive_data: Record<string, string | Record<string, string>> | null = null
+  ) {
     const dir = path.dirname(filepath);
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(filepath, JSON.stringify(this.toJSON(), null, 2), 'utf-8');
+    fs.writeFileSync(
+      filepath,
+      JSON.stringify(this.toJSON(sensitive_data), null, 2),
+      'utf-8'
+    );
   }
 
   static load_from_file(
@@ -1102,15 +1193,19 @@ export class AgentHistoryList<TStructured = unknown> {
     return new AgentHistoryList(historyItems);
   }
 
-  toJSON() {
+  toJSON(
+    sensitive_data: Record<string, string | Record<string, string>> | null = null
+  ) {
     return {
-      history: this.history.map((item) => item.toJSON()),
+      history: this.history.map((item) => item.toJSON(sensitive_data)),
       usage: this.usage,
     };
   }
 
-  model_dump() {
-    return this.toJSON();
+  model_dump(
+    sensitive_data: Record<string, string | Record<string, string>> | null = null
+  ) {
+    return this.toJSON(sensitive_data);
   }
 }
 

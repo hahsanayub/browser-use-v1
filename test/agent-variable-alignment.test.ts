@@ -157,4 +157,40 @@ describe('Agent variable alignment', () => {
 
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
+
+  it('filters sensitive input values when saving history', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-vars-'));
+    const historyPath = path.join(tempDir, 'AgentHistory.json');
+    const password = 'super-secret-password';
+
+    const history = new AgentHistoryList([
+      new AgentHistory(
+        new AgentOutput({
+          action: [new ActionModel({ input: { index: 1, text: password } })],
+        }),
+        [new ActionResult({ extracted_content: password })],
+        new BrowserStateHistory('https://example.com', 'Page', [], [])
+      ),
+      new AgentHistory(
+        new AgentOutput({
+          action: [new ActionModel({ search_google: { query: password } })],
+        }),
+        [new ActionResult({ extracted_content: 'search done' })],
+        new BrowserStateHistory('https://example.com', 'Page', [], [])
+      ),
+    ]);
+
+    history.save_to_file(historyPath, { password });
+    const serialized = JSON.parse(fs.readFileSync(historyPath, 'utf-8'));
+
+    expect(serialized.history[0].model_output.action[0].input.text).toBe(
+      '<secret>password</secret>'
+    );
+    expect(serialized.history[0].result[0].extracted_content).toBe(password);
+    expect(serialized.history[1].model_output.action[0].search_google.query).toBe(
+      password
+    );
+
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
 });
