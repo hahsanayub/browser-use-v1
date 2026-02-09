@@ -573,6 +573,34 @@ describe('Controller Registry Tests', () => {
       expect(prompt).not.toContain('output_schema');
     });
 
+    it('hides output_schema from extract action JSON schema', async () => {
+      const optimizedSchema = SchemaOptimizer.createOptimizedJsonSchema(
+        {
+          type: 'object',
+          properties: {
+            extract_structured_data: {
+              type: 'object',
+              properties: {
+                query: { type: 'string' },
+                extract_links: { type: 'boolean', default: false },
+                output_schema: { type: 'object' },
+              },
+              required: ['query', 'output_schema'],
+            },
+          },
+          required: ['extract_structured_data'],
+        } as Record<string, unknown>
+      ) as any;
+
+      expect(
+        optimizedSchema.properties?.extract_structured_data?.properties
+          ?.output_schema
+      ).toBeUndefined();
+      expect(
+        optimizedSchema.properties?.extract_structured_data?.required
+      ).not.toContain('output_schema');
+    });
+
     it('stores terminates_sequence metadata on registered actions', async () => {
       const registry = new Registry();
       registry.action('Terminating action', {

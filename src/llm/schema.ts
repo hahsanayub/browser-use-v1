@@ -121,8 +121,37 @@ export class SchemaOptimizer {
       Object.values(obj).forEach(stripStructuredDoneSuccess);
     };
 
+    const stripExtractOutputSchema = (obj: any, parentKey: string | null = null) => {
+      if (Array.isArray(obj)) {
+        obj.forEach((item) => stripExtractOutputSchema(item, parentKey));
+        return;
+      }
+      if (!obj || typeof obj !== 'object') {
+        return;
+      }
+
+      const isExtractActionSchema =
+        parentKey === 'extract_structured_data' || parentKey === 'extract';
+      if (isExtractActionSchema && obj.type === 'object') {
+        const props = obj.properties;
+        if (props && typeof props === 'object' && !Array.isArray(props)) {
+          delete (props as Record<string, unknown>).output_schema;
+        }
+        if (Array.isArray(obj.required)) {
+          obj.required = obj.required.filter(
+            (name: unknown) => name !== 'output_schema'
+          );
+        }
+      }
+
+      for (const [key, value] of Object.entries(obj)) {
+        stripExtractOutputSchema(value, key);
+      }
+    };
+
     ensureAdditionalProperties(optimizedSchema);
     stripStructuredDoneSuccess(optimizedSchema);
+    stripExtractOutputSchema(optimizedSchema);
     SchemaOptimizer.makeStrictCompatible(optimizedSchema);
     return optimizedSchema;
   }
