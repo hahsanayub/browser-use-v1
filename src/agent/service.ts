@@ -2240,12 +2240,18 @@ export class Agent<
       this._session_start_time = Date.now() / 1000;
       this._task_start_time = this._session_start_time;
 
-      this.logger.debug('📡 Dispatching CreateAgentSessionEvent...');
-      this.eventbus.dispatch(CreateAgentSessionEvent.fromAgent(this as any));
+      if (!this.state.session_initialized) {
+        this.logger.debug('📡 Dispatching CreateAgentSessionEvent...');
+        this.eventbus.dispatch(CreateAgentSessionEvent.fromAgent(this as any));
+        this.state.session_initialized = true;
+      }
 
       this.logger.debug('📡 Dispatching CreateAgentTaskEvent...');
       this.eventbus.dispatch(CreateAgentTaskEvent.fromAgent(this as any));
 
+      if (!this.state.stopped) {
+        await this.browser_session?.start();
+      }
       await this._register_skills_as_actions();
       await this._execute_initial_actions();
 

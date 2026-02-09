@@ -201,6 +201,62 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('starts browser session for active runs (python c011 parity)', async () => {
+    const agent = new Agent({
+      task: 'start browser session on run',
+      llm: createLlm(),
+    });
+    const startSpy = vi
+      .spyOn(agent.browser_session as any, 'start')
+      .mockResolvedValue(undefined);
+    const logAgentEventSpy = vi
+      .spyOn(agent as any, '_log_agent_event')
+      .mockImplementation(() => {});
+    const stepSpy = vi
+      .spyOn(agent as any, '_step')
+      .mockImplementation(async () => {
+        agent.state.stopped = true;
+      });
+
+    await agent.run(1);
+
+    expect(startSpy).toHaveBeenCalledTimes(1);
+    expect(stepSpy).toHaveBeenCalledTimes(1);
+
+    logAgentEventSpy.mockRestore();
+    await agent.close();
+  });
+
+  it('dispatches CreateAgentSessionEvent only once across multiple run calls (python c011 parity)', async () => {
+    const agent = new Agent({
+      task: 'single session event across runs',
+      llm: createLlm(),
+    });
+    const dispatchSpy = vi.spyOn(agent.eventbus, 'dispatch');
+    const logAgentEventSpy = vi
+      .spyOn(agent as any, '_log_agent_event')
+      .mockImplementation(() => {});
+
+    agent.state.stopped = true;
+    await agent.run(1);
+    agent.state.stopped = true;
+    await agent.run(1);
+
+    const sessionEventCount = dispatchSpy.mock.calls.filter(
+      ([event]) => (event as any)?.event_type === 'CreateAgentSessionEvent'
+    ).length;
+    const taskEventCount = dispatchSpy.mock.calls.filter(
+      ([event]) => (event as any)?.event_type === 'CreateAgentTaskEvent'
+    ).length;
+
+    expect(sessionEventCount).toBe(1);
+    expect(taskEventCount).toBe(2);
+    expect(agent.state.session_initialized).toBe(true);
+
+    logAgentEventSpy.mockRestore();
+    await agent.close();
+  });
+
   it('continues run loop from state.n_steps for resumed runs', async () => {
     const agent = new Agent({
       task: 'resume run loop from saved step',
