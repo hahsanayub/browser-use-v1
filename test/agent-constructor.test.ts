@@ -1823,6 +1823,46 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('uses step_name in rerun retry logs for metadata-free steps (python c011 parity)', async () => {
+    const agent = new Agent({
+      task: 'test rerun retry log step name',
+      llm: createLlm(),
+    });
+    const warningSpy = vi.spyOn(agent.logger, 'warning');
+    vi.spyOn(agent as any, '_execute_history_step')
+      .mockRejectedValueOnce(new Error('first failure'))
+      .mockRejectedValueOnce(new Error('second failure'));
+    vi.spyOn(agent as any, '_sleep').mockResolvedValue(undefined);
+    vi.spyOn(agent as any, '_generate_rerun_summary').mockResolvedValue(
+      new ActionResult({ is_done: true, success: false, extracted_content: 'summary' })
+    );
+
+    const history = {
+      history: [
+        {
+          model_output: {
+            current_state: { next_goal: 'Replay action with retries' },
+            action: [{}],
+          },
+        },
+      ],
+    } as any;
+
+    const results = await agent.rerun_history(history, {
+      max_retries: 2,
+      skip_failures: true,
+    });
+
+    expect(results).toHaveLength(2);
+    expect(
+      warningSpy.mock.calls.some((call) =>
+        String(call[0] ?? '').includes('Initial actions failed (attempt 1/2)')
+      )
+    ).toBe(true);
+
+    await agent.close();
+  });
+
   it('skips redundant retry steps when previous equivalent step already succeeded', async () => {
     const agent = new Agent({
       task: 'test rerun redundant retry skip',

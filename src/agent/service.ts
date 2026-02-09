@@ -3234,7 +3234,7 @@ export class Agent<
             }
 
             if (attempt === max_retries) {
-              const message = `Step ${index + 1} failed after ${max_retries} attempts: ${
+              const message = `${stepName} failed after ${max_retries} attempts: ${
                 errorMessage
               }`;
               this.logger.error(message);
@@ -3246,7 +3246,7 @@ export class Agent<
             } else {
               const retryDelay = Math.min(5 * 2 ** Math.max(attempt - 1, 0), 30);
               this.logger.warning(
-                `Step ${index + 1} failed (attempt ${attempt}/${max_retries}), retrying in ${retryDelay}s...`
+                `${stepName} failed (attempt ${attempt}/${max_retries}), retrying in ${retryDelay}s...`
               );
               await this._sleep(retryDelay, signal);
             }
