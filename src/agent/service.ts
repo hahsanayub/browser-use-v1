@@ -783,7 +783,7 @@ export class Agent<
     );
 
     this._message_manager = new MessageManager(
-      task,
+      this.task,
       this.system_prompt_class.get_system_message(),
       this.file_system!,
       this.state.message_manager_state as MessageManagerState,

@@ -1179,6 +1179,31 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('initializes message manager with schema-enhanced task text (python c011 parity)', async () => {
+    const outputSchema = {
+      name: 'ResultSchema',
+      parse: (input: string) => JSON.parse(input),
+      model_json_schema: () => ({
+        type: 'object',
+        properties: {
+          answer: { type: 'string' },
+        },
+      }),
+    };
+
+    const agent = new Agent({
+      task: 'Extract the answer from the page',
+      llm: createLlm(),
+      output_model_schema: outputSchema as any,
+    });
+
+    const messageManagerTask = String((agent as any)._message_manager?.task ?? '');
+    expect(messageManagerTask).toContain('Expected output format: ResultSchema');
+    expect(messageManagerTask).toContain('"answer"');
+
+    await agent.close();
+  });
+
   it('aligns addNewTask with python c011 follow-up request wrapping', async () => {
     const agent = new Agent({
       task: 'Original task instructions',
