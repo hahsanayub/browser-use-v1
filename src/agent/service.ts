@@ -34,6 +34,7 @@ import { HistoryTreeProcessor } from '../dom/history-tree-processor/service.js';
 import { DOMHistoryElement } from '../dom/history-tree-processor/view.js';
 import type { DOMElementNode } from '../dom/views.js';
 import type { BaseChatModel } from '../llm/base.js';
+import { ChatBrowserUse } from '../llm/browser-use/chat.js';
 import {
   ModelProviderError,
   ModelRateLimitError,
@@ -45,6 +46,7 @@ import {
   SystemMessage,
   UserMessage,
 } from '../llm/messages.js';
+import { getLlmByName } from '../llm/models.js';
 import type { UsageSummary } from '../tokens/views.js';
 import {
   ActionResult,
@@ -189,7 +191,7 @@ interface LoadAndRerunOptions extends RerunHistoryOptions {
 
 interface AgentConstructorParams<Context, AgentStructuredOutput> {
   task: string;
-  llm: BaseChatModel;
+  llm?: BaseChatModel | null;
   page?: Page | null;
   browser?: Browser | BrowserSession | null;
   browser_context?: BrowserContext | null;
@@ -296,6 +298,19 @@ const get_model_timeout = (llm: BaseChatModel) => {
     return 90;
   }
   return 75;
+};
+
+const resolve_agent_llm = (llm: BaseChatModel | null | undefined): BaseChatModel => {
+  if (llm) {
+    return llm;
+  }
+
+  const defaultLlmName = CONFIG.DEFAULT_LLM.trim();
+  if (defaultLlmName) {
+    return getLlmByName(defaultLlmName);
+  }
+
+  return new ChatBrowserUse();
 };
 
 const defaultAgentOptions = () => ({
@@ -543,17 +558,15 @@ export class Agent<
       _url_shortening_limit = 25,
     } = { ...defaultAgentOptions(), ...params };
 
-    if (!llm) {
-      throw new Error('Invalid llm, must be provided');
-    }
-    const effectivePageExtractionLlm = page_extraction_llm ?? llm;
-    const effectiveJudgeLlm = judge_llm ?? llm;
+    const resolvedLlm = resolve_agent_llm(llm);
+    const effectivePageExtractionLlm = page_extraction_llm ?? resolvedLlm;
+    const effectiveJudgeLlm = judge_llm ?? resolvedLlm;
     const effectiveFlashMode =
-      flash_mode || (llm as any)?.provider === 'browser-use';
+      flash_mode || (resolvedLlm as any)?.provider === 'browser-use';
     const effectiveEnablePlanning = effectiveFlashMode
       ? false
       : enable_planning;
-    const effectiveLlmTimeout = llm_timeout ?? get_model_timeout(llm);
+    const effectiveLlmTimeout = llm_timeout ?? get_model_timeout(resolvedLlm);
     const normalizedMessageCompaction =
       this._normalizeMessageCompactionSetting(message_compaction);
     let resolvedLlmScreenshotSize: [number, number] | null =
@@ -581,7 +594,7 @@ export class Agent<
       logger.info(`LLM screenshot resizing enabled: ${width}x${height}`);
     }
     if (resolvedLlmScreenshotSize == null) {
-      const modelName = String((llm as any)?.model ?? '');
+      const modelName = String((resolvedLlm as any)?.model ?? '');
       if (modelName.startsWith('claude-sonnet')) {
         resolvedLlmScreenshotSize = [1400, 850];
         logger.info(
@@ -590,11 +603,11 @@ export class Agent<
       }
     }
 
-    this.llm = llm;
+    this.llm = resolvedLlm;
     this.judge_llm = effectiveJudgeLlm;
     this._fallback_llm = fallback_llm;
     this._using_fallback_llm = false;
-    this._original_llm = llm;
+    this._original_llm = resolvedLlm;
     this._url_shortening_limit = Math.max(0, Math.trunc(_url_shortening_limit));
     this.id = task_id || uuid7str();
     this.task_id = this.id;
@@ -688,7 +701,7 @@ export class Agent<
         );
       });
     }
-    this.token_cost_service.register_llm(llm);
+    this.token_cost_service.register_llm(resolvedLlm);
     this.token_cost_service.register_llm(effectivePageExtractionLlm);
     this.token_cost_service.register_llm(effectiveJudgeLlm);
     if (normalizedMessageCompaction?.compaction_llm) {

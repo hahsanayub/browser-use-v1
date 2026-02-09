@@ -108,6 +108,66 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('resolves llm from DEFAULT_LLM when constructor llm is omitted', async () => {
+    const previousDefaultLlm = process.env.DEFAULT_LLM;
+    const previousOpenAiApiKey = process.env.OPENAI_API_KEY;
+    process.env.DEFAULT_LLM = 'openai_gpt_4o';
+    process.env.OPENAI_API_KEY = 'test-openai-key';
+
+    try {
+      const agent = new Agent({
+        task: 'default llm from env',
+      });
+
+      expect(agent.llm.provider).toBe('openai');
+      expect(agent.llm.model).toBe('gpt-4o');
+
+      await agent.close();
+    } finally {
+      if (previousDefaultLlm === undefined) {
+        delete process.env.DEFAULT_LLM;
+      } else {
+        process.env.DEFAULT_LLM = previousDefaultLlm;
+      }
+      if (previousOpenAiApiKey === undefined) {
+        delete process.env.OPENAI_API_KEY;
+      } else {
+        process.env.OPENAI_API_KEY = previousOpenAiApiKey;
+      }
+    }
+  });
+
+  it('falls back to ChatBrowserUse when DEFAULT_LLM is not set', async () => {
+    const previousDefaultLlm = process.env.DEFAULT_LLM;
+    const previousBrowserUseApiKey = process.env.BROWSER_USE_API_KEY;
+    delete process.env.DEFAULT_LLM;
+    process.env.BROWSER_USE_API_KEY = 'test-browser-use-key';
+
+    try {
+      const agent = new Agent({
+        task: 'fallback browser-use llm',
+      });
+
+      expect(agent.llm.provider).toBe('browser-use');
+      expect(agent.llm.model).toBe('bu-1-0');
+      expect(agent.settings.flash_mode).toBe(true);
+      expect(agent.settings.enable_planning).toBe(false);
+
+      await agent.close();
+    } finally {
+      if (previousDefaultLlm === undefined) {
+        delete process.env.DEFAULT_LLM;
+      } else {
+        process.env.DEFAULT_LLM = previousDefaultLlm;
+      }
+      if (previousBrowserUseApiKey === undefined) {
+        delete process.env.BROWSER_USE_API_KEY;
+      } else {
+        process.env.BROWSER_USE_API_KEY = previousBrowserUseApiKey;
+      }
+    }
+  });
+
   it('uses 500 max_steps by default when run() omits max_steps', async () => {
     const agent = new Agent({
       task: 'default max steps',
