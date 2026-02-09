@@ -373,6 +373,13 @@ describe('CLI model routing', () => {
     );
   });
 
+  it('requires --model when provider is oci', () => {
+    const args = parseCliArgs(['--provider', 'oci', '-p', 'x']);
+    expect(() => getLlmFromCliArgs(args)).toThrow(
+      'Provider "oci" requires --model.'
+    );
+  });
+
   it('auto-detects OpenAI first when no model is specified', () => {
     process.env.OPENAI_API_KEY = 'test-openai';
     process.env.ANTHROPIC_API_KEY = 'test-anthropic';
@@ -408,5 +415,12 @@ describe('CLI model routing', () => {
     const llm = getLlmFromCliArgs(args);
     expect(llm.provider).toBe('browser-use');
     expect(llm.model).toBe('bu-2-0');
+  });
+
+  it('returns explicit OCI configuration guidance for oci-prefixed models', () => {
+    const args = parseCliArgs(['--model', 'oci:meta/llama-3.1', '-p', 'x']);
+    expect(() => getLlmFromCliArgs(args)).toThrow(
+      /OCI models require manual configuration/
+    );
   });
 });
