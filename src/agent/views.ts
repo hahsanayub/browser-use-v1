@@ -1126,6 +1126,16 @@ export class AgentHistoryList<TStructured = unknown> {
     return parseStructuredOutput(this._output_model_schema, final_result);
   }
 
+  get_structured_output(
+    outputModel: StructuredOutputParser<TStructured>
+  ): TStructured | null {
+    const finalResult = this.final_result();
+    if (!finalResult) {
+      return null;
+    }
+    return parseStructuredOutput(outputModel, finalResult);
+  }
+
   save_to_file(
     filepath: string,
     sensitive_data: Record<string, string | Record<string, string>> | null = null
@@ -1144,8 +1154,16 @@ export class AgentHistoryList<TStructured = unknown> {
     outputModel: typeof AgentOutput
   ): AgentHistoryList {
     const content = fs.readFileSync(filepath, 'utf-8');
-    const payload = JSON.parse(content) as { history?: any[] };
-    const historyItems = (payload.history ?? []).map((entry) => {
+    const payload = JSON.parse(content) as Record<string, unknown>;
+    return AgentHistoryList.load_from_dict(payload, outputModel);
+  }
+
+  static load_from_dict(
+    payload: Record<string, unknown>,
+    outputModel: typeof AgentOutput
+  ): AgentHistoryList {
+    const historyItems = ((payload as { history?: any[] }).history ?? []).map(
+      (entry) => {
       const modelOutput = entry.model_output
         ? outputModel.fromJSON(entry.model_output)
         : null;
@@ -1174,7 +1192,8 @@ export class AgentHistoryList<TStructured = unknown> {
         metadata,
         entry.state_message ?? null
       );
-    });
+      }
+    );
     return new AgentHistoryList(historyItems);
   }
 

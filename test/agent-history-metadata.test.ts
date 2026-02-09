@@ -59,4 +59,66 @@ describe('Agent history metadata alignment', () => {
       }
     }
   });
+
+  it('loads history entries from in-memory payload via load_from_dict', () => {
+    const payload = {
+      history: [
+        {
+          model_output: {
+            action: [],
+          },
+          result: [
+            {
+              extracted_content: 'payload result',
+              is_done: true,
+              success: true,
+            },
+          ],
+          state: {
+            url: 'https://example.com',
+            title: 'Example',
+            tabs: [],
+            interacted_element: [],
+            screenshot_path: null,
+          },
+          metadata: {
+            step_start_time: 2,
+            step_end_time: 4,
+            step_number: 1,
+            step_interval: 2,
+          },
+          state_message: 'payload state',
+        },
+      ],
+    } as const;
+
+    const loaded = AgentHistoryList.load_from_dict(payload as any, AgentOutput);
+    expect(loaded.history).toHaveLength(1);
+    expect(loaded.history[0].state_message).toBe('payload state');
+    expect(loaded.history[0].metadata?.step_interval).toBe(2);
+    expect(loaded.final_result()).toBe('payload result');
+  });
+
+  it('parses structured output with explicit parser in get_structured_output', () => {
+    const history = new AgentHistoryList<{ value: string }>();
+    history.add_item(
+      new AgentHistory(
+        new AgentOutput({ action: [] }),
+        [
+          new ActionResult({
+            is_done: true,
+            success: true,
+            extracted_content: '{"value":"ok"}',
+          }),
+        ],
+        new BrowserStateHistory('https://example.com', 'Example', [], [], null)
+      )
+    );
+
+    const structured = history.get_structured_output({
+      parse: (input: string) => JSON.parse(input) as { value: string },
+    });
+
+    expect(structured).toEqual({ value: 'ok' });
+  });
 });
