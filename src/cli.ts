@@ -462,17 +462,17 @@ const getDefaultModelForProvider = (
 ): string | null => {
   switch (provider) {
     case 'openai':
-      return 'gpt-4o';
+      return 'gpt-5-mini';
     case 'anthropic':
-      return 'claude-sonnet-4-20250514';
+      return 'claude-4-sonnet';
     case 'google':
-      return 'gemini-2.5-flash';
+      return 'gemini-2.5-pro';
     case 'deepseek':
       return 'deepseek-chat';
     case 'groq':
       return 'llama-3.1-70b-versatile';
     case 'openrouter':
-      return 'openai/gpt-4o';
+      return 'openai/gpt-5-mini';
     case 'azure':
       return 'gpt-4o';
     case 'aws-anthropic':
@@ -571,18 +571,18 @@ export const getLlmFromCliArgs = (args: ParsedCliArgs): BaseChatModel => {
 
   if (process.env.OPENAI_API_KEY) {
     return new ChatOpenAI({
-      model: 'gpt-4o',
+      model: 'gpt-5-mini',
       apiKey: process.env.OPENAI_API_KEY,
     });
   }
   if (process.env.ANTHROPIC_API_KEY) {
     return new ChatAnthropic({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-4-sonnet',
       apiKey: process.env.ANTHROPIC_API_KEY,
     });
   }
   if (process.env.GOOGLE_API_KEY) {
-    return new ChatGoogle('gemini-2.5-flash');
+    return new ChatGoogle('gemini-2.5-pro');
   }
   if (process.env.DEEPSEEK_API_KEY) {
     return new ChatDeepSeek('deepseek-chat');
@@ -591,7 +591,7 @@ export const getLlmFromCliArgs = (args: ParsedCliArgs): BaseChatModel => {
     return new ChatGroq('llama-3.1-70b-versatile');
   }
   if (process.env.OPENROUTER_API_KEY) {
-    return new ChatOpenRouter('openai/gpt-4o');
+    return new ChatOpenRouter('openai/gpt-5-mini');
   }
   if (process.env.AZURE_OPENAI_API_KEY && process.env.AZURE_OPENAI_ENDPOINT) {
     return new ChatAzure('gpt-4o');
@@ -768,7 +768,7 @@ Options:
   --version                   Print version and exit
   --mcp                       Run as MCP server
   --provider <name>           Force provider (openai|anthropic|google|deepseek|groq|openrouter|azure|ollama|aws|aws-anthropic)
-  --model <model>             Set model (e.g., gpt-4o, claude-sonnet-4-20250514, gemini-2.5-flash)
+  --model <model>             Set model (e.g., gpt-5-mini, claude-4-sonnet, gemini-2.5-pro)
   -p, --prompt <task>         Run a single task
   --headless                  Run browser in headless mode
   --allowed-domains <items>   Comma-separated allowlist (e.g., example.com,*.example.org)

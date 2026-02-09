@@ -257,7 +257,7 @@ describe('CLI model routing', () => {
     const args = parseCliArgs(['--provider', 'anthropic', '-p', 'x']);
     const llm = getLlmFromCliArgs(args);
     expect(llm.provider).toBe('anthropic');
-    expect(llm.model).toBe('claude-sonnet-4-20250514');
+    expect(llm.model).toBe('claude-4-sonnet');
   });
 
   it('rejects conflicting --provider and --model combinations', () => {
@@ -287,7 +287,7 @@ describe('CLI model routing', () => {
     const args = parseCliArgs(['-p', 'task']);
     const llm = getLlmFromCliArgs(args);
     expect(llm.provider).toBe('openai');
-    expect(llm.model).toBe('gpt-4o');
+    expect(llm.model).toBe('gpt-5-mini');
   });
 
   it('falls back to Ollama when no API credentials are present', () => {
