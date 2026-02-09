@@ -117,4 +117,10 @@ describe('LLM models factory alignment', () => {
       /Invalid model name format/
     );
   });
+
+  it('returns explicit guidance for OCI-prefixed model names', () => {
+    expect(() => getLlmByName('oci_meta_llama')).toThrow(
+      /OCI models require manual configuration/
+    );
+  });
 });

@@ -347,6 +347,11 @@ export const getLlmByName = (modelName: string): BaseChatModel => {
   const separator = normalizedName.indexOf('_');
   if (separator > 0) {
     const provider = normalizedName.slice(0, separator);
+    if (provider === 'oci') {
+      throw new Error(
+        'OCI models require manual configuration. Use ChatOCIRaw directly with your OCI credentials.'
+      );
+    }
     const modelPart = normalizedName.slice(separator + 1);
     if (provider === 'bu') {
       return buildProviderModel(
