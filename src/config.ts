@@ -197,6 +197,10 @@ class OldConfig {
     return string_to_bool(process.env.SKIP_LLM_API_KEY_VERIFICATION, false);
   }
 
+  get DEFAULT_LLM() {
+    return process.env.DEFAULT_LLM ?? '';
+  }
+
   get IN_DOCKER() {
     return (
       string_to_bool(process.env.IN_DOCKER, false) || is_running_in_docker()
@@ -310,6 +314,10 @@ class FlatEnvConfig {
 
   get SKIP_LLM_API_KEY_VERIFICATION() {
     return string_to_bool(process.env.SKIP_LLM_API_KEY_VERIFICATION, false);
+  }
+
+  get DEFAULT_LLM() {
+    return process.env.DEFAULT_LLM ?? '';
   }
 
   get IN_DOCKER() {
@@ -581,6 +589,10 @@ class ConfigCore {
 
     if (env.OPENAI_API_KEY) {
       config.llm.api_key = env.OPENAI_API_KEY;
+    }
+
+    if (env.DEFAULT_LLM) {
+      config.llm.model = env.DEFAULT_LLM;
     }
 
     if (env.BROWSER_USE_LLM_MODEL) {

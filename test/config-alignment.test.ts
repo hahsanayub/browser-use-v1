@@ -14,6 +14,7 @@ const ENV_KEYS = [
   'BROWSER_USE_HEADLESS',
   'BROWSER_USE_ALLOWED_DOMAINS',
   'BROWSER_USE_LLM_MODEL',
+  'DEFAULT_LLM',
 ] as const;
 
 const importConfigModule = async () => {
@@ -127,6 +128,39 @@ describe('Config alignment with latest py-browser-use defaults', () => {
           const { load_browser_use_config } = await importConfigModule();
           const config = load_browser_use_config();
           expect(config.browser_profile.enable_default_extensions).toBe(true);
+        }
+      );
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('maps DEFAULT_LLM to llm.model when provider-specific override is absent', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-config-'));
+    try {
+      await withEnv(
+        {
+          BROWSER_USE_CONFIG_DIR: tempDir,
+          DEFAULT_LLM: 'gpt-4.1-nano',
+          BROWSER_USE_LLM_MODEL: undefined,
+        },
+        async () => {
+          const { load_browser_use_config } = await importConfigModule();
+          const config = load_browser_use_config();
+          expect(config.llm.model).toBe('gpt-4.1-nano');
+        }
+      );
+
+      await withEnv(
+        {
+          BROWSER_USE_CONFIG_DIR: tempDir,
+          DEFAULT_LLM: 'gpt-4.1-nano',
+          BROWSER_USE_LLM_MODEL: 'gpt-4.1-mini',
+        },
+        async () => {
+          const { load_browser_use_config } = await importConfigModule();
+          const config = load_browser_use_config();
+          expect(config.llm.model).toBe('gpt-4.1-mini');
         }
       );
     } finally {
