@@ -5,10 +5,10 @@
  * MCP tools are dynamically discovered and registered as browser-use actions.
  *
  * Example usage:
- *     import { Controller } from './controller/service.js';
+ *     import { Tools } from './tools/service.js';
  *     import { MCPClient } from './mcp/client.js';
  *
- *     const controller = new Controller();
+ *     const tools = new Tools();
  *
  *     // Connect to an MCP server
  *     const mcpClient = new MCPClient(
@@ -18,7 +18,7 @@
  *     );
  *
  *     // Register all MCP tools as browser-use actions
- *     await mcpClient.registerToController(controller);
+ *     await mcpClient.registerToTools(tools);
  *
  *     // Now use with Agent as normal - MCP tools are available as actions
  */
@@ -36,7 +36,8 @@ import {
 import { z } from 'zod';
 import { createLogger } from '../logging-config.js';
 import type { Controller } from '../controller/service.js';
-import type { Registry } from '../controller/registry/service.js';
+import type { Registry } from '../tools/registry/service.js';
+import type { Tools } from '../tools/service.js';
 import { ActionResult } from '../agent/views.js';
 import { productTelemetry } from '../telemetry/service.js';
 import { MCPClientTelemetryEvent } from '../telemetry/views.js';
@@ -343,14 +344,14 @@ export class MCPClient {
   }
 
   /**
-   * Register MCP tools as actions in the browser-use controller
+   * Register MCP tools as actions in browser-use tools.
    *
-   * @param controller - Browser-use controller to register actions to
+   * @param tools - Browser-use tools to register actions to
    * @param toolFilter - Optional list of tool names to register (undefined = all tools)
    * @param prefix - Optional prefix to add to action names (e.g., "playwright_")
    */
-  async registerToController(
-    controller: Controller<any>,
+  async registerToTools(
+    tools: Pick<Tools, 'registry'>,
     toolFilter?: string[],
     prefix?: string
   ): Promise<void> {
@@ -358,7 +359,7 @@ export class MCPClient {
       await this.connect();
     }
 
-    const registry = controller.registry;
+    const registry = tools.registry;
 
     for (const [toolName, tool] of this._tools.entries()) {
       // Skip if not in filter
@@ -382,6 +383,17 @@ export class MCPClient {
     logger.info(
       `✅ Registered ${this._registeredActions.size} MCP tools from '${this.serverName}' as browser-use actions`
     );
+  }
+
+  /**
+   * @deprecated Use `registerToTools` instead.
+   */
+  async registerToController(
+    controller: Controller<any>,
+    toolFilter?: string[],
+    prefix?: string
+  ): Promise<void> {
+    await this.registerToTools(controller as unknown as Pick<Tools, 'registry'>, toolFilter, prefix);
   }
 
   private _registerToolAsAction(

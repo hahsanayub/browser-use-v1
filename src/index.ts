@@ -35,6 +35,8 @@ export * from './screenshots/service.js';
 export * from './controller/views.js';
 export * from './controller/registry/service.js';
 export * from './controller/service.js';
+export { Tools } from './tools/service.js';
+export type { ToolsOptions, ToolsActParams } from './tools/service.js';
 export * from './filesystem/file-system.js';
 export * from './agent/views.js';
 export * from './telemetry/views.js';
