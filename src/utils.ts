@@ -562,13 +562,15 @@ export function createSemaphore(maxConcurrent: number) {
 }
 
 /**
- * Check if a URL is a new tab page (about:blank or chrome://new-tab-page).
+ * Check if a URL is a new tab page (about:blank, chrome://new-tab-page, or chrome://newtab).
  */
 export function is_new_tab_page(url: string): boolean {
   return (
     url === 'about:blank' ||
     url === 'chrome://new-tab-page/' ||
-    url === 'chrome://new-tab-page'
+    url === 'chrome://new-tab-page' ||
+    url === 'chrome://newtab/' ||
+    url === 'chrome://newtab'
   );
 }
 
