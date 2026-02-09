@@ -897,7 +897,7 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
-  it('aligns addNewTask with python message-manager semantics', async () => {
+  it('aligns addNewTask with python c011 follow-up request wrapping', async () => {
     const agent = new Agent({
       task: 'Original task instructions',
       llm: createLlm(),
@@ -906,19 +906,21 @@ describe('Agent constructor browser session alignment', () => {
     agent.addNewTask('Collect pricing details');
 
     const messageManager = (agent as any)._message_manager;
-    expect((messageManager as any).task).toBe('Collect pricing details');
+    expect((messageManager as any).task).toBe(
+      '<initial_user_request>Original task instructions</initial_user_request>\n<follow_up_user_request> Collect pricing details </follow_up_user_request>'
+    );
 
     const lastHistoryItem = (messageManager as any).state.agent_history_items.at(
       -1
     );
     expect(lastHistoryItem?.system_message).toBe(
-      'User updated <user_request> to: Collect pricing details'
+      '<follow_up_user_request> Collect pricing details </follow_up_user_request>'
     );
 
     await agent.close();
   });
 
-  it('keeps step-0 model-output failures out of history and formats read_state/action results like python', async () => {
+  it('stores step-0 action results and read_state blocks using python c011 semantics', async () => {
     const agent = new Agent({
       task: 'Message manager step-0 format',
       llm: createLlm(),
@@ -942,9 +944,16 @@ describe('Agent constructor browser session alignment', () => {
     );
 
     const readState = (messageManager as any).state.read_state_description;
-    expect(readState).toBe('Read-once content');
+    expect(readState).toBe(
+      '<read_state_0>\nRead-once content\n</read_state_0>'
+    );
     expect((messageManager as any).state.agent_history_items).toHaveLength(
-      initialHistoryLength
+      initialHistoryLength + 1
+    );
+    const stepZeroHistoryItem = (messageManager as any).state.agent_history_items.at(-1);
+    expect(stepZeroHistoryItem?.action_results).toContain('Result');
+    expect(stepZeroHistoryItem?.action_results).toContain(
+      'Persisted action memory'
     );
 
     const output = new AgentOutput({
@@ -965,9 +974,9 @@ describe('Agent constructor browser session alignment', () => {
     );
 
     const lastHistoryItem = (messageManager as any).state.agent_history_items.at(-1);
-    expect(lastHistoryItem?.action_results).toContain('Action Results:');
+    expect(lastHistoryItem?.action_results).toContain('Result');
     expect(lastHistoryItem?.action_results).toContain(
-      'Action 1/1: Persisted action memory'
+      'Persisted action memory'
     );
 
     await agent.close();

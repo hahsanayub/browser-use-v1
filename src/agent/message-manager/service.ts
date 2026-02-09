@@ -100,10 +100,13 @@ export class MessageManager {
   }
 
   add_new_task(new_task: string) {
-    this.task = new_task;
-    const taskUpdateItem = `User updated <user_request> to: ${new_task}`;
+    const normalizedTask = `<follow_up_user_request> ${new_task.trim()} </follow_up_user_request>`;
+    if (!this.task.includes('<initial_user_request>')) {
+      this.task = `<initial_user_request>${this.task}</initial_user_request>`;
+    }
+    this.task += `\n${normalizedTask}`;
     this.state.agent_history_items.push(
-      new HistoryItem(null, null, null, null, null, null, taskUpdateItem)
+      new HistoryItem(null, null, null, null, null, null, normalizedTask)
     );
   }
 
@@ -118,25 +121,26 @@ export class MessageManager {
     this.state.read_state_images = [];
 
     let actionResults = '';
-    const resultLength = results.length;
-    results.forEach((action, idx) => {
+    let readStateIndex = 0;
+    results.forEach((action) => {
       if (
         action.include_extracted_content_only_once &&
         action.extracted_content
       ) {
-        this.state.read_state_description += `${action.extracted_content}\n`;
+        this.state.read_state_description += `<read_state_${readStateIndex}>\n${action.extracted_content}\n</read_state_${readStateIndex}>\n`;
+        readStateIndex += 1;
       }
       if (Array.isArray(action.images) && action.images.length > 0) {
         this.state.read_state_images.push(...action.images);
       }
 
       if (action.long_term_memory) {
-        actionResults += `Action ${idx + 1}/${resultLength}: ${action.long_term_memory}\n`;
+        actionResults += `${action.long_term_memory}\n`;
       } else if (
         action.extracted_content &&
         !action.include_extracted_content_only_once
       ) {
-        actionResults += `Action ${idx + 1}/${resultLength}: ${action.extracted_content}\n`;
+        actionResults += `${action.extracted_content}\n`;
       }
 
       if (action.error) {
@@ -144,7 +148,7 @@ export class MessageManager {
           action.error.length > 200
             ? `${action.error.slice(0, 100)}......${action.error.slice(-100)}`
             : action.error;
-        actionResults += `Action ${idx + 1}/${resultLength}: ${err}\n`;
+        actionResults += `${err}\n`;
       }
     });
 
@@ -156,7 +160,7 @@ export class MessageManager {
     this.state.read_state_description = this.state.read_state_description.trim();
 
     let normalizedActionResults = actionResults
-      ? `Action Results:\n${actionResults}`.trim()
+      ? `Result\n${actionResults}`.trim()
       : null;
     if (normalizedActionResults) {
       if (normalizedActionResults.length > MAX_CONTENT_SIZE) {
@@ -166,18 +170,32 @@ export class MessageManager {
     }
 
     if (!model_output) {
-      if (stepNumber != null && stepNumber > 0) {
-        this.state.agent_history_items.push(
-          new HistoryItem(
-            stepNumber,
-            null,
-            null,
-            null,
-            null,
-            'Agent failed to output in the right format.',
-            null
-          )
-        );
+      if (stepNumber != null) {
+        if (stepNumber === 0 && normalizedActionResults) {
+          this.state.agent_history_items.push(
+            new HistoryItem(
+              stepNumber,
+              null,
+              null,
+              null,
+              normalizedActionResults,
+              null,
+              null
+            )
+          );
+        } else if (stepNumber > 0) {
+          this.state.agent_history_items.push(
+            new HistoryItem(
+              stepNumber,
+              null,
+              null,
+              null,
+              null,
+              'Agent failed to output in the right format.',
+              null
+            )
+          );
+        }
       }
       return;
     }
