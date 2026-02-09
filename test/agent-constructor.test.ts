@@ -257,6 +257,31 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('stops cleanly before step execution when register_should_stop_callback returns true (python c011 parity)', async () => {
+    const shouldStopCallback = vi.fn(async () => true);
+    const agent = new Agent({
+      task: 'stop via external callback',
+      llm: createLlm(),
+      register_should_stop_callback: shouldStopCallback,
+    });
+
+    const infoSpy = vi.spyOn(agent.logger, 'info');
+    const logAgentEventSpy = vi
+      .spyOn(agent as any, '_log_agent_event')
+      .mockImplementation(() => {});
+    const stepSpy = vi.spyOn(agent as any, '_step');
+
+    await agent.run(1);
+
+    expect(shouldStopCallback).toHaveBeenCalledTimes(1);
+    expect(stepSpy).not.toHaveBeenCalled();
+    expect(agent.state.stopped).toBe(true);
+    expect(infoSpy).toHaveBeenCalledWith('External callback requested stop');
+
+    logAgentEventSpy.mockRestore();
+    await agent.close();
+  });
+
   it('dispatches CreateAgentSessionEvent only once across multiple run calls (python c011 parity)', async () => {
     const agent = new Agent({
       task: 'single session event across runs',

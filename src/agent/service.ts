@@ -228,6 +228,7 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
         history: AgentHistoryList<AgentStructuredOutput>
       ) => void | Promise<void>)
     | null;
+  register_should_stop_callback?: (() => Promise<boolean>) | null;
   register_external_agent_status_raise_error_callback?:
     | (() => Promise<boolean>)
     | null;
@@ -440,6 +441,10 @@ export class Agent<
     Context,
     AgentStructuredOutput
   >['register_done_callback'];
+  register_should_stop_callback: AgentConstructorParams<
+    Context,
+    AgentStructuredOutput
+  >['register_should_stop_callback'];
   register_external_agent_status_raise_error_callback: AgentConstructorParams<
     Context,
     AgentStructuredOutput
@@ -517,6 +522,7 @@ export class Agent<
       directly_open_url = true,
       register_new_step_callback = null,
       register_done_callback = null,
+      register_should_stop_callback = null,
       register_external_agent_status_raise_error_callback = null,
       output_model_schema = null,
       extraction_schema = null,
@@ -679,6 +685,7 @@ export class Agent<
       : null;
     this.register_new_step_callback = register_new_step_callback;
     this.register_done_callback = register_done_callback;
+    this.register_should_stop_callback = register_should_stop_callback;
     this.register_external_agent_status_raise_error_callback =
       register_external_agent_status_raise_error_callback;
     this.context = context as Context | null;
@@ -2235,6 +2242,16 @@ export class Agent<
           this.logger.info('🛑 Agent stopped');
           agent_run_error = 'Agent stopped programmatically';
           break;
+        }
+
+        if (this.register_should_stop_callback) {
+          const shouldStop = await this.register_should_stop_callback();
+          if (shouldStop) {
+            this.logger.info('External callback requested stop');
+            this.state.stopped = true;
+            agent_run_error = 'Agent stopped programmatically';
+            break;
+          }
         }
 
         if (this.register_external_agent_status_raise_error_callback) {
