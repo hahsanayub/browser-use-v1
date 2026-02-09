@@ -257,6 +257,61 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('uses python c011 failure log escalation in _handle_step_error', async () => {
+    const agent = new Agent({
+      task: 'step error escalation',
+      llm: createLlm(),
+      max_failures: 2,
+      final_response_after_failure: false,
+    });
+    const warningSpy = vi
+      .spyOn((agent as any).logger, 'warning')
+      .mockImplementation(() => {});
+    const errorSpy = vi
+      .spyOn((agent as any).logger, 'error')
+      .mockImplementation(() => {});
+
+    await (agent as any)._handle_step_error(new Error('first failure'));
+    await (agent as any)._handle_step_error(new Error('second failure'));
+
+    expect(agent.state.consecutive_failures).toBe(2);
+    expect(
+      warningSpy.mock.calls.some(([message]) =>
+        String(message).includes('❌ Result failed 1/2 times:')
+      )
+    ).toBe(true);
+    expect(
+      errorSpy.mock.calls.some(([message]) =>
+        String(message).includes('❌ Result failed 2/2 times:')
+      )
+    ).toBe(true);
+    expect(agent.state.last_result?.[0]?.error).toContain('second failure');
+
+    await agent.close();
+  });
+
+  it('does not apply legacy retry_delay sleeps in _handle_step_error (python c011 parity)', async () => {
+    const agent = new Agent({
+      task: 'rate-limit step error parity',
+      llm: createLlm(),
+      retry_delay: 123,
+    });
+    const sleepSpy = vi
+      .spyOn(agent as any, '_sleep')
+      .mockResolvedValue(undefined);
+
+    await (agent as any)._handle_step_error(
+      new ModelRateLimitError('Rate limit exceeded', 429, 'test-model')
+    );
+
+    expect(sleepSpy).not.toHaveBeenCalled();
+    expect(agent.state.last_result?.[0]?.error).toContain(
+      'Rate limit exceeded'
+    );
+
+    await agent.close();
+  });
+
   it('continues run loop from state.n_steps for resumed runs', async () => {
     const agent = new Agent({
       task: 'resume run loop from saved step',

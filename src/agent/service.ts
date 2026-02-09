@@ -4390,195 +4390,44 @@ export class Agent<
     }
   }
 
-  /**
-   * Handle all types of errors that can occur during a step
-   * Implements comprehensive error categorization with:
-   * - Validation error hints
-   * - Rate limit auto-retry
-   * - Parse error guidance
-   * - Token limit warnings
-   * - Network error detection
-   * - Browser error handling
-   * - LLM-specific errors
-   */
+  /** Handle all types of errors that can occur during a step (python c011 parity). */
   private async _handle_step_error(error: Error) {
+    if (error?.name === 'InterruptedError') {
+      const message = error.message
+        ? `The agent was interrupted mid-step - ${error.message}`
+        : 'The agent was interrupted mid-step';
+      this.logger.warning(message);
+      return;
+    }
+
     const include_trace = this.logger.level === 'debug';
-    let error_msg = AgentError.format_error(error, include_trace);
+    const error_msg = AgentError.format_error(error, include_trace);
+    const maxTotalFailures = this._max_total_failures();
     const prefix =
-      `❌ Result failed ${this.state.consecutive_failures + 1}/${this._max_total_failures()} times:\n `;
+      `❌ Result failed ${this.state.consecutive_failures + 1}/${maxTotalFailures} times: `;
     this.state.consecutive_failures += 1;
 
-    // 1. Handle Validation Errors (Pydantic/Zod)
-    if (
-      error.name === 'ValidationError' ||
-      error.name === 'ZodError' ||
-      error instanceof TypeError
-    ) {
-      this.logger.error(`${prefix}${error_msg}`);
+    const isFinalFailure = this.state.consecutive_failures >= maxTotalFailures;
+    const isParseError =
+      error_msg.includes('Could not parse response') ||
+      error_msg.includes('tool_use_failed');
 
-      // Add context hint for validation errors
-      if (
-        error_msg.includes('Max token limit reached') ||
-        error_msg.includes('token')
-      ) {
-        error_msg +=
-          '\n\n💡 Hint: Your response was too long. Keep your thinking and output concise.';
+    if (isParseError) {
+      const parseLog = `Model: ${(this.llm as any).model} failed`;
+      if (isFinalFailure) {
+        this.logger.error(parseLog);
       } else {
-        error_msg +=
-          '\n\n💡 Hint: Your output format was invalid. Please follow the exact schema structure required for actions.';
+        this.logger.warning(parseLog);
       }
     }
-    // 2. Handle Interrupted Errors
-    else if (
-      error.message.includes('interrupted') ||
-      error.message.includes('abort') ||
-      error.message.includes('InterruptedError')
-    ) {
-      error_msg = `The agent was interrupted mid-step${error.message ? ` - ${error.message}` : ''}`;
-      this.logger.error(`${prefix}${error_msg}`);
-    }
-    // 3. Handle Parse Errors
-    else if (
-      error_msg.includes('Could not parse') ||
-      error_msg.includes('tool_use_failed') ||
-      error_msg.includes('Failed to parse')
-    ) {
-      this.logger.debug(
-        `Model: ${(this.llm as any).model} failed to parse response`
-      );
-      error_msg +=
-        '\n\n💡 Hint: Return a valid JSON object with the required fields.';
-      this.logger.error(`${prefix}${error_msg}`);
-    }
-    // 4. Handle Rate Limit Errors (OpenAI, Anthropic, Google)
-    else if (this._isRateLimitError(error, error_msg)) {
-      this.logger.warning(`${prefix}${error_msg}`);
-      this.logger.warning(
-        `⏳ Rate limit detected, waiting ${this.settings.retry_delay}s before retrying...`
-      );
 
-      // Auto-retry: wait before continuing
-      await this._sleep(this.settings.retry_delay);
-      error_msg += `\n\n⏳ Retrying after ${this.settings.retry_delay}s delay...`;
-    }
-    // 5. Handle Network Errors
-    else if (this._isNetworkError(error, error_msg)) {
+    if (isFinalFailure) {
       this.logger.error(`${prefix}${error_msg}`);
-      error_msg +=
-        '\n\n🌐 Network error detected. Please check your internet connection and try again.';
-    }
-    // 6. Handle Browser Errors
-    else if (this._isBrowserError(error, error_msg)) {
-      this.logger.error(`${prefix}${error_msg}`);
-      error_msg +=
-        '\n\n🌍 Browser error detected. The page may have crashed or become unresponsive.';
-    }
-    // 7. Handle Timeout Errors
-    else if (this._isTimeoutError(error, error_msg)) {
-      this.logger.error(`${prefix}${error_msg}`);
-      error_msg +=
-        '\n\n⏱️ Timeout error. The operation took too long to complete.';
-    }
-    // 8. Handle All Other Errors
-    else {
-      this.logger.error(`${prefix}${error_msg}`);
+    } else {
+      this.logger.warning(`${prefix}${error_msg}`);
     }
 
     this.state.last_result = [new ActionResult({ error: error_msg })];
-  }
-
-  /**
-   * Check if an error is a network error
-   */
-  private _isNetworkError(error: Error, error_msg: string): boolean {
-    const networkPatterns = [
-      'ECONNREFUSED',
-      'ENOTFOUND',
-      'ETIMEDOUT',
-      'ECONNRESET',
-      'network error',
-      'Network Error',
-      'fetch failed',
-      'socket hang up',
-      'getaddrinfo',
-    ];
-
-    return networkPatterns.some(
-      (pattern) =>
-        error_msg.includes(pattern) || error.message.includes(pattern)
-    );
-  }
-
-  /**
-   * Check if an error is a browser/Playwright error
-   */
-  private _isBrowserError(error: Error, error_msg: string): boolean {
-    const browserPatterns = [
-      'Target page',
-      'Page crashed',
-      'Browser closed',
-      'Context closed',
-      'Frame detached',
-      'Execution context',
-      'Navigation failed',
-      'Protocol error',
-    ];
-
-    return browserPatterns.some(
-      (pattern) =>
-        error_msg.includes(pattern) || error.message.includes(pattern)
-    );
-  }
-
-  /**
-   * Check if an error is a timeout error
-   */
-  private _isTimeoutError(error: Error, error_msg: string): boolean {
-    const timeoutPatterns = [
-      'timeout',
-      'Timeout',
-      'timed out',
-      'time limit exceeded',
-      'deadline exceeded',
-    ];
-
-    return timeoutPatterns.some((pattern) =>
-      error_msg.toLowerCase().includes(pattern.toLowerCase())
-    );
-  }
-
-  /**
-   * Check if an error is a rate limit error from various LLM providers
-   */
-  private _isRateLimitError(error: Error, error_msg: string): boolean {
-    // Check error class name
-    const errorClassName = error.constructor.name;
-    if (
-      errorClassName === 'RateLimitError' ||
-      errorClassName === 'ResourceExhausted'
-    ) {
-      return true;
-    }
-
-    // Check error message patterns
-    const rateLimitPatterns = [
-      'rate_limit_exceeded',
-      'rate limit exceeded',
-      'RateLimitError',
-      'RESOURCE_EXHAUSTED',
-      'ResourceExhausted',
-      'tokens per minute',
-      'TPM',
-      'requests per minute',
-      'RPM',
-      'quota exceeded',
-      'too many requests',
-      '429',
-    ];
-
-    return rateLimitPatterns.some((pattern) =>
-      error_msg.toLowerCase().includes(pattern.toLowerCase())
-    );
   }
 
   private async _finalize(browser_state_summary: BrowserStateSummary | null) {
