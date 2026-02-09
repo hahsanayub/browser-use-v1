@@ -27,15 +27,7 @@ export const ClickElementActionSchema = z
     index: z.number().int().min(1).optional(),
     coordinate_x: z.number().int().optional(),
     coordinate_y: z.number().int().optional(),
-  })
-  .refine(
-    (value) =>
-      value.index != null ||
-      (value.coordinate_x != null && value.coordinate_y != null),
-    {
-      message: 'Provide index or both coordinate_x and coordinate_y',
-    }
-  );
+  });
 export type ClickElementAction = z.infer<typeof ClickElementActionSchema>;
 
 export const ClickElementActionIndexOnlySchema = z.object({

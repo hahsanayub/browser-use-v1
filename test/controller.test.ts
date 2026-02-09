@@ -1272,7 +1272,7 @@ describe('Regression Coverage', () => {
     expect(result.extracted_content).toContain('focused on tab #0001');
   });
 
-  it('click action validation requires index or coordinates', async () => {
+  it('click action returns python-aligned error when index and coordinates are missing', async () => {
     const controller = new Controller();
     controller.set_coordinate_clicking(true);
     const browserSession = {
@@ -1281,9 +1281,14 @@ describe('Regression Coverage', () => {
       })),
     };
 
-    await expect(
-      controller.registry.execute_action('click', {}, { browser_session: browserSession as any })
-    ).rejects.toThrow('Provide index or both coordinate_x and coordinate_y');
+    const result = await controller.registry.execute_action(
+      'click',
+      {},
+      { browser_session: browserSession as any }
+    );
+    expect(result.error).toBe(
+      'Must provide either index or both coordinate_x and coordinate_y'
+    );
   });
 
   it('set_coordinate_clicking re-registers click schema between index-only and coordinate-enabled', () => {

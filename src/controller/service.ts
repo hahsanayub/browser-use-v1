@@ -556,9 +556,9 @@ export class Controller<Context = unknown> {
       }
 
       if (params.index == null) {
-        throw new BrowserError(
-          'Provide element index or both coordinate_x and coordinate_y.'
-        );
+        return new ActionResult({
+          error: 'Must provide either index or both coordinate_x and coordinate_y',
+        });
       }
 
       const element = await browser_session.get_dom_element_by_index(params.index, {
