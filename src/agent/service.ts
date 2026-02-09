@@ -5486,22 +5486,14 @@ export class Agent<
       }
     }
 
-    const plannerModel =
-      (this.settings as any)?.planner_llm &&
-      typeof (this.settings as any).planner_llm === 'object'
-        ? ((this.settings as any).planner_llm.model ?? null)
-        : null;
-
     this.telemetry.capture(
       new AgentTelemetryEvent({
         task: this.task,
         model: this.llm.model,
         model_provider: (this.llm as any).provider ?? 'unknown',
-        planner_llm: plannerModel,
         max_steps: max_steps,
         max_actions_per_step: this.settings.max_actions_per_step,
         use_vision: this.settings.use_vision,
-        use_validation: this.settings.validate_output,
         version: this.version,
         source: this.source,
         cdp_url: cdpHost,

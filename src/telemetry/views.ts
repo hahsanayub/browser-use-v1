@@ -20,11 +20,9 @@ export interface AgentTelemetryPayload {
   task: string;
   model: string;
   model_provider: string;
-  planner_llm: string | null;
   max_steps: number;
   max_actions_per_step: number;
   use_vision: boolean | 'auto';
-  use_validation: boolean;
   version: string;
   source: string;
   cdp_url: string | null;
@@ -56,11 +54,9 @@ export class AgentTelemetryEvent
   task: string;
   model: string;
   model_provider: string;
-  planner_llm: string | null;
   max_steps: number;
   max_actions_per_step: number;
   use_vision: boolean | 'auto';
-  use_validation: boolean;
   version: string;
   source: string;
   cdp_url: string | null;
@@ -88,11 +84,9 @@ export class AgentTelemetryEvent
     this.task = payload.task;
     this.model = payload.model;
     this.model_provider = payload.model_provider;
-    this.planner_llm = payload.planner_llm;
     this.max_steps = payload.max_steps;
     this.max_actions_per_step = payload.max_actions_per_step;
     this.use_vision = payload.use_vision;
-    this.use_validation = payload.use_validation;
     this.version = payload.version;
     this.source = payload.source;
     this.cdp_url = payload.cdp_url;
