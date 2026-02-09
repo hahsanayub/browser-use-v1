@@ -1,0 +1,136 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const ENV_KEYS = [
+  'BROWSER_USE_CONFIG_DIR',
+  'BROWSER_USE_CONFIG_PATH',
+  'BROWSER_USE_PROXY_URL',
+  'BROWSER_USE_NO_PROXY',
+  'BROWSER_USE_PROXY_USERNAME',
+  'BROWSER_USE_PROXY_PASSWORD',
+  'BROWSER_USE_DISABLE_EXTENSIONS',
+  'BROWSER_USE_HEADLESS',
+  'BROWSER_USE_ALLOWED_DOMAINS',
+  'BROWSER_USE_LLM_MODEL',
+] as const;
+
+const importConfigModule = async () => {
+  vi.resetModules();
+  return await import('../src/config.js');
+};
+
+const withEnv = async (
+  overrides: Record<string, string | undefined>,
+  fn: () => Promise<void> | void
+) => {
+  const previous = new Map<string, string | undefined>();
+  for (const [key, value] of Object.entries(overrides)) {
+    previous.set(key, process.env[key]);
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+  try {
+    await fn();
+  } finally {
+    for (const [key, value] of previous.entries()) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+};
+
+describe('Config alignment with latest py-browser-use defaults', () => {
+  afterEach(() => {
+    for (const key of ENV_KEYS) {
+      delete process.env[key];
+    }
+  });
+
+  it('creates default config with gpt-4.1-mini as the default LLM model', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-config-'));
+    try {
+      await withEnv(
+        {
+          BROWSER_USE_CONFIG_DIR: tempDir,
+          BROWSER_USE_CONFIG_PATH: undefined,
+        },
+        async () => {
+          const { CONFIG } = await importConfigModule();
+          const llm = CONFIG.get_default_llm();
+          expect(llm.model).toBe('gpt-4.1-mini');
+
+          const configPath = path.join(tempDir, 'config.json');
+          expect(fs.existsSync(configPath)).toBe(true);
+        }
+      );
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('maps proxy env vars into browser_profile.proxy in load_browser_use_config', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-config-'));
+    try {
+      await withEnv(
+        {
+          BROWSER_USE_CONFIG_DIR: tempDir,
+          BROWSER_USE_PROXY_URL: 'http://proxy.internal:8080',
+          BROWSER_USE_NO_PROXY: 'localhost, 127.0.0.1, *.internal',
+          BROWSER_USE_PROXY_USERNAME: 'proxy-user',
+          BROWSER_USE_PROXY_PASSWORD: 'proxy-pass',
+        },
+        async () => {
+          const { load_browser_use_config } = await importConfigModule();
+          const config = load_browser_use_config();
+          expect(config.browser_profile.proxy).toEqual({
+            server: 'http://proxy.internal:8080',
+            bypass: 'localhost,127.0.0.1,*.internal',
+            username: 'proxy-user',
+            password: 'proxy-pass',
+          });
+        }
+      );
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('maps BROWSER_USE_DISABLE_EXTENSIONS into enable_default_extensions', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-config-'));
+    try {
+      await withEnv(
+        {
+          BROWSER_USE_CONFIG_DIR: tempDir,
+          BROWSER_USE_DISABLE_EXTENSIONS: '1',
+        },
+        async () => {
+          const { load_browser_use_config } = await importConfigModule();
+          const config = load_browser_use_config();
+          expect(config.browser_profile.enable_default_extensions).toBe(false);
+        }
+      );
+
+      await withEnv(
+        {
+          BROWSER_USE_CONFIG_DIR: tempDir,
+          BROWSER_USE_DISABLE_EXTENSIONS: 'false',
+        },
+        async () => {
+          const { load_browser_use_config } = await importConfigModule();
+          const config = load_browser_use_config();
+          expect(config.browser_profile.enable_default_extensions).toBe(true);
+        }
+      );
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});

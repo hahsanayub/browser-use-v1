@@ -116,6 +116,14 @@ class OldConfig {
     return url;
   }
 
+  get BROWSER_USE_DEBUG_LOG_FILE() {
+    return process.env.BROWSER_USE_DEBUG_LOG_FILE ?? null;
+  }
+
+  get BROWSER_USE_INFO_LOG_FILE() {
+    return process.env.BROWSER_USE_INFO_LOG_FILE ?? null;
+  }
+
   get XDG_CACHE_HOME() {
     return resolve_path(process.env.XDG_CACHE_HOME ?? '~/.cache');
   }
@@ -199,6 +207,10 @@ class OldConfig {
     return string_to_bool(process.env.IS_IN_EVALS, false);
   }
 
+  get BROWSER_USE_VERSION_CHECK() {
+    return string_to_bool(process.env.BROWSER_USE_VERSION_CHECK, true);
+  }
+
   get WIN_FONT_DIR() {
     return process.env.WIN_FONT_DIR ?? 'C:\\Windows\\Fonts';
   }
@@ -240,6 +252,14 @@ class FlatEnvConfig {
 
   get BROWSER_USE_CLOUD_UI_URL() {
     return process.env.BROWSER_USE_CLOUD_UI_URL ?? '';
+  }
+
+  get BROWSER_USE_DEBUG_LOG_FILE() {
+    return process.env.BROWSER_USE_DEBUG_LOG_FILE ?? null;
+  }
+
+  get BROWSER_USE_INFO_LOG_FILE() {
+    return process.env.BROWSER_USE_INFO_LOG_FILE ?? null;
   }
 
   get XDG_CACHE_HOME() {
@@ -301,6 +321,10 @@ class FlatEnvConfig {
     return string_to_bool(process.env.IS_IN_EVALS, false);
   }
 
+  get BROWSER_USE_VERSION_CHECK() {
+    return string_to_bool(process.env.BROWSER_USE_VERSION_CHECK, true);
+  }
+
   get WIN_FONT_DIR() {
     return process.env.WIN_FONT_DIR ?? 'C:\\Windows\\Fonts';
   }
@@ -322,6 +346,27 @@ class FlatEnvConfig {
 
   get BROWSER_USE_LLM_MODEL() {
     return process.env.BROWSER_USE_LLM_MODEL ?? null;
+  }
+
+  get BROWSER_USE_PROXY_URL() {
+    return process.env.BROWSER_USE_PROXY_URL ?? null;
+  }
+
+  get BROWSER_USE_NO_PROXY() {
+    return process.env.BROWSER_USE_NO_PROXY ?? null;
+  }
+
+  get BROWSER_USE_PROXY_USERNAME() {
+    return process.env.BROWSER_USE_PROXY_USERNAME ?? null;
+  }
+
+  get BROWSER_USE_PROXY_PASSWORD() {
+    return process.env.BROWSER_USE_PROXY_PASSWORD ?? null;
+  }
+
+  get BROWSER_USE_DISABLE_EXTENSIONS() {
+    const value = process.env.BROWSER_USE_DISABLE_EXTENSIONS;
+    return value === undefined ? null : string_to_bool(value);
   }
 }
 
@@ -382,7 +427,7 @@ const create_default_config = (): DBStyleConfigJSON => {
         id: llm_id,
         default: true,
         created_at: new Date().toISOString(),
-        model: 'gpt-4o',
+        model: 'gpt-4.1-mini',
         api_key: 'your-openai-api-key-here',
         temperature: null,
         max_tokens: null,
@@ -514,12 +559,37 @@ class ConfigCore {
           .filter(Boolean);
     }
 
+    const proxy: Record<string, unknown> = {};
+    if (env.BROWSER_USE_PROXY_URL) {
+      proxy.server = env.BROWSER_USE_PROXY_URL;
+    }
+    if (env.BROWSER_USE_NO_PROXY) {
+      proxy.bypass = env.BROWSER_USE_NO_PROXY.split(',')
+        .map((domain) => domain.trim())
+        .filter(Boolean)
+        .join(',');
+    }
+    if (env.BROWSER_USE_PROXY_USERNAME) {
+      proxy.username = env.BROWSER_USE_PROXY_USERNAME;
+    }
+    if (env.BROWSER_USE_PROXY_PASSWORD) {
+      proxy.password = env.BROWSER_USE_PROXY_PASSWORD;
+    }
+    if (Object.keys(proxy).length > 0) {
+      config.browser_profile.proxy = proxy;
+    }
+
     if (env.OPENAI_API_KEY) {
       config.llm.api_key = env.OPENAI_API_KEY;
     }
 
     if (env.BROWSER_USE_LLM_MODEL) {
       config.llm.model = env.BROWSER_USE_LLM_MODEL;
+    }
+
+    if (env.BROWSER_USE_DISABLE_EXTENSIONS !== null) {
+      config.browser_profile.enable_default_extensions =
+        !env.BROWSER_USE_DISABLE_EXTENSIONS;
     }
 
     return config;
