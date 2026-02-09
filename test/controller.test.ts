@@ -44,6 +44,30 @@ vi.mock('../src/utils.js', () => {
   };
 });
 
+let mockedPdfPages: string[] = [];
+vi.mock('pdf-parse', () => {
+  class PDFParse {
+    constructor(_options: { data: Buffer }) {}
+
+    async getInfo() {
+      return { total: Math.max(1, mockedPdfPages.length) };
+    }
+
+    async getText(options?: { partial?: number[] }) {
+      const partial = options?.partial;
+      if (Array.isArray(partial) && partial.length > 0) {
+        const pageNumber = partial[0] ?? 1;
+        return { text: mockedPdfPages[pageNumber - 1] ?? '' };
+      }
+      return { text: mockedPdfPages.join('\n\n') };
+    }
+
+    async destroy() {}
+  }
+
+  return { PDFParse };
+});
+
 // Import after mocks
 import { Registry } from '../src/controller/registry/service.js';
 import { Controller } from '../src/controller/service.js';
@@ -1657,6 +1681,89 @@ describe('Regression Coverage', () => {
     expect(result.extracted_content).toContain('revenue growth');
     expect(result.include_extracted_content_only_once).toBe(true);
     expect(result.long_term_memory).toContain('relevant sections');
+  });
+
+  it('read_long_content returns full content for small pdf files', async () => {
+    const controller = new Controller();
+    mockedPdfPages = ['Executive summary', 'Revenue increased by 12%'];
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-pdf-'));
+    const pdfPath = path.join(tempDir, 'report.pdf');
+    fs.writeFileSync(pdfPath, 'fake-pdf-bytes');
+
+    try {
+      const result = await controller.registry.execute_action(
+        'read_long_content',
+        {
+          goal: 'Summarize report',
+          source: pdfPath,
+        },
+        {
+          browser_session: {
+            downloaded_files: [],
+          } as any,
+          page_extraction_llm: {
+            ainvoke: vi.fn(async () => ({ completion: 'summary' })),
+          } as any,
+          available_file_paths: [pdfPath],
+        }
+      );
+
+      expect(result.extracted_content).toContain('PDF: report.pdf (2 pages)');
+      expect(result.extracted_content).toContain('--- Page 1 ---');
+      expect(result.extracted_content).toContain('--- Page 2 ---');
+      expect(result.long_term_memory).toContain('(2 pages,');
+      expect(result.include_extracted_content_only_once).toBe(true);
+    } finally {
+      mockedPdfPages = [];
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('read_long_content prioritizes relevant pages for large pdf files', async () => {
+    const controller = new Controller();
+    mockedPdfPages = [
+      'Introduction '.repeat(2000),
+      'Revenue growth forecast '.repeat(2200),
+      'Appendix '.repeat(2200),
+    ];
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-pdf-'));
+    const pdfPath = path.join(tempDir, 'annual-report.pdf');
+    fs.writeFileSync(pdfPath, 'fake-pdf-bytes');
+
+    try {
+      const pageExtractionLlm = {
+        ainvoke: vi.fn(async () => ({
+          completion: 'revenue\ngrowth',
+        })),
+      };
+
+      const result = await controller.registry.execute_action(
+        'read_long_content',
+        {
+          goal: 'Find revenue growth details',
+          source: pdfPath,
+        },
+        {
+          browser_session: {
+            downloaded_files: [],
+          } as any,
+          page_extraction_llm: pageExtractionLlm as any,
+          available_file_paths: [pdfPath],
+        }
+      );
+
+      expect(pageExtractionLlm.ainvoke).toHaveBeenCalled();
+      expect(result.extracted_content).toContain(
+        'PDF: annual-report.pdf (3 pages, showing'
+      );
+      expect(result.extracted_content).toContain('--- Page 1 ---');
+      expect(result.extracted_content).toContain('Revenue growth forecast');
+      expect(result.long_term_memory).toContain('relevant pages of 3');
+      expect(result.include_extracted_content_only_once).toBe(true);
+    } finally {
+      mockedPdfPages = [];
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('extract_structured_data keeps long-term memory up to 10k chars', async () => {

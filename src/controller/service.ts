@@ -40,7 +40,6 @@ import {
   SheetsInputActionSchema,
 } from './views.js';
 import { Registry } from './registry/service.js';
-import TurndownService from 'turndown';
 import { SystemMessage, UserMessage } from '../llm/messages.js';
 import { createLogger } from '../logging-config.js';
 
@@ -1865,7 +1864,7 @@ You will be given a query and the markdown of a webpage that has been filtered t
         return Array.from(new Set(tokens)).slice(0, 5);
       })();
 
-      const extractSearchTerms = async () => {
+      const extractSearchTerms = async (): Promise<string[]> => {
         const extractionLlm = page_extraction_llm as
           | {
               ainvoke: (
@@ -1919,174 +1918,379 @@ Context: ${context}`;
       const escapeRegExp = (value: string) =>
         value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-      const chunkContent = (value: string) => {
-        const chunks: Array<{ index: number; text: string }> = [];
-        for (let start = 0, index = 0; start < value.length; start += chunkSize) {
-          chunks.push({
-            index,
-            text: value.slice(start, start + chunkSize),
+      const searchText = (
+        value: string,
+        pattern: string,
+        contextChars = 100
+      ): Array<{ position: number; snippet: string }> => {
+        let regex: RegExp;
+        try {
+          regex = new RegExp(pattern, 'gi');
+        } catch {
+          regex = new RegExp(escapeRegExp(pattern), 'gi');
+        }
+        const matches: Array<{ position: number; snippet: string }> = [];
+        let match: RegExpExecArray | null = regex.exec(value);
+        while (match != null) {
+          const start = Math.max(0, match.index - contextChars);
+          const end = Math.min(
+            value.length,
+            match.index + match[0].length + contextChars
+          );
+          matches.push({
+            position: match.index,
+            snippet: value.slice(start, end),
           });
-          index += 1;
+          if (!regex.global) {
+            break;
+          }
+          match = regex.exec(value);
+        }
+        return matches;
+      };
+
+      const chunkContent = (
+        value: string,
+        size = chunkSize
+      ): Array<{ start: number; end: number; text: string }> => {
+        const chunks: Array<{ start: number; end: number; text: string }> = [];
+        for (let start = 0; start < value.length; start += size) {
+          chunks.push({
+            start,
+            end: Math.min(start + size, value.length),
+            text: value.slice(start, start + size),
+          });
         }
         return chunks;
       };
 
-      const contentToMarkdown = (html: string) => {
-        const turndown = new TurndownService({
-          headingStyle: 'atx',
-          codeBlockStyle: 'fenced',
-        });
-        return turndown.turndown(html).replace(/\n+/g, '\n').trim();
+      const getCurrentPageUrl = (page: any): string => {
+        const value = page?.url;
+        if (typeof value === 'function') {
+          return String(value.call(page) ?? '');
+        }
+        return typeof value === 'string' ? value : '';
       };
 
-      let content = '';
-      let sourceName = 'content';
+      const readPdfByPage = async (
+        filePath: string
+      ): Promise<{ numPages: number; pageTexts: string[]; totalChars: number }> => {
+        const buffer = await fsp.readFile(filePath);
+        try {
+          const pdfParseModule = (await import('pdf-parse')) as {
+            PDFParse?: new (options: { data: Buffer }) => {
+              getInfo?: (options?: unknown) => Promise<{ total?: number }>;
+              getText: (options?: unknown) => Promise<{ text?: string }>;
+              destroy?: () => Promise<void>;
+            };
+          };
 
-      if (source.toLowerCase() === 'page') {
-        if (!browser_session) {
-          throw new BrowserError('Browser session missing for page content.');
-        }
-        const page: Page | null = await browser_session.get_current_page();
-        if (!page?.content) {
-          throw new BrowserError('No active page available to read content.');
-        }
-        const html = await page.content();
-        content = contentToMarkdown(html || '');
-        sourceName = 'current page';
-      } else {
-        const allowedPaths = new Set(
-          Array.isArray(available_file_paths) ? available_file_paths : []
-        );
-        const downloadedFiles = Array.isArray(browser_session?.downloaded_files)
-          ? browser_session.downloaded_files
-          : [];
-        for (const filePath of downloadedFiles) {
-          allowedPaths.add(filePath);
+          if (typeof pdfParseModule.PDFParse === 'function') {
+            const Parser = pdfParseModule.PDFParse;
+            const parser = new Parser({ data: buffer });
+            try {
+              let numPages = 0;
+              try {
+                const info = await parser.getInfo?.({ parsePageInfo: false });
+                numPages = Number(info?.total ?? 0);
+              } catch {
+                numPages = 0;
+              }
+
+              if (!Number.isFinite(numPages) || numPages <= 0) {
+                const full = await parser.getText();
+                const text = typeof full?.text === 'string' ? full.text : '';
+                return {
+                  numPages: 1,
+                  pageTexts: [text],
+                  totalChars: text.length,
+                };
+              }
+
+              const pageTexts: string[] = [];
+              let totalChars = 0;
+              for (let pageNumber = 1; pageNumber <= numPages; pageNumber += 1) {
+                const pageResult = await parser.getText({
+                  partial: [pageNumber],
+                });
+                const text =
+                  typeof pageResult?.text === 'string' ? pageResult.text : '';
+                pageTexts.push(text);
+                totalChars += text.length;
+              }
+              return {
+                numPages,
+                pageTexts,
+                totalChars,
+              };
+            } finally {
+              if (typeof parser.destroy === 'function') {
+                await parser.destroy();
+              }
+            }
+          }
+        } catch {
+          // Fall back to the compatibility parser.
         }
 
-        if (!allowedPaths.has(source)) {
-          const message =
-            `Error: File path not in available_file_paths: ${source}. ` +
-            'The user must add this path to available_file_paths when creating the Agent.';
-          return new ActionResult({
-            extracted_content: message,
-            long_term_memory: `Failed to read: file path not allowed: ${source}`,
+        const parsed = await extractPdfText(buffer);
+        const text = parsed.text ?? '';
+        return {
+          numPages: Math.max(parsed.totalPages, 1),
+          pageTexts: [text],
+          totalChars: text.length,
+        };
+      };
+
+      try {
+        let content = '';
+        let sourceName = 'content';
+
+        if (source.toLowerCase() === 'page') {
+          if (!browser_session) {
+            throw new BrowserError('Browser session missing for page content.');
+          }
+          const page: Page | null = await browser_session.get_current_page();
+          if (!page?.content) {
+            throw new BrowserError('No active page available to read content.');
+          }
+          const html = await page.content();
+          const pageUrl = getCurrentPageUrl(page);
+          const markdown = extractCleanMarkdownFromHtml(html || '', {
+            extract_links: false,
+            method: 'page_content',
+            url: pageUrl || undefined,
           });
-        }
+          content = markdown.content;
+          sourceName = 'current page';
 
-        if (!fs.existsSync(source)) {
-          return new ActionResult({
-            extracted_content: `Error: File not found: ${source}`,
-            long_term_memory: 'Failed to read: file not found',
-          });
-        }
-
-        const ext = path.extname(source).toLowerCase();
-        sourceName = path.basename(source);
-        if (ext === '.pdf') {
-          const buffer = await fsp.readFile(source);
-          const parsed = await extractPdfText(buffer);
-          content = parsed.text ?? '';
+          if (!content) {
+            return new ActionResult({
+              extracted_content: 'Error: No page content available',
+              long_term_memory: 'Failed to read page: no content',
+            });
+          }
         } else {
+          const allowedPaths = new Set(
+            Array.isArray(available_file_paths) ? available_file_paths : []
+          );
+          const downloadedFiles = Array.isArray(browser_session?.downloaded_files)
+            ? browser_session.downloaded_files
+            : [];
+          for (const filePath of downloadedFiles) {
+            allowedPaths.add(filePath);
+          }
+
+          if (!allowedPaths.has(source)) {
+            const message =
+              `Error: File path not in available_file_paths: ${source}. ` +
+              'The user must add this path to available_file_paths when creating the Agent.';
+            return new ActionResult({
+              extracted_content: message,
+              long_term_memory: `Failed to read: file path not allowed: ${source}`,
+            });
+          }
+
+          if (!fs.existsSync(source)) {
+            return new ActionResult({
+              extracted_content: `Error: File not found: ${source}`,
+              long_term_memory: 'Failed to read: file not found',
+            });
+          }
+
+          const ext = path.extname(source).toLowerCase();
+          sourceName = path.basename(source);
+
+          if (ext === '.pdf') {
+            const pdfData = await readPdfByPage(source);
+            const numPages = pdfData.numPages;
+            const pageTexts = pdfData.pageTexts;
+            const totalChars = pdfData.totalChars;
+
+            if (totalChars <= maxChars) {
+              const contentParts: string[] = [];
+              for (let pageIndex = 0; pageIndex < pageTexts.length; pageIndex += 1) {
+                const pageText = pageTexts[pageIndex] ?? '';
+                if (!pageText.trim()) {
+                  continue;
+                }
+                contentParts.push(`--- Page ${pageIndex + 1} ---\n${pageText}`);
+              }
+              const allContent = contentParts.join('\n\n');
+              return new ActionResult({
+                extracted_content: `PDF: ${sourceName} (${numPages} pages)\n\n${allContent}`,
+                long_term_memory: `Read ${sourceName} (${numPages} pages, ${totalChars.toLocaleString()} chars) for goal: ${goal.slice(0, 50)}`,
+                include_extracted_content_only_once: true,
+              });
+            }
+
+            const searchTerms = await extractSearchTerms();
+            const pageScores = new Map<number, number>();
+            for (const term of searchTerms) {
+              if (!term.trim()) {
+                continue;
+              }
+              const pattern = new RegExp(escapeRegExp(term), 'i');
+              for (
+                let pageIndex = 0;
+                pageIndex < pageTexts.length;
+                pageIndex += 1
+              ) {
+                const pageText = pageTexts[pageIndex] ?? '';
+                if (pattern.test(pageText)) {
+                  const pageNumber = pageIndex + 1;
+                  pageScores.set(
+                    pageNumber,
+                    (pageScores.get(pageNumber) ?? 0) + 1
+                  );
+                }
+              }
+            }
+
+            const pagesToRead: number[] = [1];
+            const sortedPages = Array.from(pageScores.entries()).sort(
+              (a, b) => b[1] - a[1]
+            );
+            for (const [pageNumber] of sortedPages) {
+              if (!pagesToRead.includes(pageNumber)) {
+                pagesToRead.push(pageNumber);
+              }
+            }
+
+            const contentParts: string[] = [];
+            let charsUsed = 0;
+            const pagesIncluded: number[] = [];
+            const pageOrder = Array.from(new Set(pagesToRead)).sort(
+              (a, b) => a - b
+            );
+            for (const pageNumber of pageOrder) {
+              const pageText = pageTexts[pageNumber - 1] ?? '';
+              const pageHeader = `--- Page ${pageNumber} ---\n`;
+              const remaining = maxChars - charsUsed;
+              if (remaining < pageHeader.length + 50) {
+                break;
+              }
+              let pageContent = `${pageHeader}${pageText}`;
+              if (pageContent.length > remaining) {
+                const truncationSuffix = '\n[...truncated]';
+                pageContent =
+                  pageContent.slice(0, remaining - truncationSuffix.length) +
+                  truncationSuffix;
+              }
+              contentParts.push(pageContent);
+              charsUsed += pageContent.length;
+              pagesIncluded.push(pageNumber);
+            }
+
+            const partialPdfContent = contentParts.join('\n\n');
+            return new ActionResult({
+              extracted_content:
+                `PDF: ${sourceName} (${numPages} pages, showing ${pagesIncluded.length} relevant)\n\n` +
+                partialPdfContent,
+              long_term_memory:
+                `Read ${sourceName} (${pagesIncluded.length} relevant pages of ${numPages}) ` +
+                `for goal: ${goal.slice(0, 50)}`,
+              include_extracted_content_only_once: true,
+            });
+          }
+
           const fileBuffer = await fsp.readFile(source);
           content = fileBuffer.toString('utf-8');
         }
-      }
 
-      if (!content.trim()) {
-        return new ActionResult({
-          extracted_content: `Error: No readable content found in ${sourceName}`,
-          long_term_memory: `Failed to read ${sourceName}: no content`,
-        });
-      }
+        if (!content.trim()) {
+          return new ActionResult({
+            extracted_content: `Error: No readable content found in ${sourceName}`,
+            long_term_memory: `Failed to read ${sourceName}: no content`,
+          });
+        }
 
-      if (content.length <= maxChars) {
-        return new ActionResult({
-          extracted_content: `Content from ${sourceName} (${content.length.toLocaleString()} chars):\n\n${content}`,
-          long_term_memory: `Read ${sourceName} (${content.length.toLocaleString()} chars) for goal: ${goal.slice(0, 80)}`,
-          include_extracted_content_only_once: true,
-        });
-      }
+        if (content.length <= maxChars) {
+          return new ActionResult({
+            extracted_content: `Content from ${sourceName} (${content.length.toLocaleString()} chars):\n\n${content}`,
+            long_term_memory: `Read ${sourceName} (${content.length.toLocaleString()} chars) for goal: ${goal.slice(0, 50)}`,
+            include_extracted_content_only_once: true,
+          });
+        }
 
-      const searchTerms = await extractSearchTerms();
-      const chunks = chunkContent(content);
-      const chunkScores = new Map<number, number>();
+        const searchTerms = await extractSearchTerms();
+        const chunks = chunkContent(content, chunkSize);
+        const chunkScores = new Map<number, number>();
 
-      for (const term of searchTerms) {
-        const regex = new RegExp(escapeRegExp(term), 'gi');
-        for (const chunk of chunks) {
-          const matches = chunk.text.match(regex);
-          if (!matches?.length) {
+        for (const term of searchTerms) {
+          const matches = searchText(content, term);
+          for (const match of matches) {
+            for (let index = 0; index < chunks.length; index += 1) {
+              const chunk = chunks[index];
+              if (
+                chunk &&
+                chunk.start <= match.position &&
+                match.position < chunk.end
+              ) {
+                chunkScores.set(index, (chunkScores.get(index) ?? 0) + 1);
+                break;
+              }
+            }
+          }
+        }
+
+        if (!chunkScores.size) {
+          const truncated = content.slice(0, maxChars);
+          return new ActionResult({
+            extracted_content: `Content from ${sourceName} (first ${maxChars.toLocaleString()} of ${content.length.toLocaleString()} chars):\n\n${truncated}`,
+            long_term_memory:
+              `Read ${sourceName} (truncated to ${maxChars.toLocaleString()} chars, no matches for search terms)`,
+            include_extracted_content_only_once: true,
+          });
+        }
+
+        const sortedChunks = Array.from(chunkScores.entries()).sort(
+          (a, b) => b[1] - a[1]
+        );
+        const selectedIndices = new Set<number>([0]);
+        for (const [chunkIndex] of sortedChunks) {
+          selectedIndices.add(chunkIndex);
+        }
+
+        const resultParts: string[] = [];
+        let totalChars = 0;
+        const orderedIndices = Array.from(selectedIndices).sort((a, b) => a - b);
+        for (const index of orderedIndices) {
+          const chunk = chunks[index];
+          if (!chunk) {
             continue;
           }
-          chunkScores.set(
-            chunk.index,
-            (chunkScores.get(chunk.index) ?? 0) + matches.length
-          );
+          if (totalChars + chunk.text.length > maxChars) {
+            break;
+          }
+          const previousIndex = index - 1;
+          if (index > 0 && !selectedIndices.has(previousIndex)) {
+            resultParts.push('\n[...]\n');
+          }
+          resultParts.push(chunk.text);
+          totalChars += chunk.text.length;
         }
-      }
 
-      if (!chunkScores.size) {
-        const truncated = content.slice(0, maxChars);
+        const resultContent = resultParts.join('');
         return new ActionResult({
-          extracted_content: `Content from ${sourceName} (first ${maxChars.toLocaleString()} of ${content.length.toLocaleString()} chars):\n\n${truncated}`,
+          extracted_content:
+            `Content from ${sourceName} (relevant sections, ${totalChars.toLocaleString()} of ${content.length.toLocaleString()} chars):\n\n` +
+            resultContent,
           long_term_memory:
-            `Read ${sourceName} (truncated to ${maxChars.toLocaleString()} chars, no search-term matches)`,
+            `Read ${sourceName} (${selectedIndices.size} relevant sections of ${chunks.length}) ` +
+            `for goal: ${goal.slice(0, 50)}`,
           include_extracted_content_only_once: true,
         });
+      } catch (error) {
+        if (isAbortError(error)) {
+          throw error;
+        }
+        const errorMessage = `Error reading content: ${String((error as Error).message ?? error)}`;
+        return new ActionResult({
+          extracted_content: errorMessage,
+          long_term_memory: errorMessage,
+        });
       }
-
-      const selectedIndices = new Set<number>([0]);
-      for (const [index] of Array.from(chunkScores.entries()).sort(
-        (a, b) => b[1] - a[1]
-      )) {
-        selectedIndices.add(index);
-      }
-
-      const orderedIndices = Array.from(selectedIndices).sort((a, b) => a - b);
-      const sections: string[] = [];
-      let used = 0;
-      for (let i = 0; i < orderedIndices.length; i += 1) {
-        const chunkIndex = orderedIndices[i];
-        const chunk = chunks[chunkIndex];
-        if (!chunk) {
-          continue;
-        }
-
-        let segment = chunk.text;
-        if (used + segment.length > maxChars) {
-          segment = segment.slice(0, maxChars - used);
-        }
-        if (!segment) {
-          break;
-        }
-
-        const prevChunkIndex = orderedIndices[i - 1];
-        if (i > 0 && prevChunkIndex != null && chunkIndex - prevChunkIndex > 1) {
-          const gapMarker = '\n[...]\n';
-          if (used + gapMarker.length <= maxChars) {
-            sections.push(gapMarker);
-            used += gapMarker.length;
-          }
-        }
-
-        sections.push(segment);
-        used += segment.length;
-        if (used >= maxChars) {
-          break;
-        }
-      }
-
-      const extracted = sections.join('');
-      return new ActionResult({
-        extracted_content:
-          `Content from ${sourceName} (relevant sections, ` +
-          `${used.toLocaleString()} of ${content.length.toLocaleString()} chars):\n\n${extracted}`,
-        long_term_memory:
-          `Read ${sourceName} (${selectedIndices.size} relevant sections of ${chunks.length}) ` +
-          `for goal: ${goal.slice(0, 80)}`,
-        include_extracted_content_only_once: true,
-      });
     });
 
     type WriteFileAction = z.infer<typeof WriteFileActionSchema>;
