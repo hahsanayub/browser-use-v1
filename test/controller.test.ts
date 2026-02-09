@@ -2206,6 +2206,118 @@ describe('Regression Coverage', () => {
     expect(result.extracted_content).toContain('{"name":"Alice","age":30}');
   });
 
+  it('extract_structured_data fills optional fields with python-aligned defaults', async () => {
+    const controller = new Controller();
+    const pageExtractionLlm = {
+      ainvoke: vi.fn(async () => ({
+        completion: '{"name":"Alice"}',
+      })),
+    };
+    const page = {
+      content: vi.fn(async () => '<html><body>Alice profile</body></html>'),
+      frames: vi.fn(() => []),
+      url: vi.fn(() => 'https://example.com/profile'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+      agent_current_page: {
+        url: vi.fn(() => 'https://example.com/profile'),
+      },
+    };
+
+    const result = await controller.registry.execute_action(
+      'extract_structured_data',
+      {
+        query: 'Extract person profile',
+        output_schema: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            nickname: { type: 'string' },
+            score: { type: 'number' },
+            active: { type: 'boolean' },
+            tags: { type: 'array', items: { type: 'string' } },
+            status: { type: 'string', enum: ['ok', 'pending'] },
+          },
+          required: ['name'],
+        },
+      },
+      {
+        browser_session: browserSession as any,
+        page_extraction_llm: pageExtractionLlm as any,
+        file_system: {
+          save_extracted_content: vi.fn(async () => '/tmp/saved.txt'),
+        } as any,
+      }
+    );
+
+    expect(result.error).toBeNull();
+    const structuredMatch = result.extracted_content?.match(
+      /<structured_result>\n([\s\S]*?)\n<\/structured_result>/
+    );
+    expect(structuredMatch).toBeTruthy();
+    const parsed = JSON.parse(structuredMatch?.[1] ?? '{}');
+    expect(parsed).toMatchObject({
+      name: 'Alice',
+      nickname: '',
+      score: 0,
+      active: false,
+      tags: [],
+      status: null,
+    });
+  });
+
+  it('extract_structured_data falls back to free-text when output_schema uses unsupported keywords', async () => {
+    const controller = new Controller();
+    const pageExtractionLlm = {
+      ainvoke: vi.fn(async () => ({
+        completion: 'fallback plain text',
+      })),
+    };
+    const page = {
+      content: vi.fn(async () => '<html><body>Fallback content</body></html>'),
+      frames: vi.fn(() => []),
+      url: vi.fn(() => 'https://example.com/fallback'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+      agent_current_page: {
+        url: vi.fn(() => 'https://example.com/fallback'),
+      },
+    };
+
+    const result = await controller.registry.execute_action(
+      'extract_structured_data',
+      {
+        query: 'Fallback extraction',
+        output_schema: {
+          type: 'object',
+          properties: {
+            person: { $ref: '#/$defs/Person' },
+          },
+          $defs: {
+            Person: {
+              type: 'object',
+              properties: { name: { type: 'string' } },
+              required: ['name'],
+            },
+          },
+        },
+      },
+      {
+        browser_session: browserSession as any,
+        page_extraction_llm: pageExtractionLlm as any,
+        file_system: {
+          save_extracted_content: vi.fn(async () => '/tmp/saved.txt'),
+        } as any,
+      }
+    );
+
+    expect(result.error).toBeNull();
+    expect(result.extracted_content).toContain('<result>');
+    expect(result.extracted_content).not.toContain('<structured_result>');
+  });
+
   it('controller.act maps BrowserError to ActionResult memory fields', async () => {
     const controller = new Controller();
 

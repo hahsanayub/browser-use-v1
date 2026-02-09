@@ -928,6 +928,166 @@ export class Controller<Context = unknown> {
 
   private registerContentActions() {
     const registry = this.registry;
+    const contentLogger = this.logger;
+
+    const UNSUPPORTED_EXTRACTION_SCHEMA_KEYWORDS = new Set([
+      '$ref',
+      'allOf',
+      'anyOf',
+      'oneOf',
+      'not',
+      '$defs',
+      'definitions',
+      'if',
+      'then',
+      'else',
+      'dependentSchemas',
+      'dependentRequired',
+    ]);
+
+    const findUnsupportedSchemaKeyword = (
+      schema: unknown
+    ): string | null => {
+      if (Array.isArray(schema)) {
+        for (const item of schema) {
+          const found = findUnsupportedSchemaKeyword(item);
+          if (found) {
+            return found;
+          }
+        }
+        return null;
+      }
+      if (!schema || typeof schema !== 'object') {
+        return null;
+      }
+
+      for (const [key, value] of Object.entries(schema)) {
+        if (UNSUPPORTED_EXTRACTION_SCHEMA_KEYWORDS.has(key)) {
+          return key;
+        }
+        const found = findUnsupportedSchemaKeyword(value);
+        if (found) {
+          return found;
+        }
+      }
+
+      return null;
+    };
+
+    const resolveDefaultForSchema = (schema: unknown): unknown => {
+      if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
+        return null;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(schema, 'default')) {
+        return (schema as Record<string, unknown>).default;
+      }
+
+      const schemaRecord = schema as Record<string, unknown>;
+      const schemaType = schemaRecord.type;
+      const typeList = Array.isArray(schemaType)
+        ? schemaType.map((item) => String(item).toLowerCase())
+        : [String(schemaType ?? '').toLowerCase()].filter(Boolean);
+
+      const allowsNull =
+        schemaRecord.nullable === true || typeList.includes('null');
+      if (allowsNull) {
+        return null;
+      }
+
+      if (Array.isArray(schemaRecord.enum)) {
+        return null;
+      }
+
+      if (typeList.includes('string')) {
+        return '';
+      }
+      if (typeList.includes('number') || typeList.includes('integer')) {
+        return 0;
+      }
+      if (typeList.includes('boolean')) {
+        return false;
+      }
+      if (typeList.includes('array')) {
+        return [];
+      }
+
+      return null;
+    };
+
+    const normalizeStructuredData = (
+      value: unknown,
+      schema: unknown
+    ): unknown => {
+      if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
+        return value;
+      }
+
+      const schemaRecord = schema as Record<string, unknown>;
+      const schemaType = schemaRecord.type;
+      const typeList = Array.isArray(schemaType)
+        ? schemaType.map((item) => String(item).toLowerCase())
+        : [String(schemaType ?? '').toLowerCase()].filter(Boolean);
+
+      if (typeList.includes('object')) {
+        const properties =
+          schemaRecord.properties &&
+          typeof schemaRecord.properties === 'object' &&
+          !Array.isArray(schemaRecord.properties)
+            ? (schemaRecord.properties as Record<string, unknown>)
+            : {};
+        const required = new Set(
+          Array.isArray(schemaRecord.required)
+            ? schemaRecord.required
+                .map((name) => String(name))
+                .filter((name) => name.length > 0)
+            : []
+        );
+        const source =
+          value && typeof value === 'object' && !Array.isArray(value)
+            ? (value as Record<string, unknown>)
+            : {};
+        const normalized: Record<string, unknown> = {};
+
+        for (const [propertyName, propertySchema] of Object.entries(properties)) {
+          if (Object.prototype.hasOwnProperty.call(source, propertyName)) {
+            normalized[propertyName] = normalizeStructuredData(
+              source[propertyName],
+              propertySchema
+            );
+            continue;
+          }
+
+          if (required.has(propertyName)) {
+            continue;
+          }
+
+          normalized[propertyName] = resolveDefaultForSchema(propertySchema);
+        }
+
+        for (const [propertyName, propertyValue] of Object.entries(source)) {
+          if (!Object.prototype.hasOwnProperty.call(normalized, propertyName)) {
+            normalized[propertyName] = propertyValue;
+          }
+        }
+
+        return normalized;
+      }
+
+      if (
+        typeList.includes('array') &&
+        Array.isArray(value) &&
+        schemaRecord.items &&
+        typeof schemaRecord.items === 'object'
+      ) {
+        return value.map((item) =>
+          normalizeStructuredData(item, schemaRecord.items)
+        );
+      }
+
+      return value;
+    };
+
     type ExtractStructuredAction = z.infer<
       typeof ExtractStructuredDataActionSchema
     >;
@@ -1102,7 +1262,17 @@ export class Controller<Context = unknown> {
         return JSON.parse(candidate);
       };
 
-      const effectiveOutputSchema = params.output_schema ?? extraction_schema;
+      let effectiveOutputSchema = params.output_schema ?? extraction_schema;
+      if (effectiveOutputSchema != null) {
+        const unsupportedKeyword =
+          findUnsupportedSchemaKeyword(effectiveOutputSchema);
+        if (unsupportedKeyword) {
+          contentLogger.warning(
+            `Invalid output_schema, falling back to free-text extraction: unsupported keyword '${unsupportedKeyword}'`
+          );
+          effectiveOutputSchema = null;
+        }
+      }
       const pageUrl = currentUrl || '';
       const maxMemoryLength = 10000;
 
@@ -1164,13 +1334,17 @@ You will be given a query, a JSON Schema, and the markdown of a webpage that has
           );
         }
 
-        const resultJson = JSON.stringify(parsedResult);
+        const normalizedResult = normalizeStructuredData(
+          parsedResult,
+          effectiveOutputSchema
+        ) as Record<string, unknown>;
+        const resultJson = JSON.stringify(normalizedResult);
         const extractedContent =
           `<url>\n${pageUrl}\n</url>\n` +
           `<query>\n${params.query}\n</query>\n` +
           `<structured_result>\n${resultJson}\n</structured_result>`;
         const extractionMeta = {
-          data: parsedResult,
+          data: normalizedResult,
           schema_used: effectiveOutputSchema,
           is_partial: wasTruncated,
           source_url: pageUrl,
