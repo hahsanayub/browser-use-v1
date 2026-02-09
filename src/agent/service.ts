@@ -770,7 +770,7 @@ export class Agent<
     );
     if (this.has_downloads_path) {
       this._last_known_downloads = [];
-      this.logger.info('📁 Initialized download tracking for agent');
+      this.logger.debug('📁 Initialized download tracking for agent');
     }
 
     this.system_prompt_class = new SystemPrompt(
@@ -5376,7 +5376,7 @@ export class Agent<
         this.logger.info(`📄 New file available: ${file_path}`);
       }
     } else {
-      this.logger.info(
+      this.logger.debug(
         `📁 No new downloads detected (tracking ${existing.length} files)`
       );
     }
