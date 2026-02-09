@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { BaseChatModel } from '../src/llm/base.js';
 import { Agent } from '../src/agent/service.js';
-import { ActionResult, AgentStepInfo } from '../src/agent/views.js';
+import { ActionResult, AgentOutput, AgentStepInfo } from '../src/agent/views.js';
 import {
   ModelProviderError,
   ModelRateLimitError,
@@ -894,7 +894,7 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
-  it('formats follow-up tasks with initial and follow-up tags in message manager', async () => {
+  it('aligns addNewTask with python message-manager semantics', async () => {
     const agent = new Agent({
       task: 'Original task instructions',
       llm: createLlm(),
@@ -903,30 +903,26 @@ describe('Agent constructor browser session alignment', () => {
     agent.addNewTask('Collect pricing details');
 
     const messageManager = (agent as any)._message_manager;
-    expect((messageManager as any).task).toContain(
-      '<initial_user_request>Original task instructions</initial_user_request>'
-    );
-    expect((messageManager as any).task).toContain(
-      '<follow_up_user_request> Collect pricing details </follow_up_user_request>'
-    );
+    expect((messageManager as any).task).toBe('Collect pricing details');
 
     const lastHistoryItem = (messageManager as any).state.agent_history_items.at(
       -1
     );
     expect(lastHistoryItem?.system_message).toBe(
-      '<follow_up_user_request> Collect pricing details </follow_up_user_request>'
+      'User updated <user_request> to: Collect pricing details'
     );
 
     await agent.close();
   });
 
-  it('records step-0 action results with read_state tags and compact result text', async () => {
+  it('keeps step-0 model-output failures out of history and formats read_state/action results like python', async () => {
     const agent = new Agent({
       task: 'Message manager step-0 format',
       llm: createLlm(),
     });
 
     const messageManager = (agent as any)._message_manager;
+    const initialHistoryLength = (messageManager as any).state.agent_history_items.length;
     messageManager.prepare_step_state(
       createBrowserStateSummary(),
       null,
@@ -943,17 +939,33 @@ describe('Agent constructor browser session alignment', () => {
     );
 
     const readState = (messageManager as any).state.read_state_description;
-    expect(readState).toContain('<read_state_0>');
-    expect(readState).toContain('Read-once content');
-    expect(readState).toContain('</read_state_0>');
-
-    const lastHistoryItem = (messageManager as any).state.agent_history_items.at(
-      -1
+    expect(readState).toBe('Read-once content');
+    expect((messageManager as any).state.agent_history_items).toHaveLength(
+      initialHistoryLength
     );
-    expect(lastHistoryItem?.step_number).toBe(0);
-    expect(lastHistoryItem?.action_results).toContain('Result');
-    expect(lastHistoryItem?.action_results).toContain('Persisted action memory');
-    expect(lastHistoryItem?.action_results).not.toContain('Action 1/');
+
+    const output = new AgentOutput({
+      evaluation_previous_goal: 'ok',
+      memory: 'mem',
+      next_goal: 'next',
+      action: [],
+    });
+    messageManager.prepare_step_state(
+      createBrowserStateSummary(),
+      output as any,
+      [
+        new ActionResult({
+          long_term_memory: 'Persisted action memory',
+        }),
+      ],
+      new AgentStepInfo(1, 10)
+    );
+
+    const lastHistoryItem = (messageManager as any).state.agent_history_items.at(-1);
+    expect(lastHistoryItem?.action_results).toContain('Action Results:');
+    expect(lastHistoryItem?.action_results).toContain(
+      'Action 1/1: Persisted action memory'
+    );
 
     await agent.close();
   });
