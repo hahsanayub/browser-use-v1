@@ -137,6 +137,11 @@ export class Registry<Context = unknown> {
   }
 
   action(description: string, options: ActionOptions = {}) {
+    if (options.allowed_domains && options.domains) {
+      throw new Error(
+        "Cannot specify both 'domains' and 'allowed_domains' - they are aliases for the same parameter"
+      );
+    }
     const schema = options.param_model ?? z.object({}).strict();
     const actionNameOverride = options.action_name ?? null;
     const domains = options.allowed_domains ?? options.domains ?? null;

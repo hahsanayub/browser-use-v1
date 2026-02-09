@@ -154,6 +154,21 @@ describe('Controller Registry Tests', () => {
 
       expect(registry.get_action('switch')).toBeNull();
     });
+
+    it('throws when both domains and allowed_domains are provided', () => {
+      const registry = new Registry();
+
+      expect(() =>
+        registry.action('Conflicting domain aliases', {
+          domains: ['https://example.com'],
+          allowed_domains: ['https://example.org'],
+        })(async function conflicting_domain_action() {
+          return new ActionResult({ extracted_content: 'ok' });
+        })
+      ).toThrow(
+        "Cannot specify both 'domains' and 'allowed_domains' - they are aliases for the same parameter"
+      );
+    });
   });
 
   describe('Action Schemas', () => {
