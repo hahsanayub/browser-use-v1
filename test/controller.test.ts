@@ -2105,6 +2105,15 @@ describe('Regression Coverage', () => {
     expect(fileSystem.save_extracted_content).not.toHaveBeenCalled();
   });
 
+  it('extract_structured_data prompt description includes single-use guidance', async () => {
+    const controller = new Controller();
+    const prompt = controller.registry.get_prompt_description();
+
+    expect(prompt).toContain('extract_structured_data');
+    expect(prompt).toContain("haven't called before on same page+query");
+    expect(prompt).toContain('Use start_from_char');
+  });
+
   it('extract_structured_data rejects responses that violate output_schema', async () => {
     const controller = new Controller();
     const pageExtractionLlm = {

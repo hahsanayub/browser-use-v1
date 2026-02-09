@@ -1088,11 +1088,14 @@ export class Controller<Context = unknown> {
       return value;
     };
 
+    const extractStructuredDescription =
+      "LLM extracts structured data from page markdown. Use when: on right page, know what to extract, haven't called before on same page+query. Can't get interactive elements. Set extract_links=True for URLs. Use start_from_char if previous extraction was truncated to extract data further down the page.";
+
     type ExtractStructuredAction = z.infer<
       typeof ExtractStructuredDataActionSchema
     >;
     this.registry.action(
-      'Extract structured, semantic data from the current webpage based on a textual query.',
+      extractStructuredDescription,
       {
         param_model: ExtractStructuredDataActionSchema,
       }
@@ -1417,7 +1420,7 @@ You will be given a query and the markdown of a webpage that has been filtered t
     });
 
     this.registry.action(
-      'Extract structured, semantic data from the current webpage based on a textual query.',
+      extractStructuredDescription,
       { param_model: ExtractStructuredDataActionSchema, action_name: 'extract' }
     )(async function extract(
       params: ExtractStructuredAction,
