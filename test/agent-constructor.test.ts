@@ -1600,6 +1600,40 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('uses step_name in no-action rerun logs for metadata-free steps (python c011 parity)', async () => {
+    const agent = new Agent({
+      task: 'test rerun no-action step name parity',
+      llm: createLlm(),
+    });
+
+    const warningSpy = vi.spyOn(agent.logger, 'warning');
+    vi.spyOn(agent as any, '_generate_rerun_summary').mockResolvedValue(
+      new ActionResult({ is_done: true, success: false, extracted_content: 'summary' })
+    );
+
+    const history = {
+      history: [
+        {
+          model_output: {
+            current_state: { next_goal: 'No-op replay' },
+            action: [],
+          },
+        },
+      ],
+    } as any;
+
+    const result = await agent.rerun_history(history);
+
+    expect(result).toHaveLength(2);
+    expect(
+      warningSpy.mock.calls.some((call) =>
+        String(call[0] ?? '').includes('Initial actions: No action to replay, skipping')
+      )
+    ).toBe(true);
+
+    await agent.close();
+  });
+
   it('passes signal through rerun_history to history step execution', async () => {
     const agent = new Agent({
       task: 'test rerun signal propagation',

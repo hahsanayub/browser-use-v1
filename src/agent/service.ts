@@ -3122,7 +3122,7 @@ export class Agent<
         const hasValidAction =
           actions.length && !actions.every((action) => action == null);
         if (!historyItem.model_output || !hasValidAction) {
-          this.logger.warning(`Step ${index + 1}: No action to replay, skipping`);
+          this.logger.warning(`${stepName}: No action to replay, skipping`);
           results.push(new ActionResult({ error: 'No action to replay' }));
           continue;
         }
