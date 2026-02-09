@@ -6,7 +6,7 @@ import { ContentPartTextParam } from '../src/llm/messages.js';
 import { Image, createCanvas } from 'canvas';
 
 describe('AgentMessagePrompt browser state enrichment', () => {
-  it('includes recent events, pending requests, pagination, and popup messages', () => {
+  it('includes recent events and popup messages, without pending/pagination sections', () => {
     const root = new DOMElementNode(true, null, 'body', '/body', {}, []);
     const domState = new DOMState(root, {});
     const browserState = new BrowserStateSummary(domState, {
@@ -49,9 +49,9 @@ describe('AgentMessagePrompt browser state enrichment', () => {
     const content = String(userMessage.content ?? '');
 
     expect(content).toContain('Recent browser events:');
-    expect(content).toContain('Pending network requests:');
-    expect(content).toContain('Detected pagination buttons:');
     expect(content).toContain('Auto-closed JavaScript dialogs:');
+    expect(content).not.toContain('Pending network requests:');
+    expect(content).not.toContain('Detected pagination buttons:');
   });
 
   it('includes python-style page stats summary', () => {
@@ -267,8 +267,9 @@ describe('AgentMessagePrompt browser state enrichment', () => {
     const userMessage = prompt.get_user_message(false) as any;
     const content = String(userMessage.content ?? '');
     expect(content).toContain('PDF viewer cannot be rendered.');
-    expect(content).toContain('DO NOT use the extract_structured_data action');
+    expect(content).toContain('DO NOT use the extract action');
     expect(content).toContain('Use the read_file action');
+    expect(content).toContain('read the full text content');
   });
 
   it('includes sample_images and resizes screenshots for llm_screenshot_size', () => {
@@ -321,7 +322,7 @@ describe('AgentMessagePrompt browser state enrichment', () => {
     expect(resizedImage.height).toBe(1);
   });
 
-  it('formats step info and available file paths using python c011 prompt style', () => {
+  it('formats step info and available file paths using c011 prompt style', () => {
     const root = new DOMElementNode(true, null, 'body', '/body', {}, []);
     const domState = new DOMState(root, {});
     const browserState = new BrowserStateSummary(domState, {
@@ -344,14 +345,10 @@ describe('AgentMessagePrompt browser state enrichment', () => {
     const userMessage = prompt.get_user_message(false) as any;
     const content = String(userMessage.content ?? '');
 
+    expect(content).toContain('<step_info>Step1 maximum:5');
+    expect(content).toMatch(/Today:\d{4}-\d{2}-\d{2}/);
     expect(content).toContain(
-      '<step_info>\nStep 1 of 5 max possible steps\nCurrent date and time:'
-    );
-    expect(content).toMatch(
-      /Current date and time: \d{4}-\d{2}-\d{2} \d{2}:\d{2}/
-    );
-    expect(content).toContain(
-      '<available_file_paths>\n/tmp/report.pdf\n</available_file_paths>'
+      '<available_file_paths>/tmp/report.pdf\nUse with absolute paths</available_file_paths>'
     );
   });
 
@@ -386,7 +383,6 @@ describe('AgentMessagePrompt browser state enrichment', () => {
 describe('SystemPrompt template selection parity', () => {
   it('uses browser-use thinking template for browser-use models', () => {
     const prompt = new SystemPrompt(
-      'actions',
       5,
       null,
       null,
@@ -403,7 +399,6 @@ describe('SystemPrompt template selection parity', () => {
 
   it('uses browser-use flash template in flash mode', () => {
     const prompt = new SystemPrompt(
-      'actions',
       5,
       null,
       null,
@@ -420,7 +415,6 @@ describe('SystemPrompt template selection parity', () => {
 
   it('uses anthropic flash template for anthropic models in flash mode', () => {
     const prompt = new SystemPrompt(
-      'actions',
       5,
       null,
       null,
@@ -437,7 +431,6 @@ describe('SystemPrompt template selection parity', () => {
 
   it('uses anthropic 4.5 flash template for opus/haiku 4.5 models', () => {
     const prompt = new SystemPrompt(
-      'actions',
       5,
       null,
       null,

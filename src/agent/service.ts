@@ -780,7 +780,6 @@ export class Agent<
     }
 
     this.system_prompt_class = new SystemPrompt(
-      this.controller.registry.get_prompt_description(),
       this.settings.max_actions_per_step,
       this.settings.override_system_message,
       this.settings.extend_system_message,

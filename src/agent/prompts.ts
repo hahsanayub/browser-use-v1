@@ -29,8 +29,7 @@ export class SystemPrompt {
   private systemMessage: SystemMessage;
 
   constructor(
-    private readonly actionDescription: string,
-    private readonly maxActionsPerStep = 10,
+    private readonly maxActionsPerStep = 3,
     private readonly overrideSystemMessage: string | null = null,
     private readonly extendSystemMessage: string | null = null,
     private readonly useThinking = true,
@@ -39,7 +38,7 @@ export class SystemPrompt {
     private readonly isBrowserUseModel = false,
     private readonly modelName: string | null = null
   ) {
-    if (overrideSystemMessage) {
+    if (overrideSystemMessage !== null) {
       this.promptTemplate = overrideSystemMessage;
     } else {
       this.loadPromptTemplate();
@@ -246,8 +245,8 @@ export class AgentMessagePrompt {
       truncatedText = ` (truncated to ${this.maxClickableElementsLength} characters)`;
     }
 
-    const hasContentAbove = (this.browserState.pixels_above ?? 0) > 0;
-    const hasContentBelow = (this.browserState.pixels_below ?? 0) > 0;
+    let hasContentAbove = false;
+    let hasContentBelow = false;
 
     const pi = this.browserState.page_info;
     let pageInfoText = '';
@@ -256,35 +255,20 @@ export class AgentMessagePrompt {
         pi.viewport_height > 0 ? pi.pixels_above / pi.viewport_height : 0;
       const pagesBelow =
         pi.viewport_height > 0 ? pi.pixels_below / pi.viewport_height : 0;
-      const totalPages =
-        pi.viewport_height > 0 ? pi.page_height / pi.viewport_height : 0;
-      const currentPosition =
-        pi.scroll_y / Math.max(pi.page_height - pi.viewport_height, 1);
-      pageInfoText = `Page info: ${pi.viewport_width}x${pi.viewport_height}px viewport, ${pi.page_width}x${pi.page_height}px total page size, ${pagesAbove.toFixed(1)} pages above, ${pagesBelow.toFixed(1)} pages below, ${totalPages.toFixed(1)} total pages, at ${(currentPosition * 100).toFixed(0)}% of page`;
+      hasContentAbove = pagesAbove > 0;
+      hasContentBelow = pagesBelow > 0;
+      pageInfoText = '<page_info>';
+      pageInfoText += `${pagesAbove.toFixed(1)} above, `;
+      pageInfoText += `${pagesBelow.toFixed(1)} below `;
+      pageInfoText += '</page_info>\n';
     }
 
     if (elementsText) {
-      if (hasContentAbove) {
-        if (pi) {
-          const pagesAbove =
-            pi.viewport_height > 0 ? pi.pixels_above / pi.viewport_height : 0;
-          elementsText = `... ${this.browserState.pixels_above} pixels above (${pagesAbove.toFixed(1)} pages) - scroll to see more or extract structured data if you are looking for specific information ...\n${elementsText}`;
-        } else {
-          elementsText = `... ${this.browserState.pixels_above} pixels above - scroll to see more or extract structured data if you are looking for specific information ...\n${elementsText}`;
-        }
-      } else {
+      if (!hasContentAbove) {
         elementsText = `[Start of page]\n${elementsText}`;
       }
 
-      if (hasContentBelow) {
-        if (pi) {
-          const pagesBelow =
-            pi.viewport_height > 0 ? pi.pixels_below / pi.viewport_height : 0;
-          elementsText = `${elementsText}\n... ${this.browserState.pixels_below} pixels below (${pagesBelow.toFixed(1)} pages) - scroll to see more or extract structured data if you are looking for specific information ...`;
-        } else {
-          elementsText = `${elementsText}\n... ${this.browserState.pixels_below} pixels below - scroll to see more or extract structured data if you are looking for specific information ...`;
-        }
-      } else {
+      if (!hasContentBelow) {
         elementsText = `${elementsText}\n[End of page]`;
       }
     } else {
@@ -314,7 +298,7 @@ export class AgentMessagePrompt {
     const currentTabText =
       currentTabId !== null ? `Current tab: ${currentTabId}` : '';
     const pdfMessage = this.browserState.is_pdf_viewer
-      ? 'PDF viewer cannot be rendered. In this page, DO NOT use the extract_structured_data action as PDF content cannot be rendered. Use the read_file action on the downloaded PDF in available_file_paths to read the full content.\n\n'
+      ? 'PDF viewer cannot be rendered. In this page, DO NOT use the extract action as PDF content cannot be rendered. Use the read_file action on the downloaded PDF in available_file_paths to read the full text content.\n\n'
       : '';
     const recentEventsText =
       this.includeRecentEvents && this.browserState.recent_events
@@ -333,64 +317,26 @@ export class AgentMessagePrompt {
       closedPopupsText += '\n';
     }
 
-    let pendingRequestsText = '';
-    if (
-      Array.isArray(this.browserState.pending_network_requests) &&
-      this.browserState.pending_network_requests.length > 0
-    ) {
-      const requestLines = this.browserState.pending_network_requests
-        .slice(0, 5)
-        .map((request) => {
-          const method = request.method || 'GET';
-          const duration =
-            typeof request.loading_duration_ms === 'number'
-              ? ` (${Math.round(request.loading_duration_ms)}ms)`
-              : '';
-          return `  - ${method} ${request.url}${duration}`;
-        })
-        .join('\n');
-      pendingRequestsText = `Pending network requests:\n${requestLines}\n`;
-    }
-
-    let paginationButtonsText = '';
-    if (
-      Array.isArray(this.browserState.pagination_buttons) &&
-      this.browserState.pagination_buttons.length > 0
-    ) {
-      const buttonLines = this.browserState.pagination_buttons
-        .slice(0, 8)
-        .map(
-          (button) =>
-            `  - [${button.backend_node_id}] ${button.button_type}: ${button.text}`
-        )
-        .join('\n');
-      paginationButtonsText = `Detected pagination buttons:\n${buttonLines}\n`;
-    }
-
     return `${statsText}${currentTabText}
 Available tabs:
 ${tabsText}
 ${pageInfoText}
-${recentEventsText}${pendingRequestsText}${paginationButtonsText}${closedPopupsText}${pdfMessage}Interactive elements from top layer of the current page inside the viewport${truncatedText}:
+${recentEventsText}${closedPopupsText}${pdfMessage}Interactive elements${truncatedText}:
 ${elementsText}
 `;
   }
 
   private agentStateDescription() {
     const todoContents = this.fileSystem.get_todo_contents();
-    const todoText =
-      todoContents ||
-      '[Current todo.md is empty, fill it with your plan when applicable]';
+    const todoText = todoContents || '[empty todo.md, fill it when applicable]';
     const now = new Date();
     const pad = (value: number) => String(value).padStart(2, '0');
-    const dateTimeString =
-      `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ` +
-      `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const dateString = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
     let stepInfoDescription =
       this.stepInfo != null
-        ? `Step ${this.stepInfo.step_number + 1} of ${this.stepInfo.max_steps} max possible steps\n`
+        ? `Step${this.stepInfo.step_number + 1} maximum:${this.stepInfo.max_steps}\n`
         : '';
-    stepInfoDescription += `Current date and time: ${dateTimeString}`;
+    stepInfoDescription += `Today:${dateString}`;
 
     let agentState = `<user_request>
 ${this.task ?? ''}
@@ -402,13 +348,6 @@ ${this.fileSystem.describe()}
 ${todoText}
 </todo_contents>
 `;
-    if (this.sensitiveData) {
-      agentState += `<sensitive_data>
-${this.sensitiveData}
-</sensitive_data>
-`;
-    }
-
     if (this.planDescription) {
       agentState += `<plan>
 ${this.planDescription}
@@ -416,15 +355,17 @@ ${this.planDescription}
 `;
     }
 
-    agentState += `<step_info>
-${stepInfoDescription}
-</step_info>
+    if (this.sensitiveData) {
+      agentState += `<sensitive_data>${this.sensitiveData}</sensitive_data>
+`;
+    }
+
+    agentState += `<step_info>${stepInfoDescription}</step_info>
 `;
 
     if (this.availableFilePaths?.length) {
-      agentState += `<available_file_paths>
-${this.availableFilePaths.join('\n')}
-</available_file_paths>
+      agentState += `<available_file_paths>${this.availableFilePaths.join('\n')}
+Use with absolute paths</available_file_paths>
 `;
     }
 
@@ -480,6 +421,7 @@ ${this.availableFilePaths.join('\n')}
     let stateDescription = `<agent_history>
 ${(this.agentHistoryDescription ?? '').trim()}
 </agent_history>
+
 `;
     stateDescription += `<agent_state>
 ${this.agentStateDescription().trim()}
@@ -620,7 +562,7 @@ You are an expert at extracting data from webpages.
 <input>
 You will be given:
 1. A query describing what to extract
-2. A textual representation of the webpage
+2. The markdown of the webpage (filtered to remove noise)
 3. Optionally, a screenshot of the current page state
 </input>
 
