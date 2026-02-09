@@ -1015,6 +1015,25 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('logs c011 directly_open_url ambiguity message when multiple URLs are detected', async () => {
+    const agent = new Agent({
+      task: 'placeholder',
+      llm: createLlm(),
+    });
+
+    const debugSpy = vi.spyOn(agent.logger, 'debug');
+    const extracted = (agent as any)._extract_start_url(
+      'Compare https://example.com with https://example.org and summarize.'
+    );
+
+    expect(extracted).toBeNull();
+    expect(debugSpy).toHaveBeenCalledWith(
+      'Multiple URLs found (2), skipping directly_open_url to avoid ambiguity'
+    );
+
+    await agent.close();
+  });
+
   it('respects directly_open_url=false and skips URL auto-navigation', async () => {
     const agent = new Agent({
       task: 'Open https://example.com and verify the page title.',

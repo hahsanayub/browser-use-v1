@@ -1698,7 +1698,7 @@ export class Agent<
     const uniqueUrls = Array.from(new Set(foundUrls));
     if (uniqueUrls.length > 1) {
       this.logger.debug(
-        `Multiple URLs found (${uniqueUrls.length}), skipping automatic open URL`
+        `Multiple URLs found (${uniqueUrls.length}), skipping directly_open_url to avoid ambiguity`
       );
       return null;
     }
