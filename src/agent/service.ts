@@ -13,6 +13,7 @@ import {
   SignalHandler,
   get_browser_use_version,
   check_latest_browser_use_version,
+  sanitize_surrogates,
 } from '../utils.js';
 import type { Controller } from '../controller/service.js';
 import { Controller as DefaultController } from '../controller/service.js';
@@ -38,6 +39,7 @@ import { InsecureSensitiveDataError } from '../exceptions.js';
 import { HistoryTreeProcessor } from '../dom/history-tree-processor/service.js';
 import { DOMHistoryElement } from '../dom/history-tree-processor/view.js';
 import { DEFAULT_INCLUDE_ATTRIBUTES, type DOMElementNode } from '../dom/views.js';
+import { extractCleanMarkdownFromHtml } from '../dom/markdown-extractor.js';
 import type { BaseChatModel } from '../llm/base.js';
 import { ChatBrowserUse } from '../llm/browser-use/chat.js';
 import {
@@ -2979,32 +2981,61 @@ export class Agent<
     }
 
     const llm = aiStepLlm ?? this.llm;
-    let browserState: BrowserStateSummary | null = null;
+
+    let content = '';
+    let statsSummary = '';
+    let currentUrl = '';
     try {
-      browserState = await this.browser_session.get_browser_state_with_recovery?.(
-        {
-          cache_clickable_elements_hashes: false,
-          include_screenshot: includeScreenshot,
-          signal,
-        }
-      );
+      const page = await this.browser_session.get_current_page?.();
+      if (!page || typeof page.content !== 'function') {
+        throw new Error('No page available for markdown extraction');
+      }
+      if (typeof page.url === 'function') {
+        currentUrl = page.url();
+      }
+      const html = (await page.content()) || '';
+      const extracted = extractCleanMarkdownFromHtml(html, {
+        extract_links: extractLinks,
+      });
+      content = extracted.content;
+      const contentStats = extracted.stats;
+      statsSummary = `Content processed: ${contentStats.original_html_chars.toLocaleString()} HTML chars -> ${contentStats.initial_markdown_chars.toLocaleString()} initial markdown -> ${contentStats.final_filtered_chars.toLocaleString()} filtered markdown`;
+      if (contentStats.filtered_chars_removed > 0) {
+        statsSummary += ` (filtered ${contentStats.filtered_chars_removed.toLocaleString()} chars of noise)`;
+      }
     } catch (error) {
+      const name = error instanceof Error ? error.name : 'Error';
+      const message = error instanceof Error ? error.message : String(error);
       return new ActionResult({
-        error: `AI step failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        error: `Could not extract clean markdown: ${name}: ${message}`,
       });
     }
 
-    const content =
-      browserState?.element_tree?.clickable_elements_to_string?.(
-        this.settings.include_attributes ?? undefined
-      ) ?? '';
-    const statsSummary = `Content processed: ${content.length.toLocaleString()} chars, extract_links=${extractLinks}`;
+    const safeContent = sanitize_surrogates(content);
+    const safeQuery = sanitize_surrogates(query);
     const systemPrompt = get_ai_step_system_prompt();
-    const userPrompt = get_ai_step_user_prompt(query, statsSummary, content);
-    const screenshotB64 = includeScreenshot ? browserState?.screenshot ?? null : null;
-    const userMessage = get_rerun_summary_message(userPrompt, screenshotB64);
+    const userPrompt = get_ai_step_user_prompt(
+      safeQuery,
+      statsSummary,
+      safeContent
+    );
+
+    let screenshotB64: string | null = null;
+    if (includeScreenshot) {
+      try {
+        screenshotB64 = (await this.browser_session.take_screenshot?.(false)) ?? null;
+      } catch (error) {
+        this.logger.warning(
+          `Failed to capture screenshot for ai_step: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
+
+    const userMessage = screenshotB64
+      ? get_rerun_summary_message(userPrompt, screenshotB64)
+      : new UserMessage(userPrompt);
 
     try {
       const response = await llm.ainvoke(
@@ -3012,12 +3043,11 @@ export class Agent<
         undefined,
         { signal: signal ?? undefined }
       );
-      const currentUrl = browserState?.url ?? '';
       const completion =
         typeof response.completion === 'string'
           ? response.completion
           : JSON.stringify(response.completion);
-      const extractedContent = `<url>\n${currentUrl}\n</url>\n<query>\n${query}\n</query>\n<result>\n${completion}\n</result>`;
+      const extractedContent = `<url>\n${currentUrl}\n</url>\n<query>\n${safeQuery}\n</query>\n<result>\n${completion}\n</result>`;
       const maxMemoryLength = 1000;
       if (extractedContent.length < maxMemoryLength) {
         return new ActionResult({

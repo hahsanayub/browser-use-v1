@@ -1797,6 +1797,50 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('uses markdown extraction stats and page URL in _execute_ai_step (python c011 parity)', async () => {
+    const ainvoke = vi.fn(async () => ({
+      completion: 'ai result',
+      usage: null,
+    }));
+    const llm = {
+      model: 'gpt-test',
+      provider: 'test',
+      name: 'test',
+      model_name: 'gpt-test',
+      ainvoke,
+    } as unknown as BaseChatModel;
+    const agent = new Agent({
+      task: 'test ai step markdown extraction',
+      llm,
+    });
+
+    vi.spyOn(agent.browser_session as any, 'get_current_page').mockResolvedValue({
+      url: () => 'https://example.com/path',
+      content: vi.fn(
+        async () => '<html><body><h1>Title</h1><p>Hello world</p></body></html>'
+      ),
+    } as any);
+
+    const result = await (agent as any)._execute_ai_step(
+      'Find title',
+      false,
+      false,
+      null,
+      null
+    );
+
+    expect(ainvoke).toHaveBeenCalledTimes(1);
+    const messages = ainvoke.mock.calls[0]?.[0] as any[];
+    expect(String(messages?.[1]?.content ?? '')).toContain('Content processed:');
+    expect(String(messages?.[1]?.content ?? '')).toContain('HTML chars');
+    expect(result.extracted_content).toContain(
+      '<url>\nhttps://example.com/path\n</url>'
+    );
+    expect(result.extracted_content).toContain('<query>\nFind title\n</query>');
+
+    await agent.close();
+  });
+
   it('executes extract actions via AI step during history replay', async () => {
     const agent = new Agent({
       task: 'test extract ai-step replay',
