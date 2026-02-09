@@ -1277,6 +1277,63 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('auto-bridges controller output_model into agent output_model_schema (python c011 parity)', async () => {
+    const controllerOutputSchema = z.object({
+      answer: z.string(),
+    });
+    const controller = new Controller({
+      output_model: controllerOutputSchema,
+    });
+    const useStructuredOutputSpy = vi.spyOn(
+      controller,
+      'use_structured_output_action'
+    );
+
+    const agent = new Agent({
+      task: 'Bridge controller output model schema',
+      llm: createLlm(),
+      controller: controller as any,
+    });
+
+    expect((agent as any).output_model_schema).toBe(controllerOutputSchema);
+    expect(agent.task).toContain('Expected output format');
+    expect(agent.task).toContain('"answer"');
+    expect(useStructuredOutputSpy).toHaveBeenCalledTimes(1);
+
+    await agent.close();
+  });
+
+  it('prefers explicit output_model_schema over controller output_model', async () => {
+    const controller = new Controller({
+      output_model: z.object({
+        controller_value: z.string(),
+      }),
+    });
+    const explicitSchema = {
+      name: 'ExplicitSchema',
+      parse: (input: string) => JSON.parse(input),
+      model_json_schema: () => ({
+        type: 'object',
+        properties: {
+          explicit_value: { type: 'string' },
+        },
+      }),
+    };
+
+    const agent = new Agent({
+      task: 'Prefer explicit output schema',
+      llm: createLlm(),
+      controller: controller as any,
+      output_model_schema: explicitSchema as any,
+    });
+
+    expect((agent as any).output_model_schema).toBe(explicitSchema);
+    expect(agent.task).toContain('"explicit_value"');
+    expect(agent.task).not.toContain('"controller_value"');
+
+    await agent.close();
+  });
+
   it('aligns addNewTask with python c011 follow-up request wrapping', async () => {
     const agent = new Agent({
       task: 'Original task instructions',
@@ -1606,6 +1663,37 @@ describe('Agent constructor browser session alignment', () => {
     expect(executeContext?.extraction_schema).toEqual(
       outputSchema.model_json_schema()
     );
+
+    await agent.close();
+  });
+
+  it('bridges extraction_schema from zod output_model_schema when not provided', async () => {
+    const outputSchema = z.object({
+      answer: z.string(),
+    });
+
+    const agent = new Agent({
+      task: 'Bridge extraction schema from zod model',
+      llm: createLlm(),
+      output_model_schema: outputSchema as any,
+    });
+
+    const executeActionSpy = vi
+      .spyOn(agent.controller.registry as any, 'execute_action')
+      .mockResolvedValue(new ActionResult({ extracted_content: 'ok' }));
+
+    await agent.multi_act([{ wait: { seconds: 0 } }], {
+      check_for_new_elements: false,
+    });
+
+    const executeContext = executeActionSpy.mock.calls[0]?.[2];
+    expect(executeContext?.extraction_schema).toMatchObject({
+      type: 'object',
+      properties: {
+        answer: { type: 'string' },
+      },
+      required: ['answer'],
+    });
 
     await agent.close();
   });

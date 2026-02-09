@@ -238,6 +238,7 @@ const validateAndFixJavaScript = (code: string): string => {
 export class Controller<Context = unknown> {
   public registry: Registry<Context>;
   private displayFilesInDoneText: boolean;
+  private outputModel: z.ZodTypeAny | null;
   private logger: ReturnType<typeof createLogger>;
 
   constructor(options: ControllerOptions<Context> = {}) {
@@ -248,6 +249,7 @@ export class Controller<Context = unknown> {
     } = options;
     this.registry = new Registry<Context>(exclude_actions);
     this.displayFilesInDoneText = display_files_in_done_text;
+    this.outputModel = output_model;
     this.logger = createLogger('browser_use.controller');
 
     this.registerDefaultActions(output_model);
@@ -3435,7 +3437,12 @@ Context: ${context}`;
   }
 
   use_structured_output_action(outputModel: z.ZodTypeAny) {
+    this.outputModel = outputModel;
     this.registerDoneAction(outputModel);
+  }
+
+  get_output_model(): z.ZodTypeAny | null {
+    return this.outputModel;
   }
 
   action(description: string, options = {}) {

@@ -629,7 +629,39 @@ export class Agent<
     this.id = task_id || uuid7str();
     this.task_id = this.id;
     this.session_id = uuid7str();
-    this.output_model_schema = output_model_schema ?? null;
+    this.available_file_paths = available_file_paths || [];
+    if (tools && controller) {
+      throw new Error(
+        'Cannot specify both "tools" and "controller". Use "tools" only.'
+      );
+    }
+    const resolvedController = (tools ?? controller ??
+      new DefaultController({
+        exclude_actions: use_vision !== 'auto' ? ['screenshot'] : [],
+        display_files_in_done_text,
+      })) as Controller<Context>;
+
+    const toolsOutputModel = this._getToolsOutputModelSchema(
+      resolvedController
+    );
+    let resolvedOutputModelSchema = output_model_schema ?? null;
+    if (
+      resolvedOutputModelSchema &&
+      toolsOutputModel &&
+      resolvedOutputModelSchema !== toolsOutputModel
+    ) {
+      this.logger.warning(
+        `output_model_schema (${this._getOutputModelSchemaName(
+          resolvedOutputModelSchema
+        )}) differs from Tools output_model (${this._getOutputModelSchemaName(
+          toolsOutputModel
+        )}). Using Agent output_model_schema.`
+      );
+    } else if (!resolvedOutputModelSchema && toolsOutputModel) {
+      resolvedOutputModelSchema = toolsOutputModel;
+    }
+
+    this.output_model_schema = resolvedOutputModelSchema;
     this.extraction_schema = extraction_schema ?? null;
     if (!this.extraction_schema && this.output_model_schema) {
       this.extraction_schema =
@@ -637,18 +669,8 @@ export class Agent<
     }
     this.task = this._enhanceTaskWithSchema(task, this.output_model_schema);
     this.sensitive_data = sensitive_data;
-    this.available_file_paths = available_file_paths || [];
-    if (tools && controller) {
-      throw new Error(
-        'Cannot specify both "tools" and "controller". Use "tools" only.'
-      );
-    }
-    const resolvedController = tools ?? controller;
-    this.controller = (resolvedController ??
-      new DefaultController({
-        exclude_actions: use_vision !== 'auto' ? ['screenshot'] : [],
-        display_files_in_done_text,
-      })) as Controller<Context>;
+    this.controller = resolvedController;
+
     const structuredOutputActionSchema =
       this._resolveStructuredOutputActionSchema(this.output_model_schema);
     if (structuredOutputActionSchema) {
@@ -1565,6 +1587,16 @@ export class Agent<
   private _getOutputModelSchemaPayload(
     outputModelSchema: StructuredOutputParser<AgentStructuredOutput>
   ): Record<string, unknown> | null {
+    if (outputModelSchema instanceof z.ZodType) {
+      try {
+        const schema = z.toJSONSchema(outputModelSchema);
+        return schema && typeof schema === 'object'
+          ? (schema as Record<string, unknown>)
+          : null;
+      } catch {
+        return null;
+      }
+    }
     if (typeof outputModelSchema.model_json_schema === 'function') {
       const schema = outputModelSchema.model_json_schema();
       return schema && typeof schema === 'object'
@@ -1573,15 +1605,49 @@ export class Agent<
     }
     if (outputModelSchema.schema != null) {
       const schemaCandidate = outputModelSchema.schema as any;
-      const schema =
-        typeof schemaCandidate?.toJSON === 'function'
-          ? schemaCandidate.toJSON()
-          : schemaCandidate;
+      const schema = (() => {
+        if (schemaCandidate instanceof z.ZodType) {
+          return z.toJSONSchema(schemaCandidate);
+        }
+        if (typeof schemaCandidate?.toJSON === 'function') {
+          return schemaCandidate.toJSON();
+        }
+        return schemaCandidate;
+      })();
       return schema && typeof schema === 'object'
         ? (schema as Record<string, unknown>)
         : null;
     }
     return null;
+  }
+
+  private _getToolsOutputModelSchema(
+    tools: Controller<Context>
+  ): StructuredOutputParser<AgentStructuredOutput> | null {
+    const getOutputModel = (tools as any)?.get_output_model;
+    if (typeof getOutputModel !== 'function') {
+      return null;
+    }
+    const outputModel = getOutputModel.call(tools);
+    return outputModel == null
+      ? null
+      : (outputModel as StructuredOutputParser<AgentStructuredOutput>);
+  }
+
+  private _getOutputModelSchemaName(
+    outputModelSchema: StructuredOutputParser<AgentStructuredOutput>
+  ): string {
+    const explicitName =
+      typeof (outputModelSchema as any)?.name === 'string'
+        ? ((outputModelSchema as any).name as string)
+        : null;
+    if (explicitName && explicitName.trim().length > 0) {
+      return explicitName;
+    }
+    const ctorName = (outputModelSchema as any)?.constructor?.name;
+    return typeof ctorName === 'string' && ctorName.trim().length > 0
+      ? ctorName
+      : 'StructuredOutput';
   }
 
   private _resolveStructuredOutputActionSchema(
