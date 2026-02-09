@@ -151,6 +151,11 @@
       "import": "./dist/sync/index.js",
       "default": "./dist/sync/index.js"
     },
+    "./skills": {
+      "types": "./dist/skills/index.d.ts",
+      "import": "./dist/skills/index.js",
+      "default": "./dist/skills/index.js"
+    },
     "./telemetry": {
       "types": "./dist/telemetry/index.d.ts",
       "import": "./dist/telemetry/index.js",

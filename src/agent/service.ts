@@ -91,6 +91,13 @@ import {
   construct_judge_messages,
   construct_simple_judge_messages,
 } from './judge.js';
+import {
+  CloudSkillService,
+  MissingCookieException,
+  build_skill_parameters_schema,
+  get_skill_slug,
+  type SkillService,
+} from '../skills/index.js';
 
 loadEnv();
 
@@ -249,6 +256,9 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
   page_extraction_llm?: BaseChatModel | null;
   fallback_llm?: BaseChatModel | null;
   judge_llm?: BaseChatModel | null;
+  skill_ids?: Array<string | '*'> | null;
+  skills?: Array<string | '*'> | null;
+  skill_service?: SkillService | null;
   planner_llm?: BaseChatModel | null;
   planner_interval?: number;
   is_planner_reasoning?: boolean;
@@ -344,6 +354,9 @@ const defaultAgentOptions = () => ({
   page_extraction_llm: null as BaseChatModel | null,
   fallback_llm: null as BaseChatModel | null,
   judge_llm: null as BaseChatModel | null,
+  skill_ids: null as Array<string | '*'> | null,
+  skills: null as Array<string | '*'> | null,
+  skill_service: null as SkillService | null,
   planner_llm: null as BaseChatModel | null,
   planner_interval: 1,
   is_planner_reasoning: false,
@@ -498,6 +511,8 @@ export class Agent<
   private _using_fallback_llm = false;
   private _original_llm: BaseChatModel | null = null;
   private _url_shortening_limit = 25;
+  private skill_service: SkillService | null = null;
+  private _skills_registered = false;
 
   constructor(params: AgentConstructorParams<Context, AgentStructuredOutput>) {
     const {
@@ -540,6 +555,9 @@ export class Agent<
       page_extraction_llm = null,
       fallback_llm = null,
       judge_llm = null,
+      skill_ids = null,
+      skills = null,
+      skill_service = null,
       enable_planning = true,
       planning_replan_on_stall = 3,
       planning_exploration_limit = 5,
@@ -631,6 +649,20 @@ export class Agent<
         exclude_actions: use_vision !== 'auto' ? ['screenshot'] : [],
         display_files_in_done_text,
       })) as Controller<Context>;
+
+    if (skills && skill_ids) {
+      throw new Error(
+        'Cannot specify both "skills" and "skill_ids". Use "skills" only.'
+      );
+    }
+    const resolvedSkillIds = skills ?? skill_ids;
+    if (skill_service) {
+      this.skill_service = skill_service;
+    } else if (resolvedSkillIds && resolvedSkillIds.length > 0) {
+      this.skill_service = new CloudSkillService({
+        skill_ids: resolvedSkillIds,
+      });
+    }
     if (use_vision !== 'auto') {
       (this.controller.registry as any).exclude_action?.('screenshot');
     }
@@ -1862,6 +1894,124 @@ export class Agent<
     }
   }
 
+  private async _register_skills_as_actions() {
+    if (!this.skill_service || this._skills_registered) {
+      return;
+    }
+
+    const skills = await this.skill_service.get_all_skills();
+    if (!skills.length) {
+      this.logger.warning('No skills loaded from SkillService');
+      this._skills_registered = true;
+      return;
+    }
+
+    this.logger.info(`🔧 Registering ${skills.length} skill action(s)...`);
+    for (const skill of skills) {
+      const slug = get_skill_slug(skill, skills);
+      const paramSchema = build_skill_parameters_schema(skill.parameters, {
+        exclude_cookies: true,
+      });
+      const description = `${skill.description} (Skill: "${skill.title}")`;
+
+      this.controller.registry.action(description, {
+        param_model: paramSchema,
+        action_name: slug,
+      })(
+        async (
+          params: Record<string, unknown>,
+          { browser_session }: { browser_session?: BrowserSession | null }
+        ) => {
+          if (!this.skill_service) {
+            return new ActionResult({ error: 'SkillService not initialized' });
+          }
+
+          if (!browser_session || typeof browser_session.get_cookies !== 'function') {
+            return new ActionResult({
+              error: 'Skill execution requires an active BrowserSession.',
+            });
+          }
+
+          try {
+            const cookiesRaw = await browser_session.get_cookies();
+            const cookies = Array.isArray(cookiesRaw)
+              ? cookiesRaw
+                  .map((cookie) => {
+                    const record =
+                      cookie && typeof cookie === 'object'
+                        ? (cookie as Record<string, unknown>)
+                        : null;
+                    const name =
+                      record && typeof record.name === 'string'
+                        ? record.name
+                        : null;
+                    const value =
+                      record && typeof record.value === 'string'
+                        ? record.value
+                        : '';
+                    return name ? { name, value } : null;
+                  })
+                  .filter(
+                    (
+                      cookie
+                    ): cookie is {
+                      name: string;
+                      value: string;
+                    } => cookie != null
+                  )
+              : [];
+
+            const result = await this.skill_service.execute_skill({
+              skill_id: skill.id,
+              parameters: params ?? {},
+              cookies,
+            });
+
+            if (!result.success) {
+              return new ActionResult({
+                error: result.error ?? 'Skill execution failed',
+              });
+            }
+
+            const rendered =
+              typeof result.result === 'string'
+                ? result.result
+                : JSON.stringify(result.result ?? {});
+            return new ActionResult({
+              extracted_content: rendered,
+              long_term_memory: rendered,
+            });
+          } catch (error) {
+            if (error instanceof MissingCookieException) {
+              return new ActionResult({
+                error: `Missing cookies (${error.cookie_name}): ${error.cookie_description}`,
+              });
+            }
+
+            const message =
+              error instanceof Error
+                ? `${error.name}: ${error.message}`
+                : String(error);
+            return new ActionResult({ error: `Skill execution error: ${message}` });
+          }
+        }
+      );
+    }
+
+    this._skills_registered = true;
+    this._setup_action_models();
+    if (this.initial_actions?.length) {
+      const actionDicts = this.initial_actions.map((action) =>
+        typeof (action as any)?.model_dump === 'function'
+          ? (action as any).model_dump({ exclude_unset: true })
+          : action
+      );
+      this.initial_actions = this._convertInitialActions(
+        actionDicts as Array<Record<string, Record<string, unknown>>>
+      );
+    }
+  }
+
   /**
    * Update action models with page-specific actions
    * Called during each step to filter actions based on current page context
@@ -1940,6 +2090,8 @@ export class Agent<
 
       this.logger.debug('📡 Dispatching CreateAgentTaskEvent...');
       this.eventbus.dispatch(CreateAgentTaskEvent.fromAgent(this as any));
+
+      await this._register_skills_as_actions();
 
       if (this.initial_actions?.length) {
         this.logger.debug(
@@ -3903,33 +4055,42 @@ export class Agent<
       return;
     }
 
-    const browser_session = this.browser_session;
-    if (!browser_session) {
-      return;
-    }
-
     this._closePromise = (async () => {
-      this._release_browser_session_claim(browser_session);
-
-      if (this._has_any_browser_session_attachments(browser_session)) {
-        this.logger.debug(
-          'Skipping BrowserSession shutdown because other attached Agents are still active.'
-        );
-        return;
-      }
-
-      this._cleanup_shared_session_step_lock_if_unused(browser_session);
-
+      const browser_session = this.browser_session;
       try {
-        if (typeof (browser_session as any).stop === 'function') {
-          await (browser_session as any).stop();
-        } else if (typeof (browser_session as any).close === 'function') {
-          await (browser_session as any).close();
+        if (browser_session) {
+          this._release_browser_session_claim(browser_session);
+
+          if (this._has_any_browser_session_attachments(browser_session)) {
+            this.logger.debug(
+              'Skipping BrowserSession shutdown because other attached Agents are still active.'
+            );
+          } else {
+            this._cleanup_shared_session_step_lock_if_unused(browser_session);
+
+            if (typeof (browser_session as any).stop === 'function') {
+              await (browser_session as any).stop();
+            } else if (typeof (browser_session as any).close === 'function') {
+              await (browser_session as any).close();
+            }
+          }
         }
       } catch (error) {
         this.logger.error(
           `Error during agent cleanup: ${error instanceof Error ? error.message : String(error)}`
         );
+      }
+
+      if (this.skill_service && typeof this.skill_service.close === 'function') {
+        try {
+          await this.skill_service.close();
+        } catch (error) {
+          this.logger.error(
+            `Error during skill service cleanup: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        }
       }
     })();
 
