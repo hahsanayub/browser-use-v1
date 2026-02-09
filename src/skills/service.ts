@@ -186,47 +186,85 @@ export class CloudSkillService implements SkillService {
       return;
     }
 
-    const useWildcard = this.skill_ids.includes('*');
-    const requestedIds = new Set(
-      this.skill_ids.filter((entry): entry is string => entry !== '*')
-    );
+    try {
+      const useWildcard = this.skill_ids.includes('*');
+      const requestedIds = new Set(
+        this.skill_ids.filter((entry): entry is string => entry !== '*')
+      );
 
-    const page_size = 100;
-    const max_pages = useWildcard ? 1 : 5;
-    const loaded: SkillDefinition[] = [];
+      const page_size = 100;
+      const max_pages = useWildcard ? 1 : 5;
+      const loaded: SkillDefinition[] = [];
+      let reachedPaginationLimit = true;
 
-    for (let page = 1; page <= max_pages; page += 1) {
-      const pageSkills = await this.listSkillsPage(page, page_size);
-      loaded.push(...pageSkills);
+      for (let page = 1; page <= max_pages; page += 1) {
+        const pageSkills = await this.listSkillsPage(page, page_size);
+        loaded.push(...pageSkills);
 
-      if (pageSkills.length < page_size) {
-        break;
-      }
-
-      if (!useWildcard && requestedIds.size > 0) {
-        const found = new Set(
-          loaded.map((entry) => entry.id).filter((id) => requestedIds.has(id))
-        );
-        if (found.size === requestedIds.size) {
+        if (pageSkills.length < page_size) {
+          reachedPaginationLimit = false;
           break;
         }
+
+        if (!useWildcard && requestedIds.size > 0) {
+          const found = new Set(
+            loaded.map((entry) => entry.id).filter((id) => requestedIds.has(id))
+          );
+          if (found.size === requestedIds.size) {
+            reachedPaginationLimit = false;
+            break;
+          }
+        }
       }
+
+      if (useWildcard && loaded.length >= page_size) {
+        logger.warning(
+          'Wildcard "*" limited to first 100 skills. Specify explicit skill IDs if you need specific skills beyond this limit.'
+        );
+      }
+
+      if (!useWildcard && reachedPaginationLimit) {
+        logger.warning(
+          'Reached pagination limit (5 pages) before finding all requested skills'
+        );
+      }
+
+      const selected = useWildcard
+        ? loaded
+        : loaded.filter((entry) => requestedIds.has(entry.id));
+
+      if (!useWildcard && requestedIds.size > 0) {
+        const foundIds = new Set(selected.map((entry) => entry.id));
+        const missingIds = Array.from(requestedIds).filter(
+          (id) => !foundIds.has(id)
+        );
+        if (missingIds.length > 0) {
+          logger.warning(
+            `Requested skills not found or not available: ${missingIds.join(', ')}`
+          );
+        }
+      }
+
+      for (const skill of selected) {
+        this.skills.set(skill.id, skill);
+      }
+
+      this.initialized = true;
+      logger.info(
+        `Loaded ${this.skills.size} skills${
+          useWildcard ? ' (wildcard mode)' : ''
+        }`
+      );
+    } catch (error) {
+      // Match Python semantics: avoid retry loops after an initialization failure.
+      this.initialized = true;
+      throw error;
     }
+  }
 
-    const selected = useWildcard
-      ? loaded
-      : loaded.filter((entry) => requestedIds.has(entry.id));
-
-    for (const skill of selected) {
-      this.skills.set(skill.id, skill);
-    }
-
-    this.initialized = true;
-    logger.info(
-      `Loaded ${this.skills.size} skills${
-        useWildcard ? ' (wildcard mode)' : ''
-      }`
-    );
+  async get_skill(skill_id: string): Promise<SkillDefinition | null> {
+    await this.ensureInitialized();
+    return this.skills.get(skill_id) ?? null;
   }
 
   async get_all_skills(): Promise<SkillDefinition[]> {

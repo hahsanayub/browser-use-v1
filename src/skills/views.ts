@@ -40,6 +40,7 @@ export interface ExecuteSkillInput {
 }
 
 export interface SkillService {
+  get_skill?(skill_id: string): Promise<SkillDefinition | null>;
   get_all_skills(): Promise<SkillDefinition[]>;
   execute_skill(input: ExecuteSkillInput): Promise<SkillExecutionResult>;
   close?(): Promise<void> | void;
