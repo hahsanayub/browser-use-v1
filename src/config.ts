@@ -404,7 +404,7 @@ export interface DBStyleConfigJSON {
 }
 
 const create_default_config = (): DBStyleConfigJSON => {
-  logger.info('Creating fresh default config.json');
+  logger.debug('Creating fresh default config.json');
 
   const profile_id = randomUUID();
   const llm_id = randomUUID();
@@ -471,7 +471,7 @@ const load_and_migrate_config = (config_path: string): DBStyleConfigJSON => {
       return raw as DBStyleConfigJSON;
     }
 
-    logger.info(
+    logger.debug(
       `Old config format detected at ${config_path}, creating fresh config`
     );
     const fresh = create_default_config();
