@@ -24,17 +24,27 @@ import {
   ConverseCommand,
   type Tool as BedrockTool,
 } from '@aws-sdk/client-bedrock-runtime';
-import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
-import { ChatInvokeCompletion } from '../views.js';
-import { type Message, SystemMessage } from '../messages.js';
-import { AnthropicMessageSerializer } from '../anthropic/serializer.js';
 import { zodToJsonSchema } from 'zod-to-json-schema';
+import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
+import { ModelProviderError, ModelRateLimitError } from '../exceptions.js';
+import { ChatInvokeCompletion } from '../views.js';
+import { type Message } from '../messages.js';
+import { AnthropicMessageSerializer } from '../anthropic/serializer.js';
+import { SchemaOptimizer } from '../schema.js';
 
 export interface ChatAnthropicBedrockConfig {
   /** Model ID, defaults to Claude 3.5 Sonnet */
   model?: string;
   /** AWS region, defaults to us-east-1 */
   region?: string;
+  /** AWS access key ID */
+  awsAccessKeyId?: string;
+  /** AWS secret access key */
+  awsSecretAccessKey?: string;
+  /** AWS session token */
+  awsSessionToken?: string;
+  /** Retry attempts */
+  maxRetries?: number;
   /** Maximum tokens to generate */
   max_tokens?: number;
   /** Temperature for sampling (0-1) */
@@ -45,6 +55,10 @@ export interface ChatAnthropicBedrockConfig {
   top_k?: number | null;
   /** Stop sequences */
   stop_sequences?: string[] | null;
+  /** Remove minItems from schema for provider compatibility */
+  removeMinItemsFromSchema?: boolean;
+  /** Remove default from schema for provider compatibility */
+  removeDefaultsFromSchema?: boolean;
 }
 
 export class ChatAnthropicBedrock implements BaseChatModel {
@@ -56,6 +70,8 @@ export class ChatAnthropicBedrock implements BaseChatModel {
   private top_p: number | null;
   private top_k: number | null;
   private stop_sequences: string[] | null;
+  private removeMinItemsFromSchema: boolean;
+  private removeDefaultsFromSchema: boolean;
 
   constructor(config: ChatAnthropicBedrockConfig = {}) {
     // Anthropic Claude specific defaults
@@ -67,9 +83,25 @@ export class ChatAnthropicBedrock implements BaseChatModel {
     this.top_k = config.top_k === undefined ? null : config.top_k;
     this.stop_sequences =
       config.stop_sequences === undefined ? null : config.stop_sequences;
+    this.removeMinItemsFromSchema = config.removeMinItemsFromSchema ?? false;
+    this.removeDefaultsFromSchema = config.removeDefaultsFromSchema ?? false;
 
     const region = config.region || process.env.AWS_REGION || 'us-east-1';
-    this.client = new BedrockRuntimeClient({ region });
+    const awsSessionToken = config.awsSessionToken || process.env.AWS_SESSION_TOKEN;
+    const credentials =
+      config.awsAccessKeyId && config.awsSecretAccessKey
+        ? {
+            accessKeyId: config.awsAccessKeyId,
+            secretAccessKey: config.awsSecretAccessKey,
+            ...(awsSessionToken ? { sessionToken: awsSessionToken } : {}),
+          }
+        : undefined;
+
+    this.client = new BedrockRuntimeClient({
+      region,
+      ...(credentials ? { credentials } : {}),
+      ...(config.maxRetries !== undefined ? { maxAttempts: config.maxRetries } : {}),
+    });
   }
 
   get name(): string {
@@ -98,6 +130,57 @@ export class ChatAnthropicBedrock implements BaseChatModel {
     return params;
   }
 
+  private getZodSchemaCandidate(
+    output_format?: { parse: (input: string) => unknown } | undefined
+  ) {
+    const output = output_format as any;
+    if (
+      output &&
+      typeof output === 'object' &&
+      typeof output.safeParse === 'function' &&
+      typeof output.parse === 'function'
+    ) {
+      return output;
+    }
+    if (
+      output &&
+      typeof output === 'object' &&
+      output.schema &&
+      typeof output.schema.safeParse === 'function' &&
+      typeof output.schema.parse === 'function'
+    ) {
+      return output.schema;
+    }
+    return null;
+  }
+
+  private parseOutput<T>(
+    output_format: { parse: (input: string) => T },
+    payload: unknown
+  ): T {
+    const output = output_format as any;
+    if (
+      output &&
+      typeof output === 'object' &&
+      output.schema &&
+      typeof output.schema.parse === 'function'
+    ) {
+      return output.schema.parse(payload);
+    }
+    return output.parse(payload);
+  }
+
+  private getTextCompletion(response: any): string {
+    const contentBlocks = response?.output?.message?.content;
+    if (!Array.isArray(contentBlocks)) {
+      return '';
+    }
+    return contentBlocks
+      .filter((block: any) => typeof block?.text === 'string')
+      .map((block: any) => block.text)
+      .join('\n');
+  }
+
   async ainvoke(
     messages: Message[],
     output_format?: undefined,
@@ -124,8 +207,25 @@ export class ChatAnthropicBedrock implements BaseChatModel {
         ? msg.content.map((block: any) => {
             if (block.type === 'text') {
               return { text: block.text };
+            } else if (block.type === 'tool_use') {
+              return {
+                toolUse: {
+                  toolUseId: block.id,
+                  name: block.name,
+                  input: block.input,
+                },
+              };
             } else if (block.type === 'image') {
-              // Handle image blocks if needed
+              if (block.source?.type === 'base64') {
+                return {
+                  image: {
+                    format: String(block.source.media_type || 'image/jpeg').split('/')[1] ?? 'jpeg',
+                    source: {
+                      bytes: Buffer.from(block.source.data ?? '', 'base64'),
+                    },
+                  },
+                };
+              }
               return { text: '[Image]' };
             }
             return { text: String(block) };
@@ -150,30 +250,36 @@ export class ChatAnthropicBedrock implements BaseChatModel {
         ]
       : undefined;
 
-    let tools: BedrockTool[] | undefined = undefined;
     let toolConfig: any = undefined;
+    const zodSchemaCandidate = this.getZodSchemaCandidate(output_format);
 
-    if (output_format && 'schema' in output_format) {
+    if (output_format && zodSchemaCandidate) {
       // Structured output using tools
       try {
-        const schema = (output_format as any).schema?.shape
-          ? this._zodToJsonSchema((output_format as any).schema)
-          : {};
+        const rawSchema = this._zodToJsonSchema(zodSchemaCandidate);
+        const schema = SchemaOptimizer.createOptimizedJsonSchema(
+          rawSchema as Record<string, unknown>,
+          {
+            removeMinItems: this.removeMinItemsFromSchema,
+            removeDefaults: this.removeDefaultsFromSchema,
+          }
+        ) as Record<string, unknown>;
+        delete schema.title;
 
-        tools = [
+        const tools: BedrockTool[] = [
           {
             toolSpec: {
               name: 'extract_structured_data',
               description: 'Extract structured data from the response',
               inputSchema: {
-                json: schema,
+                json: schema as any,
               },
             },
           },
         ];
 
         toolConfig = {
-          tools: tools,
+          tools,
           toolChoice: { tool: { name: 'extract_structured_data' } },
         };
       } catch (e) {
@@ -189,34 +295,61 @@ export class ChatAnthropicBedrock implements BaseChatModel {
       inferenceConfig: this._getInferenceParams(),
     });
 
-    const response = await this.client.send(
-      command,
-      options.signal ? { abortSignal: options.signal } : undefined
-    );
-
-    let completion: T | string = '';
-
-    if (response.output?.message?.content) {
-      // Check for tool use (structured output)
-      const toolUseBlock = response.output.message.content.find(
-        (block) => block.toolUse
+    try {
+      const response = await this.client.send(
+        command,
+        options.signal ? { abortSignal: options.signal } : undefined
       );
-      if (toolUseBlock && toolUseBlock.toolUse && output_format) {
-        completion = output_format.parse(toolUseBlock.toolUse.input as any);
-      } else {
-        // Fallback to text
-        const textBlock = response.output.message.content.find(
-          (block) => block.text
-        );
-        completion = textBlock?.text || '';
-      }
-    }
 
-    return new ChatInvokeCompletion(completion, {
-      prompt_tokens: response.usage?.inputTokens ?? 0,
-      completion_tokens: response.usage?.outputTokens ?? 0,
-      total_tokens: response.usage?.totalTokens ?? 0,
-    });
+      let completion: T | string = this.getTextCompletion(response);
+      const contentBlocks = response?.output?.message?.content;
+      const toolUseBlock = Array.isArray(contentBlocks)
+        ? contentBlocks.find((block: any) => block?.toolUse)
+        : undefined;
+      if (toolUseBlock?.toolUse && output_format) {
+        const input = toolUseBlock.toolUse.input;
+        if (typeof input === 'string') {
+          completion = this.parseOutput(output_format, JSON.parse(input));
+        } else {
+          completion = this.parseOutput(output_format, input);
+        }
+      } else if (output_format && toolConfig) {
+        throw new ModelProviderError(
+          'Expected tool use in response but none found',
+          502,
+          this.model
+        );
+      } else if (output_format) {
+        completion = this.parseOutput(output_format, completion);
+      } else {
+        completion = this.getTextCompletion(response);
+      }
+
+      return new ChatInvokeCompletion(completion, {
+        prompt_tokens: response.usage?.inputTokens ?? 0,
+        completion_tokens: response.usage?.outputTokens ?? 0,
+        total_tokens: response.usage?.totalTokens ?? 0,
+      });
+    } catch (error: any) {
+      const errorName = String(error?.name ?? '');
+      const statusCode = error?.$metadata?.httpStatusCode ?? 502;
+      if (
+        statusCode === 429 ||
+        errorName.includes('Throttling') ||
+        errorName.includes('TooManyRequests')
+      ) {
+        throw new ModelRateLimitError(
+          error?.message ?? 'Rate limit exceeded',
+          429,
+          this.model
+        );
+      }
+      throw new ModelProviderError(
+        error?.message ?? String(error),
+        statusCode,
+        this.model
+      );
+    }
   }
 
   /**

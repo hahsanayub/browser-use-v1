@@ -1,23 +1,70 @@
 import {
   AssistantMessage,
   ContentPartImageParam,
+  ContentPartRefusalParam,
   ContentPartTextParam,
   SystemMessage,
   UserMessage,
   type Message,
 } from '../messages.js';
 
-// AWS Bedrock types are a bit complex and vary by model.
-// We will define a generic structure that fits most Bedrock models (like Claude on Bedrock).
+type BedrockContentBlock = Record<string, unknown>;
+type BedrockMessage = {
+  role: 'user' | 'assistant';
+  content: BedrockContentBlock[];
+};
+type BedrockSystemMessage = { text: string }[];
 
 export class AWSBedrockMessageSerializer {
-  serialize(messages: Message[]): any[] {
-    return messages
-      .filter((msg) => !(msg instanceof SystemMessage)) // System messages are handled separately usually
-      .map((message) => this.serializeMessage(message));
+  serialize(messages: Message[]): BedrockMessage[] {
+    return this.serializeMessages(messages)[0];
   }
 
-  private serializeMessage(message: Message): any {
+  serializeMessages(messages: Message[]): [BedrockMessage[], BedrockSystemMessage?] {
+    const bedrockMessages: BedrockMessage[] = [];
+    let systemMessage: BedrockSystemMessage | undefined = undefined;
+
+    for (const message of messages) {
+      if (message instanceof SystemMessage) {
+        systemMessage = this.serializeSystemContent(message.content);
+      } else {
+        bedrockMessages.push(this.serializeMessage(message));
+      }
+    }
+
+    return [bedrockMessages, systemMessage];
+  }
+
+  private serializeSystemContent(
+    content: string | ContentPartTextParam[]
+  ): BedrockSystemMessage {
+    if (typeof content === 'string') {
+      return [{ text: content }];
+    }
+    return content
+      .filter((part) => part instanceof ContentPartTextParam)
+      .map((part) => ({ text: part.text }));
+  }
+
+  private serializeImageContent(part: ContentPartImageParam): BedrockContentBlock {
+    const url = part.image_url.url;
+    if (!url.startsWith('data:')) {
+      throw new Error(`Unsupported image URL format: ${url}`);
+    }
+
+    const [, payload = ''] = url.split(',', 2);
+    const format = part.image_url.media_type.split('/')[1] ?? 'jpeg';
+    return {
+      image: {
+        format,
+        source: {
+          bytes: Buffer.from(payload, 'base64'),
+        },
+      },
+    };
+  }
+
+  private serializeMessage(message: Message): BedrockMessage {
     if (message instanceof UserMessage) {
       return {
         role: 'user',
@@ -27,16 +74,7 @@ export class AWSBedrockMessageSerializer {
                 return { text: part.text };
               }
               if (part instanceof ContentPartImageParam) {
-                const mediaType = part.image_url.media_type;
-                const data = part.image_url.url.split(',')[1];
-                return {
-                  image: {
-                    format: mediaType.split('/')[1], // e.g. 'png' from 'image/png'
-                    source: {
-                      bytes: Buffer.from(data, 'base64'),
-                    },
-                  },
-                };
+                return this.serializeImageContent(part);
               }
               return { text: '' };
             })
@@ -45,7 +83,7 @@ export class AWSBedrockMessageSerializer {
     }
 
     if (message instanceof AssistantMessage) {
-      const content: any[] = [];
+      const content: BedrockContentBlock[] = [];
       if (message.content) {
         if (typeof message.content === 'string') {
           content.push({ text: message.content });
@@ -53,6 +91,8 @@ export class AWSBedrockMessageSerializer {
           message.content.forEach((part) => {
             if (part instanceof ContentPartTextParam) {
               content.push({ text: part.text });
+            } else if (part instanceof ContentPartRefusalParam) {
+              content.push({ text: `[Refusal] ${part.refusal}` });
             }
           });
         }
@@ -60,14 +100,27 @@ export class AWSBedrockMessageSerializer {
 
       if (message.tool_calls) {
         message.tool_calls.forEach((toolCall) => {
+          let parsedArguments: Record<string, unknown> | string;
+          try {
+            parsedArguments = JSON.parse(toolCall.functionCall.arguments);
+          } catch {
+            parsedArguments = {
+              arguments: toolCall.functionCall.arguments,
+            };
+          }
+
           content.push({
             toolUse: {
               toolUseId: toolCall.id,
               name: toolCall.functionCall.name,
-              input: JSON.parse(toolCall.functionCall.arguments),
+              input: parsedArguments,
             },
           });
         });
+      }
+
+      if (!content.length) {
+        content.push({ text: '' });
       }
 
       return {
