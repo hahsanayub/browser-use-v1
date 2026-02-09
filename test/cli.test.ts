@@ -30,6 +30,7 @@ const MANAGED_ENV_KEYS = [
   'AWS_PROFILE',
   'OLLAMA_MODEL',
   'OLLAMA_HOST',
+  'BROWSER_USE_API_KEY',
   'BROWSER_USE_CONFIG_DIR',
   'BROWSER_USE_CLI_FORCE_INTERACTIVE',
   'HOME',
@@ -301,6 +302,14 @@ describe('CLI model routing', () => {
     expect(llm.model).toBe('claude-4-sonnet');
   });
 
+  it('supports browser-use provider defaults when api key is configured', () => {
+    process.env.BROWSER_USE_API_KEY = 'test-browser-use';
+    const args = parseCliArgs(['--provider', 'browser-use', '-p', 'x']);
+    const llm = getLlmFromCliArgs(args);
+    expect(llm.provider).toBe('browser-use');
+    expect(llm.model).toBe('bu-1-0');
+  });
+
   it('rejects conflicting --provider and --model combinations', () => {
     process.env.OPENAI_API_KEY = 'test-openai';
     const args = parseCliArgs([
@@ -348,5 +357,13 @@ describe('CLI model routing', () => {
     expect(() => getLlmFromCliArgs(args)).toThrow(
       'Missing environment variable: ANTHROPIC_API_KEY'
     );
+  });
+
+  it('routes bu-* model names to browser-use provider', () => {
+    process.env.BROWSER_USE_API_KEY = 'test-browser-use';
+    const args = parseCliArgs(['--model', 'bu-2-0', '-p', 'x']);
+    const llm = getLlmFromCliArgs(args);
+    expect(llm.provider).toBe('browser-use');
+    expect(llm.model).toBe('bu-2-0');
   });
 });

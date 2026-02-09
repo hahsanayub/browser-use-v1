@@ -21,6 +21,7 @@ import { ChatAzure } from './llm/azure/chat.js';
 import { ChatOllama } from './llm/ollama/chat.js';
 import { ChatAnthropicBedrock } from './llm/aws/chat-anthropic.js';
 import { ChatBedrockConverse } from './llm/aws/chat-bedrock.js';
+import { ChatBrowserUse } from './llm/browser-use/chat.js';
 import type { BaseChatModel } from './llm/base.js';
 import { MCPServer } from './mcp/server.js';
 import { get_browser_use_version } from './utils.js';
@@ -39,7 +40,8 @@ type CliModelProvider =
   | 'azure'
   | 'aws-anthropic'
   | 'aws'
-  | 'ollama';
+  | 'ollama'
+  | 'browser-use';
 
 const CLI_PROVIDER_ALIASES: Record<string, CliModelProvider> = {
   openai: 'openai',
@@ -51,6 +53,9 @@ const CLI_PROVIDER_ALIASES: Record<string, CliModelProvider> = {
   openrouter: 'openrouter',
   azure: 'azure',
   ollama: 'ollama',
+  'browser-use': 'browser-use',
+  browseruse: 'browser-use',
+  bu: 'browser-use',
   bedrock: 'aws',
   aws: 'aws',
   'aws-anthropic': 'aws-anthropic',
@@ -112,7 +117,7 @@ const parseProvider = (value: string): CliModelProvider => {
   const provider = CLI_PROVIDER_ALIASES[normalized];
   if (!provider) {
     throw new Error(
-      `Unsupported provider "${value}". Supported values: openai, anthropic, google, deepseek, groq, openrouter, azure, ollama, aws, aws-anthropic.`
+      `Unsupported provider "${value}". Supported values: openai, anthropic, google, deepseek, groq, openrouter, azure, ollama, browser-use, aws, aws-anthropic.`
     );
   }
   return provider;
@@ -434,6 +439,13 @@ const inferProviderFromModel = (model: string): CliModelProvider | null => {
   if (lower.startsWith('ollama:')) {
     return 'ollama';
   }
+  if (
+    lower.startsWith('browser-use:') ||
+    lower.startsWith('bu-') ||
+    lower.startsWith('browser-use/')
+  ) {
+    return 'browser-use';
+  }
   if (lower.startsWith('bedrock:anthropic.')) {
     return 'aws-anthropic';
   }
@@ -469,6 +481,12 @@ const normalizeModelValue = (
   }
   if (provider === 'ollama' && lower.startsWith('ollama:')) {
     return model.slice('ollama:'.length);
+  }
+  if (provider === 'browser-use' && lower.startsWith('browser-use:')) {
+    return model.slice('browser-use:'.length);
+  }
+  if (provider === 'browser-use' && lower.startsWith('bu_')) {
+    return model.replace(/_/g, '-');
   }
   if (provider === 'aws-anthropic' && lower.startsWith('bedrock:')) {
     return model.slice('bedrock:'.length);
@@ -517,6 +535,8 @@ const getDefaultModelForProvider = (
       return 'anthropic.claude-3-5-sonnet-20241022-v2:0';
     case 'ollama':
       return process.env.OLLAMA_MODEL || 'qwen2.5:latest';
+    case 'browser-use':
+      return 'bu-latest';
     case 'aws':
       return null;
     default:
@@ -559,6 +579,11 @@ const createLlmForProvider = (
       const host = process.env.OLLAMA_HOST || 'http://localhost:11434';
       return new ChatOllama(model, host);
     }
+    case 'browser-use':
+      return new ChatBrowserUse({
+        model,
+        apiKey: requireEnv('BROWSER_USE_API_KEY'),
+      });
     case 'aws-anthropic':
       return new ChatAnthropicBedrock({
         model,
@@ -590,7 +615,7 @@ export const getLlmFromCliArgs = (args: ParsedCliArgs): BaseChatModel => {
     const provider = args.provider ?? inferredProvider;
     if (!provider) {
       throw new Error(
-        `Cannot infer provider from model "${args.model}". Provide --provider or use a supported model prefix: gpt*/o*, claude*, gemini*, deepseek*, groq:, openrouter:, azure:, ollama:, bedrock:.`
+        `Cannot infer provider from model "${args.model}". Provide --provider or use a supported model prefix: gpt*/o*, claude*, gemini*, deepseek*, groq:, openrouter:, azure:, ollama:, browser-use:, bu-*, bedrock:.`
       );
     }
     const normalizedModel = normalizeModelValue(args.model, provider);
@@ -832,7 +857,7 @@ Options:
   -h, --help                  Show this help message
   --version                   Print version and exit
   --mcp                       Run as MCP server
-  --provider <name>           Force provider (openai|anthropic|google|deepseek|groq|openrouter|azure|ollama|aws|aws-anthropic)
+  --provider <name>           Force provider (openai|anthropic|google|deepseek|groq|openrouter|azure|ollama|browser-use|aws|aws-anthropic)
   --model <model>             Set model (e.g., gpt-5-mini, claude-4-sonnet, gemini-2.5-pro)
   -p, --prompt <task>         Run a single task
   --headless                  Run browser in headless mode
