@@ -305,7 +305,7 @@ describe('MCPServer retry_with_browser_use_agent', () => {
     expect(
       instance.params.browser_session.browser_profile.config.allowed_domains
     ).toEqual([]);
-    expect(instance.runMaxSteps).toBe(500);
+    expect(instance.runMaxSteps).toBe(100);
   });
 
   it('returns explicit error when OpenAI key is missing', async () => {

@@ -646,7 +646,7 @@ export class MCPServer {
       'Retry a complex task with the browser-use autonomous agent',
       z.object({
         task: z.string(),
-        max_steps: z.number().int().optional().default(500),
+        max_steps: z.number().int().optional().default(100),
         model: z.string().optional().default('gpt-4o'),
         allowed_domains: z.array(z.string()).optional().default([]),
         use_vision: z.boolean().optional().default(true),
@@ -658,7 +658,7 @@ export class MCPServer {
         }
 
         const model = String(args?.model ?? 'gpt-4o').trim();
-        const maxSteps = Number(args?.max_steps ?? 500);
+        const maxSteps = Number(args?.max_steps ?? 100);
         const useVision = Boolean(args?.use_vision ?? true);
         const allowedDomains = Array.isArray(args?.allowed_domains)
           ? args.allowed_domains
@@ -768,12 +768,12 @@ export class MCPServer {
         },
         {
           name: 'max_steps',
-          description: 'Maximum number of steps (default: 500)',
+          description: 'Maximum number of steps (default: 100)',
           required: false,
         },
       ],
       template: (args) =>
-        `Use retry_with_browser_use_agent with task: '${args.task_description}'. Set max_steps=${args.max_steps || '500'} and use_vision=true for better understanding.`,
+        `Use retry_with_browser_use_agent with task: '${args.task_description}'. Set max_steps=${args.max_steps || '100'} and use_vision=true for better understanding.`,
     });
 
     // Research topic prompt
