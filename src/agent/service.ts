@@ -211,6 +211,7 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
   browser_context?: BrowserContext | null;
   browser_profile?: BrowserProfile | null;
   browser_session?: BrowserSession | null;
+  tools?: Controller<Context> | null;
   controller?: Controller<Context> | null;
   sensitive_data?: Record<string, string | Record<string, string>> | null;
   initial_actions?: Array<Record<string, Record<string, unknown>>> | null;
@@ -509,6 +510,7 @@ export class Agent<
       browser_context = null,
       browser_profile = null,
       browser_session = null,
+      tools = null,
       controller = null,
       sensitive_data = null,
       initial_actions = null,
@@ -630,7 +632,13 @@ export class Agent<
     this.task = this._enhanceTaskWithSchema(task, this.output_model_schema);
     this.sensitive_data = sensitive_data;
     this.available_file_paths = available_file_paths || [];
-    this.controller = (controller ??
+    if (tools && controller) {
+      throw new Error(
+        'Cannot specify both "tools" and "controller". Use "tools" only.'
+      );
+    }
+    const resolvedController = tools ?? controller;
+    this.controller = (resolvedController ??
       new DefaultController({
         exclude_actions: use_vision !== 'auto' ? ['screenshot'] : [],
         display_files_in_done_text,

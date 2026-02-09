@@ -9,6 +9,7 @@ import {
 import { UserMessage } from '../src/llm/messages.js';
 import { BrowserSession } from '../src/browser/session.js';
 import { BrowserProfile } from '../src/browser/profile.js';
+import { Controller } from '../src/controller/service.js';
 import {
   BrowserStateSummary,
   PLACEHOLDER_4PX_SCREENSHOT,
@@ -96,6 +97,35 @@ describe('Agent constructor browser session alignment', () => {
     expect(agent.browser_session).toBe(browserSession);
 
     await agent.close();
+  });
+
+  it('accepts tools as an alias of controller (python c011 parity)', async () => {
+    const tools = new Controller();
+
+    const agent = new Agent({
+      task: 'tools alias controller',
+      llm: createLlm(),
+      tools: tools as any,
+    });
+
+    expect(agent.controller).toBe(tools);
+
+    await agent.close();
+  });
+
+  it('throws when tools and controller are both provided (python c011 parity)', () => {
+    const tools = new Controller();
+    const controller = new Controller();
+
+    expect(
+      () =>
+        new Agent({
+          task: 'tools/controller conflict',
+          llm: createLlm(),
+          tools: tools as any,
+          controller: controller as any,
+        })
+    ).toThrow(/Cannot specify both "tools" and "controller"/);
   });
 
   it('auto-enables flash mode for browser-use provider and disables planning', async () => {
