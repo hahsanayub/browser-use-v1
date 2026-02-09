@@ -3445,6 +3445,10 @@ Context: ${context}`;
     return this.outputModel;
   }
 
+  exclude_action(actionName: string) {
+    this.registry.exclude_action(actionName);
+  }
+
   action(description: string, options = {}) {
     return this.registry.action(description, options);
   }

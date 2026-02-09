@@ -483,6 +483,23 @@ describe('Agent constructor browser session alignment', () => {
     await grokCodeAgent.close();
   });
 
+  it('uses controller.exclude_action to hide screenshot when use_vision is not auto (python c011 parity)', async () => {
+    const controller = new Controller();
+    const excludeActionSpy = vi.spyOn(controller, 'exclude_action');
+
+    const agent = new Agent({
+      task: 'exclude screenshot action for fixed vision mode',
+      llm: createLlm(),
+      controller: controller as any,
+      use_vision: true,
+    });
+
+    expect(excludeActionSpy).toHaveBeenCalledWith('screenshot');
+    expect(controller.registry.get_action('screenshot')).toBeNull();
+
+    await agent.close();
+  });
+
   it('initializes fallback llm state and exposes model tracking getters', async () => {
     const primary = createLlm('primary-model', 'openai');
     const fallback = createLlm('fallback-model', 'anthropic');

@@ -691,7 +691,12 @@ export class Agent<
       });
     }
     if (use_vision !== 'auto') {
-      (this.controller.registry as any).exclude_action?.('screenshot');
+      const excludeAction = (this.controller as any)?.exclude_action;
+      if (typeof excludeAction === 'function') {
+        excludeAction.call(this.controller, 'screenshot');
+      } else {
+        (this.controller.registry as any).exclude_action?.('screenshot');
+      }
     }
     let resolvedInitialActions = initial_actions;
     const hasFollowUpState = Boolean(params.injected_agent_state?.follow_up_task);
