@@ -95,6 +95,29 @@ describe('Agent skills alignment', () => {
     await agent.close();
   });
 
+  it('keeps skills registration retryable when skill list is empty (python c011 parity)', async () => {
+    const skillService: SkillService = {
+      get_all_skills: vi.fn(async () => []),
+      execute_skill: vi.fn(async () => ({ success: true, result: null })),
+      close: vi.fn(async () => {}),
+    };
+
+    const agent = new Agent({
+      task: 'retry empty skills registration',
+      llm: createLlm(),
+      skill_service: skillService,
+    });
+
+    await (agent as any)._register_skills_as_actions();
+    expect((agent as any)._skills_registered).toBe(false);
+    expect(skillService.get_all_skills).toHaveBeenCalledTimes(1);
+
+    await (agent as any)._register_skills_as_actions();
+    expect(skillService.get_all_skills).toHaveBeenCalledTimes(2);
+
+    await agent.close();
+  });
+
   it('maps MissingCookieException to actionable ActionResult error text', async () => {
     const browserSession = new BrowserSession({
       browser_profile: new BrowserProfile({}),

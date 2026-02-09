@@ -1896,7 +1896,6 @@ export class Agent<
     const skills = await this.skill_service.get_all_skills();
     if (!skills.length) {
       this.logger.warning('No skills loaded from SkillService');
-      this._skills_registered = true;
       return;
     }
 
