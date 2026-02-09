@@ -3072,180 +3072,190 @@ export class Agent<
     } = options;
 
     this._throwIfAborted(signal);
+
+    // Mirror python c011 behavior: rerun should not emit create-session events.
+    this.state.session_initialized = true;
+
     const results: ActionResult[] = [];
     let previousItem: AgentHistory | null = null;
     let previousStepSucceeded = false;
 
-    for (let index = 0; index < history.history.length; index++) {
-      this._throwIfAborted(signal);
-      const historyItem = history.history[index];
-      const goal = historyItem.model_output?.current_state?.next_goal ?? '';
-      const stepNumber = historyItem.metadata?.step_number ?? index + 1;
-      const stepName = stepNumber === 0 ? 'Initial actions' : `Step ${stepNumber}`;
-      const savedInterval = historyItem.metadata?.step_interval;
-      let stepDelay = delay_between_actions;
-      let delaySource = `using default delay=${this._formatDelaySeconds(stepDelay)}`;
-      if (typeof savedInterval === 'number' && Number.isFinite(savedInterval)) {
-        stepDelay = Math.min(savedInterval, max_step_interval);
-        if (savedInterval > max_step_interval) {
-          delaySource = `capped to ${this._formatDelaySeconds(stepDelay)} (saved was ${savedInterval.toFixed(1)}s)`;
-        } else {
-          delaySource = `using saved step_interval=${this._formatDelaySeconds(stepDelay)}`;
-        }
-      }
-      this.logger.info(
-        `Replaying ${stepName} (${index + 1}/${history.history.length}) [${delaySource}]: ${goal}`
-      );
+    try {
+      await this.browser_session?.start();
 
-      const actions = historyItem.model_output?.action ?? [];
-      const hasValidAction =
-        actions.length && !actions.every((action) => action == null);
-      if (!historyItem.model_output || !hasValidAction) {
-        this.logger.warning(`Step ${index + 1}: No action to replay, skipping`);
-        results.push(new ActionResult({ error: 'No action to replay' }));
-        continue;
-      }
-
-      const originalErrors = Array.isArray(historyItem.result)
-        ? historyItem.result
-            .map((result) => result?.error)
-            .filter((error): error is string => typeof error === 'string')
-        : [];
-      if (originalErrors.length && skip_failures) {
-        const firstError = originalErrors[0] ?? 'unknown';
-        const preview =
-          firstError.length > 100 ? `${firstError.slice(0, 100)}...` : firstError;
-        this.logger.warning(
-          `${stepName}: Original step had error(s), skipping (skip_failures=true): ${preview}`
-        );
-        results.push(
-          new ActionResult({
-            error: `Skipped - original step had error: ${preview}`,
-          })
-        );
-        continue;
-      }
-
-      if (
-        this._is_redundant_retry_step(
-          historyItem,
-          previousItem,
-          previousStepSucceeded
-        )
-      ) {
-        this.logger.info(
-          `${stepName}: Skipping redundant retry (previous step already succeeded with same element)`
-        );
-        results.push(
-          new ActionResult({
-            extracted_content: 'Skipped - redundant retry of previous step',
-            include_in_memory: false,
-          })
-        );
-        continue;
-      }
-
-      let attempt = 0;
-      let stepSucceeded = false;
-      let menuReopened = false;
-      while (attempt < max_retries) {
+      for (let index = 0; index < history.history.length; index++) {
         this._throwIfAborted(signal);
-        try {
-          const stepResult =
-            ai_step_llm != null
-              ? await this._execute_history_step(
-                  historyItem,
-                  stepDelay,
-                  signal,
-                  wait_for_elements,
-                  ai_step_llm
-                )
-              : await this._execute_history_step(
-                  historyItem,
-                  stepDelay,
-                  signal,
-                  wait_for_elements
-                );
-          results.push(...stepResult);
-          stepSucceeded = true;
-          break;
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          if (
-            signal?.aborted ||
-            (error instanceof Error && error.name === 'AbortError')
-          ) {
-            throw this._createAbortError();
+        const historyItem = history.history[index];
+        const goal = historyItem.model_output?.current_state?.next_goal ?? '';
+        const stepNumber = historyItem.metadata?.step_number ?? index + 1;
+        const stepName =
+          stepNumber === 0 ? 'Initial actions' : `Step ${stepNumber}`;
+        const savedInterval = historyItem.metadata?.step_interval;
+        let stepDelay = delay_between_actions;
+        let delaySource = `using default delay=${this._formatDelaySeconds(stepDelay)}`;
+        if (typeof savedInterval === 'number' && Number.isFinite(savedInterval)) {
+          stepDelay = Math.min(savedInterval, max_step_interval);
+          if (savedInterval > max_step_interval) {
+            delaySource = `capped to ${this._formatDelaySeconds(stepDelay)} (saved was ${savedInterval.toFixed(1)}s)`;
+          } else {
+            delaySource = `using saved step_interval=${this._formatDelaySeconds(stepDelay)}`;
           }
-          attempt += 1;
+        }
+        this.logger.info(
+          `Replaying ${stepName} (${index + 1}/${history.history.length}) [${delaySource}]: ${goal}`
+        );
 
-          if (
-            !menuReopened &&
-            errorMessage.includes('Could not find matching element') &&
-            previousItem &&
-            this._is_menu_opener_step(previousItem)
-          ) {
-            const currentElement = this._coerceHistoryElement(
-              historyItem.state?.interacted_element?.[0]
-            );
-            if (this._is_menu_item_element(currentElement)) {
-              this.logger.info(
-                'Dropdown may have closed. Attempting to re-open by re-executing previous step...'
+        const actions = historyItem.model_output?.action ?? [];
+        const hasValidAction =
+          actions.length && !actions.every((action) => action == null);
+        if (!historyItem.model_output || !hasValidAction) {
+          this.logger.warning(`Step ${index + 1}: No action to replay, skipping`);
+          results.push(new ActionResult({ error: 'No action to replay' }));
+          continue;
+        }
+
+        const originalErrors = Array.isArray(historyItem.result)
+          ? historyItem.result
+              .map((result) => result?.error)
+              .filter((error): error is string => typeof error === 'string')
+          : [];
+        if (originalErrors.length && skip_failures) {
+          const firstError = originalErrors[0] ?? 'unknown';
+          const preview =
+            firstError.length > 100
+              ? `${firstError.slice(0, 100)}...`
+              : firstError;
+          this.logger.warning(
+            `${stepName}: Original step had error(s), skipping (skip_failures=true): ${preview}`
+          );
+          results.push(
+            new ActionResult({
+              error: `Skipped - original step had error: ${preview}`,
+            })
+          );
+          continue;
+        }
+
+        if (
+          this._is_redundant_retry_step(
+            historyItem,
+            previousItem,
+            previousStepSucceeded
+          )
+        ) {
+          this.logger.info(
+            `${stepName}: Skipping redundant retry (previous step already succeeded with same element)`
+          );
+          results.push(
+            new ActionResult({
+              extracted_content: 'Skipped - redundant retry of previous step',
+              include_in_memory: false,
+            })
+          );
+          continue;
+        }
+
+        let attempt = 0;
+        let stepSucceeded = false;
+        let menuReopened = false;
+        while (attempt < max_retries) {
+          this._throwIfAborted(signal);
+          try {
+            const stepResult =
+              ai_step_llm != null
+                ? await this._execute_history_step(
+                    historyItem,
+                    stepDelay,
+                    signal,
+                    wait_for_elements,
+                    ai_step_llm
+                  )
+                : await this._execute_history_step(
+                    historyItem,
+                    stepDelay,
+                    signal,
+                    wait_for_elements
+                  );
+            results.push(...stepResult);
+            stepSucceeded = true;
+            break;
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+            if (
+              signal?.aborted ||
+              (error instanceof Error && error.name === 'AbortError')
+            ) {
+              throw this._createAbortError();
+            }
+            attempt += 1;
+
+            if (
+              !menuReopened &&
+              errorMessage.includes('Could not find matching element') &&
+              previousItem &&
+              this._is_menu_opener_step(previousItem)
+            ) {
+              const currentElement = this._coerceHistoryElement(
+                historyItem.state?.interacted_element?.[0]
               );
-              const reopened = await this._reexecute_menu_opener(
-                previousItem,
-                signal,
-                ai_step_llm
-              );
-              if (reopened) {
-                menuReopened = true;
-                attempt -= 1;
-                stepDelay = 0.5;
+              if (this._is_menu_item_element(currentElement)) {
                 this.logger.info(
-                  'Dropdown re-opened, retrying element match...'
+                  'Dropdown may have closed. Attempting to re-open by re-executing previous step...'
                 );
-                continue;
+                const reopened = await this._reexecute_menu_opener(
+                  previousItem,
+                  signal,
+                  ai_step_llm
+                );
+                if (reopened) {
+                  menuReopened = true;
+                  attempt -= 1;
+                  stepDelay = 0.5;
+                  this.logger.info(
+                    'Dropdown re-opened, retrying element match...'
+                  );
+                  continue;
+                }
               }
             }
-          }
 
-          if (attempt === max_retries) {
-            const message = `Step ${index + 1} failed after ${max_retries} attempts: ${
-              errorMessage
-            }`;
-            this.logger.error(message);
-            const failure = new ActionResult({ error: message });
-            results.push(failure);
-            if (!skip_failures) {
-              throw new Error(message);
+            if (attempt === max_retries) {
+              const message = `Step ${index + 1} failed after ${max_retries} attempts: ${
+                errorMessage
+              }`;
+              this.logger.error(message);
+              const failure = new ActionResult({ error: message });
+              results.push(failure);
+              if (!skip_failures) {
+                throw new Error(message);
+              }
+            } else {
+              const retryDelay = Math.min(5 * 2 ** Math.max(attempt - 1, 0), 30);
+              this.logger.warning(
+                `Step ${index + 1} failed (attempt ${attempt}/${max_retries}), retrying in ${retryDelay}s...`
+              );
+              await this._sleep(retryDelay, signal);
             }
-          } else {
-            const retryDelay = Math.min(
-              5 * 2 ** Math.max(attempt - 1, 0),
-              30
-            );
-            this.logger.warning(
-              `Step ${index + 1} failed (attempt ${attempt}/${max_retries}), retrying in ${retryDelay}s...`
-            );
-            await this._sleep(retryDelay, signal);
           }
         }
+
+        previousItem = historyItem;
+        previousStepSucceeded = stepSucceeded;
       }
 
-      previousItem = historyItem;
-      previousStepSucceeded = stepSucceeded;
+      const summaryResult = await this._generate_rerun_summary(
+        this.task,
+        results,
+        summary_llm,
+        signal
+      );
+      results.push(summaryResult);
+
+      return results;
+    } finally {
+      await this.close();
     }
-
-    const summaryResult = await this._generate_rerun_summary(
-      this.task,
-      results,
-      summary_llm,
-      signal
-    );
-    results.push(summaryResult);
-
-    return results;
   }
 
   private async _execute_history_step(

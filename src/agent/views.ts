@@ -467,6 +467,7 @@ export class AgentState {
   last_model_output: AgentOutput | null;
   paused: boolean;
   stopped: boolean;
+  session_initialized: boolean;
   follow_up_task: boolean;
   message_manager_state: MessageManagerState;
   file_system_state: FileSystemState | null;
@@ -487,6 +488,7 @@ export class AgentState {
     this.last_model_output = init?.last_model_output ?? null;
     this.paused = init?.paused ?? false;
     this.stopped = init?.stopped ?? false;
+    this.session_initialized = init?.session_initialized ?? false;
     this.follow_up_task = init?.follow_up_task ?? false;
     if (init?.message_manager_state instanceof MessageManagerState) {
       this.message_manager_state = init.message_manager_state;
@@ -525,6 +527,7 @@ export class AgentState {
       last_model_output: this.last_model_output?.model_dump() ?? null,
       paused: this.paused,
       stopped: this.stopped,
+      session_initialized: this.session_initialized,
       follow_up_task: this.follow_up_task,
       message_manager_state: JSON.parse(
         JSON.stringify(this.message_manager_state)

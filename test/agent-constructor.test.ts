@@ -1417,6 +1417,42 @@ describe('Agent constructor browser session alignment', () => {
     ).toThrow(/allowed_domains/);
   });
 
+  it('starts and closes browser session during rerun_history (python c011 parity)', async () => {
+    const agent = new Agent({
+      task: 'test rerun lifecycle parity',
+      llm: createLlm(),
+    });
+
+    const startSpy = vi
+      .spyOn(agent.browser_session as any, 'start')
+      .mockResolvedValue(undefined);
+    const closeSpy = vi.spyOn(agent, 'close').mockResolvedValue(undefined);
+    vi.spyOn(agent as any, '_execute_history_step').mockResolvedValue([
+      new ActionResult({ extracted_content: 'replayed step' }),
+    ]);
+    vi.spyOn(agent as any, '_generate_rerun_summary').mockResolvedValue(
+      new ActionResult({ is_done: true, success: true, extracted_content: 'ok' })
+    );
+
+    const history = {
+      history: [
+        {
+          model_output: {
+            current_state: { next_goal: 'Replay action' },
+            action: [{}],
+          },
+        },
+      ],
+    } as any;
+
+    const result = await agent.rerun_history(history);
+
+    expect(result).toHaveLength(2);
+    expect(agent.state.session_initialized).toBe(true);
+    expect(startSpy).toHaveBeenCalledTimes(1);
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('passes signal through rerun_history to history step execution', async () => {
     const agent = new Agent({
       task: 'test rerun signal propagation',
