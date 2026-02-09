@@ -53,6 +53,25 @@ describe('Action loop detection', () => {
     expect(googleHash).not.toBe(bingHash);
   });
 
+  it('normalizes scroll action aliases into one loop signature', () => {
+    const scrollHash = compute_action_hash('scroll', {
+      down: true,
+      pages: 1,
+      index: 3,
+    });
+    const scrollPageHash = compute_action_hash('scroll_page', {
+      down: true,
+      num_pages: 1,
+      index: 3,
+    });
+    const scrollDownHash = compute_action_hash('scroll_down', {
+      index: 3,
+    });
+
+    expect(scrollHash).toBe(scrollPageHash);
+    expect(scrollHash).toBe(scrollDownHash);
+  });
+
   it('emits repeated-action nudge at threshold', () => {
     const detector = new ActionLoopDetector({ window_size: 20 });
     for (let i = 0; i < 5; i += 1) {

@@ -215,7 +215,7 @@ const normalizeActionForHash = (
           ? 'up'
           : 'down';
     const index = String(params.index ?? '');
-    return `scroll|${action_name}|${direction}|${index}`;
+    return `scroll|${direction}|${index}`;
   }
 
   return `${action_name}|${stableSerialize(params)}`;
