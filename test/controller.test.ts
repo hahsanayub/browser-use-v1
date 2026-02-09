@@ -75,6 +75,7 @@ import {
   ExtractStructuredDataActionSchema,
   StructuredOutputActionSchema,
 } from '../src/controller/views.js';
+import { SchemaOptimizer } from '../src/llm/schema.js';
 import { ActionResult } from '../src/agent/views.js';
 import { BrowserError } from '../src/browser/views.js';
 import { FileSystem } from '../src/filesystem/file-system.js';
@@ -525,6 +526,36 @@ describe('Controller Registry Tests', () => {
       expect(prompt).toContain('done');
       expect(prompt).toContain('data');
       expect(prompt).not.toContain('"success"');
+    });
+
+    it('hides top-level success in structured done JSON schema but keeps nested data.success', async () => {
+      const optimizedSchema = SchemaOptimizer.createOptimizedJsonSchema(
+        {
+          type: 'object',
+          properties: {
+            success: {
+              type: 'boolean',
+              default: true,
+              description: 'True if user_request completed successfully',
+            },
+            data: {
+              type: 'object',
+              properties: {
+                success: { type: 'string' },
+                value: { type: 'string' },
+              },
+              required: ['success', 'value'],
+            },
+          },
+          required: ['success', 'data'],
+        } as Record<string, unknown>
+      ) as any;
+
+      expect(optimizedSchema.properties?.success).toBeUndefined();
+      expect(optimizedSchema.properties?.data).toBeDefined();
+      expect(
+        optimizedSchema.properties?.data?.properties?.success
+      ).toBeDefined();
     });
 
     it('hides output_schema from extract_structured_data prompt schema', async () => {

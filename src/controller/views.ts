@@ -56,7 +56,10 @@ export const StructuredOutputActionSchema = <T extends z.ZodTypeAny>(
   dataSchema: T
 ) =>
   z.object({
-    success: z.boolean().default(true),
+    success: z
+      .boolean()
+      .default(true)
+      .describe('True if user_request completed successfully'),
     data: dataSchema,
   });
 export type StructuredOutputAction<T> = {

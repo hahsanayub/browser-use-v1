@@ -83,7 +83,46 @@ export class SchemaOptimizer {
       }
     };
 
+    const stripStructuredDoneSuccess = (obj: any) => {
+      if (Array.isArray(obj)) {
+        obj.forEach(stripStructuredDoneSuccess);
+        return;
+      }
+      if (!obj || typeof obj !== 'object') {
+        return;
+      }
+
+      const properties = obj.properties;
+      if (
+        obj.type === 'object' &&
+        properties &&
+        typeof properties === 'object' &&
+        !Array.isArray(properties)
+      ) {
+        const dataSchema = (properties as Record<string, any>).data;
+        const successSchema = (properties as Record<string, any>).success;
+        const looksLikeStructuredDone =
+          dataSchema &&
+          successSchema &&
+          successSchema.type === 'boolean' &&
+          successSchema.description ===
+            'True if user_request completed successfully';
+
+        if (looksLikeStructuredDone) {
+          delete (properties as Record<string, any>).success;
+          if (Array.isArray(obj.required)) {
+            obj.required = obj.required.filter(
+              (name: unknown) => name !== 'success'
+            );
+          }
+        }
+      }
+
+      Object.values(obj).forEach(stripStructuredDoneSuccess);
+    };
+
     ensureAdditionalProperties(optimizedSchema);
+    stripStructuredDoneSuccess(optimizedSchema);
     SchemaOptimizer.makeStrictCompatible(optimizedSchema);
     return optimizedSchema;
   }
