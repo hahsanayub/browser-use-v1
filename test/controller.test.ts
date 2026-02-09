@@ -71,7 +71,10 @@ vi.mock('pdf-parse', () => {
 // Import after mocks
 import { Registry } from '../src/controller/registry/service.js';
 import { Controller } from '../src/controller/service.js';
-import { StructuredOutputActionSchema } from '../src/controller/views.js';
+import {
+  ExtractStructuredDataActionSchema,
+  StructuredOutputActionSchema,
+} from '../src/controller/views.js';
 import { ActionResult } from '../src/agent/views.js';
 import { BrowserError } from '../src/browser/views.js';
 import { FileSystem } from '../src/filesystem/file-system.js';
@@ -522,6 +525,21 @@ describe('Controller Registry Tests', () => {
       expect(prompt).toContain('done');
       expect(prompt).toContain('data');
       expect(prompt).not.toContain('"success"');
+    });
+
+    it('hides output_schema from extract_structured_data prompt schema', async () => {
+      const registry = new Registry();
+
+      registry.action('Extract structured data', {
+        param_model: ExtractStructuredDataActionSchema,
+      })(async function extract_structured_data() {
+        return new ActionResult({ extracted_content: '{}' });
+      });
+
+      const prompt = registry.get_prompt_description();
+      expect(prompt).toContain('extract_structured_data');
+      expect(prompt).toContain('extract_links');
+      expect(prompt).not.toContain('output_schema');
     });
 
     it('stores terminates_sequence metadata on registered actions', async () => {

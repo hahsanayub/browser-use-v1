@@ -54,6 +54,16 @@ export class RegisteredAction {
       skipKeys.add('success');
     }
 
+    const hideExtractOutputSchema = Boolean(
+      this.name === 'extract_structured_data' &&
+        schemaShape &&
+        typeof schemaShape === 'object' &&
+        Object.prototype.hasOwnProperty.call(schemaShape, 'output_schema')
+    );
+    if (hideExtractOutputSchema) {
+      skipKeys.add('output_schema');
+    }
+
     if (schemaShape) {
       const props = Object.fromEntries(
         Object.entries(schemaShape)
