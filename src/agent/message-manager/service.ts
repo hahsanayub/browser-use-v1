@@ -221,7 +221,11 @@ export class MessageManager {
     if (!placeholders.size) {
       return '';
     }
-    return `Here are placeholders for sensitive data:\n${Array.from(placeholders).sort().join(', ')}\nTo use them, write <secret>the placeholder name</secret>`;
+    const placeholderList = `[${Array.from(placeholders)
+      .sort()
+      .map((placeholder) => `'${placeholder.replaceAll("'", "\\'")}'`)
+      .join(', ')}]`;
+    return `Here are placeholders for sensitive data:\n${placeholderList}\nTo use them, write <secret>the placeholder name</secret>`;
   }
 
   prepare_step_state(

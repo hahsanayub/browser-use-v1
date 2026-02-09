@@ -1068,6 +1068,7 @@ describe('Agent constructor browser session alignment', () => {
     );
     expect(stateMessageText).not.toContain(secret);
     expect(stateMessageText).toContain('<secret>token</secret>');
+    expect(stateMessageText).toContain("['token']");
 
     await agent.close();
   });
