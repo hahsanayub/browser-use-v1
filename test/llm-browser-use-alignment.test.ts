@@ -44,7 +44,7 @@ describe('ChatBrowserUse alignment', () => {
     const result = await llm.ainvoke(
       [new UserMessage('hello')],
       undefined,
-      { request_type: 'judge' }
+      { request_type: 'judge', session_id: 'session-123' }
     );
 
     expect(result.completion).toBe('ok');
@@ -58,6 +58,7 @@ describe('ChatBrowserUse alignment', () => {
     const payload = JSON.parse(String(request.body));
     expect(payload.model).toBe('bu-1-0');
     expect(payload.request_type).toBe('judge');
+    expect(payload.session_id).toBe('session-123');
     expect(payload.messages).toEqual([{ role: 'user', content: 'hello' }]);
   });
 

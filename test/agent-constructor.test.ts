@@ -362,6 +362,44 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('passes session_id into llm invoke options for model output generation', async () => {
+    const invokeMock = vi.fn(async () => ({
+      completion: {
+        thinking: null,
+        evaluation_previous_goal: 'none',
+        memory: 'none',
+        next_goal: 'finish',
+        action: [
+          {
+            done: {
+              text: 'Task completed',
+              success: true,
+            },
+          },
+        ],
+      },
+      usage: null,
+    }));
+    const llm = {
+      ...createLlm('primary-model'),
+      ainvoke: invokeMock,
+    } as BaseChatModel;
+    const agent = new Agent({
+      task: 'session id forwarding',
+      llm,
+    });
+
+    await (agent as any)._get_model_output_with_retry(
+      [{ role: 'user', content: 'test' }],
+      null
+    );
+
+    const invokeOptions = invokeMock.mock.calls[0]?.[2] ?? {};
+    expect(invokeOptions.session_id).toBe(agent.session_id);
+
+    await agent.close();
+  });
+
   it('shortens long URLs before invoke and restores original URLs in model output', async () => {
     const longUrl = `https://example.com/path?token=${'x'.repeat(80)}`;
     const seenMessages: any[] = [];

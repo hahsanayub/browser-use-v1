@@ -4910,7 +4910,10 @@ export class Agent<
       const completion = await this.llm.ainvoke(
         inputMessages as any,
         AgentLLMOutputFormat as any,
-        { signal: signal ?? undefined }
+        {
+          signal: signal ?? undefined,
+          session_id: this.session_id,
+        }
       );
       this._throwIfAborted(signal);
       const parsed = this._parseCompletionPayload((completion as any).completion);

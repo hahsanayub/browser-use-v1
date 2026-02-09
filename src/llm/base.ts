@@ -4,6 +4,7 @@ import type { Message } from './messages.js';
 export interface ChatInvokeOptions {
   signal?: AbortSignal;
   request_type?: string;
+  [key: string]: unknown;
 }
 
 export interface BaseChatModel {

@@ -351,6 +351,9 @@ export class ChatBrowserUse implements BaseChatModel {
       request_type: options.request_type ?? 'browser_agent',
       anonymized_telemetry: CONFIG.ANONYMIZED_TELEMETRY,
     };
+    if (typeof (options as any).session_id === 'string') {
+      payload.session_id = (options as any).session_id;
+    }
 
     const schema = this.getOutputSchema(output_format);
     if (schema) {
