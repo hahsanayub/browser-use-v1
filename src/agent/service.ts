@@ -649,6 +649,11 @@ export class Agent<
         exclude_actions: use_vision !== 'auto' ? ['screenshot'] : [],
         display_files_in_done_text,
       })) as Controller<Context>;
+    const structuredOutputActionSchema =
+      this._resolveStructuredOutputActionSchema(this.output_model_schema);
+    if (structuredOutputActionSchema) {
+      this.controller.use_structured_output_action(structuredOutputActionSchema);
+    }
 
     if (skills && skill_ids) {
       throw new Error(
@@ -1566,6 +1571,22 @@ export class Agent<
       return schema && typeof schema === 'object'
         ? (schema as Record<string, unknown>)
         : null;
+    }
+    return null;
+  }
+
+  private _resolveStructuredOutputActionSchema(
+    outputModelSchema: StructuredOutputParser<AgentStructuredOutput> | null
+  ): z.ZodTypeAny | null {
+    if (!outputModelSchema) {
+      return null;
+    }
+    if (outputModelSchema instanceof z.ZodType) {
+      return outputModelSchema;
+    }
+    const schemaCandidate = (outputModelSchema as any)?.schema;
+    if (schemaCandidate instanceof z.ZodType) {
+      return schemaCandidate;
     }
     return null;
   }

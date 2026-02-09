@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import type { BaseChatModel } from '../src/llm/base.js';
 import { Agent } from '../src/agent/service.js';
 import {
@@ -1220,6 +1221,58 @@ describe('Agent constructor browser session alignment', () => {
     const messageManagerTask = String((agent as any)._message_manager?.task ?? '');
     expect(messageManagerTask).toContain('Expected output format: ResultSchema');
     expect(messageManagerTask).toContain('"answer"');
+
+    await agent.close();
+  });
+
+  it('registers structured output done action for zod output_model_schema (python c011 parity)', async () => {
+    const controller = new Controller();
+    const outputSchema = z.object({
+      answer: z.string(),
+    });
+    const useStructuredOutputSpy = vi.spyOn(
+      controller,
+      'use_structured_output_action'
+    );
+
+    const agent = new Agent({
+      task: 'structured output action setup',
+      llm: createLlm(),
+      controller: controller as any,
+      output_model_schema: outputSchema as any,
+    });
+
+    expect(useStructuredOutputSpy).toHaveBeenCalledTimes(1);
+    expect(useStructuredOutputSpy).toHaveBeenCalledWith(outputSchema);
+
+    await agent.close();
+  });
+
+  it('does not register structured output done action for non-zod output parsers', async () => {
+    const controller = new Controller();
+    const useStructuredOutputSpy = vi.spyOn(
+      controller,
+      'use_structured_output_action'
+    );
+    const outputSchema = {
+      name: 'ResultSchema',
+      parse: (input: string) => JSON.parse(input),
+      model_json_schema: () => ({
+        type: 'object',
+        properties: {
+          answer: { type: 'string' },
+        },
+      }),
+    };
+
+    const agent = new Agent({
+      task: 'non-zod output parser',
+      llm: createLlm(),
+      controller: controller as any,
+      output_model_schema: outputSchema as any,
+    });
+
+    expect(useStructuredOutputSpy).not.toHaveBeenCalled();
 
     await agent.close();
   });
