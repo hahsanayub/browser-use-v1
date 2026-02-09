@@ -4322,12 +4322,18 @@ export class Agent<
     }
   }
 
+  private _createInterruptedError(message: string) {
+    const interruptedError = new Error(message);
+    interruptedError.name = 'InterruptedError';
+    return interruptedError;
+  }
+
   private _raise_if_stopped_or_paused() {
     if (this.state.stopped) {
-      throw new Error('Agent stopped');
+      throw this._createInterruptedError('Agent stopped');
     }
     if (this.state.paused) {
-      throw new Error('Agent paused');
+      throw this._createInterruptedError('Agent paused');
     }
   }
 

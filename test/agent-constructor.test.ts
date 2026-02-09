@@ -345,6 +345,49 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('uses InterruptedError semantics for stop/pause guards and step-error handling (python c011 parity)', async () => {
+    const agent = new Agent({
+      task: 'interrupted guard semantics',
+      llm: createLlm(),
+    });
+    const warningSpy = vi
+      .spyOn((agent as any).logger, 'warning')
+      .mockImplementation(() => {});
+
+    agent.state.stopped = true;
+    try {
+      (agent as any)._raise_if_stopped_or_paused();
+      throw new Error('Expected stop guard to throw');
+    } catch (error) {
+      expect((error as Error).name).toBe('InterruptedError');
+      expect((error as Error).message).toBe('Agent stopped');
+    }
+
+    agent.state.stopped = false;
+    agent.state.paused = true;
+    try {
+      (agent as any)._raise_if_stopped_or_paused();
+      throw new Error('Expected pause guard to throw');
+    } catch (error) {
+      expect((error as Error).name).toBe('InterruptedError');
+      expect((error as Error).message).toBe('Agent paused');
+    }
+
+    agent.state.paused = false;
+    const interrupted = new Error('Agent paused');
+    interrupted.name = 'InterruptedError';
+    await (agent as any)._handle_step_error(interrupted);
+    expect(agent.state.consecutive_failures).toBe(0);
+    expect(agent.state.last_result).toBeNull();
+    expect(
+      warningSpy.mock.calls.some(([message]) =>
+        String(message).includes('The agent was interrupted mid-step - Agent paused')
+      )
+    ).toBe(true);
+
+    await agent.close();
+  });
+
   it('does not apply legacy retry_delay sleeps in _handle_step_error (python c011 parity)', async () => {
     const agent = new Agent({
       task: 'rate-limit step error parity',
