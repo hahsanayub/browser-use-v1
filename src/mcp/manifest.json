@@ -78,6 +78,18 @@
     {
       "name": "browser_close_tab",
       "description": "Close a specific tab by its index"
+    },
+    {
+      "name": "browser_list_sessions",
+      "description": "List all active browser sessions managed by the MCP server"
+    },
+    {
+      "name": "browser_close_session",
+      "description": "Close a specific browser session by its session_id"
+    },
+    {
+      "name": "browser_close_all",
+      "description": "Close all active browser sessions managed by the MCP server"
     }
   ],
   "prompts": [

@@ -79,6 +79,12 @@ export interface MCPPromptTemplate {
   template: (args: Record<string, string>) => string;
 }
 
+interface MCPTrackedSession {
+  session: BrowserSession;
+  created_at: number;
+  last_activity: number;
+}
+
 export class MCPServer {
   private server: Server;
   private tools: Record<string, any> = {};
@@ -93,6 +99,7 @@ export class MCPServer {
   private toolExecutionCount = 0;
   private errorCount = 0;
   private abortController: AbortController | null = null;
+  private activeSessions: Map<string, MCPTrackedSession> = new Map();
 
   constructor(name: string, version: string) {
     this.server = new Server(
@@ -304,6 +311,109 @@ export class MCPServer {
     return results.join('\n');
   }
 
+  private trackSession(session: BrowserSession): void {
+    const now = Date.now() / 1000;
+    const existing = this.activeSessions.get(session.id);
+    if (existing) {
+      existing.session = session;
+      existing.last_activity = now;
+      return;
+    }
+    this.activeSessions.set(session.id, {
+      session,
+      created_at: now,
+      last_activity: now,
+    });
+  }
+
+  private updateSessionActivity(session: BrowserSession | null): void {
+    if (!session) {
+      return;
+    }
+    const tracked = this.activeSessions.get(session.id);
+    if (!tracked) {
+      this.trackSession(session);
+      return;
+    }
+    tracked.last_activity = Date.now() / 1000;
+  }
+
+  private serializeTrackedSessions() {
+    const now = Date.now() / 1000;
+    return Array.from(this.activeSessions.entries()).map(
+      ([session_id, tracked]) => ({
+        session_id,
+        created_at: tracked.created_at,
+        last_activity: tracked.last_activity,
+        age_minutes: (now - tracked.created_at) / 60,
+        active: Boolean(tracked.session?.initialized),
+        current_session: this.browserSession?.id === session_id,
+      })
+    );
+  }
+
+  private async shutdownSession(session: BrowserSession): Promise<void> {
+    const withKill = session as BrowserSession & { kill?: () => Promise<void> };
+    if (typeof withKill.kill === 'function') {
+      await withKill.kill();
+      return;
+    }
+    if (typeof session.stop === 'function') {
+      await session.stop();
+    }
+  }
+
+  private async closeSessionById(
+    sessionId: string
+  ): Promise<{ session_id: string; closed: boolean; message: string }> {
+    const tracked = this.activeSessions.get(sessionId);
+    if (!tracked) {
+      return {
+        session_id: sessionId,
+        closed: false,
+        message: `Session ${sessionId} not found`,
+      };
+    }
+
+    try {
+      await this.shutdownSession(tracked.session);
+      this.activeSessions.delete(sessionId);
+      if (this.browserSession?.id === sessionId) {
+        this.browserSession = null;
+      }
+      return {
+        session_id: sessionId,
+        closed: true,
+        message: `Closed session ${sessionId}`,
+      };
+    } catch (error) {
+      return {
+        session_id: sessionId,
+        closed: false,
+        message: `Failed to close session ${sessionId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      };
+    }
+  }
+
+  private async closeAllTrackedSessions(): Promise<{
+    closed_count: number;
+    total_count: number;
+    results: Array<{ session_id: string; closed: boolean; message: string }>;
+  }> {
+    const sessionIds = Array.from(this.activeSessions.keys());
+    const results = await Promise.all(
+      sessionIds.map((sessionId) => this.closeSessionById(sessionId))
+    );
+    const closedCount = results.filter((result) => result.closed).length;
+    return {
+      closed_count: closedCount,
+      total_count: sessionIds.length,
+      results,
+    };
+  }
+
   private setupHandlers() {
     // List available tools
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -418,6 +528,7 @@ export class MCPServer {
       const profileConfig = this.getDefaultProfileConfig();
       const profile = this.buildDirectSessionProfile(profileConfig);
       this.browserSession = new BrowserSession({ browser_profile: profile });
+      this.trackSession(this.browserSession);
       this.initializeLlmForDirectTools();
       this.initializeFileSystem(profileConfig);
     }
@@ -425,6 +536,8 @@ export class MCPServer {
     if (!this.browserSession.initialized) {
       await this.browserSession.start();
     }
+    this.trackSession(this.browserSession);
+    this.updateSessionActivity(this.browserSession);
 
     return this.browserSession;
   }
@@ -435,6 +548,7 @@ export class MCPServer {
   ): Promise<unknown> {
     const controller = await this.ensureController();
     const browserSession = await this.ensureBrowserSession();
+    this.updateSessionActivity(browserSession);
     if (actionName === 'extract_structured_data' && !this.llm) {
       throw new Error(
         'LLM not initialized. Set provider API key env vars and configure BROWSER_USE_LLM_MODEL/DEFAULT_LLM to a supported model.'
@@ -658,6 +772,31 @@ export class MCPServer {
     );
 
     this.registerTool(
+      'browser_list_sessions',
+      'List active browser sessions managed by this MCP server',
+      z.object({}).strict(),
+      async () => {
+        return this.serializeTrackedSessions();
+      }
+    );
+
+    this.registerTool(
+      'browser_close_session',
+      'Close a specific browser session by session_id',
+      z.object({
+        session_id: z.string().trim().min(1),
+      }),
+      async (args) => this.closeSessionById(String(args?.session_id ?? ''))
+    );
+
+    this.registerTool(
+      'browser_close_all',
+      'Close all active browser sessions managed by this MCP server',
+      z.object({}).strict(),
+      async () => this.closeAllTrackedSessions()
+    );
+
+    this.registerTool(
       'retry_with_browser_use_agent',
       'Retry a complex task with the browser-use autonomous agent',
       z.object({
@@ -854,7 +993,10 @@ export class MCPServer {
     browserSession: BrowserSession
   ): Promise<void> {
     this.browserSession = browserSession;
+    this.trackSession(browserSession);
     await this.browserSession.start();
+    this.trackSession(this.browserSession);
+    this.updateSessionActivity(this.browserSession);
     logger.info('Browser session initialized');
   }
 
@@ -908,8 +1050,8 @@ export class MCPServer {
       }
 
       // Close browser session if active
-      if (this.browserSession) {
-        await this.browserSession.stop();
+      if (this.activeSessions.size > 0) {
+        await this.closeAllTrackedSessions();
         this.browserSession = null;
         logger.info('Browser session closed');
       }

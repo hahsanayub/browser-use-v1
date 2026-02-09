@@ -48,11 +48,18 @@ vi.mock('../src/browser/session.js', () => {
   class BrowserSession {
     initialized = true;
     browser_profile: any;
+    id = 'session-test';
     downloaded_files: string[] = [];
     constructor(init: any = {}) {
       this.browser_profile = init.browser_profile ?? { config: {} };
     }
     async start() {}
+    async stop() {
+      this.initialized = false;
+    }
+    async kill() {
+      this.initialized = false;
+    }
   }
   return { BrowserSession };
 });
@@ -364,5 +371,103 @@ describe('MCPServer retry_with_browser_use_agent', () => {
         process.env.OPENAI_API_KEY = previousOpenAiApiKey;
       }
     }
+  });
+});
+
+describe('MCPServer session management tools', () => {
+  it('lists tracked sessions from direct tools lifecycle', async () => {
+    const server = new MCPServer('test-mcp', '1.0.0');
+
+    await (server as any).ensureBrowserSession();
+    const sessions = await (server as any).tools.browser_list_sessions.handler(
+      {}
+    );
+
+    expect(Array.isArray(sessions)).toBe(true);
+    expect(sessions.length).toBeGreaterThan(0);
+    expect(sessions[0]).toMatchObject({
+      session_id: 'session-test',
+      active: true,
+      current_session: true,
+    });
+  });
+
+  it('closes a specific tracked session and clears active browser session reference', async () => {
+    const server = new MCPServer('test-mcp', '1.0.0');
+    const kill = vi.fn(async () => undefined);
+    const session = {
+      id: 'session-a',
+      initialized: true,
+      kill,
+    };
+
+    (server as any).activeSessions = new Map([
+      [
+        'session-a',
+        {
+          session,
+          created_at: 1,
+          last_activity: 1,
+        },
+      ],
+    ]);
+    (server as any).browserSession = session;
+
+    const result = await (server as any).tools.browser_close_session.handler({
+      session_id: 'session-a',
+    });
+
+    expect(kill).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      session_id: 'session-a',
+      closed: true,
+    });
+    expect((server as any).browserSession).toBeNull();
+    expect((server as any).activeSessions.size).toBe(0);
+  });
+
+  it('closes all tracked sessions and returns aggregate summary', async () => {
+    const server = new MCPServer('test-mcp', '1.0.0');
+    const killA = vi.fn(async () => undefined);
+    const killB = vi.fn(async () => undefined);
+    const sessionA = {
+      id: 'session-a',
+      initialized: true,
+      kill: killA,
+    };
+    const sessionB = {
+      id: 'session-b',
+      initialized: true,
+      kill: killB,
+    };
+
+    (server as any).activeSessions = new Map([
+      [
+        'session-a',
+        {
+          session: sessionA,
+          created_at: 1,
+          last_activity: 1,
+        },
+      ],
+      [
+        'session-b',
+        {
+          session: sessionB,
+          created_at: 2,
+          last_activity: 2,
+        },
+      ],
+    ]);
+
+    const result = await (server as any).tools.browser_close_all.handler({});
+
+    expect(killA).toHaveBeenCalledTimes(1);
+    expect(killB).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      closed_count: 2,
+      total_count: 2,
+    });
+    expect((server as any).activeSessions.size).toBe(0);
   });
 });
