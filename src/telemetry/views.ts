@@ -1,3 +1,5 @@
+import { is_running_in_docker } from '../config.js';
+
 export abstract class BaseTelemetryEvent {
   abstract name: string;
 
@@ -5,7 +7,10 @@ export abstract class BaseTelemetryEvent {
     const entries = Object.entries(this as Record<string, unknown>).filter(
       ([key]) => key !== 'name'
     );
-    return Object.fromEntries(entries);
+    return {
+      ...Object.fromEntries(entries),
+      is_docker: is_running_in_docker(),
+    };
   }
 }
 
@@ -23,11 +28,15 @@ export interface AgentTelemetryPayload {
   version: string;
   source: string;
   cdp_url: string | null;
+  agent_type: string | null;
   action_errors: BaseSequence;
   action_history: Array<Array<Record<string, unknown>> | null> | undefined;
   urls_visited: BaseSequence;
   steps: number;
   total_input_tokens: number;
+  total_output_tokens: number;
+  prompt_cached_tokens: number;
+  total_tokens: number;
   total_duration_seconds: number;
   success: boolean | null;
   final_result_response: string | null;
@@ -55,11 +64,15 @@ export class AgentTelemetryEvent
   version: string;
   source: string;
   cdp_url: string | null;
+  agent_type: string | null;
   action_errors: BaseSequence;
   action_history: Array<Array<Record<string, unknown>> | null> | undefined;
   urls_visited: BaseSequence;
   steps: number;
   total_input_tokens: number;
+  total_output_tokens: number;
+  prompt_cached_tokens: number;
+  total_tokens: number;
   total_duration_seconds: number;
   success: boolean | null;
   final_result_response: string | null;
@@ -83,11 +96,15 @@ export class AgentTelemetryEvent
     this.version = payload.version;
     this.source = payload.source;
     this.cdp_url = payload.cdp_url;
+    this.agent_type = payload.agent_type;
     this.action_errors = payload.action_errors;
     this.action_history = payload.action_history;
     this.urls_visited = payload.urls_visited;
     this.steps = payload.steps;
     this.total_input_tokens = payload.total_input_tokens;
+    this.total_output_tokens = payload.total_output_tokens;
+    this.prompt_cached_tokens = payload.prompt_cached_tokens;
+    this.total_tokens = payload.total_tokens;
     this.total_duration_seconds = payload.total_duration_seconds;
     this.success = payload.success;
     this.final_result_response = payload.final_result_response;
