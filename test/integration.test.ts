@@ -388,7 +388,7 @@ describe('Component Tests (Mocked Dependencies)', () => {
 
     const secondCallMessages = llm.calls[1] ?? [];
     const hasFinalStepGuidance = secondCallMessages.some((message: any) =>
-      String(message?.text ?? '').includes('Use only the "done" action now')
+      String(message?.text ?? '').includes('You reached max_steps')
     );
 
     expect(hasFinalStepGuidance).toBe(true);

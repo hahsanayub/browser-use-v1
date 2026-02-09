@@ -386,6 +386,18 @@ const AgentLLMOutputSchema = z.object({
     .default([]),
 });
 
+const DoneOnlyLLMOutputSchema = AgentLLMOutputSchema.extend({
+  action: z
+    .array(
+      z.object({
+        done: z.object({}).passthrough(),
+      })
+    )
+    .optional()
+    .nullable()
+    .default([]),
+});
+
 const SimpleJudgeSchema = z.object({
   is_correct: z.boolean(),
   reason: z.string().optional().default(''),
@@ -404,6 +416,12 @@ const AgentLLMOutputFormat =
     schema: typeof AgentLLMOutputSchema;
   };
 AgentLLMOutputFormat.schema = AgentLLMOutputSchema;
+
+const DoneOnlyLLMOutputFormat =
+  DoneOnlyLLMOutputSchema as typeof DoneOnlyLLMOutputSchema & {
+    schema: typeof DoneOnlyLLMOutputSchema;
+  };
+DoneOnlyLLMOutputFormat.schema = DoneOnlyLLMOutputSchema;
 
 const SimpleJudgeOutputFormat =
   SimpleJudgeSchema as typeof SimpleJudgeSchema & {
@@ -4609,12 +4627,11 @@ export class Agent<
 
     if (isLastStep) {
       const message =
-        'Now comes your last step. Use only the "done" action now. No other actions - so here your action sequence must have length 1.\n' +
-        'If the task is not yet fully finished as requested by the user, set success in "done" to false! E.g. if not all steps are fully completed.\n' +
-        'If the task is fully finished, set success in "done" to true.\n' +
+        'You reached max_steps - this is your last step. Your only tool available is the "done" tool. No other tool is available. All other tools which you see in history or examples are not available.\n' +
+        'If the task is not yet fully finished as requested by the user, set success in "done" to false! E.g. if not all steps are fully completed. Else success to true.\n' +
         'Include everything you found out for the ultimate task in the done text.';
       this._message_manager._add_context_message(new UserMessage(message));
-      this.logger.info('⚠️ Approaching last step. Enforcing done-only action.');
+      this.logger.debug('Last step finishing up');
     }
   }
 
@@ -4635,15 +4652,12 @@ export class Agent<
 
     const message =
       `You failed ${this.settings.max_failures} times. Therefore we terminate the agent.\n` +
-      'Your only tool available is the "done" tool. No other tools are available.\n' +
-      'If the task is not fully finished as requested, set success in "done" to false.\n' +
-      'If the task is fully finished, set success in "done" to true.\n' +
+      'Your only tool available is the "done" tool. No other tool is available. All other tools which you see in history or examples are not available.\n' +
+      'If the task is not yet fully finished as requested by the user, set success in "done" to false! E.g. if not all steps are fully completed. Else success to true.\n' +
       'Include everything you found out for the task in the done text.';
     this._message_manager._add_context_message(new UserMessage(message));
     this._enforceDoneOnlyForCurrentStep = true;
-    this.logger.info(
-      '⚠️ Max failures reached. Enforcing done-only recovery step.'
-    );
+    this.logger.debug('Force done action, because we reached max_failures.');
   }
 
   private _update_plan_from_model_output(modelOutput: AgentOutput) {
@@ -5183,9 +5197,12 @@ export class Agent<
 
     const invokeAndParse = async (inputMessages: any[]) => {
       this._throwIfAborted(signal);
+      const outputFormat = this._enforceDoneOnlyForCurrentStep
+        ? DoneOnlyLLMOutputFormat
+        : AgentLLMOutputFormat;
       const completion = await this.llm.ainvoke(
         inputMessages as any,
-        AgentLLMOutputFormat as any,
+        outputFormat as any,
         {
           signal: signal ?? undefined,
           session_id: this.session_id,
@@ -5229,7 +5246,7 @@ export class Agent<
       this._throwIfAborted(signal);
       this.logger.warning('Model returned empty action. Retrying...');
       const clarificationMessage = new UserMessage(
-        'You forgot to return an action. Please respond only with a valid JSON action according to the expected format.'
+        'You forgot to return an action. Please respond with a valid JSON action according to the expected schema with your assessment and next actions.'
       );
       parsed_completion = await invokeAndParseWithFallback([
         ...messages,
@@ -5265,7 +5282,9 @@ export class Agent<
       Array.isArray(value)
         ? value.filter((item): item is string => typeof item === 'string')
         : null;
-    const AgentOutputModel = this.AgentOutput ?? AgentOutput;
+    const AgentOutputModel = this._enforceDoneOnlyForCurrentStep
+      ? this.DoneAgentOutput ?? this.AgentOutput ?? AgentOutput
+      : this.AgentOutput ?? AgentOutput;
     return new AgentOutputModel({
       thinking: toNullableString(parsed_completion?.thinking),
       evaluation_previous_goal: toNullableString(

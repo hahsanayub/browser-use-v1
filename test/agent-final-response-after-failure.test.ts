@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { BaseChatModel } from '../src/llm/base.js';
 import { Agent } from '../src/agent/service.js';
+import { UserMessage } from '../src/llm/messages.js';
 
 const createLlm = (): BaseChatModel =>
   ({
@@ -77,6 +78,56 @@ describe('Agent final response after failure', () => {
       expect(getContextMessageTexts(agent)).toHaveLength(0);
       expect((agent as any)._enforceDoneOnlyForCurrentStep).toBe(false);
       expect((agent as any)._max_total_failures()).toBe(3);
+    } finally {
+      await agent.close();
+    }
+  });
+
+  it('uses done-only output schema when done-only enforcement is active', async () => {
+    const ainvoke = vi.fn(async () => ({
+      completion: {
+        action: [{ done: { success: true, text: 'final response' } }],
+      },
+      usage: null,
+    }));
+    const llm = {
+      model: 'gpt-test',
+      get provider() {
+        return 'test';
+      },
+      get name() {
+        return 'test';
+      },
+      get model_name() {
+        return 'gpt-test';
+      },
+      ainvoke,
+    } as unknown as BaseChatModel;
+
+    const agent = new Agent({
+      task: 'test task',
+      llm,
+      max_failures: 3,
+      final_response_after_failure: true,
+    });
+
+    try {
+      (agent as any)._enforceDoneOnlyForCurrentStep = true;
+      await (agent as any)._get_model_output_with_retry([
+        new UserMessage('final step'),
+      ]);
+
+      const outputFormat = ainvoke.mock.calls[0]?.[1];
+      expect(
+        outputFormat.schema.safeParse({
+          action: [{ done: { success: true, text: 'ok' } }],
+        }).success
+      ).toBe(true);
+      expect(
+        outputFormat.schema.safeParse({
+          action: [{ go_to_url: { url: 'https://example.com' } }],
+        }).success
+      ).toBe(false);
     } finally {
       await agent.close();
     }
