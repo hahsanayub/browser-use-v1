@@ -955,6 +955,48 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('stores manual initial_actions as step-0 history for rerun parity', async () => {
+    const agent = new Agent({
+      task: 'Open https://example.com and then continue',
+      llm: createLlm(),
+      initial_actions: [
+        {
+          go_to_url: {
+            url: 'https://example.com',
+            new_tab: false,
+          },
+        },
+      ],
+    });
+
+    const initialResult = [
+      new ActionResult({
+        long_term_memory: 'Loaded start URL',
+      }),
+    ];
+    const multiActSpy = vi
+      .spyOn(agent, 'multi_act')
+      .mockResolvedValue(initialResult as any);
+    const logAgentEventSpy = vi
+      .spyOn(agent as any, '_log_agent_event')
+      .mockImplementation(() => {});
+
+    agent.state.stopped = true;
+    await agent.run(1);
+
+    expect(multiActSpy).toHaveBeenCalledTimes(1);
+    expect(agent.history.history).toHaveLength(1);
+    expect(agent.history.history[0]?.metadata?.step_number).toBe(0);
+    expect(agent.history.history[0]?.state.url).toBe('');
+    expect(agent.history.history[0]?.state.title).toBe('Initial Actions');
+    expect(agent.history.history[0]?.result[0]?.long_term_memory).toBe(
+      'Loaded start URL'
+    );
+
+    logAgentEventSpy.mockRestore();
+    await agent.close();
+  });
+
   it('stores step-0 action results and read_state blocks using python c011 semantics', async () => {
     const agent = new Agent({
       task: 'Message manager step-0 format',
@@ -1327,6 +1369,44 @@ describe('Agent constructor browser session alignment', () => {
       signalController.signal,
       false
     );
+
+    await agent.close();
+  });
+
+  it('does not execute initial_actions before rerun_history replay', async () => {
+    const agent = new Agent({
+      task: 'test rerun initial action guard',
+      llm: createLlm(),
+      initial_actions: [
+        {
+          go_to_url: {
+            url: 'https://example.com',
+            new_tab: false,
+          },
+        },
+      ],
+    });
+
+    const executeSpy = vi
+      .spyOn(agent as any, '_execute_history_step')
+      .mockResolvedValue([new ActionResult({ extracted_content: 'ok' })]);
+    const multiActSpy = vi.spyOn(agent, 'multi_act').mockResolvedValue([]);
+    const history = {
+      history: [
+        {
+          model_output: {
+            current_state: { next_goal: 'Replay action' },
+            action: [{}],
+          },
+        },
+      ],
+    } as any;
+
+    const result = await agent.rerun_history(history);
+
+    expect(result).toHaveLength(2);
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+    expect(multiActSpy).not.toHaveBeenCalled();
 
     await agent.close();
   });

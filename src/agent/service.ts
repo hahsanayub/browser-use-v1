@@ -2152,6 +2152,62 @@ export class Agent<
     }
   }
 
+  private async _execute_initial_actions() {
+    if (!this.initial_actions?.length || this.state.follow_up_task) {
+      return;
+    }
+
+    this.logger.debug(
+      `⚡ Executing ${this.initial_actions.length} initial actions...`
+    );
+    const result = await this.multi_act(this.initial_actions, {
+      check_for_new_elements: false,
+    });
+
+    if (result.length > 0 && this.initial_url && result[0]?.long_term_memory) {
+      result[0].long_term_memory =
+        `Found initial url and automatically loaded it. ${result[0].long_term_memory}`;
+    }
+
+    this.state.last_result = result;
+
+    const modelOutput = this.settings.flash_mode
+      ? new this.AgentOutput({
+          evaluation_previous_goal: null,
+          memory: 'Initial navigation',
+          next_goal: null,
+          action: this.initial_actions as unknown as ActionModel[],
+        })
+      : new this.AgentOutput({
+          evaluation_previous_goal: 'Start',
+          memory: null,
+          next_goal: 'Initial navigation',
+          action: this.initial_actions as unknown as ActionModel[],
+        });
+
+    const timestamp = Date.now() / 1000;
+    const metadata = new StepMetadata(timestamp, timestamp, 0, null);
+    const stateHistory = new BrowserStateHistory(
+      this.initial_url ?? '',
+      'Initial Actions',
+      [],
+      Array(this.initial_actions.length).fill(null),
+      null
+    );
+
+    this.history.add_item(
+      new AgentHistory(
+        modelOutput,
+        result,
+        stateHistory,
+        metadata,
+        null
+      )
+    );
+    this.logger.debug('📝 Saved initial actions to history as step 0');
+    this.logger.debug('✅ Initial actions completed');
+  }
+
   async run(
     max_steps = 500,
     on_step_start: AgentHookFunc<Context, AgentStructuredOutput> | null = null,
@@ -2191,17 +2247,7 @@ export class Agent<
       this.eventbus.dispatch(CreateAgentTaskEvent.fromAgent(this as any));
 
       await this._register_skills_as_actions();
-
-      if (this.initial_actions?.length && !this.state.follow_up_task) {
-        this.logger.debug(
-          `⚡ Executing ${this.initial_actions.length} initial actions...`
-        );
-        const result = await this.multi_act(this.initial_actions, {
-          check_for_new_elements: false,
-        });
-        this.state.last_result = result;
-        this.logger.debug('✅ Initial actions completed');
-      }
+      await this._execute_initial_actions();
 
       this.logger.debug(
         `🔄 Starting main execution loop with max ${max_steps} steps...`
