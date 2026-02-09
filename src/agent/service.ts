@@ -1411,14 +1411,20 @@ export class Agent<
         typeof this.task_id === 'string' && this.task_id.length
           ? this.task_id.slice(-4)
           : '----';
-      const browserSessionId =
+      const browserSessionSuffix =
         typeof this.browser_session?.id === 'string'
-          ? this.browser_session.id
+          ? this.browser_session.id.slice(-4)
           : typeof this.id === 'string'
-            ? this.id
+            ? this.id.slice(-4)
             : '----';
+      const focusTargetSuffixRaw = (this.browser_session as any)
+        ?.agent_focus_target_id;
+      const focusTargetSuffix =
+        typeof focusTargetSuffixRaw === 'string' && focusTargetSuffixRaw.length
+          ? focusTargetSuffixRaw.slice(-2)
+          : '--';
       this._logger = createLogger(
-        `browser_use.Agent🅰 ${taskIdSuffix} on 🆂 ${String(browserSessionId).slice(-4)}`
+        `browser_use.Agent🅰 ${taskIdSuffix} ⇢ 🅑 ${browserSessionSuffix} 🅣 ${focusTargetSuffix}`
       );
     }
     return this._logger;
