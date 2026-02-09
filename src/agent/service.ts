@@ -667,7 +667,12 @@ export class Agent<
       (this.controller.registry as any).exclude_action?.('screenshot');
     }
     let resolvedInitialActions = initial_actions;
-    if (directly_open_url && !resolvedInitialActions?.length) {
+    const hasFollowUpState = Boolean(params.injected_agent_state?.follow_up_task);
+    if (
+      directly_open_url &&
+      !hasFollowUpState &&
+      !resolvedInitialActions?.length
+    ) {
       const extractedUrl = this._extract_start_url(task);
       if (extractedUrl) {
         this.initial_url = extractedUrl;

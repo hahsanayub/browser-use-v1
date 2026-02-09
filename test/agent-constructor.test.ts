@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { BaseChatModel } from '../src/llm/base.js';
 import { Agent } from '../src/agent/service.js';
-import { ActionResult, AgentOutput, AgentStepInfo } from '../src/agent/views.js';
+import {
+  ActionResult,
+  AgentOutput,
+  AgentState,
+  AgentStepInfo,
+} from '../src/agent/views.js';
 import {
   ModelProviderError,
   ModelRateLimitError,
@@ -1095,6 +1100,21 @@ describe('Agent constructor browser session alignment', () => {
         new_tab: false,
       },
     });
+
+    await agent.close();
+  });
+
+  it('does not auto-open URL when follow_up_task state is restored (python c011 parity)', async () => {
+    const agent = new Agent({
+      task: 'Open https://example.com and verify the page title.',
+      llm: createLlm(),
+      injected_agent_state: new AgentState({
+        follow_up_task: true,
+      }),
+    });
+
+    expect(agent.initial_url).toBeNull();
+    expect(agent.initial_actions).toBeNull();
 
     await agent.close();
   });
