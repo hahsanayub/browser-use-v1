@@ -2003,6 +2003,8 @@ export class Agent<
         actionDicts as Array<Record<string, Record<string, unknown>>>
       );
     }
+
+    this.logger.info(`✓ Registered ${skills.length} skill actions`);
   }
 
   private async _get_unavailable_skills_info(): Promise<string> {
@@ -2080,7 +2082,7 @@ export class Agent<
           ? get_skill_slug(skillObj, skills)
           : skillInfo.title;
         lines.push('');
-        lines.push(`  - ${slug} ("${skillInfo.title}")`);
+        lines.push(`  • ${slug} ("${skillInfo.title}")`);
         lines.push(`    Description: ${skillInfo.description}`);
         lines.push('    Missing cookies:');
         for (const cookie of skillInfo.missing_cookies) {
