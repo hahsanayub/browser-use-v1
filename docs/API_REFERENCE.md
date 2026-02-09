@@ -52,7 +52,7 @@ new Agent(options: AgentOptions)
 | `save_conversation_path`  | `string`                    | No       | `null`                      | Path to save conversation logs           |
 | `override_system_message` | `string`                    | No       | `null`                      | Replace system message                   |
 | `extend_system_message`   | `string`                    | No       | `null`                      | Append to system message                 |
-| `include_attributes`      | `string[]`                  | No       | `['title', 'type', 'name']` | Additional HTML attributes to include    |
+| `include_attributes`      | `string[]`                  | No       | `['title','type','name','role','tabindex','aria-label','placeholder','value','alt','aria-expanded']` | Additional HTML attributes to include    |
 | `sensitive_data`          | `SensitiveDataMap`          | No       | `null`                      | Credentials for auto-fill                |
 | `session_attachment_mode` | `'copy' \| 'strict' \| 'shared'` | No | `'copy'`                    | How Agent attaches to an existing `BrowserSession` |
 | `allow_insecure_sensitive_data` | `boolean`            | No       | `false`                     | Allow `sensitive_data` without `allowed_domains` (unsafe) |

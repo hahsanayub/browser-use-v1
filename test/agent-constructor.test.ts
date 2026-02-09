@@ -108,6 +108,28 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('uses python-aligned default include_attributes when not provided', async () => {
+    const agent = new Agent({
+      task: 'default include attributes',
+      llm: createLlm(),
+    });
+
+    expect(agent.settings.include_attributes).toEqual([
+      'title',
+      'type',
+      'name',
+      'role',
+      'tabindex',
+      'aria-label',
+      'placeholder',
+      'value',
+      'alt',
+      'aria-expanded',
+    ]);
+
+    await agent.close();
+  });
+
   it('resolves llm from DEFAULT_LLM when constructor llm is omitted', async () => {
     const previousDefaultLlm = process.env.DEFAULT_LLM;
     const previousOpenAiApiKey = process.env.OPENAI_API_KEY;
