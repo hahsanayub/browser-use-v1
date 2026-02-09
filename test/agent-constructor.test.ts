@@ -602,6 +602,37 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('multi_act ignores legacy selector-map drift guards (python c011 parity)', async () => {
+    const agent = new Agent({
+      task: 'multi_act selector-map drift parity',
+      llm: createLlm(),
+    });
+
+    const selectorMapSpy = vi.spyOn(
+      agent.browser_session as any,
+      'get_selector_map'
+    );
+    const browserStateSpy = vi.spyOn(
+      agent.browser_session as any,
+      'get_browser_state_with_recovery'
+    );
+    const executeActionSpy = vi
+      .spyOn(agent.controller.registry as any, 'execute_action')
+      .mockResolvedValue(new ActionResult({ extracted_content: 'ok' }));
+
+    const results = await agent.multi_act(
+      [{ click: { index: 1 } }, { click: { index: 1 } }],
+      { check_for_new_elements: true }
+    );
+
+    expect(executeActionSpy).toHaveBeenCalledTimes(2);
+    expect(selectorMapSpy).not.toHaveBeenCalled();
+    expect(browserStateSpy).not.toHaveBeenCalled();
+    expect(results).toHaveLength(2);
+
+    await agent.close();
+  });
+
   it('copies non-owning BrowserSession instances to avoid shared-agent state', async () => {
     const sharedSession = new BrowserSession({
       browser_profile: new BrowserProfile({}),

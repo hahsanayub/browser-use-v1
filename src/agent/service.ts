@@ -2722,7 +2722,7 @@ export class Agent<
       signal?: AbortSignal | null;
     } = {}
   ) {
-    const { check_for_new_elements = true, signal = null } = options;
+    const { signal = null } = options;
     const results: ActionResult[] = [];
 
     if (!this.browser_session) {
@@ -2730,28 +2730,6 @@ export class Agent<
     }
 
     await this._restore_shared_pinned_tab_if_needed();
-
-    // ==================== Selector Map Caching ====================
-    // Check if any action uses an index, if so cache the selector map
-    let cached_selector_map: Record<number, any> = {};
-    let cached_path_hashes: Set<string> = new Set();
-
-    for (const action of actions) {
-      const actionName = Object.keys(action)[0];
-      const actionParams = action[actionName];
-      const index = (actionParams as any)?.index;
-
-      if (index !== null && index !== undefined) {
-        cached_selector_map =
-          (await this.browser_session.get_selector_map?.()) || {};
-        cached_path_hashes = new Set(
-          Object.values(cached_selector_map)
-            .map((e: any) => e?.hash?.branch_path_hash)
-            .filter(Boolean)
-        );
-        break;
-      }
-    }
 
     // ==================== Execute Actions ====================
     for (let i = 0; i < actions.length; i++) {
@@ -2768,66 +2746,8 @@ export class Agent<
         break;
       }
 
-      // ==================== Index Change & New Element Detection ====================
+      // ==================== Wait Between Actions ====================
       if (i > 0) {
-        const currentIndex = (actionParams as any)?.index;
-        if (currentIndex !== null && currentIndex !== undefined) {
-          this._throwIfAborted(signal);
-          // Get new browser state after previous action
-          const new_browser_state_summary =
-            await this.browser_session.get_browser_state_with_recovery?.({
-              cache_clickable_elements_hashes: false,
-              include_screenshot: false,
-              signal,
-            });
-          const new_selector_map =
-            new_browser_state_summary?.selector_map || {};
-
-          // Detect index change after previous action
-          const orig_target = cached_selector_map[currentIndex];
-          const orig_target_hash = orig_target?.hash?.branch_path_hash || null;
-          const new_target = new_selector_map[currentIndex];
-          const new_target_hash = new_target?.hash?.branch_path_hash || null;
-
-          if (orig_target_hash !== new_target_hash) {
-            const msg = `Element index changed after action ${i} / ${actions.length}, because page changed.`;
-            this.logger.info(msg);
-            results.push(
-              new ActionResult({
-                extracted_content: msg,
-                include_in_memory: true,
-                long_term_memory: msg,
-              })
-            );
-            break;
-          }
-
-          // Check for new elements on the page
-          const new_path_hashes = new Set(
-            Object.values(new_selector_map)
-              .map((e: any) => e?.hash?.branch_path_hash)
-              .filter(Boolean)
-          );
-
-          // Check if new elements appeared (new_path_hashes is not a subset of cached_path_hashes)
-          const has_new_elements = Array.from(new_path_hashes).some(
-            (hash) => !cached_path_hashes.has(hash)
-          );
-
-          if (check_for_new_elements && has_new_elements) {
-            const msg = `Something new appeared after action ${i} / ${actions.length}, following actions are NOT executed and should be retried.`;
-            this.logger.info(msg);
-            results.push(
-              new ActionResult({
-                extracted_content: msg,
-                include_in_memory: true,
-                long_term_memory: msg,
-              })
-            );
-            break;
-          }
-        }
-
         // Wait between actions
         const wait_time =
           (this.browser_session as any)?.browser_profile
