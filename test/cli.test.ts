@@ -30,6 +30,8 @@ const MANAGED_ENV_KEYS = [
   'MISTRAL_BASE_URL',
   'CEREBRAS_API_KEY',
   'CEREBRAS_BASE_URL',
+  'VERCEL_API_KEY',
+  'VERCEL_BASE_URL',
   'AWS_ACCESS_KEY_ID',
   'AWS_PROFILE',
   'OLLAMA_MODEL',
@@ -314,6 +316,19 @@ describe('CLI model routing', () => {
     expect(llm.model).toBe('llama3.1-8b');
   });
 
+  it('routes vercel-prefixed model names to Vercel gateway provider', () => {
+    process.env.VERCEL_API_KEY = 'test-vercel';
+    const args = parseCliArgs([
+      '--model',
+      'vercel:openai/gpt-5-mini',
+      '-p',
+      'x',
+    ]);
+    const llm = getLlmFromCliArgs(args);
+    expect(llm.provider).toBe('vercel');
+    expect(llm.model).toBe('openai/gpt-5-mini');
+  });
+
   it('supports --provider without --model using provider defaults', () => {
     process.env.ANTHROPIC_API_KEY = 'test-anthropic';
     const args = parseCliArgs(['--provider', 'anthropic', '-p', 'x']);
@@ -328,6 +343,14 @@ describe('CLI model routing', () => {
     const llm = getLlmFromCliArgs(args);
     expect(llm.provider).toBe('browser-use');
     expect(llm.model).toBe('bu-1-0');
+  });
+
+  it('supports vercel provider defaults when api key is configured', () => {
+    process.env.VERCEL_API_KEY = 'test-vercel';
+    const args = parseCliArgs(['--provider', 'vercel', '-p', 'x']);
+    const llm = getLlmFromCliArgs(args);
+    expect(llm.provider).toBe('vercel');
+    expect(llm.model).toBe('openai/gpt-5-mini');
   });
 
   it('rejects conflicting --provider and --model combinations', () => {

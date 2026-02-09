@@ -121,6 +121,11 @@
       "import": "./dist/llm/openrouter/index.js",
       "default": "./dist/llm/openrouter/index.js"
     },
+    "./llm/vercel": {
+      "types": "./dist/llm/vercel/index.d.ts",
+      "import": "./dist/llm/vercel/index.js",
+      "default": "./dist/llm/vercel/index.js"
+    },
     "./llm/schema": {
       "types": "./dist/llm/schema.d.ts",
       "import": "./dist/llm/schema.js",

@@ -21,6 +21,7 @@ import { ChatAzure } from './llm/azure/chat.js';
 import { ChatOllama } from './llm/ollama/chat.js';
 import { ChatMistral } from './llm/mistral/chat.js';
 import { ChatCerebras } from './llm/cerebras/chat.js';
+import { ChatVercel } from './llm/vercel/chat.js';
 import { ChatAnthropicBedrock } from './llm/aws/chat-anthropic.js';
 import { ChatBedrockConverse } from './llm/aws/chat-bedrock.js';
 import { ChatBrowserUse } from './llm/browser-use/chat.js';
@@ -42,6 +43,7 @@ type CliModelProvider =
   | 'azure'
   | 'mistral'
   | 'cerebras'
+  | 'vercel'
   | 'aws-anthropic'
   | 'aws'
   | 'ollama'
@@ -58,6 +60,7 @@ const CLI_PROVIDER_ALIASES: Record<string, CliModelProvider> = {
   azure: 'azure',
   mistral: 'mistral',
   cerebras: 'cerebras',
+  vercel: 'vercel',
   ollama: 'ollama',
   'browser-use': 'browser-use',
   browseruse: 'browser-use',
@@ -123,7 +126,7 @@ const parseProvider = (value: string): CliModelProvider => {
   const provider = CLI_PROVIDER_ALIASES[normalized];
   if (!provider) {
     throw new Error(
-      `Unsupported provider "${value}". Supported values: openai, anthropic, google, deepseek, groq, openrouter, azure, mistral, cerebras, ollama, browser-use, aws, aws-anthropic.`
+      `Unsupported provider "${value}". Supported values: openai, anthropic, google, deepseek, groq, openrouter, azure, mistral, cerebras, vercel, ollama, browser-use, aws, aws-anthropic.`
     );
   }
   return provider;
@@ -448,6 +451,9 @@ const inferProviderFromModel = (model: string): CliModelProvider | null => {
   if (lower.startsWith('cerebras:')) {
     return 'cerebras';
   }
+  if (lower.startsWith('vercel:')) {
+    return 'vercel';
+  }
   if (
     lower.startsWith('mistral-') ||
     lower.startsWith('codestral') ||
@@ -512,6 +518,9 @@ const normalizeModelValue = (
   if (provider === 'cerebras' && lower.startsWith('cerebras:')) {
     return model.slice('cerebras:'.length);
   }
+  if (provider === 'vercel' && lower.startsWith('vercel:')) {
+    return model.slice('vercel:'.length);
+  }
   if (provider === 'ollama' && lower.startsWith('ollama:')) {
     return model.slice('ollama:'.length);
   }
@@ -568,6 +577,8 @@ const getDefaultModelForProvider = (
       return 'mistral-large-latest';
     case 'cerebras':
       return 'llama3.1-8b';
+    case 'vercel':
+      return 'openai/gpt-5-mini';
     case 'aws-anthropic':
       return 'anthropic.claude-3-5-sonnet-20241022-v2:0';
     case 'ollama':
@@ -624,6 +635,12 @@ const createLlmForProvider = (
         apiKey: requireEnv('CEREBRAS_API_KEY'),
         baseURL: process.env.CEREBRAS_BASE_URL,
       });
+    case 'vercel':
+      return new ChatVercel({
+        model,
+        apiKey: requireEnv('VERCEL_API_KEY'),
+        baseURL: process.env.VERCEL_BASE_URL,
+      });
     case 'ollama': {
       const host = process.env.OLLAMA_HOST || 'http://localhost:11434';
       return new ChatOllama(model, host);
@@ -664,7 +681,7 @@ export const getLlmFromCliArgs = (args: ParsedCliArgs): BaseChatModel => {
     const provider = args.provider ?? inferredProvider;
     if (!provider) {
       throw new Error(
-        `Cannot infer provider from model "${args.model}". Provide --provider or use a supported model prefix: gpt*/o*, claude*, gemini*, deepseek*, groq:, openrouter:, azure:, mistral:, cerebras:, ollama:, browser-use:, bu-*, bedrock:.`
+        `Cannot infer provider from model "${args.model}". Provide --provider or use a supported model prefix: gpt*/o*, claude*, gemini*, deepseek*, groq:, openrouter:, azure:, mistral:, cerebras:, vercel:, ollama:, browser-use:, bu-*, bedrock:.`
       );
     }
     const normalizedModel = normalizeModelValue(args.model, provider);
@@ -720,6 +737,13 @@ export const getLlmFromCliArgs = (args: ParsedCliArgs): BaseChatModel => {
       model: 'llama3.1-8b',
       apiKey: process.env.CEREBRAS_API_KEY,
       baseURL: process.env.CEREBRAS_BASE_URL,
+    });
+  }
+  if (process.env.VERCEL_API_KEY) {
+    return new ChatVercel({
+      model: 'openai/gpt-5-mini',
+      apiKey: process.env.VERCEL_API_KEY,
+      baseURL: process.env.VERCEL_BASE_URL,
     });
   }
   if (process.env.AWS_ACCESS_KEY_ID || process.env.AWS_PROFILE) {
@@ -920,7 +944,7 @@ Options:
   -h, --help                  Show this help message
   --version                   Print version and exit
   --mcp                       Run as MCP server
-  --provider <name>           Force provider (openai|anthropic|google|deepseek|groq|openrouter|azure|mistral|cerebras|ollama|browser-use|aws|aws-anthropic)
+  --provider <name>           Force provider (openai|anthropic|google|deepseek|groq|openrouter|azure|mistral|cerebras|vercel|ollama|browser-use|aws|aws-anthropic)
   --model <model>             Set model (e.g., gpt-5-mini, claude-4-sonnet, gemini-2.5-pro)
   -p, --prompt <task>         Run a single task
   --headless                  Run browser in headless mode

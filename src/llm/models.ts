@@ -11,6 +11,7 @@ import { ChatMistral } from './mistral/chat.js';
 import { ChatOllama } from './ollama/chat.js';
 import { ChatOpenAI } from './openai/chat.js';
 import { ChatOpenRouter } from './openrouter/chat.js';
+import { ChatVercel } from './vercel/chat.js';
 
 type ResolvedProvider =
   | 'openai'
@@ -24,7 +25,8 @@ type ResolvedProvider =
   | 'aws'
   | 'browser-use'
   | 'mistral'
-  | 'cerebras';
+  | 'cerebras'
+  | 'vercel';
 
 const AVAILABLE_PROVIDERS = [
   'openai',
@@ -39,6 +41,7 @@ const AVAILABLE_PROVIDERS = [
   'browser-use',
   'mistral',
   'cerebras',
+  'vercel',
 ] as const;
 
 const MISTRAL_ALIAS_MAP: Record<string, string> = {
@@ -159,6 +162,9 @@ const inferProviderFromModel = (model: string): ResolvedProvider | null => {
   if (lower.startsWith('cerebras:')) {
     return 'cerebras';
   }
+  if (lower.startsWith('vercel:')) {
+    return 'vercel';
+  }
   if (
     lower.startsWith('mistral-') ||
     lower.startsWith('codestral') ||
@@ -215,6 +221,9 @@ const normalizeModelForProvider = (
   }
   if (provider === 'cerebras' && lower.startsWith('cerebras:')) {
     return model.slice('cerebras:'.length);
+  }
+  if (provider === 'vercel' && lower.startsWith('vercel:')) {
+    return model.slice('vercel:'.length);
   }
   if (provider === 'aws' && lower.startsWith('bedrock:')) {
     return model.slice('bedrock:'.length);
@@ -279,6 +288,12 @@ const buildProviderModel = (
         model,
         apiKey: process.env.CEREBRAS_API_KEY,
         baseURL: process.env.CEREBRAS_BASE_URL,
+      });
+    case 'vercel':
+      return new ChatVercel({
+        model,
+        apiKey: process.env.VERCEL_API_KEY,
+        baseURL: process.env.VERCEL_BASE_URL,
       });
     case 'aws':
       return new ChatBedrockConverse({

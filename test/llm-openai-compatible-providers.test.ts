@@ -26,6 +26,7 @@ import { ChatOpenAILike } from '../src/llm/openai/like.js';
 import { ChatOpenRouter } from '../src/llm/openrouter/chat.js';
 import { ChatMistral } from '../src/llm/mistral/chat.js';
 import { ChatCerebras } from '../src/llm/cerebras/chat.js';
+import { ChatVercel } from '../src/llm/vercel/chat.js';
 
 const buildResponse = (content: string) => ({
   choices: [{ message: { content } }],
@@ -103,6 +104,33 @@ describe('OpenAI-compatible providers alignment', () => {
       'HTTP-Referer': 'https://example.com/app',
     });
     expect(request.provider).toEqual({ order: ['openai'] });
+  });
+
+  it('supports Vercel providerOptions passthrough with OpenAI-compatible payload', async () => {
+    const llm = new ChatVercel({
+      model: 'openai/gpt-5-mini',
+      temperature: 0.3,
+      topP: 0.7,
+      seed: 11,
+      providerOptions: {
+        gateway: {
+          order: ['openai', 'anthropic'],
+        },
+      },
+    });
+
+    await llm.ainvoke([new UserMessage('hello')]);
+
+    const request = openaiCreateMock.mock.calls[0]?.[0] ?? {};
+    expect(request.model).toBe('openai/gpt-5-mini');
+    expect(request.temperature).toBe(0.3);
+    expect(request.top_p).toBe(0.7);
+    expect(request.seed).toBe(11);
+    expect(request.providerOptions).toEqual({
+      gateway: {
+        order: ['openai', 'anthropic'],
+      },
+    });
   });
 
   it('optimizes OpenRouter structured schemas for provider compatibility', async () => {

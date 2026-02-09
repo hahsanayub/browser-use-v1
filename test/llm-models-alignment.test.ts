@@ -8,6 +8,7 @@ describe('LLM models factory alignment', () => {
   const originalAzureOpenAiEndpoint = process.env.AZURE_OPENAI_ENDPOINT;
   const originalMistralApiKey = process.env.MISTRAL_API_KEY;
   const originalCerebrasApiKey = process.env.CEREBRAS_API_KEY;
+  const originalVercelApiKey = process.env.VERCEL_API_KEY;
 
   beforeEach(() => {
     process.env.BROWSER_USE_API_KEY = 'test-bu-key';
@@ -16,6 +17,7 @@ describe('LLM models factory alignment', () => {
     process.env.AZURE_OPENAI_ENDPOINT = 'https://example.openai.azure.com';
     process.env.MISTRAL_API_KEY = 'test-mistral-key';
     process.env.CEREBRAS_API_KEY = 'test-cerebras-key';
+    process.env.VERCEL_API_KEY = 'test-vercel-key';
   });
 
   afterEach(() => {
@@ -48,6 +50,11 @@ describe('LLM models factory alignment', () => {
       delete process.env.CEREBRAS_API_KEY;
     } else {
       process.env.CEREBRAS_API_KEY = originalCerebrasApiKey;
+    }
+    if (originalVercelApiKey === undefined) {
+      delete process.env.VERCEL_API_KEY;
+    } else {
+      process.env.VERCEL_API_KEY = originalVercelApiKey;
     }
   });
 
@@ -97,6 +104,12 @@ describe('LLM models factory alignment', () => {
     const llm = getLlmByName('cerebras_llama3_1_8b');
     expect(llm.provider).toBe('cerebras');
     expect(llm.model).toBe('llama3.1-8b');
+  });
+
+  it('supports provider-prefixed Vercel model aliases', () => {
+    const llm = getLlmByName('vercel:openai/gpt-5-mini');
+    expect(llm.provider).toBe('vercel');
+    expect(llm.model).toBe('openai/gpt-5-mini');
   });
 
   it('throws for unrecognized model names', () => {
