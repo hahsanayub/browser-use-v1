@@ -619,17 +619,83 @@ export class Controller<Context = unknown> {
           `Element index ${params.index} does not exist - retry or use alternative actions`
         );
       }
+
+      const isAutocompleteField = (
+        node: { attributes?: Record<string, string> } | null | undefined
+      ) => {
+        const attrs = node?.attributes ?? {};
+        const role = String(attrs.role ?? '').toLowerCase();
+        const ariaAutocomplete = String(
+          attrs['aria-autocomplete'] ?? ''
+        ).toLowerCase();
+        const hasDatalist = String(attrs.list ?? '').trim().length > 0;
+        return (
+          role === 'combobox' ||
+          (ariaAutocomplete !== '' && ariaAutocomplete !== 'none') ||
+          hasDatalist
+        );
+      };
+
+      const needsAutocompleteDelay = (
+        node: { attributes?: Record<string, string> } | null | undefined
+      ) => {
+        const attrs = node?.attributes ?? {};
+        const role = String(attrs.role ?? '').toLowerCase();
+        const ariaAutocomplete = String(
+          attrs['aria-autocomplete'] ?? ''
+        ).toLowerCase();
+        return (
+          role === 'combobox' ||
+          (ariaAutocomplete !== '' && ariaAutocomplete !== 'none')
+        );
+      };
+
       await browser_session._input_text_element_node(element, params.text, {
         clear: params.clear,
         signal,
       });
-      const msg = has_sensitive_data
+
+      let actualValue: string | null = null;
+      try {
+        const locator = await browser_session.get_locate_element?.(element);
+        if (locator && typeof locator.inputValue === 'function') {
+          const value = await locator.inputValue();
+          actualValue = typeof value === 'string' ? value : null;
+        }
+      } catch {
+        actualValue = null;
+      }
+
+      let msg = has_sensitive_data
         ? `⌨️  Input sensitive data into index ${params.index}`
         : `⌨️  Input ${params.text} into index ${params.index}`;
+
+      if (
+        !has_sensitive_data &&
+        actualValue != null &&
+        actualValue !== params.text
+      ) {
+        msg +=
+          `\n⚠️ Note: the field's actual value '${actualValue}' differs from typed text '${params.text}'. ` +
+          'The page may have reformatted or autocompleted your input.';
+      }
+
+      if (isAutocompleteField(element)) {
+        msg +=
+          '\n💡 This is an autocomplete field. Wait for suggestions to appear, then click the correct suggestion instead of pressing Enter.';
+        if (needsAutocompleteDelay(element)) {
+          await waitWithSignal(400, signal);
+        }
+      }
+
+      const longTermMemory = has_sensitive_data
+        ? `Input sensitive data into element ${params.index}.`
+        : msg;
+
       return new ActionResult({
         extracted_content: msg,
         include_in_memory: true,
-        long_term_memory: `Input '${params.text}' into element ${params.index}.`,
+        long_term_memory: longTermMemory,
       });
     };
 

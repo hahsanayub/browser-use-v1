@@ -1229,6 +1229,77 @@ describe('Regression Coverage', () => {
     );
   });
 
+  it('input_text does not leak sensitive value in long-term memory', async () => {
+    const controller = new Controller();
+    const element = { xpath: '/html/body/input', attributes: {} };
+    const browserSession = {
+      get_dom_element_by_index: vi.fn(async () => element),
+      _input_text_element_node: vi.fn(async () => {}),
+      get_locate_element: vi.fn(async () => null),
+    };
+
+    const result = await controller.registry.execute_action(
+      'input_text',
+      { index: 2, text: '<secret>password</secret>', clear: true },
+      {
+        browser_session: browserSession as any,
+        sensitive_data: { password: 'super-secret-value' },
+      }
+    );
+
+    expect(result.extracted_content).toContain('Input sensitive data');
+    expect(result.long_term_memory).toContain('Input sensitive data');
+    expect(result.extracted_content).not.toContain('super-secret-value');
+    expect(result.long_term_memory).not.toContain('super-secret-value');
+  });
+
+  it('input_text adds autocomplete hint for datalist-style fields', async () => {
+    const controller = new Controller();
+    const element = {
+      xpath: '/html/body/input',
+      attributes: { list: 'country-options' },
+    };
+    const browserSession = {
+      get_dom_element_by_index: vi.fn(async () => element),
+      _input_text_element_node: vi.fn(async () => {}),
+      get_locate_element: vi.fn(async () => ({
+        inputValue: vi.fn(async () => 'Ger'),
+      })),
+    };
+
+    const result = await controller.registry.execute_action(
+      'input_text',
+      { index: 3, text: 'Ger', clear: true },
+      { browser_session: browserSession as any }
+    );
+
+    expect(result.extracted_content).toContain('autocomplete field');
+    expect(result.long_term_memory).toContain('autocomplete field');
+  });
+
+  it('input_text warns when actual field value differs from typed text', async () => {
+    const controller = new Controller();
+    const element = { xpath: '/html/body/input', attributes: {} };
+    const browserSession = {
+      get_dom_element_by_index: vi.fn(async () => element),
+      _input_text_element_node: vi.fn(async () => {}),
+      get_locate_element: vi.fn(async () => ({
+        inputValue: vi.fn(async () => 'Alice (autofilled)'),
+      })),
+    };
+
+    const result = await controller.registry.execute_action(
+      'input_text',
+      { index: 4, text: 'Alice', clear: true },
+      { browser_session: browserSession as any }
+    );
+
+    expect(result.extracted_content).toContain("actual value 'Alice (autofilled)'");
+    expect(result.long_term_memory).toContain(
+      "actual value 'Alice (autofilled)'"
+    );
+  });
+
   it('scroll action accepts pages alias for num_pages', async () => {
     const controller = new Controller();
     const page = {
