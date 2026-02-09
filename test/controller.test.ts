@@ -72,6 +72,7 @@ vi.mock('pdf-parse', () => {
 import { Registry } from '../src/controller/registry/service.js';
 import { Controller } from '../src/controller/service.js';
 import {
+  DoneActionSchema,
   ExtractStructuredDataActionSchema,
   StructuredOutputActionSchema,
 } from '../src/controller/views.js';
@@ -151,6 +152,17 @@ describe('Controller Registry Tests', () => {
         });
 
       expect(registry.get_action('switch')).toBeNull();
+    });
+  });
+
+  describe('Action Schemas', () => {
+    it('defaults done.success to true when omitted', () => {
+      const parsed = DoneActionSchema.parse({
+        text: 'Task completed',
+      });
+
+      expect(parsed.success).toBe(true);
+      expect(parsed.files_to_display).toEqual([]);
     });
   });
 

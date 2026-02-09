@@ -47,7 +47,7 @@ export type InputTextAction = z.infer<typeof InputTextActionSchema>;
 
 export const DoneActionSchema = z.object({
   text: z.string(),
-  success: z.boolean(),
+  success: z.boolean().default(true),
   files_to_display: z.array(z.string()).default([]),
 });
 export type DoneAction = z.infer<typeof DoneActionSchema>;
