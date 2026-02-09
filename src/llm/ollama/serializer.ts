@@ -2,6 +2,7 @@ import type { Message as OllamaMessage } from 'ollama';
 import {
   AssistantMessage,
   ContentPartImageParam,
+  ContentPartRefusalParam,
   ContentPartTextParam,
   SystemMessage,
   UserMessage,
@@ -13,23 +14,41 @@ export class OllamaMessageSerializer {
     return messages.map((message) => this.serializeMessage(message));
   }
 
+  private extractTextContent(content: unknown): string {
+    if (content === null || content === undefined) {
+      return '';
+    }
+    if (typeof content === 'string') {
+      return content;
+    }
+    if (!Array.isArray(content)) {
+      return '';
+    }
+
+    const parts: string[] = [];
+    for (const part of content) {
+      if (part instanceof ContentPartTextParam) {
+        parts.push(part.text);
+      } else if (part instanceof ContentPartRefusalParam) {
+        parts.push(`[Refusal] ${part.refusal}`);
+      }
+    }
+    return parts.join('\n');
+  }
+
   private serializeMessage(message: Message): OllamaMessage {
     if (message instanceof UserMessage) {
       const images: string[] = [];
-      let content = '';
+      const content = this.extractTextContent(message.content);
 
       if (Array.isArray(message.content)) {
         message.content.forEach((part) => {
-          if (part instanceof ContentPartTextParam) {
-            content += part.text;
-          } else if (part instanceof ContentPartImageParam) {
+          if (part instanceof ContentPartImageParam) {
             // Ollama expects base64 string without header
             const data = part.image_url.url.split(',')[1];
             if (data) images.push(data);
           }
         });
-      } else {
-        content = message.content;
       }
 
       return {
@@ -42,7 +61,7 @@ export class OllamaMessageSerializer {
     if (message instanceof SystemMessage) {
       return {
         role: 'system',
-        content: message.text,
+        content: this.extractTextContent(message.content),
       };
     }
 
@@ -50,13 +69,19 @@ export class OllamaMessageSerializer {
       const toolCalls = message.tool_calls?.map((toolCall) => ({
         function: {
           name: toolCall.functionCall.name,
-          arguments: JSON.parse(toolCall.functionCall.arguments),
+          arguments: (() => {
+            try {
+              return JSON.parse(toolCall.functionCall.arguments);
+            } catch {
+              return { arguments: toolCall.functionCall.arguments };
+            }
+          })(),
         },
       }));
 
       return {
         role: 'assistant',
-        content: message.text,
+        content: this.extractTextContent(message.content),
         tool_calls: toolCalls,
       };
     }

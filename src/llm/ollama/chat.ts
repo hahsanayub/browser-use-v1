@@ -1,22 +1,64 @@
-import { Ollama, type ChatResponse } from 'ollama';
+import {
+  Ollama,
+  type ChatResponse,
+  type Config as OllamaClientConfig,
+  type Options as OllamaOptions,
+} from 'ollama';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import type { z } from 'zod';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
+import { ModelProviderError } from '../exceptions.js';
 import { ChatInvokeCompletion } from '../views.js';
 import type { Message } from '../messages.js';
 import { OllamaMessageSerializer } from './serializer.js';
+
+export interface ChatOllamaOptions {
+  model?: string;
+  host?: string;
+  timeout?: number | null;
+  clientParams?: Partial<OllamaClientConfig> | null;
+  ollamaOptions?: Partial<OllamaOptions> | null;
+}
 
 export class ChatOllama implements BaseChatModel {
   public model: string;
   public provider = 'ollama';
   private client: Ollama;
+  private ollamaOptions: Partial<OllamaOptions> | null;
 
   constructor(
-    model: string = 'qwen2.5:latest',
+    modelOrOptions: string | ChatOllamaOptions = 'qwen2.5:latest',
     host: string = 'http://localhost:11434'
   ) {
+    const normalizedOptions =
+      typeof modelOrOptions === 'string'
+        ? ({ model: modelOrOptions, host } as ChatOllamaOptions)
+        : modelOrOptions;
+
+    const {
+      model = 'qwen2.5:latest',
+      host: ollamaHost = 'http://localhost:11434',
+      timeout = null,
+      clientParams = null,
+      ollamaOptions = null,
+    } = normalizedOptions;
+
     this.model = model;
-    this.client = new Ollama({ host });
+    this.ollamaOptions = ollamaOptions;
+
+    const baseFetch = clientParams?.fetch;
+    let fetchWithTimeout = baseFetch;
+    if (timeout !== null && timeout !== undefined) {
+      const timeoutMs = Number(timeout);
+      if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
+        fetchWithTimeout = this.createTimeoutFetch(baseFetch, timeoutMs);
+      }
+    }
+
+    this.client = new Ollama({
+      host: ollamaHost,
+      ...(clientParams ?? {}),
+      ...(fetchWithTimeout ? { fetch: fetchWithTimeout } : {}),
+    });
   }
 
   get name(): string {
@@ -25,6 +67,75 @@ export class ChatOllama implements BaseChatModel {
 
   get model_name(): string {
     return this.model;
+  }
+
+  private getZodSchemaCandidate(
+    output_format?: { parse: (input: string) => unknown } | undefined
+  ) {
+    const output = output_format as any;
+    if (
+      output &&
+      typeof output === 'object' &&
+      typeof output.safeParse === 'function' &&
+      typeof output.parse === 'function'
+    ) {
+      return output;
+    }
+    if (
+      output &&
+      typeof output === 'object' &&
+      output.schema &&
+      typeof output.schema.safeParse === 'function' &&
+      typeof output.schema.parse === 'function'
+    ) {
+      return output.schema;
+    }
+    return null;
+  }
+
+  private parseOutput<T>(
+    output_format: { parse: (input: string) => T },
+    payload: unknown
+  ): T {
+    const output = output_format as any;
+    if (
+      output &&
+      typeof output === 'object' &&
+      output.schema &&
+      typeof output.schema.parse === 'function'
+    ) {
+      return output.schema.parse(payload);
+    }
+    return output.parse(payload);
+  }
+
+  private createTimeoutFetch(
+    baseFetch: OllamaClientConfig['fetch'] | undefined,
+    timeoutMs: number
+  ): OllamaClientConfig['fetch'] {
+    return async (input, init) => {
+      const fetchImpl = baseFetch ?? fetch;
+      const timeoutController = new AbortController();
+      const timeoutHandle = setTimeout(() => timeoutController.abort(), timeoutMs);
+      const externalSignal = init?.signal;
+      const onAbort = () => timeoutController.abort();
+      try {
+        if (externalSignal) {
+          if (externalSignal.aborted) {
+            timeoutController.abort();
+          } else {
+            externalSignal.addEventListener('abort', onAbort, { once: true });
+          }
+        }
+        return await fetchImpl(input, {
+          ...init,
+          signal: timeoutController.signal,
+        });
+      } finally {
+        clearTimeout(timeoutHandle);
+        externalSignal?.removeEventListener('abort', onAbort);
+      }
+    };
   }
 
   async ainvoke(
@@ -44,10 +155,15 @@ export class ChatOllama implements BaseChatModel {
   ): Promise<ChatInvokeCompletion<T | string>> {
     const serializer = new OllamaMessageSerializer();
     const ollamaMessages = serializer.serialize(messages);
+    const zodSchemaCandidate = this.getZodSchemaCandidate(output_format);
 
-    let format: string | undefined = undefined;
-    if (output_format && 'schema' in output_format && output_format.schema) {
-      // Ollama supports 'json' format
+    let format: string | object | undefined = undefined;
+    if (zodSchemaCandidate) {
+      format = zodToJsonSchema(zodSchemaCandidate as any, {
+        name: 'Response',
+        target: 'jsonSchema7',
+      }) as object;
+    } else if (output_format) {
       format = 'json';
     }
 
@@ -55,6 +171,7 @@ export class ChatOllama implements BaseChatModel {
       model: this.model,
       messages: ollamaMessages,
       format: format,
+      options: this.ollamaOptions ?? undefined,
       stream: false,
     });
 
@@ -90,23 +207,34 @@ export class ChatOllama implements BaseChatModel {
         })
       : await requestPromise;
 
-    const content = response.message.content;
+    try {
+      const content = response.message.content;
 
-    let completion: T | string = content;
-    if (output_format) {
-      try {
-        completion = output_format.parse(JSON.parse(content));
-      } catch (e) {
-        console.error('Failed to parse completion', e);
-        throw e;
+      let completion: T | string = content;
+      if (output_format) {
+        if (zodSchemaCandidate) {
+          completion = this.parseOutput(output_format, JSON.parse(content));
+        } else {
+          try {
+            completion = this.parseOutput(output_format, JSON.parse(content));
+          } catch {
+            completion = this.parseOutput(output_format, content);
+          }
+        }
       }
-    }
 
-    return new ChatInvokeCompletion(completion, {
-      prompt_tokens: response.prompt_eval_count ?? 0,
-      completion_tokens: response.eval_count ?? 0,
-      total_tokens:
-        (response.prompt_eval_count ?? 0) + (response.eval_count ?? 0),
-    });
+      return new ChatInvokeCompletion(completion, {
+        prompt_tokens: response.prompt_eval_count ?? 0,
+        completion_tokens: response.eval_count ?? 0,
+        total_tokens:
+          (response.prompt_eval_count ?? 0) + (response.eval_count ?? 0),
+      });
+    } catch (error: any) {
+      throw new ModelProviderError(
+        error?.message ?? String(error),
+        error?.status ?? 502,
+        this.model
+      );
+    }
   }
 }
