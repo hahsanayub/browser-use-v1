@@ -1198,7 +1198,6 @@ export class AgentHistoryList<TStructured = unknown> {
   ) {
     return {
       history: this.history.map((item) => item.toJSON(sensitive_data)),
-      usage: this.usage,
     };
   }
 

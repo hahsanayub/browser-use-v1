@@ -3770,7 +3770,7 @@ export class Agent<
       );
     });
 
-    return new AgentHistoryList(historyItems, payload.usage ?? null);
+    return new AgentHistoryList(historyItems, history.usage ?? null);
   }
 
   private _createAbortError(): Error {

@@ -193,4 +193,15 @@ describe('Agent variable alignment', () => {
 
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
+
+  it('omits usage from serialized history for python parity', () => {
+    const history = createHistory();
+    (history as any).usage = { total_tokens: 42 };
+
+    const serialized = history.model_dump();
+    expect(serialized.history.length).toBe(2);
+    expect(Object.prototype.hasOwnProperty.call(serialized, 'usage')).toBe(
+      false
+    );
+  });
 });
