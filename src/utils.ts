@@ -382,6 +382,32 @@ export const create_task_with_error_handling = <T>(
   });
 };
 
+export const sanitize_surrogates = (text: string): string => {
+  let result = '';
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+
+    // High surrogate
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const nextCode =
+        index + 1 < text.length ? text.charCodeAt(index + 1) : null;
+      if (nextCode != null && nextCode >= 0xdc00 && nextCode <= 0xdfff) {
+        result += text[index] + text[index + 1];
+        index += 1;
+      }
+      continue;
+    }
+
+    // Low surrogate without preceding high surrogate
+    if (code >= 0xdc00 && code <= 0xdfff) {
+      continue;
+    }
+
+    result += text[index];
+  }
+  return result;
+};
+
 let cached_git_info: Record<string, string> | null | undefined;
 
 export const get_git_info = () => {
