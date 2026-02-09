@@ -19,6 +19,10 @@ export interface ChatGoogleOptions {
   maxOutputTokens?: number | null;
   includeSystemInUser?: boolean;
   supportsStructuredOutput?: boolean;
+  maxRetries?: number;
+  retryableStatusCodes?: number[];
+  retryBaseDelay?: number;
+  retryMaxDelay?: number;
 }
 
 export class ChatGoogle implements BaseChatModel {
@@ -33,6 +37,10 @@ export class ChatGoogle implements BaseChatModel {
   private maxOutputTokens: number | null;
   private includeSystemInUser: boolean;
   private supportsStructuredOutput: boolean;
+  private maxRetries: number;
+  private retryableStatusCodes: number[];
+  private retryBaseDelay: number;
+  private retryMaxDelay: number;
 
   constructor(options: string | ChatGoogleOptions = {}) {
     const normalizedOptions =
@@ -50,6 +58,10 @@ export class ChatGoogle implements BaseChatModel {
       maxOutputTokens = 8096,
       includeSystemInUser = false,
       supportsStructuredOutput = true,
+      maxRetries = 5,
+      retryableStatusCodes = [429, 500, 502, 503, 504],
+      retryBaseDelay = 1.0,
+      retryMaxDelay = 60.0,
     } = normalizedOptions;
 
     this.model = model;
@@ -61,6 +73,10 @@ export class ChatGoogle implements BaseChatModel {
     this.maxOutputTokens = maxOutputTokens;
     this.includeSystemInUser = includeSystemInUser;
     this.supportsStructuredOutput = supportsStructuredOutput;
+    this.maxRetries = Math.max(1, maxRetries);
+    this.retryableStatusCodes = [...retryableStatusCodes];
+    this.retryBaseDelay = retryBaseDelay;
+    this.retryMaxDelay = retryMaxDelay;
 
     this.client = new GoogleGenAI({
       apiKey,
@@ -151,6 +167,73 @@ export class ChatGoogle implements BaseChatModel {
     }
 
     return cleaned;
+  }
+
+  private _parseStructuredJson(text: string): unknown {
+    let jsonText = String(text ?? '').trim();
+
+    const fencedMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fencedMatch && fencedMatch[1]) {
+      jsonText = fencedMatch[1].trim();
+    }
+
+    const firstBrace = jsonText.indexOf('{');
+    const lastBrace = jsonText.lastIndexOf('}');
+    if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+      throw new Error(
+        `Expected JSON response but got plain text: "${jsonText.slice(0, 50)}..."`
+      );
+    }
+
+    return JSON.parse(jsonText.slice(firstBrace, lastBrace + 1));
+  }
+
+  private _extractStatusCode(error: any): number | null {
+    const directStatus = Number(
+      error?.status ??
+        error?.statusCode ??
+        error?.response?.status ??
+        error?.response?.statusCode
+    );
+    if (Number.isFinite(directStatus)) {
+      return directStatus;
+    }
+
+    const message = String(error?.message ?? error ?? '').toLowerCase();
+
+    if (
+      /(rate limit|resource exhausted|quota exceeded|too many requests|429)/.test(
+        message
+      )
+    ) {
+      return 429;
+    }
+    if (/(service unavailable|internal server error|bad gateway|503|502|500)/.test(message)) {
+      return 503;
+    }
+    if (/(forbidden|403)/.test(message)) {
+      return 403;
+    }
+    if (/(timeout|timed out|cancelled|canceled)/.test(message)) {
+      return 504;
+    }
+
+    return null;
+  }
+
+  private _toModelProviderError(error: any): ModelProviderError {
+    if (error instanceof ModelProviderError) {
+      return error;
+    }
+    return new ModelProviderError(
+      error?.message ?? String(error),
+      this._extractStatusCode(error) ?? 502,
+      this.model
+    );
+  }
+
+  private async _sleep(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   async ainvoke(
@@ -248,21 +331,49 @@ export class ChatGoogle implements BaseChatModel {
       return null;
     })();
 
-    if (schemaForJson && this.supportsStructuredOutput) {
+    let cleanSchemaForJson: Record<string, unknown> | null = null;
+    if (schemaForJson) {
       try {
         const jsonSchema = zodToJsonSchema(schemaForJson as any);
-        // Clean up the schema for Google's format
-        const cleanSchema = this._cleanSchemaForGoogle(jsonSchema);
-        generationConfig.responseMimeType = 'application/json';
-        generationConfig.responseSchema = cleanSchema;
+        cleanSchemaForJson = this._cleanSchemaForGoogle(jsonSchema);
       } catch {
-        // Continue without responseSchema fallback.
+        cleanSchemaForJson = null;
+      }
+    }
+
+    if (cleanSchemaForJson && this.supportsStructuredOutput) {
+      generationConfig.responseMimeType = 'application/json';
+      generationConfig.responseSchema = cleanSchemaForJson;
+    }
+
+    const requestContents = (contents as any[]).map((entry) => ({
+      ...entry,
+      parts: Array.isArray((entry as any)?.parts)
+        ? (entry as any).parts.map((part: any) => ({ ...part }))
+        : (entry as any)?.parts,
+    }));
+
+    if (
+      output_format &&
+      cleanSchemaForJson &&
+      !this.supportsStructuredOutput
+    ) {
+      const jsonInstruction =
+        '\n\nPlease respond with a valid JSON object that matches this schema: ' +
+        JSON.stringify(cleanSchemaForJson);
+
+      for (let i = requestContents.length - 1; i >= 0; i -= 1) {
+        const content = requestContents[i] as any;
+        if (content?.role === 'user' && Array.isArray(content?.parts)) {
+          content.parts = [...content.parts, { text: jsonInstruction }];
+          break;
+        }
       }
     }
 
     const request: any = {
       model: this.model,
-      contents,
+      contents: requestContents,
     };
 
     if (systemInstruction && !this.includeSystemInUser) {
@@ -276,50 +387,24 @@ export class ChatGoogle implements BaseChatModel {
       request.generationConfig = generationConfig;
     }
 
-    try {
-      const result = await (this.client.models as any).generateContent(
-        request,
-        options.signal ? { signal: options.signal } : undefined
-      );
-
-      // Extract text from first candidate
-      const candidate = result.candidates?.[0];
-      const textParts = candidate?.content?.parts?.filter((p: any) => p.text) || [];
-      const text = textParts.map((p: any) => p.text).join('');
-
-      let completion: T | string = text;
-      const stopReason = result?.candidates?.[0]?.finishReason ?? null;
-
+    for (let attempt = 0; attempt < this.maxRetries; attempt += 1) {
       try {
+        const result = await (this.client.models as any).generateContent(
+          request,
+          options.signal ? { signal: options.signal } : undefined
+        );
+
+        const candidate = result.candidates?.[0];
+        const textParts =
+          candidate?.content?.parts?.filter((p: any) => p.text) || [];
+        const text = textParts.map((p: any) => p.text).join('');
+
+        let completion: T | string = text;
+        const stopReason = result?.candidates?.[0]?.finishReason ?? null;
+
         let parsed: any = text;
-
-        if (output_format && schemaForJson && this.supportsStructuredOutput) {
-          let jsonText = String(text ?? '').trim();
-
-          // Handle markdown code fences like ```json ... ```
-          const fencedMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/i);
-          if (fencedMatch && fencedMatch[1]) {
-            jsonText = fencedMatch[1].trim();
-          }
-
-          // Try to extract JSON object from text
-          const firstBrace = jsonText.indexOf('{');
-          const lastBrace = jsonText.lastIndexOf('}');
-          if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-            jsonText = jsonText.slice(firstBrace, lastBrace + 1);
-          } else {
-            // If no JSON object found, the model returned plain text
-            // Try to wrap it in a minimal valid structure
-            console.warn(
-              'Google LLM returned plain text instead of JSON. Raw response:',
-              text.slice(0, 200)
-            );
-            throw new Error(
-              `Expected JSON response but got plain text: "${text.slice(0, 50)}..."`
-            );
-          }
-
-          parsed = JSON.parse(jsonText);
+        if (output_format && schemaForJson) {
+          parsed = this._parseStructuredJson(text);
         }
 
         if (output_format) {
@@ -336,23 +421,37 @@ export class ChatGoogle implements BaseChatModel {
             completion = output.parse(parsed);
           }
         }
-      } catch (error) {
-        throw error;
-      }
 
-      return new ChatInvokeCompletion(
-        completion,
-        this.getUsage(result),
-        null,
-        null,
-        stopReason
-      );
-    } catch (error: any) {
-      throw new ModelProviderError(
-        error?.message ?? String(error),
-        error?.status ?? 500,
-        this.model
-      );
+        return new ChatInvokeCompletion(
+          completion,
+          this.getUsage(result),
+          null,
+          null,
+          stopReason
+        );
+      } catch (error: any) {
+        const providerError = this._toModelProviderError(error);
+        const shouldRetry =
+          this.retryableStatusCodes.includes(providerError.statusCode) &&
+          attempt < this.maxRetries - 1;
+
+        if (!shouldRetry) {
+          throw providerError;
+        }
+
+        const delaySeconds = Math.min(
+          this.retryBaseDelay * 2 ** attempt,
+          this.retryMaxDelay
+        );
+        const jitter = Math.random() * delaySeconds * 0.1;
+        await this._sleep((delaySeconds + jitter) * 1000);
+      }
     }
+
+    throw new ModelProviderError(
+      'Retry loop completed without response',
+      500,
+      this.model
+    );
   }
 }

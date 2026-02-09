@@ -178,6 +178,44 @@ describe('Google LLM alignment', () => {
     expect((response.completion as any).value).toBe('ok');
   });
 
+  it('falls back to prompt-based JSON mode when structured output is disabled', async () => {
+    generateContentMock.mockResolvedValue(
+      buildResult('```json\n{"value":"fallback"}\n```')
+    );
+    const schema = z.object({ value: z.string() });
+    const llm = new ChatGoogle({
+      model: 'gemini-2.5-flash',
+      supportsStructuredOutput: false,
+    });
+
+    const response = await llm.ainvoke([new UserMessage('extract')], schema as any);
+    const request = generateContentMock.mock.calls[0]?.[0] ?? {};
+
+    expect(request.generationConfig.responseMimeType).toBeUndefined();
+    expect(request.generationConfig.responseSchema).toBeUndefined();
+    expect(
+      (request.contents?.[0]?.parts?.[1]?.text as string) ?? ''
+    ).toContain('Please respond with a valid JSON object that matches this schema');
+    expect((response.completion as any).value).toBe('fallback');
+  });
+
+  it('retries retryable failures with exponential backoff settings', async () => {
+    generateContentMock
+      .mockRejectedValueOnce({ status: 503, message: 'service unavailable' })
+      .mockResolvedValueOnce(buildResult('recovered'));
+
+    const llm = new ChatGoogle({
+      model: 'gemini-2.5-flash',
+      maxRetries: 2,
+      retryBaseDelay: 0,
+      retryMaxDelay: 0,
+    });
+
+    const response = await llm.ainvoke([new UserMessage('retry')]);
+    expect(generateContentMock).toHaveBeenCalledTimes(2);
+    expect(response.completion).toBe('recovered');
+  });
+
   it('omits output_schema field from Gemini response schema', async () => {
     generateContentMock.mockResolvedValue(
       buildResult('{"query":"topic","value":"ok"}')
