@@ -500,4 +500,48 @@ describe('MCPServer session management tools', () => {
     });
     expect((server as any).activeSessions.size).toBe(0);
   });
+
+  it('auto-closes sessions that exceed inactivity timeout during cleanup', async () => {
+    const server = new MCPServer('test-mcp', '1.0.0');
+    const now = Date.now() / 1000;
+    const killExpired = vi.fn(async () => undefined);
+    const killActive = vi.fn(async () => undefined);
+    const expiredSession = {
+      id: 'session-expired',
+      initialized: true,
+      kill: killExpired,
+    };
+    const activeSession = {
+      id: 'session-active',
+      initialized: true,
+      kill: killActive,
+    };
+
+    (server as any).sessionTimeoutMinutes = 1;
+    (server as any).activeSessions = new Map([
+      [
+        'session-expired',
+        {
+          session: expiredSession,
+          created_at: now - 360,
+          last_activity: now - 120,
+        },
+      ],
+      [
+        'session-active',
+        {
+          session: activeSession,
+          created_at: now - 60,
+          last_activity: now - 10,
+        },
+      ],
+    ]);
+
+    await (server as any).cleanupExpiredSessions();
+
+    expect(killExpired).toHaveBeenCalledTimes(1);
+    expect(killActive).not.toHaveBeenCalled();
+    expect((server as any).activeSessions.has('session-expired')).toBe(false);
+    expect((server as any).activeSessions.has('session-active')).toBe(true);
+  });
 });

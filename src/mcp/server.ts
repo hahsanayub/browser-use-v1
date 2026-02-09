@@ -100,6 +100,8 @@ export class MCPServer {
   private errorCount = 0;
   private abortController: AbortController | null = null;
   private activeSessions: Map<string, MCPTrackedSession> = new Map();
+  private sessionTimeoutMinutes = 10;
+  private sessionCleanupInterval: NodeJS.Timeout | null = null;
 
   constructor(name: string, version: string) {
     this.server = new Server(
@@ -116,6 +118,13 @@ export class MCPServer {
     );
 
     this.config = load_browser_use_config();
+    const configuredTimeout = Number(
+      process.env.BROWSER_USE_MCP_SESSION_TIMEOUT_MINUTES ?? '10'
+    );
+    this.sessionTimeoutMinutes =
+      Number.isFinite(configuredTimeout) && configuredTimeout > 0
+        ? configuredTimeout
+        : 10;
     this.startTime = Date.now() / 1000;
     this.setupHandlers();
     this.registerDefaultPrompts();
@@ -412,6 +421,52 @@ export class MCPServer {
       total_count: sessionIds.length,
       results,
     };
+  }
+
+  private async cleanupExpiredSessions(): Promise<void> {
+    const now = Date.now() / 1000;
+    const timeoutSeconds = this.sessionTimeoutMinutes * 60;
+    const expiredSessionIds: string[] = [];
+
+    for (const [sessionId, tracked] of this.activeSessions.entries()) {
+      if (now - tracked.last_activity > timeoutSeconds) {
+        expiredSessionIds.push(sessionId);
+      }
+    }
+
+    for (const sessionId of expiredSessionIds) {
+      const result = await this.closeSessionById(sessionId);
+      if (!result.closed) {
+        logger.warning(result.message);
+      }
+    }
+  }
+
+  private startSessionCleanupLoop(): void {
+    if (this.sessionCleanupInterval) {
+      return;
+    }
+
+    this.sessionCleanupInterval = setInterval(() => {
+      this.cleanupExpiredSessions().catch((error) => {
+        logger.warning(
+          `MCP session cleanup failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      });
+    }, 120_000);
+
+    // Do not keep the Node process alive solely because of the cleanup loop.
+    this.sessionCleanupInterval.unref?.();
+  }
+
+  private stopSessionCleanupLoop(): void {
+    if (!this.sessionCleanupInterval) {
+      return;
+    }
+    clearInterval(this.sessionCleanupInterval);
+    this.sessionCleanupInterval = null;
   }
 
   private setupHandlers() {
@@ -1065,6 +1120,7 @@ export class MCPServer {
       const transport = new StdioServerTransport();
       await this.server.connect(transport);
       this.isRunning = true;
+      this.startSessionCleanupLoop();
       logger.info(
         `🔌 MCP Server started (${this.getToolCount()} tools, ${this.getPromptCount()} prompts registered)`
       );
@@ -1086,6 +1142,7 @@ export class MCPServer {
 
     try {
       this.isRunning = false;
+      this.stopSessionCleanupLoop();
 
       // Cancel any pending operations
       if (this.abortController) {
