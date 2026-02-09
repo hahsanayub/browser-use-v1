@@ -500,6 +500,37 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('sets coordinate-clicking support from model family (python c011 parity)', async () => {
+    const regularController = new Controller();
+    const regularToggleSpy = vi.spyOn(
+      regularController,
+      'set_coordinate_clicking'
+    );
+    const regularAgent = new Agent({
+      task: 'regular model coordinate toggle',
+      llm: createLlm('gpt-4o-mini', 'openai'),
+      controller: regularController as any,
+    });
+
+    expect(regularToggleSpy).toHaveBeenCalledWith(false);
+
+    const supportedController = new Controller();
+    const supportedToggleSpy = vi.spyOn(
+      supportedController,
+      'set_coordinate_clicking'
+    );
+    const supportedAgent = new Agent({
+      task: 'supported model coordinate toggle',
+      llm: createLlm('claude-sonnet-4-5', 'anthropic'),
+      controller: supportedController as any,
+    });
+
+    expect(supportedToggleSpy).toHaveBeenCalledWith(true);
+
+    await regularAgent.close();
+    await supportedAgent.close();
+  });
+
   it('initializes fallback llm state and exposes model tracking getters', async () => {
     const primary = createLlm('primary-model', 'openai');
     const fallback = createLlm('fallback-model', 'anthropic');

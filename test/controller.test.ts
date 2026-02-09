@@ -1085,6 +1085,31 @@ describe('Regression Coverage', () => {
     expect(result.extracted_content).toContain('Clicked at coordinates (42, 84)');
   });
 
+  it('click action rejects coordinate clicks when coordinate clicking is disabled', async () => {
+    const controller = new Controller();
+    controller.set_coordinate_clicking(false);
+    const page = {
+      mouse: {
+        click: vi.fn(async () => {}),
+      },
+      url: vi.fn(() => 'https://example.com'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+    };
+
+    await expect(
+      controller.registry.execute_action(
+        'click',
+        { coordinate_x: 42, coordinate_y: 84 },
+        { browser_session: browserSession as any }
+      )
+    ).rejects.toThrow(
+      'Coordinate clicking is disabled for the current model. Provide an element index.'
+    );
+    expect(page.mouse.click).not.toHaveBeenCalled();
+  });
+
   it('click action rescales coordinates when llm_screenshot_size is configured', async () => {
     const controller = new Controller();
     const page = {

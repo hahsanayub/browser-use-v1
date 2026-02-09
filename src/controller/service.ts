@@ -239,6 +239,7 @@ export class Controller<Context = unknown> {
   public registry: Registry<Context>;
   private displayFilesInDoneText: boolean;
   private outputModel: z.ZodTypeAny | null;
+  private coordinateClickingEnabled: boolean;
   private logger: ReturnType<typeof createLogger>;
 
   constructor(options: ControllerOptions<Context> = {}) {
@@ -250,6 +251,7 @@ export class Controller<Context = unknown> {
     this.registry = new Registry<Context>(exclude_actions);
     this.displayFilesInDoneText = display_files_in_done_text;
     this.outputModel = output_model;
+    this.coordinateClickingEnabled = true;
     this.logger = createLogger('browser_use.controller');
 
     this.registerDefaultActions(output_model);
@@ -513,6 +515,11 @@ export class Controller<Context = unknown> {
         params.coordinate_y != null &&
         params.index == null
       ) {
+        if (!this.coordinateClickingEnabled) {
+          throw new BrowserError(
+            'Coordinate clicking is disabled for the current model. Provide an element index.'
+          );
+        }
         const tabsBefore = collectTabIds();
         const page: Page | null = await browser_session.get_current_page();
         if (!page?.mouse?.click) {
@@ -3447,6 +3454,10 @@ Context: ${context}`;
 
   exclude_action(actionName: string) {
     this.registry.exclude_action(actionName);
+  }
+
+  set_coordinate_clicking(enabled: boolean) {
+    this.coordinateClickingEnabled = Boolean(enabled);
   }
 
   action(description: string, options = {}) {

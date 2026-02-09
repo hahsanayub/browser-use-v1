@@ -670,6 +670,20 @@ export class Agent<
     this.task = this._enhanceTaskWithSchema(task, this.output_model_schema);
     this.sensitive_data = sensitive_data;
     this.controller = resolvedController;
+    const setCoordinateClicking = (this.controller as any)?.set_coordinate_clicking;
+    if (typeof setCoordinateClicking === 'function') {
+      const modelName = String((this.llm as any)?.model ?? '').toLowerCase();
+      const supportsCoordinateClicking = [
+        'claude-sonnet-4',
+        'claude-opus-4',
+        'gemini-3-pro',
+        'browser-use/',
+      ].some((pattern) => modelName.includes(pattern));
+      setCoordinateClicking.call(
+        this.controller,
+        supportsCoordinateClicking
+      );
+    }
 
     const structuredOutputActionSchema =
       this._resolveStructuredOutputActionSchema(this.output_model_schema);
