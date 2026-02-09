@@ -250,6 +250,7 @@ export class Registry<Context = unknown> {
           extraction_schema,
           file_system,
           available_file_paths,
+          sensitive_data,
           signal,
           has_sensitive_data:
             (action_name === 'input_text' || action_name === 'input') &&

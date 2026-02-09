@@ -605,15 +605,45 @@ export class Controller<Context = unknown> {
     this.registerClickActions();
 
     type InputTextAction = z.infer<typeof InputTextActionSchema>;
+    const detectSensitiveKeyName = (
+      value: string,
+      sensitiveData: Record<string, string | Record<string, string>> | null
+    ) => {
+      if (!value || !sensitiveData) {
+        return null;
+      }
+
+      for (const [domainOrKey, content] of Object.entries(sensitiveData)) {
+        if (typeof content === 'string') {
+          if (content === value) {
+            return domainOrKey;
+          }
+          continue;
+        }
+        if (!content || typeof content !== 'object') {
+          continue;
+        }
+        for (const [key, nestedValue] of Object.entries(content)) {
+          if (nestedValue === value) {
+            return key;
+          }
+        }
+      }
+
+      return null;
+    };
+
     const inputImpl = async function (
       params: InputTextAction,
       {
         browser_session,
         has_sensitive_data,
+        sensitive_data,
         signal,
       }: {
         browser_session?: any;
         has_sensitive_data?: boolean;
+        sensitive_data?: Record<string, string | Record<string, string>> | null;
         signal?: AbortSignal | null;
       }
     ) {
@@ -675,9 +705,16 @@ export class Controller<Context = unknown> {
         actualValue = null;
       }
 
-      let msg = has_sensitive_data
-        ? `⌨️  Input sensitive data into index ${params.index}`
-        : `⌨️  Input ${params.text} into index ${params.index}`;
+      let msg = `⌨️  Input ${params.text} into index ${params.index}`;
+      if (has_sensitive_data) {
+        const sensitiveKeyName = detectSensitiveKeyName(
+          params.text,
+          sensitive_data ?? null
+        );
+        msg = sensitiveKeyName
+          ? `Typed ${sensitiveKeyName}`
+          : 'Typed sensitive data';
+      }
 
       if (
         !has_sensitive_data &&
@@ -697,14 +734,10 @@ export class Controller<Context = unknown> {
         }
       }
 
-      const longTermMemory = has_sensitive_data
-        ? `Input sensitive data into element ${params.index}.`
-        : msg;
-
       return new ActionResult({
         extracted_content: msg,
         include_in_memory: true,
-        long_term_memory: longTermMemory,
+        long_term_memory: msg,
       });
     };
 
@@ -713,9 +746,14 @@ export class Controller<Context = unknown> {
       { param_model: InputTextActionSchema }
     )(async function input_text(
       params: InputTextAction,
-      { browser_session, has_sensitive_data, signal }
+      { browser_session, has_sensitive_data, sensitive_data, signal }
     ) {
-      return inputImpl(params, { browser_session, has_sensitive_data, signal });
+      return inputImpl(params, {
+        browser_session,
+        has_sensitive_data,
+        sensitive_data,
+        signal,
+      });
     });
 
     this.registry.action(
@@ -723,9 +761,14 @@ export class Controller<Context = unknown> {
       { param_model: InputTextActionSchema }
     )(async function input(
       params: InputTextAction,
-      { browser_session, has_sensitive_data, signal }
+      { browser_session, has_sensitive_data, sensitive_data, signal }
     ) {
-      return inputImpl(params, { browser_session, has_sensitive_data, signal });
+      return inputImpl(params, {
+        browser_session,
+        has_sensitive_data,
+        sensitive_data,
+        signal,
+      });
     });
 
     type UploadFileAction = z.infer<typeof UploadFileActionSchema>;

@@ -1349,7 +1349,7 @@ describe('Regression Coverage', () => {
     );
   });
 
-  it('input_text does not leak sensitive value in long-term memory', async () => {
+  it('input_text does not leak sensitive value and reports matched sensitive key', async () => {
     const controller = new Controller();
     const element = { xpath: '/html/body/input', attributes: {} };
     const browserSession = {
@@ -1367,8 +1367,8 @@ describe('Regression Coverage', () => {
       }
     );
 
-    expect(result.extracted_content).toContain('Input sensitive data');
-    expect(result.long_term_memory).toContain('Input sensitive data');
+    expect(result.extracted_content).toContain('Typed password');
+    expect(result.long_term_memory).toContain('Typed password');
     expect(result.extracted_content).not.toContain('super-secret-value');
     expect(result.long_term_memory).not.toContain('super-secret-value');
   });
