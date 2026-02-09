@@ -38,6 +38,13 @@ export const ClickElementActionSchema = z
   );
 export type ClickElementAction = z.infer<typeof ClickElementActionSchema>;
 
+export const ClickElementActionIndexOnlySchema = z.object({
+  index: z.number().int().min(1),
+});
+export type ClickElementActionIndexOnly = z.infer<
+  typeof ClickElementActionIndexOnlySchema
+>;
+
 export const InputTextActionSchema = z.object({
   index: z.number().int().min(0),
   text: z.string(),

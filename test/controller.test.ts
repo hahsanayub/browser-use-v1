@@ -1080,6 +1080,7 @@ describe('Regression Coverage', () => {
 
   it('click action supports coordinate clicks without index', async () => {
     const controller = new Controller();
+    controller.set_coordinate_clicking(true);
     const page = {
       mouse: {
         click: vi.fn(async () => {}),
@@ -1119,14 +1120,13 @@ describe('Regression Coverage', () => {
         { coordinate_x: 42, coordinate_y: 84 },
         { browser_session: browserSession as any }
       )
-    ).rejects.toThrow(
-      'Coordinate clicking is disabled for the current model. Provide an element index.'
-    );
+    ).rejects.toThrow('Invalid parameters for action click');
     expect(page.mouse.click).not.toHaveBeenCalled();
   });
 
   it('click action rescales coordinates when llm_screenshot_size is configured', async () => {
     const controller = new Controller();
+    controller.set_coordinate_clicking(true);
     const page = {
       mouse: {
         click: vi.fn(async () => {}),
@@ -1157,6 +1157,7 @@ describe('Regression Coverage', () => {
 
   it('click action by coordinate reports newly opened tab for follow-up switch', async () => {
     const controller = new Controller();
+    controller.set_coordinate_clicking(true);
     const tabs = [{ page_id: 1, url: 'https://example.com', title: 'Example' }];
     const page = {
       mouse: {
@@ -1273,6 +1274,7 @@ describe('Regression Coverage', () => {
 
   it('click action validation requires index or coordinates', async () => {
     const controller = new Controller();
+    controller.set_coordinate_clicking(true);
     const browserSession = {
       get_current_page: vi.fn(async () => ({
         url: vi.fn(() => 'https://example.com'),
@@ -1282,6 +1284,36 @@ describe('Regression Coverage', () => {
     await expect(
       controller.registry.execute_action('click', {}, { browser_session: browserSession as any })
     ).rejects.toThrow('Provide index or both coordinate_x and coordinate_y');
+  });
+
+  it('set_coordinate_clicking re-registers click schema between index-only and coordinate-enabled', () => {
+    const controller = new Controller();
+    const clickAction = controller.registry.get_action('click');
+    expect(clickAction).not.toBeNull();
+    expect(
+      clickAction?.paramSchema.safeParse({
+        coordinate_x: 10,
+        coordinate_y: 20,
+      }).success
+    ).toBe(false);
+
+    controller.set_coordinate_clicking(true);
+    const coordinateAction = controller.registry.get_action('click');
+    expect(
+      coordinateAction?.paramSchema.safeParse({
+        coordinate_x: 10,
+        coordinate_y: 20,
+      }).success
+    ).toBe(true);
+
+    controller.set_coordinate_clicking(false);
+    const indexOnlyAction = controller.registry.get_action('click');
+    expect(
+      indexOnlyAction?.paramSchema.safeParse({
+        coordinate_x: 10,
+        coordinate_y: 20,
+      }).success
+    ).toBe(false);
   });
 
   it('click action rejects index 0', async () => {

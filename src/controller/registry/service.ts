@@ -177,6 +177,10 @@ export class Registry<Context = unknown> {
     this.registry.remove(action_name);
   }
 
+  public remove_action(action_name: string) {
+    this.registry.remove(action_name);
+  }
+
   public get_all_actions() {
     return this.registry.actionsMap;
   }

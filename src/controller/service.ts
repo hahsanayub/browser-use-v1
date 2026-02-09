@@ -10,6 +10,7 @@ import {
 } from '../dom/markdown-extractor.js';
 import { extractPdfText, FileSystem } from '../filesystem/file-system.js';
 import {
+  ClickElementActionIndexOnlySchema,
   ClickElementActionSchema,
   CloseTabActionSchema,
   DoneActionSchema,
@@ -240,6 +241,15 @@ export class Controller<Context = unknown> {
   private displayFilesInDoneText: boolean;
   private outputModel: z.ZodTypeAny | null;
   private coordinateClickingEnabled: boolean;
+  private clickActionHandler:
+    | ((
+        params: z.infer<typeof ClickElementActionSchema>,
+        ctx: {
+          browser_session?: any;
+          signal?: AbortSignal | null;
+        }
+      ) => Promise<ActionResult>)
+    | null = null;
   private logger: ReturnType<typeof createLogger>;
 
   constructor(options: ControllerOptions<Context> = {}) {
@@ -251,7 +261,7 @@ export class Controller<Context = unknown> {
     this.registry = new Registry<Context>(exclude_actions);
     this.displayFilesInDoneText = display_files_in_done_text;
     this.outputModel = output_model;
-    this.coordinateClickingEnabled = true;
+    this.coordinateClickingEnabled = false;
     this.logger = createLogger('browser_use.controller');
 
     this.registerDefaultActions(output_model);
@@ -421,8 +431,6 @@ export class Controller<Context = unknown> {
   private registerElementActions() {
     type ClickElementAction = z.infer<typeof ClickElementActionSchema>;
     const logger = this.logger;
-    const clickDescription =
-      'Click element by index or by viewport coordinates (coordinate_x/coordinate_y).';
 
     const convertLlmCoordinatesToViewport = (
       llmX: number,
@@ -593,16 +601,8 @@ export class Controller<Context = unknown> {
       });
     };
 
-    this.registry.action(clickDescription, {
-      param_model: ClickElementActionSchema,
-    })(async function click_element_by_index(params: ClickElementAction, ctx) {
-      return clickImpl(params, ctx);
-    });
-    this.registry.action(clickDescription, {
-      param_model: ClickElementActionSchema,
-    })(async function click(params: ClickElementAction, ctx) {
-      return clickImpl(params, ctx);
-    });
+    this.clickActionHandler = clickImpl;
+    this.registerClickActions();
 
     type InputTextAction = z.infer<typeof InputTextActionSchema>;
     const inputImpl = async function (
@@ -798,6 +798,55 @@ export class Controller<Context = unknown> {
         long_term_memory: `Uploaded file ${uploadPath} to element ${params.index}`,
       });
     });
+  }
+
+  private registerClickActions() {
+    type ClickElementAction = z.infer<typeof ClickElementActionSchema>;
+    type ClickElementActionIndexOnly = z.infer<
+      typeof ClickElementActionIndexOnlySchema
+    >;
+
+    const clickActionHandler = this.clickActionHandler;
+    if (!clickActionHandler) {
+      return;
+    }
+
+    const removeAction = (this.registry as any)?.remove_action;
+    if (typeof removeAction === 'function') {
+      removeAction.call(this.registry, 'click');
+      removeAction.call(this.registry, 'click_element_by_index');
+    }
+
+    const registerIndexAlias = () => {
+      this.registry.action('Click element by index.', {
+        param_model: ClickElementActionIndexOnlySchema,
+        action_name: 'click_element_by_index',
+      })(async (params: ClickElementActionIndexOnly, ctx) => {
+        return await clickActionHandler(params as ClickElementAction, ctx);
+      });
+    };
+
+    if (this.coordinateClickingEnabled) {
+      this.registry.action(
+        'Click element by index or coordinates. Use coordinates only if the index is not available. Either provide coordinates or index.',
+        {
+          param_model: ClickElementActionSchema,
+          action_name: 'click',
+        }
+      )(async (params: ClickElementAction, ctx) => {
+        return await clickActionHandler(params, ctx);
+      });
+      registerIndexAlias();
+      return;
+    }
+
+    this.registry.action('Click element by index.', {
+      param_model: ClickElementActionIndexOnlySchema,
+      action_name: 'click',
+    })(async (params: ClickElementActionIndexOnly, ctx) => {
+      return await clickActionHandler(params as ClickElementAction, ctx);
+    });
+    registerIndexAlias();
   }
 
   private registerTabActions() {
@@ -3457,7 +3506,15 @@ Context: ${context}`;
   }
 
   set_coordinate_clicking(enabled: boolean) {
-    this.coordinateClickingEnabled = Boolean(enabled);
+    const resolved = Boolean(enabled);
+    if (resolved === this.coordinateClickingEnabled) {
+      return;
+    }
+    this.coordinateClickingEnabled = resolved;
+    this.registerClickActions();
+    this.logger.debug(
+      `Coordinate clicking ${resolved ? 'enabled' : 'disabled'}`
+    );
   }
 
   action(description: string, options = {}) {
