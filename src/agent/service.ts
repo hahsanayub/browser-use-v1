@@ -809,7 +809,7 @@ export class Agent<
     );
 
     this.unfiltered_actions = this.controller.registry.get_prompt_description();
-    this.eventbus = new EventBus(`Agent_${String(this.id).slice(-4)}`);
+    this.eventbus = new EventBus(this._buildEventBusName());
     this.enable_cloud_sync = CONFIG.BROWSER_USE_CLOUD_SYNC;
     if (this.enable_cloud_sync || cloud_sync) {
       this.cloud_sync = cloud_sync ?? null;
@@ -863,6 +863,14 @@ export class Agent<
     const suffix = this.id.slice(-4);
     const generated = uuid7str();
     return `${generated.slice(0, -4)}${suffix}`;
+  }
+
+  private _buildEventBusName(): string {
+    let agentIdSuffix = String(this.id).slice(-4).replace(/-/g, '_');
+    if (agentIdSuffix && /^\d/.test(agentIdSuffix)) {
+      agentIdSuffix = `a${agentIdSuffix}`;
+    }
+    return `Agent_${agentIdSuffix}`;
   }
 
   private _copyBrowserProfile(profile: BrowserProfile | null): BrowserProfile {
@@ -1514,6 +1522,7 @@ export class Agent<
     this.state.follow_up_task = true;
     this.state.stopped = false;
     this.state.paused = false;
+    this.eventbus = new EventBus(this._buildEventBusName());
   }
 
   private _enhanceTaskWithSchema(

@@ -1281,7 +1281,9 @@ describe('Agent constructor browser session alignment', () => {
     const agent = new Agent({
       task: 'Original task instructions',
       llm: createLlm(),
+      task_id: 'task-1-23',
     });
+    const initialEventBus = agent.eventbus;
 
     agent.addNewTask('Collect pricing details');
 
@@ -1299,6 +1301,8 @@ describe('Agent constructor browser session alignment', () => {
     expect(agent.state.follow_up_task).toBe(true);
     expect(agent.state.stopped).toBe(false);
     expect(agent.state.paused).toBe(false);
+    expect(agent.eventbus).not.toBe(initialEventBus);
+    expect(agent.eventbus.name).toBe('Agent_a1_23');
 
     await agent.close();
   });
