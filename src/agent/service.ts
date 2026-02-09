@@ -272,7 +272,6 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
   include_tool_call_examples?: boolean;
   vision_detail_level?: AgentSettings['vision_detail_level'];
   session_attachment_mode?: AgentSettings['session_attachment_mode'];
-  allow_insecure_sensitive_data?: boolean;
   llm_timeout?: number | null;
   step_timeout?: number;
   final_response_after_failure?: boolean;
@@ -361,7 +360,6 @@ const defaultAgentOptions = () => ({
   display_files_in_done_text: true,
   include_tool_call_examples: false,
   session_attachment_mode: 'copy' as const,
-  allow_insecure_sensitive_data: false,
   vision_detail_level: 'auto' as const,
   llm_timeout: null as number | null,
   step_timeout: 180,
@@ -557,7 +555,6 @@ export class Agent<
       include_tool_call_examples = false,
       vision_detail_level = 'auto',
       session_attachment_mode = 'copy',
-      allow_insecure_sensitive_data = false,
       llm_timeout = null,
       step_timeout = 180,
       final_response_after_failure = true,
@@ -703,7 +700,6 @@ export class Agent<
       calculate_cost,
       include_tool_call_examples,
       session_attachment_mode,
-      allow_insecure_sensitive_data,
       llm_timeout: effectiveLlmTimeout,
       step_timeout,
       final_response_after_failure,

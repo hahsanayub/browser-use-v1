@@ -377,7 +377,6 @@ export const normalizeMessageCompactionSettings = (
 
 export interface AgentSettings {
   session_attachment_mode: 'copy' | 'strict' | 'shared';
-  allow_insecure_sensitive_data: boolean;
   use_vision: boolean | 'auto';
   include_recent_events: boolean;
   vision_detail_level: 'auto' | 'low' | 'high';
@@ -410,7 +409,6 @@ export interface AgentSettings {
 
 export const defaultAgentSettings = (): AgentSettings => ({
   session_attachment_mode: 'copy',
-  allow_insecure_sensitive_data: false,
   use_vision: true,
   include_recent_events: false,
   vision_detail_level: 'auto',

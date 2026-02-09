@@ -21,13 +21,3 @@ export class URLNotAllowedError extends Error {
     this.name = 'URLNotAllowedError';
   }
 }
-
-export class InsecureSensitiveDataError extends Error {
-  constructor() {
-    super(
-      'Sensitive data requires BrowserProfile.allowed_domains to be configured. ' +
-        'Set allowed_domains explicitly or pass allow_insecure_sensitive_data=true.'
-    );
-    this.name = 'InsecureSensitiveDataError';
-  }
-}

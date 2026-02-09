@@ -77,7 +77,6 @@ export interface ParsedCliArgs {
   help: boolean;
   version: boolean;
   debug: boolean;
-  allow_insecure: boolean;
   headless: boolean | null;
   window_width: number | null;
   window_height: number | null;
@@ -177,7 +176,6 @@ export const parseCliArgs = (argv: string[]): ParsedCliArgs => {
     help: false,
     version: false,
     debug: false,
-    allow_insecure: false,
     headless: null,
     window_width: null,
     window_height: null,
@@ -214,10 +212,6 @@ export const parseCliArgs = (argv: string[]): ParsedCliArgs => {
     }
     if (arg === '--debug') {
       parsed.debug = true;
-      continue;
-    }
-    if (arg === '--allow-insecure') {
-      parsed.allow_insecure = true;
       continue;
     }
     if (arg === '--headless') {
@@ -836,7 +830,6 @@ interface RunAgentTaskOptions {
   browserProfile?: BrowserProfile | null;
   browserSession?: BrowserSession | null;
   sessionAttachmentMode?: 'copy' | 'strict' | 'shared';
-  allowInsecureSensitiveData?: boolean;
 }
 
 const runAgentTask = async ({
@@ -845,7 +838,6 @@ const runAgentTask = async ({
   browserProfile,
   browserSession,
   sessionAttachmentMode,
-  allowInsecureSensitiveData,
 }: RunAgentTaskOptions): Promise<void> => {
   const agent = new Agent({
     task,
@@ -854,9 +846,6 @@ const runAgentTask = async ({
     ...(browserSession ? { browser_session: browserSession } : {}),
     ...(sessionAttachmentMode
       ? { session_attachment_mode: sessionAttachmentMode }
-      : {}),
-    ...(allowInsecureSensitiveData
-      ? { allow_insecure_sensitive_data: true }
       : {}),
     source: 'cli',
   });
@@ -921,7 +910,6 @@ const runInteractiveMode = async (
           browserProfile,
           browserSession,
           sessionAttachmentMode: 'strict',
-          allowInsecureSensitiveData: args.allow_insecure,
         });
       } catch (error) {
         console.error('Error running agent:', error);
@@ -963,7 +951,6 @@ Options:
   -p, --prompt <task>         Run a single task
   --headless                  Run browser in headless mode
   --allowed-domains <items>   Comma-separated allowlist (e.g., example.com,*.example.org)
-  --allow-insecure            Allow sensitive_data without domain restrictions (unsafe)
   --window-width <px>         Browser window width
   --window-height <px>        Browser window height
   --user-data-dir <path>      Chrome user data directory
@@ -1064,7 +1051,6 @@ export async function main(argv: string[] = process.argv.slice(2)) {
       llm,
       browserProfile,
       browserSession,
-      allowInsecureSensitiveData: args.allow_insecure,
     });
   } catch (error) {
     console.error('Error running agent:', error);

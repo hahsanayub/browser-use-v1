@@ -105,7 +105,6 @@ describe('CLI argument parsing', () => {
       'proxy-user',
       '--proxy-password',
       'proxy-pass',
-      '--allow-insecure',
       '--cdp-url',
       'http://localhost:9222',
       '-p',
@@ -124,7 +123,6 @@ describe('CLI argument parsing', () => {
     expect(parsed.no_proxy).toBe('localhost,127.0.0.1,*.internal');
     expect(parsed.proxy_username).toBe('proxy-user');
     expect(parsed.proxy_password).toBe('proxy-pass');
-    expect(parsed.allow_insecure).toBe(true);
     expect(parsed.cdp_url).toBe('http://localhost:9222');
     expect(parsed.prompt).toBe('Open docs and summarize');
     expect(parsed.positional).toEqual([]);
@@ -188,7 +186,6 @@ describe('CLI argument parsing', () => {
     expect(usage).toContain('--model <model>');
     expect(usage).toContain('--headless');
     expect(usage).toContain('--allowed-domains <items>');
-    expect(usage).toContain('--allow-insecure');
   });
 });
 
