@@ -1,6 +1,7 @@
 import fsSync from 'node:fs';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
+import AdmZip from 'adm-zip';
 import PDFDocument from 'pdfkit';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
@@ -98,6 +99,7 @@ const DEFAULT_EXTENSIONS = [
   'jsonl',
   'csv',
   'pdf',
+  'docx',
   'html',
   'xml',
 ];
@@ -146,6 +148,109 @@ const buildFilenameErrorMessage = (
     'Filenames must contain only letters, numbers, underscores, hyphens, dots, parentheses, and spaces. ' +
     `Supported extensions: ${supported}.`
   );
+};
+
+const escapeXmlText = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+
+const decodeXmlText = (value: string) =>
+  value
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&gt;/g, '>')
+    .replace(/&lt;/g, '<')
+    .replace(/&amp;/g, '&');
+
+const DOCX_CONTENT_TYPES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`;
+
+const DOCX_ROOT_RELS_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`;
+
+const DOCX_DOCUMENT_RELS_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`;
+
+const buildDocxDocumentXml = (content: string) => {
+  const lines = content.split(/\r?\n/);
+  const paragraphs = lines
+    .map((line) => {
+      if (!line) {
+        return '<w:p/>';
+      }
+      return `<w:p><w:r><w:t xml:space="preserve">${escapeXmlText(line)}</w:t></w:r></w:p>`;
+    })
+    .join('');
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas"
+  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+  xmlns:o="urn:schemas-microsoft-com:office:office"
+  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+  xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+  xmlns:v="urn:schemas-microsoft-com:vml"
+  xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing"
+  xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+  xmlns:w10="urn:schemas-microsoft-com:office:word"
+  xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+  xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"
+  xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup"
+  xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk"
+  xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml"
+  xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"
+  mc:Ignorable="w14 wp14">
+  <w:body>${paragraphs}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr></w:body>
+</w:document>`;
+};
+
+const buildDocxBuffer = (content: string): Buffer => {
+  const zip = new AdmZip();
+  zip.addFile('[Content_Types].xml', Buffer.from(DOCX_CONTENT_TYPES_XML, 'utf-8'));
+  zip.addFile('_rels/.rels', Buffer.from(DOCX_ROOT_RELS_XML, 'utf-8'));
+  zip.addFile(
+    'word/_rels/document.xml.rels',
+    Buffer.from(DOCX_DOCUMENT_RELS_XML, 'utf-8')
+  );
+  zip.addFile(
+    'word/document.xml',
+    Buffer.from(buildDocxDocumentXml(content), 'utf-8')
+  );
+  return zip.toBuffer();
+};
+
+const readDocxText = (fileBuffer: Buffer): string => {
+  const zip = new AdmZip(fileBuffer);
+  const documentEntry = zip.getEntry('word/document.xml');
+  if (!documentEntry) {
+    throw new FileSystemError('Error: Could not parse DOCX file content.');
+  }
+  const xml = documentEntry.getData().toString('utf-8');
+  const normalizedXml = xml.replace(/<w:p\b([^>]*)\/>/g, '<w:p$1></w:p>');
+  const paragraphMatches = normalizedXml.match(/<w:p[\s\S]*?<\/w:p>/g) ?? [];
+
+  const lines = paragraphMatches.map((paragraph) => {
+    const textMatches = Array.from(
+      paragraph.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)
+    );
+    if (!textMatches.length) {
+      return '';
+    }
+    return textMatches
+      .map((match) => decodeXmlText(match[1] ?? ''))
+      .join('');
+  });
+
+  return lines.join('\n').trim();
 };
 
 export class FileSystemError extends Error {}
@@ -293,6 +398,24 @@ stream.on('error', (err) => {
   }
 }
 
+class DocxFile extends BaseFile {
+  override get extension() {
+    return 'docx';
+  }
+
+  override async syncToDisk(dir: string) {
+    const filePath = path.join(dir, this.fullName);
+    const docxBuffer = buildDocxBuffer(this.content || '');
+    await fsp.writeFile(filePath, docxBuffer);
+  }
+
+  override syncToDiskSync(dir: string) {
+    const filePath = path.join(dir, this.fullName);
+    const docxBuffer = buildDocxBuffer(this.content || '');
+    fsSync.writeFileSync(filePath, docxBuffer);
+  }
+}
+
 class HtmlFile extends BaseFile {
   override get extension() {
     return 'html';
@@ -314,6 +437,7 @@ const FILE_TYPES: Record<string, FileClass> = {
   jsonl: JsonlFile,
   csv: CsvFile,
   pdf: PdfFile,
+  docx: DocxFile,
   html: HtmlFile,
   xml: XmlFile,
 };
@@ -325,6 +449,7 @@ const TYPE_NAME_MAP: Record<string, FileClass> = {
   JsonlFile,
   CsvFile,
   PdfFile,
+  DocxFile,
   HtmlFile,
   XmlFile,
 };
@@ -498,7 +623,13 @@ export class FileSystem {
         }
 
         const extension = base.slice(idx + 1).toLowerCase();
-        const specialExtensions = new Set(['pdf', 'jpg', 'jpeg', 'png']);
+        const specialExtensions = new Set([
+          'docx',
+          'pdf',
+          'jpg',
+          'jpeg',
+          'png',
+        ]);
         const textExtensions = this.get_allowed_extensions().filter(
           (ext) => !specialExtensions.has(ext)
         );
@@ -522,6 +653,13 @@ export class FileSystem {
           const suffix = extraPages > 0 ? `\n${extraPages} more pages...` : '';
           result.message =
             `Read from file ${filename}.\n<content>\n${preview}${suffix}\n</content>`;
+          return result;
+        }
+
+        if (extension === 'docx') {
+          const fileBuffer = await fsp.readFile(filename);
+          const content = readDocxText(fileBuffer);
+          result.message = `Read from file ${filename}.\n<content>\n${content}\n</content>`;
           return result;
         }
 

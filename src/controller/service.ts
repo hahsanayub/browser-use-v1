@@ -1783,9 +1783,12 @@ You will be given a query and the markdown of a webpage that has been filtered t
   private registerFileSystemActions() {
     const registry = this.registry;
     type ReadFileAction = z.infer<typeof ReadFileActionSchema>;
-    this.registry.action('Read file_name from file system', {
+    this.registry.action(
+      'Read the complete content of a file. Use this to view file contents before editing or to retrieve data from files. Supports text files (txt, md, json, csv, jsonl), documents (pdf, docx), and images (jpg, png).',
+      {
       param_model: ReadFileActionSchema,
-    })(async function read_file(
+      }
+    )(async function read_file(
       params: ReadFileAction,
       { file_system, available_file_paths }
     ) {
@@ -2297,7 +2300,7 @@ Context: ${context}`;
     this.registry.action(
       'Write content to a file. By default this OVERWRITES the entire file - use append=true to add to an existing file, or use replace_file for targeted edits within a file. ' +
         'FILENAME RULES: Use only letters, numbers, underscores, hyphens, dots, parentheses. Spaces are auto-converted to hyphens. ' +
-        'SUPPORTED EXTENSIONS: .txt, .md, .json, .jsonl, .csv, .html, .xml, .pdf. ' +
+        'SUPPORTED EXTENSIONS: .txt, .md, .json, .jsonl, .csv, .html, .xml, .pdf, .docx. ' +
         'CANNOT write binary/image files (.png, .jpg, .mp4, etc.) - do not attempt to save screenshots as files. ' +
         'For PDF files, write content in markdown format and it will be auto-converted to PDF.',
       {
