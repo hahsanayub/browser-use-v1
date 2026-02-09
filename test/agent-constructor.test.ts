@@ -916,7 +916,42 @@ describe('Agent constructor browser session alignment', () => {
     expect(lastHistoryItem?.system_message).toBe(
       '<follow_up_user_request> Collect pricing details </follow_up_user_request>'
     );
+    expect(agent.state.follow_up_task).toBe(true);
+    expect(agent.state.stopped).toBe(false);
+    expect(agent.state.paused).toBe(false);
 
+    await agent.close();
+  });
+
+  it('does not re-run initial_actions on follow-up tasks', async () => {
+    const agent = new Agent({
+      task: 'Open https://example.com then continue',
+      llm: createLlm(),
+      initial_actions: [
+        {
+          go_to_url: {
+            url: 'https://example.com',
+            new_tab: false,
+          },
+        },
+      ],
+    });
+
+    const multiActSpy = vi.spyOn(agent, 'multi_act').mockResolvedValue([]);
+    const logAgentEventSpy = vi
+      .spyOn(agent as any, '_log_agent_event')
+      .mockImplementation(() => {});
+
+    agent.state.stopped = true;
+    await agent.run(1);
+    expect(multiActSpy).toHaveBeenCalledTimes(1);
+
+    agent.addNewTask('Collect pricing details');
+    agent.state.stopped = true;
+    await agent.run(1);
+    expect(multiActSpy).toHaveBeenCalledTimes(1);
+
+    logAgentEventSpy.mockRestore();
     await agent.close();
   });
 

@@ -1538,6 +1538,9 @@ export class Agent<
     // The task continues with new instructions, it doesn't end and start a new one
     this.task = newTask;
     this._message_manager.add_new_task(newTask);
+    this.state.follow_up_task = true;
+    this.state.stopped = false;
+    this.state.paused = false;
   }
 
   private _enhanceTaskWithSchema(
@@ -2189,7 +2192,7 @@ export class Agent<
 
       await this._register_skills_as_actions();
 
-      if (this.initial_actions?.length) {
+      if (this.initial_actions?.length && !this.state.follow_up_task) {
         this.logger.debug(
           `⚡ Executing ${this.initial_actions.length} initial actions...`
         );
@@ -3097,13 +3100,6 @@ export class Agent<
     } = options;
 
     this._throwIfAborted(signal);
-    if (this.initial_actions?.length) {
-      const initialResult = await this.multi_act(this.initial_actions, {
-        signal,
-      });
-      this.state.last_result = initialResult;
-    }
-
     const results: ActionResult[] = [];
     let previousItem: AgentHistory | null = null;
     let previousStepSucceeded = false;
