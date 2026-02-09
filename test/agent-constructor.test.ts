@@ -1563,6 +1563,43 @@ describe('Agent constructor browser session alignment', () => {
     expect(closeSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('uses zero-based step fallback for rerun history without metadata (python c011 parity)', async () => {
+    const agent = new Agent({
+      task: 'test rerun step fallback parity',
+      llm: createLlm(),
+    });
+
+    const infoSpy = vi.spyOn(agent.logger, 'info');
+    vi.spyOn(agent as any, '_execute_history_step').mockResolvedValue([
+      new ActionResult({ extracted_content: 'replayed step' }),
+    ]);
+    vi.spyOn(agent as any, '_generate_rerun_summary').mockResolvedValue(
+      new ActionResult({ is_done: true, success: true, extracted_content: 'ok' })
+    );
+
+    const history = {
+      history: [
+        {
+          model_output: {
+            current_state: { next_goal: 'Replay action' },
+            action: [{}],
+          },
+        },
+      ],
+    } as any;
+
+    const result = await agent.rerun_history(history);
+
+    expect(result).toHaveLength(2);
+    expect(
+      infoSpy.mock.calls.some((call) =>
+        String(call[0] ?? '').includes('Replaying Initial actions (1/1)')
+      )
+    ).toBe(true);
+
+    await agent.close();
+  });
+
   it('passes signal through rerun_history to history step execution', async () => {
     const agent = new Agent({
       task: 'test rerun signal propagation',

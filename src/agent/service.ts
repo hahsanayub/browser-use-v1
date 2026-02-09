@@ -3100,7 +3100,7 @@ export class Agent<
         this._throwIfAborted(signal);
         const historyItem = history.history[index];
         const goal = historyItem.model_output?.current_state?.next_goal ?? '';
-        const stepNumber = historyItem.metadata?.step_number ?? index + 1;
+        const stepNumber = historyItem.metadata?.step_number ?? index;
         const stepName =
           stepNumber === 0 ? 'Initial actions' : `Step ${stepNumber}`;
         const savedInterval = historyItem.metadata?.step_interval;
