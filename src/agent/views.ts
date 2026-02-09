@@ -1114,6 +1114,30 @@ export class AgentHistoryList<TStructured = unknown> {
   }
 }
 
+export class DetectedVariable {
+  constructor(
+    public name: string,
+    public original_value: string,
+    public type = 'string',
+    public format: string | null = null
+  ) {}
+
+  model_dump() {
+    return {
+      name: this.name,
+      original_value: this.original_value,
+      type: this.type,
+      format: this.format,
+    };
+  }
+}
+
+export class VariableMetadata {
+  constructor(
+    public detected_variables: Record<string, DetectedVariable> = {}
+  ) {}
+}
+
 export class AgentError extends Error {
   static VALIDATION_ERROR =
     'Invalid model output format. Please follow the correct schema.';

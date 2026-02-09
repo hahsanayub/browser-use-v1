@@ -58,11 +58,16 @@ import {
   StepMetadata,
   ActionModel,
   PlanItem,
+  DetectedVariable,
   MessageCompactionSettings,
   defaultMessageCompactionSettings,
   normalizeMessageCompactionSettings,
 } from './views.js';
 import type { StructuredOutputParser } from './views.js';
+import {
+  detect_variables_in_history,
+  substitute_in_dict,
+} from './variable-detector.js';
 import {
   CreateAgentOutputFileEvent,
   CreateAgentSessionEvent,
@@ -176,6 +181,10 @@ interface RerunHistoryOptions {
   summary_llm?: BaseChatModel | null;
   ai_step_llm?: BaseChatModel | null;
   signal?: AbortSignal | null;
+}
+
+interface LoadAndRerunOptions extends RerunHistoryOptions {
+  variables?: Record<string, string> | null;
 }
 
 interface AgentConstructorParams<Context, AgentStructuredOutput> {
@@ -3612,11 +3621,19 @@ export class Agent<
 
   async load_and_rerun(
     history_file: string | null = null,
-    options: RerunHistoryOptions = {}
+    options: LoadAndRerunOptions = {}
   ) {
+    const { variables = null, ...rerunOptions } = options;
     const target = history_file ?? 'AgentHistory.json';
     const history = AgentHistoryList.load_from_file(target, this.AgentOutput);
-    return this.rerun_history(history, options);
+    const substitutedHistory = variables
+      ? this._substitute_variables_in_history(history, variables)
+      : history;
+    return this.rerun_history(substitutedHistory, rerunOptions);
+  }
+
+  detect_variables(): Record<string, DetectedVariable> {
+    return detect_variables_in_history(this.history);
   }
 
   save_history(file_path: string | null = null) {
@@ -3653,6 +3670,107 @@ export class Agent<
       payload.stable_hash != null ? String(payload.stable_hash) : null,
       payload.ax_name != null ? String(payload.ax_name) : null
     );
+  }
+
+  private _substitute_variables_in_history(
+    history: AgentHistoryList,
+    variables: Record<string, string>
+  ): AgentHistoryList {
+    const detectedVars = detect_variables_in_history(history);
+    const valueReplacements: Record<string, string> = {};
+    for (const [varName, newValue] of Object.entries(variables)) {
+      const detected = detectedVars[varName];
+      if (!detected) {
+        this.logger.warning(`Variable "${varName}" not found in history, skipping substitution`);
+        continue;
+      }
+      valueReplacements[detected.original_value] = newValue;
+    }
+
+    if (!Object.keys(valueReplacements).length) {
+      this.logger.info('No variables to substitute');
+      return history;
+    }
+
+    const clonedHistory = this._clone_history_for_substitution(history);
+    let substitutionCount = 0;
+
+    for (const historyItem of clonedHistory.history) {
+      if (!historyItem.model_output?.action?.length) {
+        continue;
+      }
+
+      for (let actionIndex = 0; actionIndex < historyItem.model_output.action.length; actionIndex += 1) {
+        const action = historyItem.model_output.action[actionIndex];
+        const actionPayload =
+          typeof (action as any).model_dump === 'function'
+            ? (action as any).model_dump()
+            : action;
+        if (!actionPayload || typeof actionPayload !== 'object' || Array.isArray(actionPayload)) {
+          continue;
+        }
+
+        substitutionCount += substitute_in_dict(
+          actionPayload as Record<string, unknown>,
+          valueReplacements
+        );
+
+        const ActionCtor = (action as any)?.constructor;
+        if (typeof ActionCtor === 'function') {
+          historyItem.model_output.action[actionIndex] = new ActionCtor(
+            actionPayload as Record<string, unknown>
+          );
+        } else {
+          historyItem.model_output.action[actionIndex] = actionPayload as any;
+        }
+      }
+    }
+
+    this.logger.info(
+      `Substituted ${substitutionCount} value(s) in ${Object.keys(valueReplacements).length} variable type(s) in history`
+    );
+    return clonedHistory;
+  }
+
+  private _clone_history_for_substitution(history: AgentHistoryList): AgentHistoryList {
+    const payload = history.toJSON();
+    const historyItems = (payload.history ?? []).map((entry: any) => {
+      const modelOutput = entry.model_output
+        ? this.AgentOutput.fromJSON(entry.model_output)
+        : null;
+      const result = (entry.result ?? []).map(
+        (item: Record<string, unknown>) => new ActionResult(item)
+      );
+      const interacted = Array.isArray(entry.state?.interacted_element)
+        ? entry.state.interacted_element.map((element: any) =>
+            this._coerceHistoryElement(element)
+          )
+        : [];
+      const state = new BrowserStateHistory(
+        entry.state?.url ?? '',
+        entry.state?.title ?? '',
+        entry.state?.tabs ?? [],
+        interacted,
+        entry.state?.screenshot_path ?? null
+      );
+      const metadata = entry.metadata
+        ? new StepMetadata(
+            entry.metadata.step_start_time,
+            entry.metadata.step_end_time,
+            entry.metadata.step_number,
+            entry.metadata.step_interval ?? null
+          )
+        : null;
+      return new AgentHistory(
+        modelOutput,
+        result,
+        state,
+        metadata,
+        entry.state_message ?? null
+      );
+    });
+
+    return new AgentHistoryList(historyItems, payload.usage ?? null);
   }
 
   private _createAbortError(): Error {

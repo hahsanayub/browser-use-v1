@@ -1,0 +1,160 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
+import type { BaseChatModel } from '../src/llm/base.js';
+import { Agent } from '../src/agent/service.js';
+import {
+  ActionResult,
+  AgentHistory,
+  AgentHistoryList,
+  AgentOutput,
+} from '../src/agent/views.js';
+import { BrowserStateHistory } from '../src/browser/views.js';
+import { DOMHistoryElement } from '../src/dom/history-tree-processor/view.js';
+import { ActionModel } from '../src/controller/registry/views.js';
+import {
+  _private_for_tests,
+  detect_variables_in_history,
+} from '../src/agent/variable-detector.js';
+
+class StubLLM implements BaseChatModel {
+  model = 'stub-model';
+  provider = 'stub';
+
+  get name() {
+    return this.model;
+  }
+
+  get model_name() {
+    return this.model;
+  }
+
+  async ainvoke(): Promise<any> {
+    return { completion: 'ok', usage: null, stop_reason: null };
+  }
+}
+
+const createHistory = () => {
+  const emailElement = new DOMHistoryElement(
+    'input',
+    '//*[@id="email"]',
+    1,
+    [],
+    {
+      type: 'email',
+      id: 'email',
+    }
+  );
+  const firstNameElement = new DOMHistoryElement(
+    'input',
+    '//*[@id="first_name"]',
+    2,
+    [],
+    {
+      name: 'first_name',
+      placeholder: 'First name',
+    }
+  );
+
+  const step1 = new AgentHistory(
+    new AgentOutput({
+      action: [new ActionModel({ input: { index: 1, text: 'old@example.com' } })],
+    }),
+    [new ActionResult({ extracted_content: 'ok' })],
+    new BrowserStateHistory(
+      'https://example.com/form',
+      'Form',
+      [],
+      [emailElement]
+    )
+  );
+  const step2 = new AgentHistory(
+    new AgentOutput({
+      action: [new ActionModel({ input: { index: 2, text: 'John' } })],
+    }),
+    [new ActionResult({ extracted_content: 'ok' })],
+    new BrowserStateHistory(
+      'https://example.com/form',
+      'Form',
+      [],
+      [firstNameElement]
+    )
+  );
+
+  return new AgentHistoryList([step1, step2]);
+};
+
+describe('Agent variable alignment', () => {
+  it('detects reusable variables from history and prioritizes element attributes', () => {
+    const history = createHistory();
+    const detected = detect_variables_in_history(history);
+
+    expect(detected.email?.original_value).toBe('old@example.com');
+    expect(detected.first_name?.original_value).toBe('John');
+    expect(detected.email?.format).toBe('email');
+
+    const attrPriority = _private_for_tests.detectVariableType(
+      'Test',
+      new DOMHistoryElement('input', '//*[@id="test"]', 1, [], { type: 'email' })
+    );
+    expect(attrPriority).toEqual(['email', 'email']);
+  });
+
+  it('substitutes detected variables without mutating original history', () => {
+    const agent = new Agent({
+      task: 'variable substitution',
+      llm: new StubLLM(),
+    });
+    const originalHistory = createHistory();
+
+    const substituted = (agent as any)._substitute_variables_in_history(
+      originalHistory,
+      {
+        email: 'new@example.com',
+        first_name: 'Jane',
+      }
+    ) as AgentHistoryList;
+
+    const originalStep1 = (originalHistory.history[0].model_output!.action[0] as any)
+      .model_dump().input.text;
+    const originalStep2 = (originalHistory.history[1].model_output!.action[0] as any)
+      .model_dump().input.text;
+    const substitutedStep1 = (substituted.history[0].model_output!.action[0] as any)
+      .model_dump().input.text;
+    const substitutedStep2 = (substituted.history[1].model_output!.action[0] as any)
+      .model_dump().input.text;
+
+    expect(originalStep1).toBe('old@example.com');
+    expect(originalStep2).toBe('John');
+    expect(substitutedStep1).toBe('new@example.com');
+    expect(substitutedStep2).toBe('Jane');
+  });
+
+  it('applies variable substitutions when loading and rerunning history', async () => {
+    const agent = new Agent({
+      task: 'load and rerun with variables',
+      llm: new StubLLM(),
+    });
+    const history = createHistory();
+
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-vars-'));
+    const historyPath = path.join(tempDir, 'AgentHistory.json');
+    history.save_to_file(historyPath);
+
+    const rerunSpy = vi
+      .spyOn(agent, 'rerun_history')
+      .mockResolvedValueOnce([]);
+
+    await agent.load_and_rerun(historyPath, {
+      variables: { email: 'loaded@example.com' },
+    });
+
+    const passedHistory = rerunSpy.mock.calls[0]?.[0] as AgentHistoryList;
+    const updatedText = (passedHistory.history[0].model_output!.action[0] as any)
+      .model_dump().input.text;
+    expect(updatedText).toBe('loaded@example.com');
+
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+});
