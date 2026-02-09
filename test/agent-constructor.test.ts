@@ -1496,6 +1496,27 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('logs startup banner only before the first recorded step (python c011 parity)', async () => {
+    const agent = new Agent({
+      task: 'first-step startup banner',
+      llm: createLlm(),
+    });
+
+    const infoSpy = vi.spyOn(agent.logger, 'info');
+
+    (agent as any)._log_first_step_startup();
+    expect(infoSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Starting a browser-use agent with version')
+    );
+
+    infoSpy.mockClear();
+    agent.history.history.push({} as any);
+    (agent as any)._log_first_step_startup();
+    expect(infoSpy).not.toHaveBeenCalled();
+
+    await agent.close();
+  });
+
   it('warns when sensitive_data is used without allowed_domains lock-down (python c011 parity)', async () => {
     const agent = new Agent({
       task: 'test allowed domains empty',

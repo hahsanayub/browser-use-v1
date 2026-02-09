@@ -2463,6 +2463,8 @@ export class Agent<
     await this._restore_shared_pinned_tab_if_needed();
     this._throwIfAborted(signal);
 
+    this._log_first_step_startup();
+
     this.logger.debug(
       `🌐 Step ${this.state.n_steps}: Getting browser state...`
     );
@@ -5355,6 +5357,15 @@ export class Agent<
     this.logger.info(`📍 Step ${this.state.n_steps}:`);
     this.logger.debug(
       `Evaluating page with ${interactive_count} interactive elements on: ${url_short}`
+    );
+  }
+
+  private _log_first_step_startup() {
+    if (this.history.history.length !== 0) {
+      return;
+    }
+    this.logger.info(
+      `Starting a browser-use agent with version ${this.version}, with provider=${(this.llm as any).provider ?? 'unknown'} and model=${this.llm.model}`
     );
   }
 
