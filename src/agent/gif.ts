@@ -6,6 +6,7 @@ import GIFEncoder from 'gif-encoder-2';
 import { createLogger } from '../logging-config.js';
 import { PLACEHOLDER_4PX_SCREENSHOT } from '../browser/views.js';
 import type { AgentHistoryList } from './views.js';
+import { is_new_tab_page } from '../utils.js';
 
 // Type compatibility between node-canvas and browser canvas
 type CompatibleCanvasContext =
@@ -40,6 +41,8 @@ const loadScreenshot = async (screenshot: string) => {
 };
 
 const FONT_CANDIDATES = [
+  '"PingFang"',
+  '"STHeiti Medium"',
   '"Microsoft YaHei"',
   '"SimHei"',
   '"SimSun"',
@@ -50,6 +53,16 @@ const FONT_CANDIDATES = [
 ];
 
 const pickFont = () => FONT_CANDIDATES.join(', ');
+
+export const is_valid_gif_screenshot_candidate = (
+  screenshot: string | null | undefined,
+  pageUrl: string | null | undefined
+) => {
+  if (!screenshot || screenshot === PLACEHOLDER_4PX_SCREENSHOT) {
+    return false;
+  }
+  return !is_new_tab_page(pageUrl ?? '');
+};
 
 const wrapText = (
   ctx: CompatibleCanvasContext,
@@ -278,11 +291,19 @@ export const create_history_gif = async (
   }
 
   const screenshots = history.screenshots();
-  const firstRealScreenshot = screenshots.find(
-    (shot) => shot && shot !== PLACEHOLDER_4PX_SCREENSHOT
-  );
+  let firstRealScreenshot: string | null = null;
+  for (let index = 0; index < screenshots.length; index += 1) {
+    const screenshot = screenshots[index];
+    const pageUrl = history.history[index]?.state?.url ?? null;
+    if (is_valid_gif_screenshot_candidate(screenshot, pageUrl)) {
+      firstRealScreenshot = screenshot as string;
+      break;
+    }
+  }
   if (!firstRealScreenshot) {
-    logger.warn('No valid screenshots found (all are placeholders)');
+    logger.warn(
+      'No valid screenshots found (all are placeholders or from new tab pages)'
+    );
     return;
   }
 
@@ -323,6 +344,14 @@ export const create_history_gif = async (
   }
 
   for (let index = 0; index < screenshots.length; index += 1) {
+    const historyItem = history.history[index];
+    if (is_new_tab_page(historyItem?.state?.url ?? '')) {
+      logger.debug(
+        `Skipping screenshot from new tab page (${historyItem?.state?.url ?? ''}) at step ${index}`
+      );
+      continue;
+    }
+
     const screenshot = screenshots[index];
     if (!screenshot || screenshot === PLACEHOLDER_4PX_SCREENSHOT) {
       continue;
