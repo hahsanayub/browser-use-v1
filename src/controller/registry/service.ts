@@ -1,4 +1,5 @@
 import { z, type ZodTypeAny } from 'zod';
+import { createHmac } from 'node:crypto';
 import { createLogger } from '../../logging-config.js';
 import { observe_debug } from '../../observability.js';
 import { time_execution_async } from '../../utils.js';
@@ -77,6 +78,54 @@ const wrapActionExecutionError = (
     (wrapped as Error & { cause?: unknown }).cause = error;
   }
   return wrapped;
+};
+
+const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+const decodeBase32Secret = (secret: string) => {
+  const sanitized = secret.toUpperCase().replace(/[^A-Z2-7]/g, '');
+  if (!sanitized.length) {
+    throw new Error('Invalid TOTP secret: empty base32 payload');
+  }
+
+  let bits = 0;
+  let bitBuffer = 0;
+  const bytes: number[] = [];
+  for (const char of sanitized) {
+    const value = BASE32_ALPHABET.indexOf(char);
+    if (value < 0) {
+      throw new Error(`Invalid base32 character in TOTP secret: ${char}`);
+    }
+    bitBuffer = (bitBuffer << 5) | value;
+    bits += 5;
+    while (bits >= 8) {
+      bytes.push((bitBuffer >>> (bits - 8)) & 0xff);
+      bits -= 8;
+    }
+  }
+
+  if (!bytes.length) {
+    throw new Error('Invalid TOTP secret: failed to decode base32 payload');
+  }
+
+  return Buffer.from(bytes);
+};
+
+const generateTotpCode = (secret: string) => {
+  const key = decodeBase32Secret(secret);
+  const counter = Math.floor(Date.now() / 1000 / 30);
+  const counterBuffer = Buffer.alloc(8);
+  counterBuffer.writeBigUInt64BE(BigInt(counter));
+
+  const hmac = createHmac('sha1', key).update(counterBuffer).digest();
+  const offset = hmac[hmac.length - 1] & 0x0f;
+  const binaryCode =
+    ((hmac[offset] & 0x7f) << 24) |
+    ((hmac[offset + 1] & 0xff) << 16) |
+    ((hmac[offset + 2] & 0xff) << 8) |
+    (hmac[offset + 3] & 0xff);
+
+  return String(binaryCode % 1_000_000).padStart(6, '0');
 };
 
 export class Registry<Context = unknown> {
@@ -254,10 +303,15 @@ export class Registry<Context = unknown> {
 
     const traverse = (value: any): any => {
       if (typeof value === 'string') {
-        return value.replace(secretPattern, (_, placeholder) => {
+        return value.replace(secretPattern, (_, placeholderValue) => {
+          const placeholder = String(placeholderValue);
           if (placeholder in applicableSecrets) {
             replaced.add(placeholder);
-            return applicableSecrets[placeholder];
+            const replacement = applicableSecrets[placeholder];
+            if (placeholder.endsWith('bu_2fa_code')) {
+              return generateTotpCode(replacement);
+            }
+            return replacement;
           }
           missing.add(placeholder);
           return `<secret>${placeholder}</secret>`;
@@ -295,7 +349,7 @@ export class Registry<Context = unknown> {
     const urlInfo =
       currentUrl && !is_new_tab_page(currentUrl) ? ` on ${currentUrl}` : '';
     logger.info(
-      `🔒 Using sensitive data placeholders: ${Array.from(placeholders).join(', ')}${urlInfo}`
+      `🔒 Using sensitive data placeholders: ${Array.from(placeholders).sort().join(', ')}${urlInfo}`
     );
   }
 

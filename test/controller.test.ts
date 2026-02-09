@@ -828,6 +828,36 @@ describe('Sensitive Data Handling', () => {
     expect(capturedParams.text).toBe('actual_secret_value');
   });
 
+  it('generates TOTP codes for bu_2fa_code placeholders', async () => {
+    const registry = new Registry();
+    let capturedParams: any = null;
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+
+    registry.action('Input with 2fa secret', {
+      param_model: z.object({
+        text: z.string(),
+      }),
+    })(async function input_text(params: { text: string }) {
+      capturedParams = params;
+      return new ActionResult({ extracted_content: 'Done' });
+    });
+
+    await registry.execute_action(
+      'input_text',
+      { text: '<secret>login_bu_2fa_code</secret>' },
+      {
+        sensitive_data: {
+          login_bu_2fa_code: 'JBSWY3DPEHPK3PXP',
+        },
+      }
+    );
+
+    expect(capturedParams.text).toMatch(/^\d{6}$/);
+    expect(capturedParams.text).not.toBe('JBSWY3DPEHPK3PXP');
+
+    nowSpy.mockRestore();
+  });
+
   it('handles domain-scoped sensitive data', async () => {
     const registry = new Registry();
     let capturedParams: any = null;
