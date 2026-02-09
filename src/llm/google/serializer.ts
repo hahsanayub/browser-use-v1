@@ -8,41 +8,107 @@ import {
   type Message,
 } from '../messages.js';
 
+export interface SerializedGoogleMessages {
+  contents: Content[];
+  systemInstruction: string | null;
+}
+
 export class GoogleMessageSerializer {
   serialize(messages: Message[]): Content[] {
-    return messages
-      .filter((msg) => !(msg instanceof SystemMessage)) // System instructions are passed separately
-      .map((message) => this.serializeMessage(message));
+    return this.serializeWithSystem(messages).contents;
   }
 
-  private serializeMessage(message: Message): Content {
-    if (message instanceof UserMessage) {
-      return {
-        role: 'user',
-        parts: Array.isArray(message.content)
-          ? message.content.map((part) => {
-              if (part instanceof ContentPartTextParam) {
-                return { text: part.text } as Part;
-              }
-              if (part instanceof ContentPartImageParam) {
-                // Google GenAI expects inlineData for images usually
-                const data = part.image_url.url.split(',')[1];
-                const mimeType = part.image_url.media_type;
-                return {
-                  inlineData: {
-                    mimeType: mimeType,
-                    data: data,
-                  },
-                } as Part;
-              }
-              return { text: '' } as Part;
-            })
-          : [{ text: message.content }],
-      };
+  serializeWithSystem(
+    messages: Message[],
+    includeSystemInUser = false
+  ): SerializedGoogleMessages {
+    const contents: Content[] = [];
+    const systemParts: string[] = [];
+    let injectedSystemIntoUser = false;
+
+    for (const message of messages) {
+      const role = (message as any)?.role;
+      if (
+        message instanceof SystemMessage ||
+        role === 'system' ||
+        role === 'developer'
+      ) {
+        const text = this.extractMessageText(message);
+        if (text) {
+          systemParts.push(text);
+        }
+        continue;
+      }
+
+      if (message instanceof UserMessage) {
+        const prependSystem =
+          includeSystemInUser &&
+          !injectedSystemIntoUser &&
+          systemParts.length > 0
+            ? systemParts.join('\n\n')
+            : null;
+        contents.push(this.serializeUserMessage(message, prependSystem));
+        if (prependSystem) {
+          injectedSystemIntoUser = true;
+        }
+        continue;
+      }
+
+      if (message instanceof AssistantMessage) {
+        contents.push(this.serializeAssistantMessage(message));
+      }
     }
 
+    if (includeSystemInUser && systemParts.length > 0 && !injectedSystemIntoUser) {
+      contents.unshift({
+        role: 'user',
+        parts: [{ text: systemParts.join('\n\n') }],
+      });
+    }
+
+    return {
+      contents,
+      systemInstruction:
+        includeSystemInUser || systemParts.length === 0
+          ? null
+          : systemParts.join('\n\n'),
+    };
+  }
+
+  private serializeUserMessage(
+    message: UserMessage,
+    prependSystem: string | null = null
+  ): Content {
+    const parts: Part[] = [];
+
+    if (prependSystem) {
+      parts.push({ text: prependSystem });
+    }
+
+    if (message instanceof UserMessage) {
+      if (Array.isArray(message.content)) {
+        for (const part of message.content) {
+          if (part instanceof ContentPartTextParam) {
+            parts.push({ text: part.text });
+          } else if (part instanceof ContentPartImageParam) {
+            parts.push(this.serializeImagePart(part));
+          }
+        }
+      } else {
+        parts.push({ text: message.content });
+      }
+    }
+
+    return {
+      role: 'user',
+      parts,
+    };
+  }
+
+  private serializeAssistantMessage(message: AssistantMessage): Content {
+    const parts: Part[] = [];
+
     if (message instanceof AssistantMessage) {
-      const parts: Part[] = [];
       if (message.content) {
         if (typeof message.content === 'string') {
           parts.push({ text: message.content });
@@ -57,21 +123,74 @@ export class GoogleMessageSerializer {
 
       if (message.tool_calls) {
         message.tool_calls.forEach((toolCall) => {
+          let args: Record<string, unknown> | null = null;
+          try {
+            args = JSON.parse(toolCall.functionCall.arguments);
+          } catch {
+            args = null;
+          }
           parts.push({
             functionCall: {
               name: toolCall.functionCall.name,
-              args: JSON.parse(toolCall.functionCall.arguments),
+              args: args ?? {},
             },
           });
         });
       }
-
-      return {
-        role: 'model',
-        parts: parts,
-      };
     }
 
-    throw new Error(`Unknown message type: ${message.constructor.name}`);
+    return {
+      role: 'model',
+      parts: parts,
+    };
+  }
+
+  private serializeImagePart(part: ContentPartImageParam): Part {
+    const imageUrl = part.image_url.url;
+    if (!imageUrl.startsWith('data:')) {
+      return { text: imageUrl } as Part;
+    }
+
+    const commaIndex = imageUrl.indexOf(',');
+    if (commaIndex === -1) {
+      return { text: imageUrl } as Part;
+    }
+
+    const header = imageUrl.slice(0, commaIndex);
+    const data = imageUrl.slice(commaIndex + 1);
+    const headerMimeType = header.match(/^data:([^;]+)/i)?.[1] ?? null;
+    const mimeType = headerMimeType ?? part.image_url.media_type;
+
+    return {
+      inlineData: {
+        mimeType,
+        data,
+      },
+    } as Part;
+  }
+
+  private extractMessageText(message: Message): string {
+    const content = (message as any)?.content;
+    if (typeof content === 'string') {
+      return content;
+    }
+    if (!Array.isArray(content)) {
+      return '';
+    }
+
+    const parts: string[] = [];
+    for (const part of content) {
+      if (part instanceof ContentPartTextParam) {
+        parts.push(part.text);
+      } else if (
+        part &&
+        typeof part === 'object' &&
+        (part as any).type === 'text' &&
+        typeof (part as any).text === 'string'
+      ) {
+        parts.push((part as any).text);
+      }
+    }
+    return parts.join('\n');
   }
 }

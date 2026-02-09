@@ -1,22 +1,61 @@
-import { GoogleGenAI, type Tool } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
-import { ChatInvokeCompletion } from '../views.js';
-import { type Message, SystemMessage } from '../messages.js';
+import { ModelProviderError } from '../exceptions.js';
+import { ChatInvokeCompletion, type ChatInvokeUsage } from '../views.js';
+import type { Message } from '../messages.js';
 import { GoogleMessageSerializer } from './serializer.js';
+
+export interface ChatGoogleOptions {
+  model?: string;
+  apiKey?: string;
+  apiVersion?: string;
+  baseUrl?: string;
+  temperature?: number | null;
+  topP?: number | null;
+  seed?: number | null;
+  maxOutputTokens?: number | null;
+  includeSystemInUser?: boolean;
+  supportsStructuredOutput?: boolean;
+}
 
 export class ChatGoogle implements BaseChatModel {
   public model: string;
   public provider = 'google';
   private client: GoogleGenAI;
+  private temperature: number | null;
+  private topP: number | null;
+  private seed: number | null;
+  private maxOutputTokens: number | null;
+  private includeSystemInUser: boolean;
+  private supportsStructuredOutput: boolean;
 
-  constructor(model: string = 'gemini-2.5-flash') {
+  constructor(options: string | ChatGoogleOptions = {}) {
+    const normalizedOptions =
+      typeof options === 'string' ? { model: options } : options;
+    const {
+      model = 'gemini-2.5-flash',
+      apiKey = process.env.GOOGLE_API_KEY || '',
+      apiVersion = process.env.GOOGLE_API_VERSION || 'v1',
+      baseUrl = process.env.GOOGLE_API_BASE_URL,
+      temperature = 0.5,
+      topP = null,
+      seed = null,
+      maxOutputTokens = 8096,
+      includeSystemInUser = false,
+      supportsStructuredOutput = true,
+    } = normalizedOptions;
+
     this.model = model;
-    const apiVersion = process.env.GOOGLE_API_VERSION || 'v1';
-    const baseUrl = process.env.GOOGLE_API_BASE_URL;
+    this.temperature = temperature;
+    this.topP = topP;
+    this.seed = seed;
+    this.maxOutputTokens = maxOutputTokens;
+    this.includeSystemInUser = includeSystemInUser;
+    this.supportsStructuredOutput = supportsStructuredOutput;
 
     this.client = new GoogleGenAI({
-      apiKey: process.env.GOOGLE_API_KEY || '',
+      apiKey,
       ...(baseUrl ? { baseUrl } : {}),
       ...(apiVersion ? { apiVersion } : {}),
     });
@@ -28,6 +67,39 @@ export class ChatGoogle implements BaseChatModel {
 
   get model_name(): string {
     return this.model;
+  }
+
+  private getUsage(result: any): ChatInvokeUsage | null {
+    const usage = result?.usageMetadata;
+    if (!usage) {
+      return null;
+    }
+
+    let imageTokens = 0;
+    const promptTokenDetails = Array.isArray(usage.promptTokensDetails)
+      ? usage.promptTokensDetails
+      : [];
+    for (const detail of promptTokenDetails) {
+      if (String(detail?.modality ?? '').toUpperCase() === 'IMAGE') {
+        imageTokens += Number(detail?.tokenCount ?? 0) || 0;
+      }
+    }
+
+    const completionTokens =
+      (Number(usage.candidatesTokenCount ?? 0) || 0) +
+      (Number(usage.thoughtsTokenCount ?? 0) || 0);
+
+    return {
+      prompt_tokens: Number(usage.promptTokenCount ?? 0) || 0,
+      prompt_cached_tokens:
+        usage.cachedContentTokenCount == null
+          ? null
+          : Number(usage.cachedContentTokenCount),
+      prompt_cache_creation_tokens: null,
+      prompt_image_tokens: imageTokens,
+      completion_tokens: completionTokens,
+      total_tokens: Number(usage.totalTokenCount ?? 0) || 0,
+    };
   }
 
   /**
@@ -85,38 +157,57 @@ export class ChatGoogle implements BaseChatModel {
     options: ChatInvokeOptions = {}
   ): Promise<ChatInvokeCompletion<T | string>> {
     const serializer = new GoogleMessageSerializer();
-    const contents = serializer.serialize(messages);
+    const { contents, systemInstruction } = serializer.serializeWithSystem(
+      messages,
+      this.includeSystemInUser
+    );
 
-    const systemMessage = messages.find(
-      (msg) => msg instanceof SystemMessage
-    ) as SystemMessage | undefined;
-    const systemInstruction = systemMessage ? systemMessage.text : undefined;
-
-    let tools: Tool[] | undefined = undefined;
-    let toolConfig: any = undefined;
-
-    // For Google, we need to be more explicit about JSON output
-    // The generationConfig with responseSchema helps enforce JSON structure
-    const generationConfig: any = {
-      responseMimeType: 'application/json',
-    };
+    const generationConfig: any = {};
+    if (this.temperature !== null) {
+      generationConfig.temperature = this.temperature;
+    }
+    if (this.topP !== null) {
+      generationConfig.topP = this.topP;
+    }
+    if (this.seed !== null) {
+      generationConfig.seed = this.seed;
+    }
+    if (this.maxOutputTokens !== null) {
+      generationConfig.maxOutputTokens = this.maxOutputTokens;
+    }
 
     // Try to get schema from output_format
-    const schemaForJson =
-      output_format &&
-      'schema' in output_format &&
-      (output_format as any).schema
-        ? (output_format as any).schema
-        : null;
+    const schemaForJson = (() => {
+      const output = output_format as any;
+      if (
+        output &&
+        typeof output === 'object' &&
+        typeof output.safeParse === 'function' &&
+        typeof output.parse === 'function'
+      ) {
+        return output;
+      }
+      if (
+        output &&
+        typeof output === 'object' &&
+        output.schema &&
+        typeof output.schema.safeParse === 'function' &&
+        typeof output.schema.parse === 'function'
+      ) {
+        return output.schema;
+      }
+      return null;
+    })();
 
-    if (schemaForJson) {
+    if (schemaForJson && this.supportsStructuredOutput) {
       try {
         const jsonSchema = zodToJsonSchema(schemaForJson as any);
         // Clean up the schema for Google's format
         const cleanSchema = this._cleanSchemaForGoogle(jsonSchema);
+        generationConfig.responseMimeType = 'application/json';
         generationConfig.responseSchema = cleanSchema;
-      } catch (e) {
-        console.warn('Failed to set responseSchema', e);
+      } catch {
+        // Continue without responseSchema fallback.
       }
     }
 
@@ -125,7 +216,7 @@ export class ChatGoogle implements BaseChatModel {
       contents,
     };
 
-    if (systemInstruction) {
+    if (systemInstruction && !this.includeSystemInUser) {
       request.systemInstruction = {
         role: 'system',
         parts: [{ text: systemInstruction }],
@@ -136,25 +227,24 @@ export class ChatGoogle implements BaseChatModel {
       request.generationConfig = generationConfig;
     }
 
-    const result = await (this.client.models as any).generateContent(
-      request,
-      options.signal ? { signal: options.signal } : undefined
-    );
+    try {
+      const result = await (this.client.models as any).generateContent(
+        request,
+        options.signal ? { signal: options.signal } : undefined
+      );
 
-    // Extract text from first candidate
-    const candidate = result.candidates?.[0];
-    const textParts =
-      candidate?.content?.parts?.filter((p: any) => p.text) || [];
-    const text = textParts.map((p: any) => p.text).join('');
+      // Extract text from first candidate
+      const candidate = result.candidates?.[0];
+      const textParts = candidate?.content?.parts?.filter((p: any) => p.text) || [];
+      const text = textParts.map((p: any) => p.text).join('');
 
-    let completion: T | string = text;
+      let completion: T | string = text;
 
-    if (output_format) {
       try {
         let parsed: any = text;
 
-        if (generationConfig.responseMimeType === 'application/json') {
-          let jsonText = text.trim();
+        if (output_format && schemaForJson && this.supportsStructuredOutput) {
+          let jsonText = String(text ?? '').trim();
 
           // Handle markdown code fences like ```json ... ```
           const fencedMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -182,17 +272,31 @@ export class ChatGoogle implements BaseChatModel {
           parsed = JSON.parse(jsonText);
         }
 
-        completion = output_format.parse(parsed);
-      } catch (e) {
-        console.error('Failed to parse completion', e);
-        throw e;
+        if (output_format) {
+          const output = output_format as any;
+          if (
+            schemaForJson &&
+            output &&
+            typeof output === 'object' &&
+            output.schema &&
+            typeof output.schema.parse === 'function'
+          ) {
+            completion = output.schema.parse(parsed);
+          } else {
+            completion = output.parse(parsed);
+          }
+        }
+      } catch (error) {
+        throw error;
       }
-    }
 
-    return new ChatInvokeCompletion(completion, {
-      prompt_tokens: result.usageMetadata?.promptTokenCount ?? 0,
-      completion_tokens: result.usageMetadata?.candidatesTokenCount ?? 0,
-      total_tokens: result.usageMetadata?.totalTokenCount ?? 0,
-    });
+      return new ChatInvokeCompletion(completion, this.getUsage(result));
+    } catch (error: any) {
+      throw new ModelProviderError(
+        error?.message ?? String(error),
+        error?.status ?? 500,
+        this.model
+      );
+    }
   }
 }
