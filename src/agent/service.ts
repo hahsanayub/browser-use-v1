@@ -4654,7 +4654,7 @@ export class Agent<
       `You failed ${this.settings.max_failures} times. Therefore we terminate the agent.\n` +
       'Your only tool available is the "done" tool. No other tool is available. All other tools which you see in history or examples are not available.\n' +
       'If the task is not yet fully finished as requested by the user, set success in "done" to false! E.g. if not all steps are fully completed. Else success to true.\n' +
-      'Include everything you found out for the task in the done text.';
+      'Include everything you found out for the ultimate task in the done text.';
     this._message_manager._add_context_message(new UserMessage(message));
     this._enforceDoneOnlyForCurrentStep = true;
     this.logger.debug('Force done action, because we reached max_failures.');
