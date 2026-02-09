@@ -266,6 +266,36 @@ describe('MCPServer browser_get_state', () => {
   });
 });
 
+describe('MCPServer tab tools parameter routing', () => {
+  it('routes browser_switch_tab tab_id to switch_tab action tab_id', async () => {
+    const server = new MCPServer('test-mcp', '1.0.0');
+    const executeAction = vi.fn(async () => 'ok');
+    (server as any).executeControllerAction = executeAction;
+
+    await (server as any).tools.browser_switch_tab.handler({
+      tab_id: '0007',
+    });
+
+    expect(executeAction).toHaveBeenCalledWith('switch_tab', {
+      tab_id: '0007',
+    });
+  });
+
+  it('routes browser_close_tab legacy tab_index to close_tab action page_id', async () => {
+    const server = new MCPServer('test-mcp', '1.0.0');
+    const executeAction = vi.fn(async () => 'ok');
+    (server as any).executeControllerAction = executeAction;
+
+    await (server as any).tools.browser_close_tab.handler({
+      tab_index: 3,
+    });
+
+    expect(executeAction).toHaveBeenCalledWith('close_tab', {
+      page_id: 3,
+    });
+  });
+});
+
 describe('MCPServer retry_with_browser_use_agent', () => {
   it('runs retry tool with isolated session/profile and returns summary', async () => {
     mockAgentInstances.length = 0;

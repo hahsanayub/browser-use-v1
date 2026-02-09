@@ -73,11 +73,11 @@
     },
     {
       "name": "browser_switch_tab",
-      "description": "Switch to a different tab by its index"
+      "description": "Switch to a different tab by tab_id (supports page_id/tab_index for compatibility)"
     },
     {
       "name": "browser_close_tab",
-      "description": "Close a specific tab by its index"
+      "description": "Close a specific tab by tab_id (supports page_id/tab_index for compatibility)"
     },
     {
       "name": "browser_list_sessions",

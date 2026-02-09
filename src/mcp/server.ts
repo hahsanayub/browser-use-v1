@@ -749,26 +749,70 @@ export class MCPServer {
 
     this.registerTool(
       'browser_switch_tab',
-      'Switch to a tab by index',
-      z.object({
-        tab_index: z.number().int(),
-      }),
-      async (args) =>
-        this.executeControllerAction('switch_tab', {
-          page_id: Number(args?.tab_index),
+      'Switch to a tab by tab_id (or page_id/tab_index for compatibility)',
+      z
+        .object({
+          tab_id: z.string().trim().length(4).optional(),
+          page_id: z.number().int().optional(),
+          tab_index: z.number().int().optional(),
         })
+        .refine(
+          (value) =>
+            value.tab_id != null ||
+            value.page_id != null ||
+            value.tab_index != null,
+          { message: 'Provide tab_id, page_id, or tab_index' }
+        ),
+      async (args) => {
+        const tabId =
+          typeof args?.tab_id === 'string' && args.tab_id.trim()
+            ? args.tab_id.trim()
+            : null;
+        if (tabId) {
+          return this.executeControllerAction('switch_tab', { tab_id: tabId });
+        }
+        const pageId =
+          typeof args?.page_id === 'number' && Number.isFinite(args.page_id)
+            ? Number(args.page_id)
+            : Number(args?.tab_index);
+        return this.executeControllerAction('switch_tab', {
+          page_id: pageId,
+        });
+      }
     );
 
     this.registerTool(
       'browser_close_tab',
-      'Close a tab by index',
-      z.object({
-        tab_index: z.number().int(),
-      }),
-      async (args) =>
-        this.executeControllerAction('close_tab', {
-          page_id: Number(args?.tab_index),
+      'Close a tab by tab_id (or page_id/tab_index for compatibility)',
+      z
+        .object({
+          tab_id: z.string().trim().length(4).optional(),
+          page_id: z.number().int().optional(),
+          tab_index: z.number().int().optional(),
         })
+        .refine(
+          (value) =>
+            value.tab_id != null ||
+            value.page_id != null ||
+            value.tab_index != null,
+          { message: 'Provide tab_id, page_id, or tab_index' }
+        ),
+      async (args) => {
+        const tabId =
+          typeof args?.tab_id === 'string' && args.tab_id.trim()
+            ? args.tab_id.trim()
+            : null;
+        if (tabId) {
+          return this.executeControllerAction('close_tab', { tab_id: tabId });
+        }
+        const pageId =
+          typeof args?.page_id === 'number' && Number.isFinite(args.page_id)
+            ? Number(args.page_id)
+            : Number(args?.tab_index);
+        return this.executeControllerAction('close_tab', {
+          page_id: pageId,
+        });
+      }
     );
 
     this.registerTool(
