@@ -16,6 +16,7 @@ vi.mock('openai', () => {
 
 import { ChatOpenAI } from '../src/llm/openai/chat.js';
 import { SystemMessage, UserMessage } from '../src/llm/messages.js';
+import { ModelRateLimitError } from '../src/llm/exceptions.js';
 
 const buildResponse = (content: string) => ({
   choices: [{ message: { content } }],
@@ -55,6 +56,19 @@ describe('ChatOpenAI alignment', () => {
     expect(request.reasoning_effort).toBe('medium');
     expect(request.temperature).toBeUndefined();
     expect(request.frequency_penalty).toBeUndefined();
+  });
+
+  it('honors custom reasoning model list', async () => {
+    const llm = new ChatOpenAI({
+      model: 'gpt-5-mini',
+      reasoningModels: ['o3'],
+    });
+    await llm.ainvoke([new UserMessage('hello')]);
+
+    const request = openaiCreateMock.mock.calls[0]?.[0] ?? {};
+    expect(request.reasoning_effort).toBeUndefined();
+    expect(request.temperature).toBe(0.2);
+    expect(request.frequency_penalty).toBe(0.3);
   });
 
   it('passes service_tier when configured', async () => {
@@ -114,5 +128,17 @@ describe('ChatOpenAI alignment', () => {
 
     expect(request.response_format).toBeUndefined();
     expect((response.completion as any).value).toBe('ok');
+  });
+
+  it('raises ModelRateLimitError for 429 responses', async () => {
+    openaiCreateMock.mockRejectedValueOnce({
+      status: 429,
+      message: 'rate limited',
+    });
+    const llm = new ChatOpenAI({ model: 'gpt-4o' });
+
+    await expect(llm.ainvoke([new UserMessage('hello')])).rejects.toBeInstanceOf(
+      ModelRateLimitError
+    );
   });
 });

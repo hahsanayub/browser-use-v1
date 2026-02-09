@@ -5,11 +5,11 @@ import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ChatInvokeCompletion, ChatInvokeUsage } from '../views.js';
 import type { Message } from '../messages.js';
 import { OpenAIMessageSerializer } from './serializer.js';
-import { ModelProviderError } from '../exceptions.js';
+import { ModelProviderError, ModelRateLimitError } from '../exceptions.js';
 import { SchemaOptimizer } from '../schema.js';
 
 // Reasoning models that support reasoning_effort parameter
-const ReasoningModels = [
+const DEFAULT_REASONING_MODELS = [
   'o4-mini',
   'o3',
   'o3-mini',
@@ -38,6 +38,7 @@ export interface ChatOpenAIOptions {
   dontForceStructuredOutput?: boolean;
   removeMinItemsFromSchema?: boolean;
   removeDefaultsFromSchema?: boolean;
+  reasoningModels?: string[] | null;
 }
 
 export class ChatOpenAI implements BaseChatModel {
@@ -61,6 +62,7 @@ export class ChatOpenAI implements BaseChatModel {
   private dontForceStructuredOutput: boolean;
   private removeMinItemsFromSchema: boolean;
   private removeDefaultsFromSchema: boolean;
+  private reasoningModels: string[] | null;
 
   constructor(options: ChatOpenAIOptions = {}) {
     const {
@@ -80,6 +82,7 @@ export class ChatOpenAI implements BaseChatModel {
       dontForceStructuredOutput = false,
       removeMinItemsFromSchema = false,
       removeDefaultsFromSchema = false,
+      reasoningModels = DEFAULT_REASONING_MODELS,
     } = options;
 
     this.model = model;
@@ -94,6 +97,9 @@ export class ChatOpenAI implements BaseChatModel {
     this.dontForceStructuredOutput = dontForceStructuredOutput;
     this.removeMinItemsFromSchema = removeMinItemsFromSchema;
     this.removeDefaultsFromSchema = removeDefaultsFromSchema;
+    this.reasoningModels = reasoningModels
+      ? [...reasoningModels]
+      : reasoningModels;
 
     this.client = new OpenAI({
       apiKey,
@@ -112,7 +118,7 @@ export class ChatOpenAI implements BaseChatModel {
   }
 
   private isReasoningModel(): boolean {
-    return ReasoningModels.some((m) =>
+    return (this.reasoningModels ?? []).some((m) =>
       this.model.toLowerCase().includes(m.toLowerCase())
     );
   }
@@ -303,7 +309,7 @@ export class ChatOpenAI implements BaseChatModel {
     } catch (error: any) {
       // Handle OpenAI-specific errors
       if (error?.status === 429) {
-        throw new ModelProviderError(
+        throw new ModelRateLimitError(
           error?.message ?? 'Rate limit exceeded',
           429,
           this.model
