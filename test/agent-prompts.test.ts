@@ -321,7 +321,7 @@ describe('AgentMessagePrompt browser state enrichment', () => {
     expect(resizedImage.height).toBe(1);
   });
 
-  it('formats step info and available file paths using c011 prompt style', () => {
+  it('formats step info and available file paths using python c011 prompt style', () => {
     const root = new DOMElementNode(true, null, 'body', '/body', {}, []);
     const domState = new DOMState(root, {});
     const browserState = new BrowserStateSummary(domState, {
@@ -344,9 +344,15 @@ describe('AgentMessagePrompt browser state enrichment', () => {
     const userMessage = prompt.get_user_message(false) as any;
     const content = String(userMessage.content ?? '');
 
-    expect(content).toContain('<step_info>Step1 maximum:5');
-    expect(content).toMatch(/Today:\d{4}-\d{2}-\d{2}<\/step_info>/);
-    expect(content).toContain('Use with absolute paths');
+    expect(content).toContain(
+      '<step_info>\nStep 1 of 5 max possible steps\nCurrent date and time:'
+    );
+    expect(content).toMatch(
+      /Current date and time: \d{4}-\d{2}-\d{2} \d{2}:\d{2}/
+    );
+    expect(content).toContain(
+      '<available_file_paths>\n/tmp/report.pdf\n</available_file_paths>'
+    );
   });
 
   it('injects unavailable skills info and sanitizes invalid surrogates', () => {
