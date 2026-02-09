@@ -160,6 +160,37 @@ describe('AgentMessagePrompt browser state enrichment', () => {
     expect(content).toContain('Current tab: a1b2');
   });
 
+  it('uses last 4 characters for long tab ids', () => {
+    const root = new DOMElementNode(true, null, 'body', '/body', {}, []);
+    const domState = new DOMState(root, {});
+    const browserState = new BrowserStateSummary(domState, {
+      url: 'https://example.com/list',
+      title: 'List',
+      tabs: [
+        {
+          page_id: 0,
+          tab_id: 'target-1234abcd',
+          url: 'https://example.com/list',
+          title: 'List',
+        },
+      ],
+    });
+
+    const prompt = new AgentMessagePrompt({
+      browser_state_summary: browserState,
+      file_system: {
+        describe: () => '/tmp',
+        get_todo_contents: () => '',
+      } as any,
+      task: 'test',
+    });
+
+    const userMessage = prompt.get_user_message(false) as any;
+    const content = String(userMessage.content ?? '');
+    expect(content).toContain('Tab abcd: https://example.com/list');
+    expect(content).toContain('Current tab: abcd');
+  });
+
   it('injects current plan block into agent state', () => {
     const root = new DOMElementNode(true, null, 'body', '/body', {}, []);
     const domState = new DOMState(root, {});
@@ -212,6 +243,32 @@ describe('AgentMessagePrompt browser state enrichment', () => {
       (part: any) => part?.image_url?.url?.startsWith?.('data:image/png;base64,')
     );
     expect(imageParts).toHaveLength(1);
+  });
+
+  it('includes python-aligned pdf guidance in browser state', () => {
+    const root = new DOMElementNode(true, null, 'body', '/body', {}, []);
+    const domState = new DOMState(root, {});
+    const browserState = new BrowserStateSummary(domState, {
+      url: 'https://example.com/file.pdf',
+      title: 'PDF Viewer',
+      tabs: [{ page_id: 0, url: 'https://example.com/file.pdf', title: 'PDF Viewer' }],
+      is_pdf_viewer: true,
+    });
+
+    const prompt = new AgentMessagePrompt({
+      browser_state_summary: browserState,
+      file_system: {
+        describe: () => '/tmp',
+        get_todo_contents: () => '',
+      } as any,
+      task: 'read pdf',
+    });
+
+    const userMessage = prompt.get_user_message(false) as any;
+    const content = String(userMessage.content ?? '');
+    expect(content).toContain('PDF viewer cannot be rendered.');
+    expect(content).toContain('DO NOT use the extract action');
+    expect(content).toContain('Use the read_file action');
   });
 
   it('includes sample_images and resizes screenshots for llm_screenshot_size', () => {

@@ -294,7 +294,7 @@ export class AgentMessagePrompt {
     let tabsText = '';
     const resolveTabIdentifier = (tab: { page_id: number; tab_id?: string }) =>
       typeof tab.tab_id === 'string' && tab.tab_id.trim()
-        ? tab.tab_id.trim()
+        ? tab.tab_id.trim().slice(-4)
         : String(tab.page_id);
     const currentTabCandidates: string[] = [];
     for (const tab of this.browserState.tabs) {
@@ -314,7 +314,7 @@ export class AgentMessagePrompt {
     const currentTabText =
       currentTabId !== null ? `Current tab: ${currentTabId}` : '';
     const pdfMessage = this.browserState.is_pdf_viewer
-      ? 'PDF viewer cannot be rendered. Do not use extract_structured_data here; use read_file on downloaded PDF via available_file_paths.\n\n'
+      ? 'PDF viewer cannot be rendered. In this page, DO NOT use the extract action as PDF content cannot be rendered. Use the read_file action on the downloaded PDF in available_file_paths to read the full text content.\n\n'
       : '';
     const recentEventsText =
       this.includeRecentEvents && this.browserState.recent_events
