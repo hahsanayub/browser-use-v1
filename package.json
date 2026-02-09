@@ -56,6 +56,11 @@
       "import": "./dist/llm/azure/index.js",
       "default": "./dist/llm/azure/index.js"
     },
+    "./llm/cerebras": {
+      "types": "./dist/llm/cerebras/index.d.ts",
+      "import": "./dist/llm/cerebras/index.js",
+      "default": "./dist/llm/cerebras/index.js"
+    },
     "./llm/browser-use": {
       "types": "./dist/llm/browser-use/index.d.ts",
       "import": "./dist/llm/browser-use/index.js",
@@ -90,6 +95,11 @@
       "types": "./dist/llm/messages.d.ts",
       "import": "./dist/llm/messages.js",
       "default": "./dist/llm/messages.js"
+    },
+    "./llm/mistral": {
+      "types": "./dist/llm/mistral/index.d.ts",
+      "import": "./dist/llm/mistral/index.js",
+      "default": "./dist/llm/mistral/index.js"
     },
     "./llm/models": {
       "types": "./dist/llm/models.d.ts",

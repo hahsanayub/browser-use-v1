@@ -3,9 +3,11 @@ import { ChatAnthropic } from './anthropic/chat.js';
 import { ChatBedrockConverse } from './aws/chat-bedrock.js';
 import { ChatAzure } from './azure/chat.js';
 import { ChatBrowserUse } from './browser-use/chat.js';
+import { ChatCerebras } from './cerebras/chat.js';
 import { ChatDeepSeek } from './deepseek/chat.js';
 import { ChatGoogle } from './google/chat.js';
 import { ChatGroq } from './groq/chat.js';
+import { ChatMistral } from './mistral/chat.js';
 import { ChatOllama } from './ollama/chat.js';
 import { ChatOpenAI } from './openai/chat.js';
 import { ChatOpenRouter } from './openrouter/chat.js';
@@ -20,7 +22,9 @@ type ResolvedProvider =
   | 'azure'
   | 'ollama'
   | 'aws'
-  | 'browser-use';
+  | 'browser-use'
+  | 'mistral'
+  | 'cerebras';
 
 const AVAILABLE_PROVIDERS = [
   'openai',
@@ -33,7 +37,18 @@ const AVAILABLE_PROVIDERS = [
   'ollama',
   'aws',
   'browser-use',
+  'mistral',
+  'cerebras',
 ] as const;
+
+const MISTRAL_ALIAS_MAP: Record<string, string> = {
+  large: 'mistral-large-latest',
+  medium: 'mistral-medium-latest',
+  small: 'mistral-small-latest',
+  codestral: 'codestral-latest',
+  'pixtral-large': 'pixtral-large-latest',
+  pixtral_large: 'pixtral-large-latest',
+};
 
 const convertPythonModelPart = (modelPart: string): string => {
   if (modelPart.includes('gpt_4_1_mini')) {
@@ -51,7 +66,59 @@ const convertPythonModelPart = (modelPart: string): string => {
   if (modelPart.includes('gemini_2_5')) {
     return modelPart.replace('gemini_2_5', 'gemini-2.5').replace(/_/g, '-');
   }
+  if (modelPart.includes('llama3_1')) {
+    return modelPart.replace('llama3_1', 'llama3.1').replace(/_/g, '-');
+  }
+  if (modelPart.includes('llama3_3')) {
+    return modelPart.replace('llama3_3', 'llama-3.3').replace(/_/g, '-');
+  }
+  if (modelPart.includes('llama_4_scout')) {
+    return modelPart.replace('llama_4_scout', 'llama-4-scout').replace(/_/g, '-');
+  }
+  if (modelPart.includes('llama_4_maverick')) {
+    return modelPart
+      .replace('llama_4_maverick', 'llama-4-maverick')
+      .replace(/_/g, '-');
+  }
+  if (modelPart.includes('gpt_oss_120b')) {
+    return modelPart.replace('gpt_oss_120b', 'gpt-oss-120b');
+  }
+  if (modelPart.includes('qwen_3_32b')) {
+    return modelPart.replace('qwen_3_32b', 'qwen-3-32b');
+  }
+  if (modelPart.includes('qwen_3_235b_a22b_instruct_2507')) {
+    return modelPart.replace(
+      'qwen_3_235b_a22b_instruct_2507',
+      'qwen-3-235b-a22b-instruct-2507'
+    );
+  }
+  if (modelPart.includes('qwen_3_235b_a22b_instruct')) {
+    return modelPart.replace(
+      'qwen_3_235b_a22b_instruct',
+      'qwen-3-235b-a22b-instruct-2507'
+    );
+  }
+  if (modelPart.includes('qwen_3_235b_a22b_thinking_2507')) {
+    return modelPart.replace(
+      'qwen_3_235b_a22b_thinking_2507',
+      'qwen-3-235b-a22b-thinking-2507'
+    );
+  }
+  if (modelPart.includes('qwen_3_235b_a22b_thinking')) {
+    return modelPart.replace(
+      'qwen_3_235b_a22b_thinking',
+      'qwen-3-235b-a22b-thinking-2507'
+    );
+  }
+  if (modelPart.includes('qwen_3_coder_480b')) {
+    return modelPart.replace('qwen_3_coder_480b', 'qwen-3-coder-480b');
+  }
   return modelPart.replace(/_/g, '-');
+};
+
+const normalizeMistralModel = (model: string): string => {
+  const key = model.trim().toLowerCase();
+  return MISTRAL_ALIAS_MAP[key] ?? model;
 };
 
 const inferProviderFromModel = (model: string): ResolvedProvider | null => {
@@ -85,6 +152,27 @@ const inferProviderFromModel = (model: string): ResolvedProvider | null => {
   }
   if (lower.startsWith('ollama:')) {
     return 'ollama';
+  }
+  if (lower.startsWith('mistral:')) {
+    return 'mistral';
+  }
+  if (lower.startsWith('cerebras:')) {
+    return 'cerebras';
+  }
+  if (
+    lower.startsWith('mistral-') ||
+    lower.startsWith('codestral') ||
+    lower.startsWith('pixtral')
+  ) {
+    return 'mistral';
+  }
+  if (
+    lower.startsWith('llama3.') ||
+    lower.startsWith('llama-4-') ||
+    lower.startsWith('gpt-oss-') ||
+    lower.startsWith('qwen-3-')
+  ) {
+    return 'cerebras';
   }
   if (lower.startsWith('bedrock:')) {
     return 'aws';
@@ -121,6 +209,12 @@ const normalizeModelForProvider = (
   }
   if (provider === 'ollama' && lower.startsWith('ollama:')) {
     return model.slice('ollama:'.length);
+  }
+  if (provider === 'mistral' && lower.startsWith('mistral:')) {
+    return model.slice('mistral:'.length);
+  }
+  if (provider === 'cerebras' && lower.startsWith('cerebras:')) {
+    return model.slice('cerebras:'.length);
   }
   if (provider === 'aws' && lower.startsWith('bedrock:')) {
     return model.slice('bedrock:'.length);
@@ -174,6 +268,18 @@ const buildProviderModel = (
         model,
         host: process.env.OLLAMA_HOST || 'http://localhost:11434',
       });
+    case 'mistral':
+      return new ChatMistral({
+        model: normalizeMistralModel(model),
+        apiKey: process.env.MISTRAL_API_KEY,
+        baseURL: process.env.MISTRAL_BASE_URL,
+      });
+    case 'cerebras':
+      return new ChatCerebras({
+        model,
+        apiKey: process.env.CEREBRAS_API_KEY,
+        baseURL: process.env.CEREBRAS_BASE_URL,
+      });
     case 'aws':
       return new ChatBedrockConverse({
         model,
@@ -205,6 +311,22 @@ export const getLlmByName = (modelName: string): BaseChatModel => {
   }
   if (normalizedName === 'bu_2_0') {
     return buildProviderModel('browser-use', 'bu-2-0');
+  }
+
+  if (normalizedName === 'mistral_large') {
+    return buildProviderModel('mistral', 'mistral-large-latest');
+  }
+  if (normalizedName === 'mistral_medium') {
+    return buildProviderModel('mistral', 'mistral-medium-latest');
+  }
+  if (normalizedName === 'mistral_small') {
+    return buildProviderModel('mistral', 'mistral-small-latest');
+  }
+  if (normalizedName === 'codestral') {
+    return buildProviderModel('mistral', 'codestral-latest');
+  }
+  if (normalizedName === 'pixtral_large') {
+    return buildProviderModel('mistral', 'pixtral-large-latest');
   }
 
   const separator = normalizedName.indexOf('_');

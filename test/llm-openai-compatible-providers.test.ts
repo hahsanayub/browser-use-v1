@@ -24,6 +24,8 @@ import { ChatDeepSeek } from '../src/llm/deepseek/chat.js';
 import { ChatOpenAI } from '../src/llm/openai/chat.js';
 import { ChatOpenAILike } from '../src/llm/openai/like.js';
 import { ChatOpenRouter } from '../src/llm/openrouter/chat.js';
+import { ChatMistral } from '../src/llm/mistral/chat.js';
+import { ChatCerebras } from '../src/llm/cerebras/chat.js';
 
 const buildResponse = (content: string) => ({
   choices: [{ message: { content } }],
@@ -152,6 +154,54 @@ describe('OpenAI-compatible providers alignment', () => {
       function: { name: 'response' },
     });
     expect(request.response_format).toBeUndefined();
+    expect((response.completion as any).value).toBe('ok');
+  });
+
+  it('uses Mistral max_tokens and strict json_schema response format', async () => {
+    openaiCreateMock.mockResolvedValue(buildResponse('{"value":"ok"}'));
+    const schema = z.object({ value: z.string() });
+    const llm = new ChatMistral({
+      model: 'mistral-medium-latest',
+      maxTokens: 512,
+      topP: 0.9,
+      seed: 7,
+    });
+
+    const response = await llm.ainvoke([new UserMessage('extract')], schema as any);
+    const request = openaiCreateMock.mock.calls[0]?.[0] ?? {};
+
+    expect(request.model).toBe('mistral-medium-latest');
+    expect(request.max_tokens).toBe(512);
+    expect(request.top_p).toBe(0.9);
+    expect(request.seed).toBe(7);
+    expect(request.max_completion_tokens).toBeUndefined();
+    expect(request.response_format?.type).toBe('json_schema');
+    expect(request.response_format?.json_schema?.strict).toBe(true);
+    expect((response.completion as any).value).toBe('ok');
+  });
+
+  it('uses Cerebras prompt-based JSON extraction for structured output', async () => {
+    openaiCreateMock.mockResolvedValue(
+      buildResponse('```json\n{"value":"ok"}\n```')
+    );
+    const schema = z.object({ value: z.string() });
+    const llm = new ChatCerebras({
+      model: 'llama3.1-8b',
+      maxTokens: 256,
+      temperature: 0.2,
+    });
+
+    const response = await llm.ainvoke([new UserMessage('extract this')], schema as any);
+    const request = openaiCreateMock.mock.calls[0]?.[0] ?? {};
+    const lastMessage = request.messages?.[request.messages.length - 1];
+    const contentText =
+      typeof lastMessage?.content === 'string'
+        ? lastMessage.content
+        : JSON.stringify(lastMessage?.content ?? '');
+
+    expect(request.model).toBe('llama3.1-8b');
+    expect(request.max_tokens).toBe(256);
+    expect(contentText).toContain('valid JSON only');
     expect((response.completion as any).value).toBe('ok');
   });
 });

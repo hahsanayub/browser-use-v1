@@ -6,12 +6,16 @@ describe('LLM models factory alignment', () => {
   const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
   const originalAzureOpenAiApiKey = process.env.AZURE_OPENAI_API_KEY;
   const originalAzureOpenAiEndpoint = process.env.AZURE_OPENAI_ENDPOINT;
+  const originalMistralApiKey = process.env.MISTRAL_API_KEY;
+  const originalCerebrasApiKey = process.env.CEREBRAS_API_KEY;
 
   beforeEach(() => {
     process.env.BROWSER_USE_API_KEY = 'test-bu-key';
     process.env.OPENAI_API_KEY = 'test-openai-key';
     process.env.AZURE_OPENAI_API_KEY = 'test-azure-key';
     process.env.AZURE_OPENAI_ENDPOINT = 'https://example.openai.azure.com';
+    process.env.MISTRAL_API_KEY = 'test-mistral-key';
+    process.env.CEREBRAS_API_KEY = 'test-cerebras-key';
   });
 
   afterEach(() => {
@@ -34,6 +38,16 @@ describe('LLM models factory alignment', () => {
       delete process.env.AZURE_OPENAI_ENDPOINT;
     } else {
       process.env.AZURE_OPENAI_ENDPOINT = originalAzureOpenAiEndpoint;
+    }
+    if (originalMistralApiKey === undefined) {
+      delete process.env.MISTRAL_API_KEY;
+    } else {
+      process.env.MISTRAL_API_KEY = originalMistralApiKey;
+    }
+    if (originalCerebrasApiKey === undefined) {
+      delete process.env.CEREBRAS_API_KEY;
+    } else {
+      process.env.CEREBRAS_API_KEY = originalCerebrasApiKey;
     }
   });
 
@@ -68,6 +82,21 @@ describe('LLM models factory alignment', () => {
     const llm = getLlmByName('azure:gpt-4o');
     expect(llm.provider).toBe('azure');
     expect(llm.model).toBe('gpt-4o');
+  });
+
+  it('supports mistral aliases from python llm.models', () => {
+    const large = getLlmByName('mistral_large');
+    const code = getLlmByName('codestral');
+    expect(large.provider).toBe('mistral');
+    expect(large.model).toBe('mistral-large-latest');
+    expect(code.provider).toBe('mistral');
+    expect(code.model).toBe('codestral-latest');
+  });
+
+  it('parses python-style Cerebras model names', () => {
+    const llm = getLlmByName('cerebras_llama3_1_8b');
+    expect(llm.provider).toBe('cerebras');
+    expect(llm.model).toBe('llama3.1-8b');
   });
 
   it('throws for unrecognized model names', () => {

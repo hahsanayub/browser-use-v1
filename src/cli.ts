@@ -19,6 +19,8 @@ import { ChatGroq } from './llm/groq/chat.js';
 import { ChatOpenRouter } from './llm/openrouter/chat.js';
 import { ChatAzure } from './llm/azure/chat.js';
 import { ChatOllama } from './llm/ollama/chat.js';
+import { ChatMistral } from './llm/mistral/chat.js';
+import { ChatCerebras } from './llm/cerebras/chat.js';
 import { ChatAnthropicBedrock } from './llm/aws/chat-anthropic.js';
 import { ChatBedrockConverse } from './llm/aws/chat-bedrock.js';
 import { ChatBrowserUse } from './llm/browser-use/chat.js';
@@ -38,6 +40,8 @@ type CliModelProvider =
   | 'groq'
   | 'openrouter'
   | 'azure'
+  | 'mistral'
+  | 'cerebras'
   | 'aws-anthropic'
   | 'aws'
   | 'ollama'
@@ -52,6 +56,8 @@ const CLI_PROVIDER_ALIASES: Record<string, CliModelProvider> = {
   groq: 'groq',
   openrouter: 'openrouter',
   azure: 'azure',
+  mistral: 'mistral',
+  cerebras: 'cerebras',
   ollama: 'ollama',
   'browser-use': 'browser-use',
   browseruse: 'browser-use',
@@ -117,7 +123,7 @@ const parseProvider = (value: string): CliModelProvider => {
   const provider = CLI_PROVIDER_ALIASES[normalized];
   if (!provider) {
     throw new Error(
-      `Unsupported provider "${value}". Supported values: openai, anthropic, google, deepseek, groq, openrouter, azure, ollama, browser-use, aws, aws-anthropic.`
+      `Unsupported provider "${value}". Supported values: openai, anthropic, google, deepseek, groq, openrouter, azure, mistral, cerebras, ollama, browser-use, aws, aws-anthropic.`
     );
   }
   return provider;
@@ -436,6 +442,27 @@ const inferProviderFromModel = (model: string): CliModelProvider | null => {
   if (lower.startsWith('azure:')) {
     return 'azure';
   }
+  if (lower.startsWith('mistral:')) {
+    return 'mistral';
+  }
+  if (lower.startsWith('cerebras:')) {
+    return 'cerebras';
+  }
+  if (
+    lower.startsWith('mistral-') ||
+    lower.startsWith('codestral') ||
+    lower.startsWith('pixtral')
+  ) {
+    return 'mistral';
+  }
+  if (
+    lower.startsWith('llama3.') ||
+    lower.startsWith('llama-4-') ||
+    lower.startsWith('gpt-oss-') ||
+    lower.startsWith('qwen-3-')
+  ) {
+    return 'cerebras';
+  }
   if (lower.startsWith('ollama:')) {
     return 'ollama';
   }
@@ -478,6 +505,12 @@ const normalizeModelValue = (
   }
   if (provider === 'azure' && lower.startsWith('azure:')) {
     return model.slice('azure:'.length);
+  }
+  if (provider === 'mistral' && lower.startsWith('mistral:')) {
+    return model.slice('mistral:'.length);
+  }
+  if (provider === 'cerebras' && lower.startsWith('cerebras:')) {
+    return model.slice('cerebras:'.length);
   }
   if (provider === 'ollama' && lower.startsWith('ollama:')) {
     return model.slice('ollama:'.length);
@@ -531,6 +564,10 @@ const getDefaultModelForProvider = (
       return 'openai/gpt-5-mini';
     case 'azure':
       return 'gpt-4o';
+    case 'mistral':
+      return 'mistral-large-latest';
+    case 'cerebras':
+      return 'llama3.1-8b';
     case 'aws-anthropic':
       return 'anthropic.claude-3-5-sonnet-20241022-v2:0';
     case 'ollama':
@@ -575,6 +612,18 @@ const createLlmForProvider = (
       requireEnv('AZURE_OPENAI_API_KEY');
       requireEnv('AZURE_OPENAI_ENDPOINT');
       return new ChatAzure(model);
+    case 'mistral':
+      return new ChatMistral({
+        model,
+        apiKey: requireEnv('MISTRAL_API_KEY'),
+        baseURL: process.env.MISTRAL_BASE_URL,
+      });
+    case 'cerebras':
+      return new ChatCerebras({
+        model,
+        apiKey: requireEnv('CEREBRAS_API_KEY'),
+        baseURL: process.env.CEREBRAS_BASE_URL,
+      });
     case 'ollama': {
       const host = process.env.OLLAMA_HOST || 'http://localhost:11434';
       return new ChatOllama(model, host);
@@ -615,7 +664,7 @@ export const getLlmFromCliArgs = (args: ParsedCliArgs): BaseChatModel => {
     const provider = args.provider ?? inferredProvider;
     if (!provider) {
       throw new Error(
-        `Cannot infer provider from model "${args.model}". Provide --provider or use a supported model prefix: gpt*/o*, claude*, gemini*, deepseek*, groq:, openrouter:, azure:, ollama:, browser-use:, bu-*, bedrock:.`
+        `Cannot infer provider from model "${args.model}". Provide --provider or use a supported model prefix: gpt*/o*, claude*, gemini*, deepseek*, groq:, openrouter:, azure:, mistral:, cerebras:, ollama:, browser-use:, bu-*, bedrock:.`
       );
     }
     const normalizedModel = normalizeModelValue(args.model, provider);
@@ -658,6 +707,20 @@ export const getLlmFromCliArgs = (args: ParsedCliArgs): BaseChatModel => {
   }
   if (process.env.AZURE_OPENAI_API_KEY && process.env.AZURE_OPENAI_ENDPOINT) {
     return new ChatAzure('gpt-4o');
+  }
+  if (process.env.MISTRAL_API_KEY) {
+    return new ChatMistral({
+      model: 'mistral-large-latest',
+      apiKey: process.env.MISTRAL_API_KEY,
+      baseURL: process.env.MISTRAL_BASE_URL,
+    });
+  }
+  if (process.env.CEREBRAS_API_KEY) {
+    return new ChatCerebras({
+      model: 'llama3.1-8b',
+      apiKey: process.env.CEREBRAS_API_KEY,
+      baseURL: process.env.CEREBRAS_BASE_URL,
+    });
   }
   if (process.env.AWS_ACCESS_KEY_ID || process.env.AWS_PROFILE) {
     return new ChatAnthropicBedrock({
@@ -857,7 +920,7 @@ Options:
   -h, --help                  Show this help message
   --version                   Print version and exit
   --mcp                       Run as MCP server
-  --provider <name>           Force provider (openai|anthropic|google|deepseek|groq|openrouter|azure|ollama|browser-use|aws|aws-anthropic)
+  --provider <name>           Force provider (openai|anthropic|google|deepseek|groq|openrouter|azure|mistral|cerebras|ollama|browser-use|aws|aws-anthropic)
   --model <model>             Set model (e.g., gpt-5-mini, claude-4-sonnet, gemini-2.5-pro)
   -p, --prompt <task>         Run a single task
   --headless                  Run browser in headless mode

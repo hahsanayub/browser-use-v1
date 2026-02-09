@@ -26,6 +26,10 @@ const MANAGED_ENV_KEYS = [
   'OPENROUTER_API_KEY',
   'AZURE_OPENAI_API_KEY',
   'AZURE_OPENAI_ENDPOINT',
+  'MISTRAL_API_KEY',
+  'MISTRAL_BASE_URL',
+  'CEREBRAS_API_KEY',
+  'CEREBRAS_BASE_URL',
   'AWS_ACCESS_KEY_ID',
   'AWS_PROFILE',
   'OLLAMA_MODEL',
@@ -292,6 +296,22 @@ describe('CLI model routing', () => {
     const llm = getLlmFromCliArgs(args);
     expect(llm.provider).toBe('openai');
     expect(llm.model).toBe('gpt-4o');
+  });
+
+  it('routes mistral aliases to Mistral', () => {
+    process.env.MISTRAL_API_KEY = 'test-mistral';
+    const args = parseCliArgs(['--model', 'mistral-large-latest', '-p', 'x']);
+    const llm = getLlmFromCliArgs(args);
+    expect(llm.provider).toBe('mistral');
+    expect(llm.model).toBe('mistral-large-latest');
+  });
+
+  it('routes cerebras-prefixed model names to Cerebras', () => {
+    process.env.CEREBRAS_API_KEY = 'test-cerebras';
+    const args = parseCliArgs(['--model', 'cerebras:llama3.1-8b', '-p', 'x']);
+    const llm = getLlmFromCliArgs(args);
+    expect(llm.provider).toBe('cerebras');
+    expect(llm.model).toBe('llama3.1-8b');
   });
 
   it('supports --provider without --model using provider defaults', () => {
