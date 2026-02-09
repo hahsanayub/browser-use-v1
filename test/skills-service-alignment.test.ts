@@ -91,5 +91,33 @@ describe('CloudSkillService alignment', () => {
     const skills = await service.get_all_skills();
     expect(skills.map((entry) => entry.id)).toEqual(['skill-a']);
   });
-});
 
+  it('returns python-aligned execute failure envelope with error type', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          items: [makeSkillItem('skill-1')],
+        }),
+      })
+      .mockRejectedValueOnce(new Error('boom'));
+
+    const service = new CloudSkillService({
+      skill_ids: ['skill-1'],
+      api_key: 'test-key',
+      base_url: 'https://api.test',
+      fetch_impl: fetchMock as any,
+    });
+
+    const result = await service.execute_skill({
+      skill_id: 'skill-1',
+      parameters: { query: 'weather' },
+      cookies: [],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Failed to execute skill: Error: boom');
+  });
+});

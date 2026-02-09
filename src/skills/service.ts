@@ -347,12 +347,13 @@ export class CloudSkillService implements SkillService {
         latency_ms,
       };
     } catch (error) {
+      const errorText =
+        error instanceof Error
+          ? `${error.name}: ${error.message}`
+          : String(error);
       return {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : `Failed to execute skill: ${String(error)}`,
+        error: `Failed to execute skill: ${errorText}`,
       };
     }
   }
