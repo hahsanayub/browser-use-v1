@@ -1439,8 +1439,14 @@ export class Agent<
       }
     }
 
-    const baseDir =
-      file_system_path ?? path.join(Agent.DEFAULT_AGENT_DATA_DIR, this.task_id);
+    const timestamp = Date.now();
+    this.agent_directory = path.join(
+      os.tmpdir(),
+      `browser_use_agent_${this.id}_${timestamp}`
+    );
+    ensureDir(this.agent_directory);
+
+    const baseDir = file_system_path ?? this.agent_directory;
     ensureDir(baseDir);
 
     try {
@@ -1451,13 +1457,6 @@ export class Agent<
       this.logger.error(`💾 Failed to initialize file system: ${message}`);
       throw error;
     }
-
-    const timestamp = Date.now();
-    this.agent_directory = path.join(
-      os.tmpdir(),
-      `browser_use_agent_${this.id}_${timestamp}`
-    );
-    ensureDir(this.agent_directory);
 
     this.state.file_system_state = this.file_system.get_state();
     this.logger.debug(`💾 File system path: ${this._file_system_path}`);

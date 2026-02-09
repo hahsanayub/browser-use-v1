@@ -15,6 +15,7 @@ import {
 import { UserMessage } from '../src/llm/messages.js';
 import { BrowserSession } from '../src/browser/session.js';
 import { BrowserProfile } from '../src/browser/profile.js';
+import { DEFAULT_FILE_SYSTEM_PATH } from '../src/filesystem/file-system.js';
 import { Controller } from '../src/controller/service.js';
 import {
   BrowserStateSummary,
@@ -101,6 +102,21 @@ describe('Agent constructor browser session alignment', () => {
     });
 
     expect(agent.browser_session).toBe(browserSession);
+
+    await agent.close();
+  });
+
+  it('defaults file_system_path to agent_directory when not provided (python c011 parity)', async () => {
+    const agent = new Agent({
+      task: 'default file system directory',
+      llm: createLlm(),
+    });
+
+    const fileSystemDir = (agent as any).file_system?.get_dir?.();
+    expect(fileSystemDir).toBe(
+      `${agent.agent_directory}/${DEFAULT_FILE_SYSTEM_PATH}`
+    );
+    expect((agent as any)._file_system_path).toBe(agent.agent_directory);
 
     await agent.close();
   });
