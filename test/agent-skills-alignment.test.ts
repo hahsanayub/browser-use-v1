@@ -138,6 +138,56 @@ describe('Agent skills alignment', () => {
     await agent.close();
   });
 
+  it('builds unavailable skill info for missing required cookies', async () => {
+    const browserSession = new BrowserSession({
+      browser_profile: new BrowserProfile({}),
+    });
+    vi.spyOn(browserSession, 'get_cookies').mockResolvedValue([
+      { name: 'already_present', value: 'ok' } as any,
+    ]);
+
+    const skillService: SkillService = {
+      get_all_skills: vi.fn(async () => [
+        {
+          id: 'skill-open',
+          title: 'Open Skill',
+          description: 'No cookies required',
+          parameters: [{ name: 'query', type: 'string', required: true }],
+          output_schema: null,
+        },
+        {
+          id: 'skill-private',
+          title: 'Private Area',
+          description: 'Needs authenticated cookie',
+          parameters: [
+            { name: 'session_id', type: 'cookie', required: true, description: 'Login first' },
+            { name: 'already_present', type: 'cookie', required: true, description: 'Already set' },
+          ],
+          output_schema: null,
+        },
+      ]),
+      execute_skill: vi.fn(async () => ({ success: true, result: null })),
+      close: vi.fn(async () => {}),
+    };
+
+    const agent = new Agent({
+      task: 'inspect missing skills',
+      llm: createLlm(),
+      browser_session: browserSession,
+      skill_service: skillService,
+    });
+
+    const unavailableInfo = await (agent as any)._get_unavailable_skills_info();
+    expect(unavailableInfo).toContain(
+      'Unavailable Skills (missing required cookies):'
+    );
+    expect(unavailableInfo).toContain('private_area ("Private Area")');
+    expect(unavailableInfo).toContain('session_id: Login first');
+    expect(unavailableInfo).not.toContain('Open Skill');
+
+    await agent.close();
+  });
+
   it('closes injected skill service during agent.close()', async () => {
     const closeSpy = vi.fn(async () => {});
     const skillService: SkillService = {

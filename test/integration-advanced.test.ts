@@ -50,6 +50,7 @@ vi.mock('../src/utils.js', () => {
     get_browser_use_version: () => 'test-version',
     is_new_tab_page,
     match_url_with_domain_pattern,
+    sanitize_surrogates: (text: string) => text,
     log_pretty_path: (p: string) => p,
     wait_until: async (predicate: () => boolean, timeout = 1000) => {
       const start = Date.now();

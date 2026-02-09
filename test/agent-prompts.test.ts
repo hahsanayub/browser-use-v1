@@ -241,6 +241,33 @@ describe('AgentMessagePrompt browser state enrichment', () => {
     expect(content).toMatch(/Today:\d{4}-\d{2}-\d{2}<\/step_info>/);
     expect(content).toContain('Use with absolute paths');
   });
+
+  it('injects unavailable skills info and sanitizes invalid surrogates', () => {
+    const root = new DOMElementNode(true, null, 'body', '/body', {}, []);
+    const domState = new DOMState(root, {});
+    const browserState = new BrowserStateSummary(domState, {
+      url: 'https://example.com',
+      title: 'Example',
+      tabs: [{ page_id: 0, url: 'https://example.com', title: 'Example' }],
+    });
+
+    const prompt = new AgentMessagePrompt({
+      browser_state_summary: browserState,
+      file_system: {
+        describe: () => '/tmp',
+        get_todo_contents: () => '',
+      } as any,
+      task: 'test',
+      unavailable_skills_info:
+        'Unavailable Skills (missing required cookies):\n  - private_area ("Private Area")\n    Missing cookies: broken-\uD800-cookie',
+    });
+
+    const userMessage = prompt.get_user_message(false) as any;
+    const content = String(userMessage.content ?? '');
+    expect(content).toContain('Unavailable Skills (missing required cookies):');
+    expect(content).toContain('private_area ("Private Area")');
+    expect(content.includes('\uD800')).toBe(false);
+  });
 });
 
 describe('SystemPrompt template selection parity', () => {

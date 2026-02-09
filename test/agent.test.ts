@@ -41,6 +41,7 @@ vi.mock('../src/utils.js', () => {
       }
       return url.includes(pattern);
     },
+    sanitize_surrogates: (text: string) => text,
     log_pretty_path: (p: string) => p,
     wait_until: async () => {},
   };

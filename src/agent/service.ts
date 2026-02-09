@@ -2012,6 +2012,100 @@ export class Agent<
     }
   }
 
+  private async _get_unavailable_skills_info(): Promise<string> {
+    if (!this.skill_service || !this.browser_session) {
+      return '';
+    }
+
+    try {
+      const skills = await this.skill_service.get_all_skills();
+      if (!skills.length) {
+        return '';
+      }
+
+      const currentCookies = await this.browser_session.get_cookies();
+      const cookieNames = new Set<string>();
+      if (Array.isArray(currentCookies)) {
+        for (const cookie of currentCookies) {
+          if (!cookie || typeof cookie !== 'object') {
+            continue;
+          }
+          const name =
+            typeof (cookie as Record<string, unknown>).name === 'string'
+              ? String((cookie as Record<string, unknown>).name)
+              : '';
+          if (name) {
+            cookieNames.add(name);
+          }
+        }
+      }
+
+      const unavailableSkills: Array<{
+        id: string;
+        title: string;
+        description: string;
+        missing_cookies: Array<{ name: string; description: string }>;
+      }> = [];
+
+      for (const skill of skills) {
+        const cookieParams = skill.parameters.filter(
+          (param) => param.type === 'cookie'
+        );
+        if (!cookieParams.length) {
+          continue;
+        }
+
+        const missingCookies: Array<{ name: string; description: string }> = [];
+        for (const cookieParam of cookieParams) {
+          const isRequired = cookieParam.required !== false;
+          if (isRequired && !cookieNames.has(cookieParam.name)) {
+            missingCookies.push({
+              name: cookieParam.name,
+              description: cookieParam.description || 'No description provided',
+            });
+          }
+        }
+
+        if (missingCookies.length) {
+          unavailableSkills.push({
+            id: skill.id,
+            title: skill.title,
+            description: skill.description,
+            missing_cookies: missingCookies,
+          });
+        }
+      }
+
+      if (!unavailableSkills.length) {
+        return '';
+      }
+
+      const lines: string[] = ['Unavailable Skills (missing required cookies):'];
+      for (const skillInfo of unavailableSkills) {
+        const skillObj = skills.find((entry) => entry.id === skillInfo.id);
+        const slug = skillObj
+          ? get_skill_slug(skillObj, skills)
+          : skillInfo.title;
+        lines.push('');
+        lines.push(`  - ${slug} ("${skillInfo.title}")`);
+        lines.push(`    Description: ${skillInfo.description}`);
+        lines.push('    Missing cookies:');
+        for (const cookie of skillInfo.missing_cookies) {
+          lines.push(`      - ${cookie.name}: ${cookie.description}`);
+        }
+      }
+
+      return lines.join('\n');
+    } catch (error) {
+      this.logger.error(
+        `Error getting unavailable skills info: ${
+          error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+        }`
+      );
+      return '';
+    }
+  }
+
   /**
    * Update action models with page-specific actions
    * Called during each step to filter actions based on current page context
@@ -2387,6 +2481,10 @@ export class Agent<
 
     const page_filtered_actions =
       this.controller.registry.get_prompt_description(current_page);
+    let unavailable_skills_info: string | null = null;
+    if (this.skill_service) {
+      unavailable_skills_info = await this._get_unavailable_skills_info();
+    }
 
     this.logger.debug(
       `💬 Step ${this.state.n_steps}: Creating state messages for context...`
@@ -2410,6 +2508,7 @@ export class Agent<
       this.available_file_paths,
       this.settings.include_recent_events,
       this._render_plan_description(),
+      unavailable_skills_info,
       true
     );
 

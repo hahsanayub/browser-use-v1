@@ -389,6 +389,7 @@ export class MessageManager {
     available_file_paths: string[] | null = null,
     include_recent_events: boolean | null = null,
     plan_description: string | null = null,
+    unavailable_skills_info: string | null = null,
     skip_state_update = false
   ) {
     if (!skip_state_update) {
@@ -445,6 +446,7 @@ export class MessageManager {
       read_state_images: this.state.read_state_images,
       llm_screenshot_size: this.llmScreenshotSize,
       plan_description,
+      unavailable_skills_info,
     });
     const message = prompt.get_user_message(effectiveUseVision);
     this.last_state_message_text = this.extractStateMessageText(message);

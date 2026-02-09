@@ -10,7 +10,7 @@ import {
   ImageURL,
 } from '../llm/messages.js';
 import { observe_debug } from '../observability.js';
-import { is_new_tab_page } from '../utils.js';
+import { is_new_tab_page, sanitize_surrogates } from '../utils.js';
 import { createLogger } from '../logging-config.js';
 import type { AgentStepInfo } from './views.js';
 import type { BrowserStateSummary } from '../browser/views.js';
@@ -121,6 +121,7 @@ interface AgentMessagePromptInit {
   sample_images?: Array<ContentPartTextParam | ContentPartImageParam> | null;
   read_state_images?: Array<Record<string, unknown>> | null;
   llm_screenshot_size?: [number, number] | null;
+  unavailable_skills_info?: string | null;
   plan_description?: string | null;
 }
 
@@ -142,6 +143,7 @@ export class AgentMessagePrompt {
   private readonly sampleImages: Array<ContentPartTextParam | ContentPartImageParam>;
   private readonly readStateImages: Array<Record<string, unknown>>;
   private readonly llmScreenshotSize: [number, number] | null;
+  private readonly unavailableSkillsInfo: string | null;
   private readonly planDescription: string | null;
 
   constructor(init: AgentMessagePromptInit) {
@@ -163,6 +165,7 @@ export class AgentMessagePrompt {
     this.sampleImages = init.sample_images ?? [];
     this.readStateImages = init.read_state_images ?? [];
     this.llmScreenshotSize = init.llm_screenshot_size ?? null;
+    this.unavailableSkillsInfo = init.unavailable_skills_info ?? null;
     this.planDescription = init.plan_description ?? null;
   }
 
@@ -430,6 +433,12 @@ ${this.pageFilteredActions}
 </page_specific_actions>
 `;
     }
+
+    if (this.unavailableSkillsInfo) {
+      stateDescription += `\n${this.unavailableSkillsInfo}\n`;
+    }
+
+    stateDescription = sanitize_surrogates(stateDescription);
 
     const hasReadStateImages = this.readStateImages.length > 0;
     if (

@@ -44,6 +44,7 @@ vi.mock('../src/utils.js', () => {
     },
     is_new_tab_page: () => false,
     match_url_with_domain_pattern: () => false,
+    sanitize_surrogates: (text: string) => text,
     log_pretty_path: (p: string) => p,
   };
 });

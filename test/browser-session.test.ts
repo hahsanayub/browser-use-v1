@@ -43,6 +43,7 @@ vi.mock('../src/utils.js', () => {
       const normalized = pattern.replace(/\*/g, '');
       return url.includes(normalized);
     },
+    sanitize_surrogates: (text: string) => text,
     log_pretty_path: (p: string) => p,
   };
 });
