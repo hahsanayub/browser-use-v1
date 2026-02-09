@@ -308,21 +308,61 @@ describe('MCPServer retry_with_browser_use_agent', () => {
     expect(instance.runMaxSteps).toBe(100);
   });
 
-  it('returns explicit error when OpenAI key is missing', async () => {
-    const server = new MCPServer('test-mcp', '1.0.0');
-    (server as any).config = {
-      browser_profile: {},
-      llm: {},
-    };
+  it('supports non-openai models via shared llm factory', async () => {
+    mockAgentInstances.length = 0;
+    const previousBrowserUseApiKey = process.env.BROWSER_USE_API_KEY;
+    process.env.BROWSER_USE_API_KEY = 'test-browser-use-key';
 
-    const result = await (
-      server as any
-    ).tools.retry_with_browser_use_agent.handler({
-      task: 'Try task again',
-    });
+    try {
+      const server = new MCPServer('test-mcp', '1.0.0');
+      (server as any).config = {
+        browser_profile: {},
+        llm: { model: 'bu-2-0' },
+      };
 
-    expect(result).toBe(
-      'Error: OPENAI_API_KEY not set in config or environment'
-    );
+      await (server as any).tools.retry_with_browser_use_agent.handler({
+        task: 'Run with browser-use model',
+        model: 'bu-2-0',
+      });
+
+      expect(mockAgentInstances.length).toBe(1);
+      const instance = mockAgentInstances[0];
+      expect(instance.params.llm.provider).toBe('browser-use');
+      expect(instance.params.llm.model).toBe('bu-2-0');
+    } finally {
+      if (previousBrowserUseApiKey === undefined) {
+        delete process.env.BROWSER_USE_API_KEY;
+      } else {
+        process.env.BROWSER_USE_API_KEY = previousBrowserUseApiKey;
+      }
+    }
+  });
+
+  it('returns explicit error when configured model credentials are missing', async () => {
+    const previousOpenAiApiKey = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+
+    try {
+      const server = new MCPServer('test-mcp', '1.0.0');
+      (server as any).config = {
+        browser_profile: {},
+        llm: {},
+      };
+
+      const result = await (
+        server as any
+      ).tools.retry_with_browser_use_agent.handler({
+        task: 'Try task again',
+      });
+
+      expect(result).toContain('Error: Failed to initialize LLM');
+      expect(result).toContain('OPENAI_API_KEY');
+    } finally {
+      if (previousOpenAiApiKey === undefined) {
+        delete process.env.OPENAI_API_KEY;
+      } else {
+        process.env.OPENAI_API_KEY = previousOpenAiApiKey;
+      }
+    }
   });
 });

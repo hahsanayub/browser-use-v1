@@ -45,7 +45,8 @@ import { Agent } from '../agent/service.js';
 import { BrowserSession } from '../browser/session.js';
 import { BrowserProfile } from '../browser/profile.js';
 import { FileSystem } from '../filesystem/file-system.js';
-import { ChatOpenAI } from '../llm/openai/chat.js';
+import type { BaseChatModel } from '../llm/base.js';
+import { getLlmByName } from '../llm/models.js';
 import {
   load_browser_use_config,
   get_default_llm,
@@ -85,7 +86,7 @@ export class MCPServer {
   private config: Record<string, any>;
   private browserSession: BrowserSession | null = null;
   private controller: Controller<any> | null = null;
-  private llm: ChatOpenAI | null = null;
+  private llm: BaseChatModel | null = null;
   private fileSystem: FileSystem | null = null;
   private startTime: number;
   private isRunning = false;
@@ -129,6 +130,28 @@ export class MCPServer {
   private getDefaultLlmConfig(): Record<string, unknown> {
     const llm = get_default_llm(this.config);
     return llm && typeof llm === 'object' ? { ...llm } : {};
+  }
+
+  private seedOpenAiApiKeyFromConfig(llmConfig: Record<string, unknown>) {
+    if (
+      typeof process.env.OPENAI_API_KEY === 'string' &&
+      process.env.OPENAI_API_KEY.trim()
+    ) {
+      return;
+    }
+    const configuredApiKey =
+      typeof llmConfig.api_key === 'string' ? llmConfig.api_key.trim() : '';
+    if (configuredApiKey) {
+      process.env.OPENAI_API_KEY = configuredApiKey;
+    }
+  }
+
+  private createLlmFromModelName(
+    modelName: string,
+    llmConfig: Record<string, unknown>
+  ): BaseChatModel {
+    this.seedOpenAiApiKeyFromConfig(llmConfig);
+    return getLlmByName(modelName);
   }
 
   private sanitizeProfileConfig(
@@ -217,29 +240,20 @@ export class MCPServer {
       return;
     }
     const llmConfig = this.getDefaultLlmConfig();
-    const configuredApiKey =
-      typeof llmConfig.api_key === 'string' ? llmConfig.api_key.trim() : '';
-    const envApiKey =
-      typeof process.env.OPENAI_API_KEY === 'string'
-        ? process.env.OPENAI_API_KEY.trim()
-        : '';
-    const apiKey = configuredApiKey || envApiKey;
-    if (!apiKey) {
-      return;
-    }
-
     const model =
       typeof llmConfig.model === 'string' && llmConfig.model.trim()
         ? llmConfig.model.trim()
         : 'gpt-4o-mini';
-    const temperature =
-      typeof llmConfig.temperature === 'number' ? llmConfig.temperature : 0.7;
 
-    this.llm = new ChatOpenAI({
-      model,
-      apiKey,
-      temperature,
-    });
+    try {
+      this.llm = this.createLlmFromModelName(model, llmConfig);
+    } catch (error) {
+      logger.debug(
+        `Skipping MCP direct-tools LLM initialization for model "${model}": ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
   }
 
   private initializeFileSystem(profileConfig: Record<string, unknown>) {
@@ -422,7 +436,9 @@ export class MCPServer {
     const controller = await this.ensureController();
     const browserSession = await this.ensureBrowserSession();
     if (actionName === 'extract_structured_data' && !this.llm) {
-      throw new Error('LLM not initialized (set OPENAI_API_KEY)');
+      throw new Error(
+        'LLM not initialized. Set provider API key env vars and configure BROWSER_USE_LLM_MODEL/DEFAULT_LLM to a supported model.'
+      );
     }
 
     return await controller.registry.execute_action(actionName, args, {
@@ -667,32 +683,19 @@ export class MCPServer {
           : [];
 
         const llmConfig = this.getDefaultLlmConfig();
-        const configuredApiKey =
-          typeof llmConfig.api_key === 'string' ? llmConfig.api_key.trim() : '';
-        const envApiKey =
-          typeof process.env.OPENAI_API_KEY === 'string'
-            ? process.env.OPENAI_API_KEY.trim()
-            : '';
-        const apiKey = configuredApiKey || envApiKey;
-        if (!apiKey) {
-          return 'Error: OPENAI_API_KEY not set in config or environment';
-        }
-
         const configuredModel =
           typeof llmConfig.model === 'string' && llmConfig.model.trim()
             ? llmConfig.model.trim()
             : 'gpt-4o';
         const llmModel = model || configuredModel;
-        const temperature =
-          typeof llmConfig.temperature === 'number'
-            ? llmConfig.temperature
-            : 0.7;
-
-        const llm = new ChatOpenAI({
-          model: llmModel,
-          apiKey,
-          temperature,
-        });
+        let llm: BaseChatModel;
+        try {
+          llm = this.createLlmFromModelName(llmModel, llmConfig);
+        } catch (error) {
+          return `Error: Failed to initialize LLM "${llmModel}": ${
+            error instanceof Error ? error.message : String(error)
+          }`;
+        }
 
         const profileConfig = this.getDefaultProfileConfig();
         const profile = this.buildRetryProfile(profileConfig, allowedDomains);
