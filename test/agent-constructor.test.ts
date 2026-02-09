@@ -288,6 +288,30 @@ describe('Agent constructor browser session alignment', () => {
     await agent.close();
   });
 
+  it('ignores InterruptedError raised during initial_actions and stops gracefully (python c011 parity)', async () => {
+    const shouldStopCallback = vi.fn(async () => true);
+    const agent = new Agent({
+      task: 'stop during initial actions',
+      llm: createLlm(),
+      register_should_stop_callback: shouldStopCallback,
+      initial_actions: [{ wait: { seconds: 0 } }],
+    });
+
+    const logAgentEventSpy = vi
+      .spyOn(agent as any, '_log_agent_event')
+      .mockImplementation(() => {});
+    const stepSpy = vi.spyOn(agent as any, '_step');
+
+    await expect(agent.run(1)).resolves.toBeDefined();
+
+    expect(shouldStopCallback).toHaveBeenCalled();
+    expect(stepSpy).not.toHaveBeenCalled();
+    expect(agent.state.stopped).toBe(true);
+
+    logAgentEventSpy.mockRestore();
+    await agent.close();
+  });
+
   it('dispatches CreateAgentSessionEvent only once across multiple run calls (python c011 parity)', async () => {
     const agent = new Agent({
       task: 'single session event across runs',

@@ -2335,7 +2335,13 @@ export class Agent<
         await this.browser_session?.start();
       }
       await this._register_skills_as_actions();
-      await this._execute_initial_actions();
+      try {
+        await this._execute_initial_actions();
+      } catch (error) {
+        if ((error as Error)?.name !== 'InterruptedError') {
+          throw error;
+        }
+      }
 
       this.logger.debug(
         `🔄 Starting main execution loop with max ${max_steps} steps (currently at step ${this.state.n_steps})...`
