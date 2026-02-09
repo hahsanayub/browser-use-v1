@@ -26,7 +26,11 @@ import type {
 import {
   AssistantMessage,
   ContentPartImageParam,
+  ContentPartRefusalParam,
   ContentPartTextParam,
+  FunctionCall,
+  ImageURL,
+  ToolCall,
   UserMessage,
   SystemMessage,
   type Message,
@@ -50,7 +54,7 @@ export class AnthropicMessageSerializer {
     messages: Message[]
   ): [MessageParam[], (string | TextBlockParam[])?] {
     // Make deep copies to avoid modifying originals
-    const messagesCopy = messages.map((m) => ({ ...m }));
+    const messagesCopy = messages.map((message) => this._cloneMessage(message));
 
     // Separate system messages from normal messages
     const normalMessages: NonSystemMessage[] = [];
@@ -118,7 +122,7 @@ export class AnthropicMessageSerializer {
           content.push({
             type: 'text',
             text: message.content,
-            ...(message.cache
+            ...(message.cache && !message.tool_calls?.length
               ? { cache_control: this._serializeCacheControl(true) }
               : {}),
           });
@@ -140,12 +144,18 @@ export class AnthropicMessageSerializer {
         message.tool_calls.forEach((toolCall, idx, arr) => {
           const isLastToolCall = idx === arr.length - 1;
           const useCache = message.cache && isLastToolCall;
+          let toolInput: Record<string, unknown> | string;
+          try {
+            toolInput = JSON.parse(toolCall.functionCall.arguments);
+          } catch {
+            toolInput = { arguments: toolCall.functionCall.arguments };
+          }
 
           content.push({
             type: 'tool_use',
             id: toolCall.id,
             name: toolCall.functionCall.name,
-            input: JSON.parse(toolCall.functionCall.arguments),
+            input: toolInput as any,
             ...(useCache
               ? { cache_control: this._serializeCacheControl(true) }
               : {}),
@@ -164,9 +174,25 @@ export class AnthropicMessageSerializer {
         });
       }
 
+      const normalizedContent: string | (TextBlockParam | ToolUseBlockParam)[] =
+        (() => {
+          if (message.cache || content.length > 1) {
+            return content;
+          }
+          const first = content[0];
+          if (
+            first &&
+            first.type === 'text' &&
+            !(first as any).cache_control
+          ) {
+            return first.text;
+          }
+          return content;
+        })();
+
       return {
         role: 'assistant',
-        content: content,
+        content: normalizedContent,
       };
     }
 
@@ -307,7 +333,7 @@ export class AnthropicMessageSerializer {
       throw new Error(`Invalid base64 URL format: ${url}`);
     }
 
-    let mediaType = header.split(';')[0]?.replace('data:', '') || 'image/png';
+    let mediaType = header.split(';')[0]?.replace('data:', '') || 'image/jpeg';
 
     // Ensure it's a supported media type
     const supportedTypes: SupportedImageMediaType[] = [
@@ -318,11 +344,105 @@ export class AnthropicMessageSerializer {
     ];
 
     if (!supportedTypes.includes(mediaType as SupportedImageMediaType)) {
-      // Default to png if not recognized
-      mediaType = 'image/png';
+      // Default to jpeg if not recognized
+      mediaType = 'image/jpeg';
     }
 
     return [mediaType as SupportedImageMediaType, data];
+  }
+
+  private _cloneMessage(message: Message): Message {
+    if (message instanceof UserMessage) {
+      const clone = new UserMessage(
+        this._cloneContent(message.content),
+        message.name
+      );
+      clone.cache = message.cache;
+      return clone;
+    }
+
+    if (message instanceof SystemMessage) {
+      const clone = new SystemMessage(
+        typeof message.content === 'string'
+          ? message.content
+          : message.content.map((part) => new ContentPartTextParam(part.text)),
+        message.name
+      );
+      clone.cache = message.cache;
+      return clone;
+    }
+
+    if (message instanceof AssistantMessage) {
+      const clone = new AssistantMessage({
+        content:
+          message.content === null
+            ? null
+            : typeof message.content === 'string'
+            ? message.content
+            : message.content.map((part) => {
+                if (part instanceof ContentPartTextParam) {
+                  return new ContentPartTextParam(part.text);
+                }
+                if (part instanceof ContentPartRefusalParam) {
+                  return new ContentPartRefusalParam(part.refusal);
+                }
+                if (part instanceof ContentPartImageParam) {
+                  return new ContentPartImageParam(
+                    new ImageURL(
+                      part.image_url.url,
+                      part.image_url.detail,
+                      part.image_url.media_type
+                    )
+                  );
+                }
+                return part;
+              }),
+        tool_calls: message.tool_calls
+          ? message.tool_calls.map(
+              (toolCall) =>
+                new ToolCall(
+                  toolCall.id,
+                  new FunctionCall(
+                    toolCall.functionCall.name,
+                    toolCall.functionCall.arguments
+                  )
+                )
+            )
+          : null,
+        refusal: message.refusal,
+      });
+      clone.cache = message.cache;
+      return clone;
+    }
+
+    return message;
+  }
+
+  private _cloneContent(
+    content:
+      | string
+      | (ContentPartTextParam | ContentPartImageParam | ContentPartRefusalParam)[]
+  ):
+    | string
+    | (ContentPartTextParam | ContentPartImageParam | ContentPartRefusalParam)[] {
+    if (typeof content === 'string') {
+      return content;
+    }
+    return content.map((part) => {
+      if (part instanceof ContentPartTextParam) {
+        return new ContentPartTextParam(part.text);
+      }
+      if (part instanceof ContentPartRefusalParam) {
+        return new ContentPartRefusalParam(part.refusal);
+      }
+      return new ContentPartImageParam(
+        new ImageURL(
+          part.image_url.url,
+          part.image_url.detail,
+          part.image_url.media_type
+        )
+      );
+    });
   }
 
   /**
@@ -339,7 +459,9 @@ export class AnthropicMessageSerializer {
     }
 
     // Create deep copies to avoid modifying originals
-    const cleanedMessages = messages.map((msg) => ({ ...msg }));
+    const cleanedMessages = messages.map((msg) =>
+      this._cloneMessage(msg)
+    ) as NonSystemMessage[];
 
     // Find the last message with cache=true
     let lastCacheIndex = -1;
@@ -359,6 +481,6 @@ export class AnthropicMessageSerializer {
       }
     }
 
-    return cleanedMessages as any;
+    return cleanedMessages;
   }
 }
