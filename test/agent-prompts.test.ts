@@ -267,7 +267,7 @@ describe('AgentMessagePrompt browser state enrichment', () => {
     const userMessage = prompt.get_user_message(false) as any;
     const content = String(userMessage.content ?? '');
     expect(content).toContain('PDF viewer cannot be rendered.');
-    expect(content).toContain('DO NOT use the extract action');
+    expect(content).toContain('DO NOT use the extract_structured_data action');
     expect(content).toContain('Use the read_file action');
   });
 

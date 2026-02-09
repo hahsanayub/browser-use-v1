@@ -314,7 +314,7 @@ export class AgentMessagePrompt {
     const currentTabText =
       currentTabId !== null ? `Current tab: ${currentTabId}` : '';
     const pdfMessage = this.browserState.is_pdf_viewer
-      ? 'PDF viewer cannot be rendered. In this page, DO NOT use the extract action as PDF content cannot be rendered. Use the read_file action on the downloaded PDF in available_file_paths to read the full text content.\n\n'
+      ? 'PDF viewer cannot be rendered. In this page, DO NOT use the extract_structured_data action as PDF content cannot be rendered. Use the read_file action on the downloaded PDF in available_file_paths to read the full content.\n\n'
       : '';
     const recentEventsText =
       this.includeRecentEvents && this.browserState.recent_events
