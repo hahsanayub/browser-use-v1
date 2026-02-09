@@ -68,6 +68,10 @@ export interface ParsedCliArgs {
   user_data_dir: string | null;
   profile_directory: string | null;
   allowed_domains: string[] | null;
+  proxy_url: string | null;
+  no_proxy: string | null;
+  proxy_username: string | null;
+  proxy_password: string | null;
   cdp_url: string | null;
   model: string | null;
   provider: CliModelProvider | null;
@@ -164,6 +168,10 @@ export const parseCliArgs = (argv: string[]): ParsedCliArgs => {
     user_data_dir: null,
     profile_directory: null,
     allowed_domains: null,
+    proxy_url: null,
+    no_proxy: null,
+    proxy_username: null,
+    proxy_password: null,
     cdp_url: null,
     model: null,
     provider: null,
@@ -254,6 +262,36 @@ export const parseCliArgs = (argv: string[]): ParsedCliArgs => {
       const { value, nextIndex } = takeOptionValue(arg, i, argv);
       const domains = parseAllowedDomains(value);
       parsed.allowed_domains = [...(parsed.allowed_domains ?? []), ...domains];
+      i = nextIndex;
+      continue;
+    }
+    if (arg === '--proxy-url' || arg.startsWith('--proxy-url=')) {
+      const { value, nextIndex } = takeOptionValue(arg, i, argv);
+      parsed.proxy_url = value.trim();
+      i = nextIndex;
+      continue;
+    }
+    if (arg === '--no-proxy' || arg.startsWith('--no-proxy=')) {
+      const { value, nextIndex } = takeOptionValue(arg, i, argv);
+      parsed.no_proxy = value;
+      i = nextIndex;
+      continue;
+    }
+    if (
+      arg === '--proxy-username' ||
+      arg.startsWith('--proxy-username=')
+    ) {
+      const { value, nextIndex } = takeOptionValue(arg, i, argv);
+      parsed.proxy_username = value;
+      i = nextIndex;
+      continue;
+    }
+    if (
+      arg === '--proxy-password' ||
+      arg.startsWith('--proxy-password=')
+    ) {
+      const { value, nextIndex } = takeOptionValue(arg, i, argv);
+      parsed.proxy_password = value;
       i = nextIndex;
       continue;
     }
@@ -609,7 +647,13 @@ export const getLlmFromCliArgs = (args: ParsedCliArgs): BaseChatModel => {
   );
 };
 
-const buildBrowserProfileFromCliArgs = (
+const parseCommaSeparatedList = (value: string): string[] =>
+  value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+
+export const buildBrowserProfileFromCliArgs = (
   args: ParsedCliArgs
 ): BrowserProfile | null => {
   const profile: Partial<BrowserProfileOptions> = {};
@@ -631,6 +675,27 @@ const buildBrowserProfileFromCliArgs = (
   }
   if (args.allowed_domains && args.allowed_domains.length > 0) {
     profile.allowed_domains = args.allowed_domains;
+  }
+  if (
+    args.proxy_url ||
+    args.no_proxy ||
+    args.proxy_username ||
+    args.proxy_password
+  ) {
+    const proxy: Record<string, string> = {};
+    if (args.proxy_url) {
+      proxy.server = args.proxy_url;
+    }
+    if (args.no_proxy) {
+      proxy.bypass = parseCommaSeparatedList(args.no_proxy).join(',');
+    }
+    if (args.proxy_username) {
+      proxy.username = args.proxy_username;
+    }
+    if (args.proxy_password) {
+      proxy.password = args.proxy_password;
+    }
+    profile.proxy = proxy as BrowserProfileOptions['proxy'];
   }
 
   if (Object.keys(profile).length === 0) {
@@ -777,6 +842,10 @@ Options:
   --window-height <px>        Browser window height
   --user-data-dir <path>      Chrome user data directory
   --profile-directory <name>  Chrome profile directory (Default, Profile 1, ...)
+  --proxy-url <url>           Proxy server URL (e.g., http://proxy.example.com:8080)
+  --no-proxy <items>          Comma-separated proxy bypass list
+  --proxy-username <value>    Proxy username
+  --proxy-password <value>    Proxy password
   --cdp-url <url>             Connect to an existing Chromium instance via CDP
   --debug                     Enable debug logging`;
 

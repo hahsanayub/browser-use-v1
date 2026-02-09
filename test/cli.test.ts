@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   CLI_HISTORY_LIMIT,
+  buildBrowserProfileFromCliArgs,
   getCliHistoryPath,
   getCliUsage,
   getLlmFromCliArgs,
@@ -29,6 +30,7 @@ const MANAGED_ENV_KEYS = [
   'AWS_PROFILE',
   'OLLAMA_MODEL',
   'OLLAMA_HOST',
+  'BROWSER_USE_CONFIG_DIR',
   'BROWSER_USE_CLI_FORCE_INTERACTIVE',
   'HOME',
 ] as const;
@@ -88,6 +90,14 @@ describe('CLI argument parsing', () => {
       'Profile 1',
       '--allowed-domains',
       'example.com,*.example.org',
+      '--proxy-url',
+      'http://proxy.example.com:8080',
+      '--no-proxy',
+      'localhost,127.0.0.1,*.internal',
+      '--proxy-username',
+      'proxy-user',
+      '--proxy-password',
+      'proxy-pass',
       '--allow-insecure',
       '--cdp-url',
       'http://localhost:9222',
@@ -103,10 +113,41 @@ describe('CLI argument parsing', () => {
     expect(parsed.user_data_dir).toBe('/home/tester/chrome-data');
     expect(parsed.profile_directory).toBe('Profile 1');
     expect(parsed.allowed_domains).toEqual(['example.com', '*.example.org']);
+    expect(parsed.proxy_url).toBe('http://proxy.example.com:8080');
+    expect(parsed.no_proxy).toBe('localhost,127.0.0.1,*.internal');
+    expect(parsed.proxy_username).toBe('proxy-user');
+    expect(parsed.proxy_password).toBe('proxy-pass');
     expect(parsed.allow_insecure).toBe(true);
     expect(parsed.cdp_url).toBe('http://localhost:9222');
     expect(parsed.prompt).toBe('Open docs and summarize');
     expect(parsed.positional).toEqual([]);
+  });
+
+  it('builds proxy settings into BrowserProfile from CLI args', async () => {
+    const configDir = await makeTempDir();
+    process.env.BROWSER_USE_CONFIG_DIR = configDir;
+
+    const parsed = parseCliArgs([
+      '--proxy-url',
+      'http://proxy.example.com:8080',
+      '--no-proxy',
+      'localhost, 127.0.0.1 ,*.internal',
+      '--proxy-username',
+      'proxy-user',
+      '--proxy-password',
+      'proxy-pass',
+      '-p',
+      'task',
+    ]);
+
+    const profile = buildBrowserProfileFromCliArgs(parsed);
+    expect(profile).not.toBeNull();
+    expect(profile!.config.proxy).toEqual({
+      server: 'http://proxy.example.com:8080',
+      bypass: 'localhost,127.0.0.1,*.internal',
+      username: 'proxy-user',
+      password: 'proxy-pass',
+    });
   });
 
   it('parses positional task mode', () => {
