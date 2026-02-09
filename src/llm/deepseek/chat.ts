@@ -1,7 +1,9 @@
 import OpenAI from 'openai';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
-import { ModelProviderError } from '../exceptions.js';
+import { ModelProviderError, ModelRateLimitError } from '../exceptions.js';
 import type { Message } from '../messages.js';
+import { SchemaOptimizer } from '../schema.js';
 import { ChatInvokeCompletion, type ChatInvokeUsage } from '../views.js';
 import { DeepSeekMessageSerializer } from './serializer.js';
 
@@ -9,6 +11,8 @@ export interface ChatDeepSeekOptions {
   model?: string;
   apiKey?: string;
   baseURL?: string;
+  timeout?: number | null;
+  clientParams?: Record<string, unknown> | null;
   temperature?: number | null;
   maxTokens?: number | null;
   topP?: number | null;
@@ -32,6 +36,8 @@ export class ChatDeepSeek implements BaseChatModel {
       model = 'deepseek-chat',
       apiKey = process.env.DEEPSEEK_API_KEY,
       baseURL = 'https://api.deepseek.com/v1',
+      timeout = null,
+      clientParams = null,
       temperature = null,
       maxTokens = null,
       topP = null,
@@ -48,7 +54,9 @@ export class ChatDeepSeek implements BaseChatModel {
     this.client = new OpenAI({
       apiKey,
       baseURL,
+      ...(timeout !== null ? { timeout } : {}),
       maxRetries,
+      ...(clientParams ?? {}),
     });
   }
 
@@ -132,13 +140,76 @@ export class ChatDeepSeek implements BaseChatModel {
       return null;
     })();
 
-    let responseFormat: OpenAI.Chat.Completions.ChatCompletionCreateParams['response_format'] =
-      undefined;
-    if (zodSchemaCandidate) {
-      responseFormat = { type: 'json_object' };
-    }
-
     try {
+      if (output_format && zodSchemaCandidate) {
+        const rawSchema = zodToJsonSchema(zodSchemaCandidate as any, {
+          name: 'response',
+          target: 'jsonSchema7',
+        });
+        const optimizedSchema = SchemaOptimizer.createOptimizedJsonSchema(
+          rawSchema as Record<string, unknown>
+        ) as Record<string, unknown>;
+        delete optimizedSchema.title;
+
+        const response = await this.client.chat.completions.create(
+          {
+            model: this.model,
+            messages: deepseekMessages,
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'response',
+                  description: 'Return a JSON object of type response',
+                  parameters: optimizedSchema as any,
+                },
+              },
+            ],
+            tool_choice: {
+              type: 'function',
+              function: { name: 'response' },
+            } as any,
+            ...modelParams,
+          },
+          options.signal ? { signal: options.signal } : undefined
+        );
+
+        const usage = this.getUsage(response);
+        const stopReason = response.choices[0].finish_reason ?? null;
+        const toolCalls = response.choices[0].message.tool_calls;
+        if (!toolCalls?.length) {
+          throw new ModelProviderError(
+            'Expected tool_calls in response but got none',
+            502,
+            this.model
+          );
+        }
+
+        const rawArguments = (toolCalls[0] as any)?.function?.arguments;
+        const parsedArguments =
+          typeof rawArguments === 'string'
+            ? JSON.parse(rawArguments)
+            : rawArguments;
+        const output = output_format as any;
+        const completion =
+          output &&
+          typeof output === 'object' &&
+          output.schema &&
+          typeof output.schema.parse === 'function'
+            ? output.schema.parse(parsedArguments)
+            : output.parse(parsedArguments);
+
+        return new ChatInvokeCompletion(
+          completion,
+          usage,
+          null,
+          null,
+          stopReason
+        );
+      }
+
+      const responseFormat: OpenAI.Chat.Completions.ChatCompletionCreateParams['response_format'] =
+        output_format ? { type: 'json_object' } : undefined;
       const response = await this.client.chat.completions.create(
         {
           model: this.model,
@@ -155,28 +226,30 @@ export class ChatDeepSeek implements BaseChatModel {
 
       let completion: T | string = content;
       if (output_format) {
-        if (zodSchemaCandidate) {
-          const parsedJson = JSON.parse(content);
-          const output = output_format as any;
-          if (
-            output &&
-            typeof output === 'object' &&
-            output.schema &&
-            typeof output.schema.parse === 'function'
-          ) {
-            completion = output.schema.parse(parsedJson);
-          } else {
-            completion = (output_format as any).parse(parsedJson);
-          }
+        const parsedJson = JSON.parse(content);
+        const output = output_format as any;
+        if (
+          output &&
+          typeof output === 'object' &&
+          output.schema &&
+          typeof output.schema.parse === 'function'
+        ) {
+          completion = output.schema.parse(parsedJson);
         } else {
-          completion = (output_format as any).parse(content);
+          completion = (output_format as any).parse(parsedJson);
         }
       }
 
-      return new ChatInvokeCompletion(completion, usage, null, null, stopReason);
+      return new ChatInvokeCompletion(
+        completion,
+        usage,
+        null,
+        null,
+        stopReason
+      );
     } catch (error: any) {
       if (error?.status === 429) {
-        throw new ModelProviderError(
+        throw new ModelRateLimitError(
           error?.message ?? 'Rate limit exceeded',
           429,
           this.model

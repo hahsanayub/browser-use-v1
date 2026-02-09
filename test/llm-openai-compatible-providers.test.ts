@@ -35,6 +35,24 @@ const buildResponse = (content: string) => ({
   },
 });
 
+const buildToolResponse = (argumentsJson: string) => ({
+  choices: [
+    {
+      finish_reason: 'tool_calls',
+      message: {
+        content: null,
+        tool_calls: [{ function: { arguments: argumentsJson } }],
+      },
+    },
+  ],
+  usage: {
+    prompt_tokens: 12,
+    completion_tokens: 4,
+    total_tokens: 16,
+    prompt_tokens_details: { cached_tokens: 3 },
+  },
+});
+
 describe('OpenAI-compatible providers alignment', () => {
   beforeEach(() => {
     openaiCreateMock.mockReset();
@@ -109,10 +127,8 @@ describe('OpenAI-compatible providers alignment', () => {
     expect((response.completion as any).items).toEqual(['alpha']);
   });
 
-  it('uses DeepSeek json_object structured output path and generation params', async () => {
-    openaiCreateMock.mockResolvedValue(
-      buildResponse(JSON.stringify({ value: 'ok' }))
-    );
+  it('uses DeepSeek function-calling structured output path and generation params', async () => {
+    openaiCreateMock.mockResolvedValue(buildToolResponse('{"value":"ok"}'));
     const schema = z.object({ value: z.string() });
     const llm = new ChatDeepSeek({
       model: 'deepseek-chat',
@@ -130,7 +146,12 @@ describe('OpenAI-compatible providers alignment', () => {
     expect(request.max_tokens).toBe(256);
     expect(request.top_p).toBe(0.7);
     expect(request.seed).toBe(9);
-    expect(request.response_format?.type).toBe('json_object');
+    expect(request.tools).toHaveLength(1);
+    expect(request.tool_choice).toEqual({
+      type: 'function',
+      function: { name: 'response' },
+    });
+    expect(request.response_format).toBeUndefined();
     expect((response.completion as any).value).toBe('ok');
   });
 });
