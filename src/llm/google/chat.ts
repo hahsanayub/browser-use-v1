@@ -135,6 +135,10 @@ export class ChatGoogle implements BaseChatModel {
       if (key === 'properties' && typeof value === 'object') {
         cleaned.properties = {};
         for (const [propKey, propValue] of Object.entries(value as object)) {
+          // Align python: hide programmatic extraction schema field from LLM JSON schema.
+          if (propKey === 'output_schema') {
+            continue;
+          }
           cleaned.properties[propKey] = this._cleanSchemaForGoogle(propValue);
         }
       } else if (key === 'items' && typeof value === 'object') {

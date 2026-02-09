@@ -177,4 +177,28 @@ describe('Google LLM alignment', () => {
     expect(request.generationConfig.responseSchema).toBeDefined();
     expect((response.completion as any).value).toBe('ok');
   });
+
+  it('omits output_schema field from Gemini response schema', async () => {
+    generateContentMock.mockResolvedValue(
+      buildResult('{"query":"topic","value":"ok"}')
+    );
+
+    const schema = z.object({
+      query: z.string(),
+      output_schema: z.record(z.string(), z.unknown()).nullable().optional(),
+      value: z.string(),
+    });
+
+    const llm = new ChatGoogle({
+      model: 'gemini-2.5-flash',
+      supportsStructuredOutput: true,
+    });
+
+    await llm.ainvoke([new UserMessage('extract')], schema as any);
+    const request = generateContentMock.mock.calls[0]?.[0] ?? {};
+    const responseSchema = request.generationConfig.responseSchema ?? {};
+    const serializedSchema = JSON.stringify(responseSchema);
+
+    expect(serializedSchema).not.toContain('output_schema');
+  });
 });
