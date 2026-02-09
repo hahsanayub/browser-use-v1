@@ -113,26 +113,27 @@ export const log_response = (
   logInstance = logger
 ) => {
   if (response.current_state.thinking) {
-    logInstance.info(`💡 Thinking:\n${response.current_state.thinking}`);
+    logInstance.debug(`💡 Thinking:\n${response.current_state.thinking}`);
   }
 
   const evalGoal = response.current_state.evaluation_previous_goal;
   if (evalGoal) {
-    let emoji = '❔';
-    if (evalGoal.toLowerCase().includes('success')) emoji = '👍';
-    else if (evalGoal.toLowerCase().includes('failure')) emoji = '⚠️';
-    logInstance.info(`${emoji} Eval: ${evalGoal}`);
+    if (evalGoal.toLowerCase().includes('success')) {
+      logInstance.info(`  \x1b[32m👍 Eval: ${evalGoal}\x1b[0m`);
+    } else if (evalGoal.toLowerCase().includes('failure')) {
+      logInstance.info(`  \x1b[31m⚠️ Eval: ${evalGoal}\x1b[0m`);
+    } else {
+      logInstance.info(`  ❔ Eval: ${evalGoal}`);
+    }
   }
 
   if (response.current_state.memory) {
-    logInstance.info(`🧠 Memory: ${response.current_state.memory}`);
+    logInstance.info(`  🧠 Memory: ${response.current_state.memory}`);
   }
 
   const nextGoal = response.current_state.next_goal;
   if (nextGoal) {
-    logInstance.info(`🎯 Next goal: ${nextGoal}\n`);
-  } else {
-    logInstance.info('');
+    logInstance.info(`  \x1b[34m🎯 Next goal: ${nextGoal}\x1b[0m`);
   }
 };
 
