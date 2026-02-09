@@ -1825,9 +1825,12 @@ describe('Regression Coverage', () => {
     );
 
     expect(pageExtractionLlm.ainvoke).toHaveBeenCalled();
-    const promptMessage = pageExtractionLlm.ainvoke.mock.calls[0]?.[0]?.[0];
-    expect(promptMessage?.text ?? '').toContain('Output Schema (JSON Schema):');
-    expect(promptMessage?.text ?? '').toContain('"name"');
+    const messages = pageExtractionLlm.ainvoke.mock.calls[0]?.[0] ?? [];
+    const systemPrompt = messages[0]?.text ?? '';
+    const userPrompt = messages[1]?.text ?? '';
+    expect(systemPrompt).toContain('JSON Schema');
+    expect(userPrompt).toContain('<output_schema>');
+    expect(userPrompt).toContain('"name"');
     expect(result.error).toBeNull();
     expect(result.extracted_content).toContain('{"name":"Alice","age":30}');
   });

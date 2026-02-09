@@ -3,6 +3,10 @@ import path from 'node:path';
 import { z } from 'zod';
 import { ActionResult } from '../agent/views.js';
 import { BrowserError } from '../browser/views.js';
+import {
+  chunkMarkdownByStructure,
+  extractCleanMarkdownFromHtml,
+} from '../dom/markdown-extractor.js';
 import { extractPdfText, FileSystem } from '../filesystem/file-system.js';
 import {
   ClickElementActionSchema,
@@ -37,7 +41,7 @@ import {
 } from './views.js';
 import { Registry } from './registry/service.js';
 import TurndownService from 'turndown';
-import { UserMessage } from '../llm/messages.js';
+import { SystemMessage, UserMessage } from '../llm/messages.js';
 import { createLogger } from '../logging-config.js';
 
 type BrowserSession = any;
@@ -846,33 +850,42 @@ export class Controller<Context = unknown> {
         throw new BrowserError('page_extraction_llm is not configured.');
       }
       const fsInstance = file_system ?? new FileSystem(process.cwd(), false);
-      const html = await page.content?.();
-      if (!html) {
+      const pageHtml = await runWithTimeoutAndSignal(
+        async () => {
+          const value = await page.content?.();
+          return typeof value === 'string' ? value : '';
+        },
+        10000,
+        signal,
+        'Page content extraction timed out'
+      );
+      if (!pageHtml) {
         throw new BrowserError('Unable to extract page content.');
       }
 
-      const turndown = new TurndownService({
-        headingStyle: 'atx',
-        codeBlockStyle: 'fenced',
-      });
-      let rawHtml = html;
-      if (!params.extract_links) {
-        rawHtml = rawHtml.replace(/<a\b[^>]*>/gi, '').replace(/<\/a>/gi, '');
-      }
-      let content = turndown.turndown(rawHtml);
-      content = content.replace(/\n+/g, '\n');
+      let combinedHtml = pageHtml;
+      const frames: any[] =
+        typeof page.frames === 'function'
+          ? page.frames()
+          : Array.isArray((page as any).frames)
+            ? (page as any).frames
+            : [];
+      const currentUrl: string = (() => {
+        const pageUrlValue = (page as any).url;
+        if (typeof pageUrlValue === 'function') {
+          return String(pageUrlValue.call(page) ?? '');
+        }
+        return typeof pageUrlValue === 'string' ? pageUrlValue : '';
+      })();
 
-      // Manually append iframe text into the content so it's readable by the LLM (includes cross-origin iframes)
-      const frames = page.frames?.() || [];
       for (const iframe of frames) {
         throwIfAborted(signal);
         try {
-          // Wait for iframe to load with aggressive timeout
           await runWithTimeoutAndSignal(
             async () => {
               await iframe.waitForLoadState?.('load');
             },
-            2000,
+            1000,
             signal,
             'Iframe load timeout'
           );
@@ -880,73 +893,109 @@ export class Controller<Context = unknown> {
           if (isAbortError(error)) {
             throw error;
           }
-          // Ignore iframe load errors
         }
 
-        const iframeUrl = iframe.url?.();
-        const pageUrl = page.url?.();
+        const iframeUrl =
+          typeof iframe.url === 'function'
+            ? iframe.url()
+            : typeof iframe.url === 'string'
+              ? iframe.url
+              : '';
         if (
-          iframeUrl &&
-          pageUrl &&
-          iframeUrl !== pageUrl &&
-          !iframeUrl.startsWith('data:') &&
-          !iframeUrl.startsWith('about:')
+          !iframeUrl ||
+          iframeUrl === currentUrl ||
+          iframeUrl.startsWith('data:') ||
+          iframeUrl.startsWith('about:')
         ) {
-          content += `\n\nIFRAME ${iframeUrl}:\n`;
-          try {
-            const iframeHtml = await runWithTimeoutAndSignal(
-              async () => (await iframe.content?.()) ?? '',
-              2000,
-              signal,
-              'Iframe content extraction timeout'
-            );
-            const iframeMarkdown = turndown.turndown(iframeHtml || '');
-            content += iframeMarkdown;
-          } catch (error) {
-            if (isAbortError(error)) {
-              throw error;
-            }
-            // Skip failed iframes
+          continue;
+        }
+
+        try {
+          const iframeHtml = await runWithTimeoutAndSignal(
+            async () => {
+              const value = await iframe.content?.();
+              return typeof value === 'string' ? value : '';
+            },
+            2000,
+            signal,
+            'Iframe content extraction timeout'
+          );
+          if (!iframeHtml) {
+            continue;
+          }
+          combinedHtml += `\n<section><h2>IFRAME ${iframeUrl}</h2>${iframeHtml}</section>`;
+        } catch (error) {
+          if (isAbortError(error)) {
+            throw error;
           }
         }
       }
 
-      // Replace multiple sequential \n with a single \n
-      content = content.replace(/\n+/g, '\n');
+      const extracted = extractCleanMarkdownFromHtml(combinedHtml, {
+        extract_links: params.extract_links,
+        method: 'page_content',
+        url: currentUrl || undefined,
+      });
+      let content = extracted.content;
+      const contentStats = extracted.stats;
+      const finalFilteredLength = contentStats.final_filtered_chars;
 
       const startFromChar = Math.max(0, params.start_from_char ?? 0);
-      if (startFromChar >= content.length) {
+      const maxChars = 100000;
+      const chunks = chunkMarkdownByStructure(
+        content,
+        maxChars,
+        5,
+        startFromChar
+      );
+      if (!chunks.length) {
         return new ActionResult({
-          error: `start_from_char (${startFromChar}) exceeds content length ${content.length} characters.`,
+          error: `start_from_char (${startFromChar}) exceeds content length ${finalFilteredLength} characters.`,
         });
       }
 
+      const chunk = chunks[0]!;
+      content = chunk.content;
+      const wasTruncated = chunk.has_more;
+
+      if (chunk.overlap_prefix) {
+        content = `${chunk.overlap_prefix}\n${content}`;
+      }
+
       if (startFromChar > 0) {
-        content = content.slice(startFromChar);
+        contentStats.started_from_char = startFromChar;
+      }
+      if (wasTruncated) {
+        contentStats.truncated_at_char = chunk.char_offset_end;
+        contentStats.next_start_char = chunk.char_offset_end;
+        contentStats.chunk_index = chunk.chunk_index;
+        contentStats.total_chunks = chunk.total_chunks;
       }
 
-      const maxChars = 100000;
-      let wasTruncated = false;
-      let nextStartChar: number | null = null;
-      if (content.length > maxChars) {
-        wasTruncated = true;
-        nextStartChar = startFromChar + maxChars;
-        content = content.slice(0, maxChars);
-      }
+      const originalHtmlLength = contentStats.original_html_chars;
+      const initialMarkdownLength = contentStats.initial_markdown_chars;
+      const charsFiltered = contentStats.filtered_chars_removed;
 
-      const formatStats = () => {
-        const stats = [
-          `processed_chars=${content.length.toLocaleString()}`,
-          `start_from_char=${startFromChar.toLocaleString()}`,
-        ];
-        if (wasTruncated && nextStartChar != null) {
-          stats.push(
-            `truncated=true`,
-            `next_start_char=${nextStartChar.toLocaleString()}`
-          );
-        }
-        return stats.join(', ');
-      };
+      let statsSummary =
+        `Content processed: ${originalHtmlLength.toLocaleString()} HTML chars ` +
+        `→ ${initialMarkdownLength.toLocaleString()} initial markdown ` +
+        `→ ${finalFilteredLength.toLocaleString()} filtered markdown`;
+      if (startFromChar > 0) {
+        statsSummary += ` (started from char ${startFromChar.toLocaleString()})`;
+      }
+      if (
+        wasTruncated &&
+        contentStats.next_start_char != null &&
+        contentStats.chunk_index != null &&
+        contentStats.total_chunks != null
+      ) {
+        const chunkInfo = `chunk ${contentStats.chunk_index + 1} of ${contentStats.total_chunks}, `;
+        statsSummary +=
+          ` → ${content.length.toLocaleString()} final chars ` +
+          `(${chunkInfo}use start_from_char=${contentStats.next_start_char} to continue)`;
+      } else if (charsFiltered > 0) {
+        statsSummary += ` (filtered ${charsFiltered.toLocaleString()} chars of noise)`;
+      }
 
       const parseJsonFromCompletion = (completion: string) => {
         const trimmed = completion.trim();
@@ -955,81 +1004,125 @@ export class Controller<Context = unknown> {
         return JSON.parse(candidate);
       };
 
-      const basePrompt = `You convert websites into structured information. Extract information from this webpage based on the query. Focus only on content relevant to the query. If 
-1. The query is vague
-2. Does not make sense for the page
-3. Some/all of the information is not available
-
-Explain the content of the page and that the requested information is not available in the page. Respond in JSON format.
-Query: ${params.query}
-Content Stats: ${formatStats()}
-Website:
-${content}`;
-
       const effectiveOutputSchema = params.output_schema ?? extraction_schema;
+      const pageUrl = currentUrl || '';
+      const maxMemoryLength = 10000;
 
-      const prompt = effectiveOutputSchema
-        ? `${basePrompt}
+      if (effectiveOutputSchema != null) {
+        const systemPrompt = `
+You are an expert at extracting structured data from the markdown of a webpage.
 
-Output Schema (JSON Schema):
-${JSON.stringify(effectiveOutputSchema, null, 2)}
+<input>
+You will be given a query, a JSON Schema, and the markdown of a webpage that has been filtered to remove noise and advertising content.
+</input>
 
-Return valid JSON only, matching the schema exactly.`
-        : basePrompt;
+<instructions>
+- Extract ONLY information present in the webpage. Do not guess or fabricate values.
+- Your response MUST conform to the provided JSON Schema exactly.
+- If a required field's value cannot be found on the page, use null (if the schema allows it) or an empty string / empty array as appropriate.
+- If the content was truncated, extract what is available from the visible portion.
+</instructions>`.trim();
+        const schemaJson = JSON.stringify(effectiveOutputSchema, null, 2);
+        const prompt =
+          `<query>\n${params.query}\n</query>\n\n` +
+          `<output_schema>\n${schemaJson}\n</output_schema>\n\n` +
+          `<content_stats>\n${statsSummary}\n</content_stats>\n\n` +
+          `<webpage_content>\n${content}\n</webpage_content>`;
 
-      const extraction = await (page_extraction_llm as any).ainvoke(
-        [new UserMessage(prompt)],
+        const response = await (page_extraction_llm as any).ainvoke(
+          [new SystemMessage(systemPrompt), new UserMessage(prompt)],
+          undefined,
+          { signal: signal ?? undefined }
+        );
+        throwIfAborted(signal);
+        const completion = response?.completion;
+        const completionText =
+          typeof completion === 'string'
+            ? completion
+            : JSON.stringify(completion ?? {});
+
+        let parsedResult: Record<string, unknown>;
+        try {
+          parsedResult = parseJsonFromCompletion(completionText);
+        } catch (error) {
+          throw new BrowserError(
+            `Structured extraction returned invalid JSON: ${(error as Error).message}`
+          );
+        }
+
+        const resultJson = JSON.stringify(parsedResult);
+        const extractedContent =
+          `<url>\n${pageUrl}\n</url>\n` +
+          `<query>\n${params.query}\n</query>\n` +
+          `<structured_result>\n${resultJson}\n</structured_result>`;
+        const extractionMeta = {
+          data: parsedResult,
+          schema_used: effectiveOutputSchema,
+          is_partial: wasTruncated,
+          source_url: pageUrl,
+          content_stats: contentStats,
+        };
+
+        const includeOnce = extractedContent.length >= maxMemoryLength;
+        const memory = includeOnce
+          ? `Query: ${params.query}\nContent in ${await fsInstance.save_extracted_content(extractedContent)} and once in <read_state>.`
+          : extractedContent;
+        return new ActionResult({
+          extracted_content: extractedContent,
+          include_extracted_content_only_once: includeOnce,
+          long_term_memory: memory,
+          metadata: {
+            structured_extraction: true,
+            extraction_result: extractionMeta,
+          },
+        });
+      }
+
+      const systemPrompt = `
+You are an expert at extracting data from the markdown of a webpage.
+
+<input>
+You will be given a query and the markdown of a webpage that has been filtered to remove noise and advertising content.
+</input>
+
+<instructions>
+- You are tasked to extract information from the webpage that is relevant to the query.
+- You should ONLY use the information available in the webpage to answer the query. Do not make up information or provide guess from your own knowledge.
+- If the information relevant to the query is not available in the page, your response should mention that.
+- If the query asks for all items, products, etc., make sure to directly list all of them.
+- If the content was truncated and you need more information, note that the user can use start_from_char parameter to continue from where truncation occurred.
+</instructions>
+
+<output>
+- Your output should present ALL the information relevant to the query in a concise way.
+- Do not answer in conversational format - directly output the relevant information or that the information is unavailable.
+</output>`.trim();
+      const prompt =
+        `<query>\n${params.query}\n</query>\n\n` +
+        `<content_stats>\n${statsSummary}\n</content_stats>\n\n` +
+        `<webpage_content>\n${content}\n</webpage_content>`;
+      const response = await (page_extraction_llm as any).ainvoke(
+        [new SystemMessage(systemPrompt), new UserMessage(prompt)],
         undefined,
         { signal: signal ?? undefined }
       );
       throwIfAborted(signal);
-      const completion = extraction?.completion ?? '';
+      const completion = response?.completion;
       const completionText =
         typeof completion === 'string'
           ? completion
           : JSON.stringify(completion ?? {});
-      const normalizedResult = effectiveOutputSchema
-        ? (() => {
-            try {
-              return JSON.stringify(parseJsonFromCompletion(completionText));
-            } catch (error) {
-              throw new BrowserError(
-                `Structured extraction returned invalid JSON: ${(error as Error).message}`
-              );
-            }
-          })()
-        : completionText;
-      const continuationNote =
-        wasTruncated && nextStartChar != null
-          ? `\n\nContent was truncated. Use start_from_char=${nextStartChar} to continue extraction.`
-          : '';
-      const extracted_content =
-        `Page Link: ${page.url}\n` +
-        `Query: ${params.query}\n` +
-        `Extracted Content:\n${normalizedResult}${continuationNote}`;
-
-      let includeOnce = false;
-      let memory = extracted_content;
-      const MAX_MEMORY_SIZE = 10000;
-      if (extracted_content.length > MAX_MEMORY_SIZE) {
-        const lines = extracted_content.split('\n');
-        let display = '';
-        let count = 0;
-        for (const line of lines) {
-          if (display.length + line.length > MAX_MEMORY_SIZE) break;
-          display += `${line}\n`;
-          count += 1;
-        }
-        const saveResult =
-          await fsInstance.save_extracted_content(extracted_content);
-        // NOTE: Do NOT mention file_system tag here as it misleads LLM to use read_file action
-        // The extracted content preview above is sufficient for most tasks
-        memory = `Extracted content from ${page.url}\n<query>${params.query}</query>\n<extracted_content>\n${display}${lines.length - count} more lines (auto-saved, no need to read)...\n</extracted_content>`;
-        includeOnce = true;
-      }
+      const extractedContent =
+        `<url>\n${pageUrl}\n</url>\n` +
+        `<query>\n${params.query}\n</query>\n` +
+        `<result>\n${completionText}\n</result>`;
+      const includeOnce = extractedContent.length >= maxMemoryLength;
+      const memory = includeOnce
+        ? `Query: ${params.query}\nContent in ${await fsInstance.save_extracted_content(extractedContent)} and once in <read_state>.`
+        : extractedContent;
 
       return new ActionResult({
-        extracted_content,
+        extracted_content: extractedContent,
         include_extracted_content_only_once: includeOnce,
         long_term_memory: memory,
       });
