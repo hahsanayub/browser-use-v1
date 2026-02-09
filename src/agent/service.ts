@@ -5332,10 +5332,16 @@ export class Agent<
         }
       }
     } catch (error) {
+      const errorType =
+        error instanceof Error
+          ? error.name || 'Error'
+          : typeof error === 'object' && error !== null
+            ? (error as any).constructor?.name ?? 'Error'
+            : 'Error';
       const message = error instanceof Error ? error.message : String(error);
       const errorContext = context ? ` ${context}` : '';
       this.logger.debug(
-        `📁 Failed to check for downloads${errorContext}: ${message}`
+        `📁 Failed to check for downloads${errorContext}: ${errorType}: ${message}`
       );
     }
   }
