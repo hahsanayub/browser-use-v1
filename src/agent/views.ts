@@ -381,7 +381,6 @@ export interface AgentSettings {
   use_vision: boolean | 'auto';
   include_recent_events: boolean;
   vision_detail_level: 'auto' | 'low' | 'high';
-  use_vision_for_planner: boolean;
   save_conversation_path: string | null;
   save_conversation_path_encoding: string | null;
   max_failures: number;
@@ -396,10 +395,6 @@ export interface AgentSettings {
   ground_truth: string | null;
   max_history_items: number | null;
   page_extraction_llm: unknown | null;
-  planner_llm: unknown | null;
-  planner_interval: number;
-  is_planner_reasoning: boolean;
-  extend_planner_system_message: string | null;
   enable_planning: boolean;
   planning_replan_on_stall: number;
   planning_exploration_limit: number;
@@ -419,7 +414,6 @@ export const defaultAgentSettings = (): AgentSettings => ({
   use_vision: true,
   include_recent_events: false,
   vision_detail_level: 'auto',
-  use_vision_for_planner: false,
   save_conversation_path: null,
   save_conversation_path_encoding: 'utf-8',
   max_failures: 3,
@@ -434,10 +428,6 @@ export const defaultAgentSettings = (): AgentSettings => ({
   ground_truth: null,
   max_history_items: null,
   page_extraction_llm: null,
-  planner_llm: null,
-  planner_interval: 1,
-  is_planner_reasoning: false,
-  extend_planner_system_message: null,
   enable_planning: true,
   planning_replan_on_stall: 3,
   planning_exploration_limit: 5,

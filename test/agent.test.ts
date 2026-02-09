@@ -66,7 +66,6 @@ const createAgentSettings = (
   use_vision: true,
   include_recent_events: false,
   vision_detail_level: 'auto',
-  use_vision_for_planner: false,
   save_conversation_path: null,
   save_conversation_path_encoding: null,
   max_failures: 3,

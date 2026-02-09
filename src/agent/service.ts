@@ -238,7 +238,6 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
     | Array<ContentPartTextParam | ContentPartImageParam>
     | null;
   llm_screenshot_size?: [number, number] | null;
-  use_vision_for_planner?: boolean;
   save_conversation_path?: string | null;
   save_conversation_path_encoding?: BufferEncoding | null;
   max_failures?: number;
@@ -259,10 +258,6 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
   skill_ids?: Array<string | '*'> | null;
   skills?: Array<string | '*'> | null;
   skill_service?: SkillService | null;
-  planner_llm?: BaseChatModel | null;
-  planner_interval?: number;
-  is_planner_reasoning?: boolean;
-  extend_planner_system_message?: string | null;
   enable_planning?: boolean;
   planning_replan_on_stall?: number;
   planning_exploration_limit?: number;
@@ -333,7 +328,6 @@ const defaultAgentOptions = () => ({
   include_recent_events: false,
   sample_images: null as Array<ContentPartTextParam | ContentPartImageParam> | null,
   llm_screenshot_size: null as [number, number] | null,
-  use_vision_for_planner: false,
   save_conversation_path: null,
   save_conversation_path_encoding: 'utf-8' as BufferEncoding,
   max_failures: 3,
@@ -355,10 +349,6 @@ const defaultAgentOptions = () => ({
   skill_ids: null as Array<string | '*'> | null,
   skills: null as Array<string | '*'> | null,
   skill_service: null as SkillService | null,
-  planner_llm: null as BaseChatModel | null,
-  planner_interval: 1,
-  is_planner_reasoning: false,
-  extend_planner_system_message: null as string | null,
   enable_planning: true,
   planning_replan_on_stall: 3,
   planning_exploration_limit: 5,
@@ -693,7 +683,6 @@ export class Agent<
       use_vision,
       include_recent_events,
       vision_detail_level,
-      use_vision_for_planner: false,
       save_conversation_path,
       save_conversation_path_encoding,
       max_failures,
@@ -708,10 +697,6 @@ export class Agent<
       ground_truth,
       max_history_items,
       page_extraction_llm: effectivePageExtractionLlm,
-      planner_llm: null,
-      planner_interval: 1,
-      is_planner_reasoning: false,
-      extend_planner_system_message: null,
       enable_planning: effectiveEnablePlanning,
       planning_replan_on_stall,
       planning_exploration_limit,
