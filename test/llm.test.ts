@@ -303,6 +303,28 @@ describe('Schema Optimizer', () => {
         'right',
       ]);
     });
+
+    it('optionally removes minItems and default for provider compatibility', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          items: {
+            type: 'array',
+            minItems: 1,
+            default: ['seed'],
+            items: { type: 'string' },
+          },
+        },
+      };
+
+      const optimized = SchemaOptimizer.createOptimizedJsonSchema(schema, {
+        removeMinItems: true,
+        removeDefaults: true,
+      });
+
+      expect(JSON.stringify(optimized)).not.toContain('minItems');
+      expect(JSON.stringify(optimized)).not.toContain('"default"');
+    });
   });
 
   describe('makeStrictCompatible', () => {

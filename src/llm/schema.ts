@@ -1,8 +1,16 @@
 type JsonSchema = Record<string, unknown>;
 
 export class SchemaOptimizer {
-  static createOptimizedJsonSchema(schema: JsonSchema): JsonSchema {
+  static createOptimizedJsonSchema(
+    schema: JsonSchema,
+    options: {
+      removeMinItems?: boolean;
+      removeDefaults?: boolean;
+    } = {}
+  ): JsonSchema {
     const defsLookup = (schema.$defs as Record<string, JsonSchema>) ?? {};
+    const removeMinItems = options.removeMinItems ?? false;
+    const removeDefaults = options.removeDefaults ?? false;
 
     const optimize = (obj: any, inProperties = false): any => {
       if (Array.isArray(obj)) {
@@ -16,6 +24,8 @@ export class SchemaOptimizer {
         for (const [key, value] of Object.entries(obj)) {
           if (key === '$defs' || key === 'additionalProperties') continue;
           if (key === 'title' && !inProperties) continue;
+          if (removeMinItems && key === 'minItems') continue;
+          if (removeDefaults && key === 'default') continue;
 
           if (key === '$ref' && typeof value === 'string') {
             const refName = value.split('/').pop()!;

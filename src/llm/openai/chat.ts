@@ -6,6 +6,7 @@ import { ChatInvokeCompletion, ChatInvokeUsage } from '../views.js';
 import type { Message } from '../messages.js';
 import { OpenAIMessageSerializer } from './serializer.js';
 import { ModelProviderError } from '../exceptions.js';
+import { SchemaOptimizer } from '../schema.js';
 
 // Reasoning models that support reasoning_effort parameter
 const ReasoningModels = [
@@ -28,11 +29,15 @@ export interface ChatOpenAIOptions {
   temperature?: number | null;
   frequencyPenalty?: number | null;
   reasoningEffort?: 'low' | 'medium' | 'high';
+  serviceTier?: 'auto' | 'default' | 'flex' | 'priority' | 'scale' | null;
   maxCompletionTokens?: number | null;
   maxRetries?: number;
   seed?: number | null;
   topP?: number | null;
   addSchemaToSystemPrompt?: boolean;
+  dontForceStructuredOutput?: boolean;
+  removeMinItemsFromSchema?: boolean;
+  removeDefaultsFromSchema?: boolean;
 }
 
 export class ChatOpenAI implements BaseChatModel {
@@ -42,10 +47,20 @@ export class ChatOpenAI implements BaseChatModel {
   private temperature: number | null;
   private frequencyPenalty: number | null;
   private reasoningEffort: 'low' | 'medium' | 'high';
+  private serviceTier:
+    | 'auto'
+    | 'default'
+    | 'flex'
+    | 'priority'
+    | 'scale'
+    | null;
   private maxCompletionTokens: number | null;
   private seed: number | null;
   private topP: number | null;
   private addSchemaToSystemPrompt: boolean;
+  private dontForceStructuredOutput: boolean;
+  private removeMinItemsFromSchema: boolean;
+  private removeDefaultsFromSchema: boolean;
 
   constructor(options: ChatOpenAIOptions = {}) {
     const {
@@ -54,23 +69,31 @@ export class ChatOpenAI implements BaseChatModel {
       organization,
       baseURL,
       temperature = 0.2,
-      frequencyPenalty = 0.1,
+      frequencyPenalty = 0.3,
       reasoningEffort = 'low',
-      maxCompletionTokens = 8000,
-      maxRetries = 10,
+      serviceTier = null,
+      maxCompletionTokens = 4096,
+      maxRetries = 5,
       seed = null,
       topP = null,
       addSchemaToSystemPrompt = false,
+      dontForceStructuredOutput = false,
+      removeMinItemsFromSchema = false,
+      removeDefaultsFromSchema = false,
     } = options;
 
     this.model = model;
     this.temperature = temperature;
     this.frequencyPenalty = frequencyPenalty;
     this.reasoningEffort = reasoningEffort;
+    this.serviceTier = serviceTier;
     this.maxCompletionTokens = maxCompletionTokens;
     this.seed = seed;
     this.topP = topP;
     this.addSchemaToSystemPrompt = addSchemaToSystemPrompt;
+    this.dontForceStructuredOutput = dontForceStructuredOutput;
+    this.removeMinItemsFromSchema = removeMinItemsFromSchema;
+    this.removeDefaultsFromSchema = removeDefaultsFromSchema;
 
     this.client = new OpenAI({
       apiKey,
@@ -159,39 +182,81 @@ export class ChatOpenAI implements BaseChatModel {
     if (this.topP !== null) {
       modelParams.top_p = this.topP;
     }
+    if (this.serviceTier !== null) {
+      modelParams.service_tier = this.serviceTier;
+    }
+
+    const zodSchemaCandidate = (() => {
+      const output = output_format as any;
+      if (
+        output &&
+        typeof output === 'object' &&
+        typeof output.safeParse === 'function' &&
+        typeof output.parse === 'function'
+      ) {
+        return output;
+      }
+      if (
+        output &&
+        typeof output === 'object' &&
+        output.schema &&
+        typeof output.schema.safeParse === 'function' &&
+        typeof output.schema.parse === 'function'
+      ) {
+        return output.schema;
+      }
+      return null;
+    })();
 
     let responseFormat: OpenAI.Chat.Completions.ChatCompletionCreateParams['response_format'] =
       undefined;
-    if (output_format && 'schema' in output_format && output_format.schema) {
-      // Assuming output_format is a Zod schema wrapper or similar that has a schema property
-      // But the interface says { parse: ... }
-      // In the plan, it was passed as a Zod schema directly.
-      // However, the BaseChatModel interface I saw earlier has:
-      // ainvoke<T>(messages: Message[], output_format: { parse: (input: string) => T } | undefined): Promise<ChatInvokeCompletion<T>>;
-      // So I need to handle how to extract the schema if I want to use structured outputs.
-      // If output_format is just a Zod schema, it has a parse method.
-      // Let's assume it's a Zod schema for now, as that's what the plan implies.
-
-      // We need to cast it to any or check if it's a Zod schema to get the schema for JSON schema generation.
-      // For now, I'll try to use zodToJsonSchema on it if possible.
+    if (zodSchemaCandidate) {
       try {
-        const jsonSchema = zodToJsonSchema(output_format as any, {
-          name: 'Response',
+        const rawJsonSchema = zodToJsonSchema(zodSchemaCandidate, {
+          name: 'agent_output',
           target: 'jsonSchema7',
         });
+        const optimizedJsonSchema = SchemaOptimizer.createOptimizedJsonSchema(
+          rawJsonSchema as Record<string, unknown>,
+          {
+            removeMinItems: this.removeMinItemsFromSchema,
+            removeDefaults: this.removeDefaultsFromSchema,
+          }
+        );
 
-        // OpenAI expects a specific format for json_schema
-        responseFormat = {
-          type: 'json_schema',
-          json_schema: {
-            name: 'Response',
-            schema: jsonSchema as any,
-            strict: true,
-          },
+        const responseJsonSchema = {
+          name: 'agent_output',
+          schema: optimizedJsonSchema as any,
+          strict: true,
         };
-      } catch (e) {
-        // If it's not a Zod schema or fails, we might fallback or just not use response_format
-        console.warn('Failed to convert output_format to JSON schema', e);
+
+        if (this.addSchemaToSystemPrompt && openaiMessages.length > 0) {
+          const firstMessage = openaiMessages[0] as ChatCompletionMessageParam;
+          const schemaText =
+            `\n<json_schema>\n` +
+            `${JSON.stringify(responseJsonSchema, null, 2)}\n` +
+            `</json_schema>`;
+          if (firstMessage?.role === 'system') {
+            if (typeof (firstMessage as any).content === 'string') {
+              (firstMessage as any).content =
+                ((firstMessage as any).content ?? '') + schemaText;
+            } else if (Array.isArray((firstMessage as any).content)) {
+              (firstMessage as any).content = [
+                ...(firstMessage as any).content,
+                { type: 'text', text: schemaText },
+              ];
+            }
+          }
+        }
+
+        if (!this.dontForceStructuredOutput) {
+          responseFormat = {
+            type: 'json_schema',
+            json_schema: responseJsonSchema,
+          };
+        }
+      } catch {
+        responseFormat = undefined;
       }
     }
 
@@ -212,20 +277,24 @@ export class ChatOpenAI implements BaseChatModel {
       let completion: T | string = content;
       if (output_format) {
         try {
-          // If it's structured output, we need to parse the JSON first
-          if (responseFormat?.type === 'json_schema') {
+          if (zodSchemaCandidate) {
             const parsedJson = JSON.parse(content);
-            completion = output_format.parse(parsedJson);
+            const output = output_format as any;
+            if (
+              output &&
+              typeof output === 'object' &&
+              output.schema &&
+              typeof output.schema.parse === 'function'
+            ) {
+              completion = output.schema.parse(parsedJson);
+            } else {
+              completion = (output_format as any).parse(parsedJson);
+            }
           } else {
-            // If it's not structured output but we have a parser (e.g. for simple types or manual parsing)
-            // But usually for OpenAI we want structured output if a schema is provided.
-            // If we didn't use json_schema, we might still try to parse if it looks like JSON?
-            // For now, let's trust the output_format.parse
-            completion = output_format.parse(content);
+            completion = (output_format as any).parse(content);
           }
-        } catch (e) {
-          console.error('Failed to parse completion', e);
-          throw e;
+        } catch (error) {
+          throw error;
         }
       }
 
