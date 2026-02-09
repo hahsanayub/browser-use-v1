@@ -418,6 +418,7 @@ describe('LLM Views', () => {
       // Property is 'completion', not 'content'
       expect(completion.completion).toBe('Hello!');
       expect(completion.usage).toBeNull();
+      expect(completion.stop_reason).toBeNull();
     });
 
     it('creates completion with usage', () => {
@@ -451,6 +452,18 @@ describe('LLM Views', () => {
       );
 
       expect(completion.thinking).toBe('Internal reasoning...');
+    });
+
+    it('stores stop reason when provided', () => {
+      const completion = new ChatInvokeCompletion(
+        'Response',
+        null,
+        null,
+        null,
+        'end_turn'
+      );
+
+      expect(completion.stop_reason).toBe('end_turn');
     });
   });
 });

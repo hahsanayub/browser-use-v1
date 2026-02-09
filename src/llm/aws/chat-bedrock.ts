@@ -285,7 +285,14 @@ export class ChatBedrockConverse implements BaseChatModel {
         completion = this.getTextCompletion(response);
       }
 
-      return new ChatInvokeCompletion(completion, this.getUsage(response));
+      const stopReason = response?.stopReason ?? null;
+      return new ChatInvokeCompletion(
+        completion,
+        this.getUsage(response),
+        null,
+        null,
+        stopReason
+      );
     } catch (error: any) {
       const errorName = String(error?.name ?? '');
       const statusCode = error?.$metadata?.httpStatusCode ?? 502;

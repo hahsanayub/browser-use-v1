@@ -400,6 +400,7 @@ export class ChatAzure implements BaseChatModel {
 
       const content = response.choices[0].message.content || '';
       const usage = this.getChatUsage(response);
+      const stopReason = response.choices[0].finish_reason ?? null;
 
       let completion: T | string = content;
       if (output_format) {
@@ -421,7 +422,7 @@ export class ChatAzure implements BaseChatModel {
         }
       }
 
-      return new ChatInvokeCompletion(completion, usage);
+      return new ChatInvokeCompletion(completion, usage, null, null, stopReason);
     } catch (error: any) {
       if (error?.status === 429) {
         throw new ModelRateLimitError(
@@ -497,6 +498,7 @@ export class ChatAzure implements BaseChatModel {
 
       const content = this.getResponseOutputText(response);
       const usage = this.getResponsesUsage(response);
+      const stopReason = response?.status ?? null;
 
       let completion: T | string = content;
       if (output_format) {
@@ -518,7 +520,7 @@ export class ChatAzure implements BaseChatModel {
         }
       }
 
-      return new ChatInvokeCompletion(completion, usage);
+      return new ChatInvokeCompletion(completion, usage, null, null, stopReason);
     } catch (error: any) {
       if (error?.status === 429) {
         throw new ModelRateLimitError(

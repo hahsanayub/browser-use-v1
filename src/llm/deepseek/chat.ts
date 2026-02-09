@@ -151,6 +151,7 @@ export class ChatDeepSeek implements BaseChatModel {
 
       const content = response.choices[0].message.content || '';
       const usage = this.getUsage(response);
+      const stopReason = response.choices[0].finish_reason ?? null;
 
       let completion: T | string = content;
       if (output_format) {
@@ -172,7 +173,7 @@ export class ChatDeepSeek implements BaseChatModel {
         }
       }
 
-      return new ChatInvokeCompletion(completion, usage);
+      return new ChatInvokeCompletion(completion, usage, null, null, stopReason);
     } catch (error: any) {
       if (error?.status === 429) {
         throw new ModelProviderError(

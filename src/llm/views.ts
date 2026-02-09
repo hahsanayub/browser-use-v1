@@ -12,6 +12,7 @@ export class ChatInvokeCompletion<T = string> {
     public completion: T,
     public usage: ChatInvokeUsage | null = null,
     public thinking: string | null = null,
-    public redacted_thinking: string | null = null
+    public redacted_thinking: string | null = null,
+    public stop_reason: string | null = null
   ) {}
 }

@@ -325,11 +325,18 @@ export class ChatAnthropicBedrock implements BaseChatModel {
         completion = this.getTextCompletion(response);
       }
 
-      return new ChatInvokeCompletion(completion, {
-        prompt_tokens: response.usage?.inputTokens ?? 0,
-        completion_tokens: response.usage?.outputTokens ?? 0,
-        total_tokens: response.usage?.totalTokens ?? 0,
-      });
+      const stopReason = response?.stopReason ?? null;
+      return new ChatInvokeCompletion(
+        completion,
+        {
+          prompt_tokens: response.usage?.inputTokens ?? 0,
+          completion_tokens: response.usage?.outputTokens ?? 0,
+          total_tokens: response.usage?.totalTokens ?? 0,
+        },
+        null,
+        null,
+        stopReason
+      );
     } catch (error: any) {
       const errorName = String(error?.name ?? '');
       const statusCode = error?.$metadata?.httpStatusCode ?? 502;

@@ -239,6 +239,7 @@ export class ChatGoogle implements BaseChatModel {
       const text = textParts.map((p: any) => p.text).join('');
 
       let completion: T | string = text;
+      const stopReason = result?.candidates?.[0]?.finishReason ?? null;
 
       try {
         let parsed: any = text;
@@ -290,7 +291,13 @@ export class ChatGoogle implements BaseChatModel {
         throw error;
       }
 
-      return new ChatInvokeCompletion(completion, this.getUsage(result));
+      return new ChatInvokeCompletion(
+        completion,
+        this.getUsage(result),
+        null,
+        null,
+        stopReason
+      );
     } catch (error: any) {
       throw new ModelProviderError(
         error?.message ?? String(error),

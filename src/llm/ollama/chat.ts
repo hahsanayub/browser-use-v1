@@ -223,12 +223,13 @@ export class ChatOllama implements BaseChatModel {
         }
       }
 
+      const stopReason = response.done_reason ?? null;
       return new ChatInvokeCompletion(completion, {
         prompt_tokens: response.prompt_eval_count ?? 0,
         completion_tokens: response.eval_count ?? 0,
         total_tokens:
           (response.prompt_eval_count ?? 0) + (response.eval_count ?? 0),
-      });
+      }, null, null, stopReason);
     } catch (error: any) {
       throw new ModelProviderError(
         error?.message ?? String(error),
