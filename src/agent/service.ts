@@ -2642,7 +2642,22 @@ export class Agent<
       this._update_plan_from_model_output(this.state.last_model_output);
     }
     this._update_loop_detector_actions();
-    this.state.consecutive_failures = 0;
+
+    const lastResult = this.state.last_result;
+    if (lastResult && lastResult.length === 1 && lastResult[0]?.error) {
+      this.state.consecutive_failures += 1;
+      this.logger.debug(
+        `🔄 Step ${this.state.n_steps}: Consecutive failures: ${this.state.consecutive_failures}`
+      );
+      return;
+    }
+
+    if (this.state.consecutive_failures > 0) {
+      this.state.consecutive_failures = 0;
+      this.logger.debug(
+        `🔄 Step ${this.state.n_steps}: Consecutive failures reset to: ${this.state.consecutive_failures}`
+      );
+    }
   }
 
   async multi_act(
