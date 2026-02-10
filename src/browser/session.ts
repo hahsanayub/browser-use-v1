@@ -59,6 +59,7 @@ import { CrashWatchdog } from './watchdogs/crash-watchdog.js';
 import { DefaultActionWatchdog } from './watchdogs/default-action-watchdog.js';
 import { DOMWatchdog } from './watchdogs/dom-watchdog.js';
 import { DownloadsWatchdog } from './watchdogs/downloads-watchdog.js';
+import { HarRecordingWatchdog } from './watchdogs/har-recording-watchdog.js';
 import { LocalBrowserWatchdog } from './watchdogs/local-browser-watchdog.js';
 import { PermissionsWatchdog } from './watchdogs/permissions-watchdog.js';
 import { PopupsWatchdog } from './watchdogs/popups-watchdog.js';
@@ -270,7 +271,7 @@ export class BrowserSession {
     if (this._defaultWatchdogsAttached) {
       return;
     }
-    this.attach_watchdogs([
+    const watchdogs: BaseWatchdog[] = [
       new LocalBrowserWatchdog({ browser_session: this }),
       new CDPSessionWatchdog({ browser_session: this }),
       new CrashWatchdog({ browser_session: this }),
@@ -284,7 +285,17 @@ export class BrowserSession {
       new DownloadsWatchdog({ browser_session: this }),
       new StorageStateWatchdog({ browser_session: this }),
       new DefaultActionWatchdog({ browser_session: this }),
-    ]);
+    ];
+
+    const configuredHarPath = this.browser_profile.config.record_har_path;
+    if (
+      typeof configuredHarPath === 'string' &&
+      configuredHarPath.trim().length > 0
+    ) {
+      watchdogs.push(new HarRecordingWatchdog({ browser_session: this }));
+    }
+
+    this.attach_watchdogs(watchdogs);
     this._defaultWatchdogsAttached = true;
   }
 

@@ -19,6 +19,7 @@ import { CDPSessionWatchdog } from '../src/browser/watchdogs/cdp-session-watchdo
 import { CrashWatchdog } from '../src/browser/watchdogs/crash-watchdog.js';
 import { DownloadsWatchdog } from '../src/browser/watchdogs/downloads-watchdog.js';
 import { DOMWatchdog } from '../src/browser/watchdogs/dom-watchdog.js';
+import { HarRecordingWatchdog } from '../src/browser/watchdogs/har-recording-watchdog.js';
 import { LocalBrowserWatchdog } from '../src/browser/watchdogs/local-browser-watchdog.js';
 import { PermissionsWatchdog } from '../src/browser/watchdogs/permissions-watchdog.js';
 import { PopupsWatchdog } from '../src/browser/watchdogs/popups-watchdog.js';
@@ -74,6 +75,22 @@ describe('default action watchdog alignment', () => {
     ).toBe(true);
     expect(
       watchdogs.some((watchdog) => watchdog instanceof DefaultActionWatchdog)
+    ).toBe(true);
+  });
+
+  it('attaches HarRecordingWatchdog when record_har_path is configured', () => {
+    const session = new BrowserSession({
+      profile: {
+        record_har_path: './tmp/default-stack.har',
+      },
+    });
+
+    session.attach_default_watchdogs();
+
+    const watchdogs = session.get_watchdogs();
+    expect(watchdogs).toHaveLength(14);
+    expect(
+      watchdogs.some((watchdog) => watchdog instanceof HarRecordingWatchdog)
     ).toBe(true);
   });
 
