@@ -6,7 +6,11 @@ import { spawn, exec, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createLogger } from '../logging-config.js';
 import { match_url_with_domain_pattern, uuid7str } from '../utils.js';
-import { EventBus } from '../event-bus.js';
+import {
+  EventBus,
+  type EventDispatchOptions,
+  type EventPayload,
+} from '../event-bus.js';
 import {
   async_playwright,
   type Browser,
@@ -27,7 +31,11 @@ import {
   BrowserError,
   URLNotAllowedError,
 } from './views.js';
-import { DownloadStartedEvent, FileDownloadedEvent } from './events.js';
+import {
+  BrowserLaunchEvent,
+  DownloadStartedEvent,
+  FileDownloadedEvent,
+} from './events.js';
 import { DOMElementNode, DOMState, type SelectorMap } from '../dom/views.js';
 import { normalize_url } from './utils.js';
 import { DomService } from '../dom/service.js';
@@ -40,6 +48,7 @@ import { SessionManager } from './session-manager.js';
 import { DefaultActionWatchdog } from './watchdogs/default-action-watchdog.js';
 import { DOMWatchdog } from './watchdogs/dom-watchdog.js';
 import { DownloadsWatchdog } from './watchdogs/downloads-watchdog.js';
+import { LocalBrowserWatchdog } from './watchdogs/local-browser-watchdog.js';
 import type { BaseWatchdog } from './watchdogs/base.js';
 
 const execAsync = promisify(exec);
@@ -218,11 +227,34 @@ export class BrowserSession {
     return [...this._watchdogs];
   }
 
+  async dispatch_browser_event<TEvent extends EventPayload>(
+    event: TEvent,
+    options: Omit<EventDispatchOptions, 'throw_on_error'> = {}
+  ) {
+    return this.event_bus.dispatch_or_throw(event, options);
+  }
+
+  async launch() {
+    this.attach_default_watchdogs();
+    const dispatchResult = await this.dispatch_browser_event(
+      new BrowserLaunchEvent()
+    );
+    const eventResult = dispatchResult.event.event_result as
+      | { cdp_url?: string | null }
+      | null
+      | undefined;
+    return {
+      cdp_url:
+        eventResult?.cdp_url ?? this.cdp_url ?? this.wss_url ?? 'playwright',
+    };
+  }
+
   attach_default_watchdogs() {
     if (this._defaultWatchdogsAttached) {
       return;
     }
     this.attach_watchdogs([
+      new LocalBrowserWatchdog({ browser_session: this }),
       new DOMWatchdog({ browser_session: this }),
       new DownloadsWatchdog({ browser_session: this }),
       new DefaultActionWatchdog({ browser_session: this }),

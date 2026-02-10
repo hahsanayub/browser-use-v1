@@ -10,6 +10,7 @@ import {
 import { DefaultActionWatchdog } from '../src/browser/watchdogs/default-action-watchdog.js';
 import { DownloadsWatchdog } from '../src/browser/watchdogs/downloads-watchdog.js';
 import { DOMWatchdog } from '../src/browser/watchdogs/dom-watchdog.js';
+import { LocalBrowserWatchdog } from '../src/browser/watchdogs/local-browser-watchdog.js';
 
 describe('default action watchdog alignment', () => {
   it('attaches default watchdog stack only once', () => {
@@ -19,7 +20,10 @@ describe('default action watchdog alignment', () => {
     session.attach_default_watchdogs();
 
     const watchdogs = session.get_watchdogs();
-    expect(watchdogs).toHaveLength(3);
+    expect(watchdogs).toHaveLength(4);
+    expect(
+      watchdogs.some((watchdog) => watchdog instanceof LocalBrowserWatchdog)
+    ).toBe(true);
     expect(watchdogs.some((watchdog) => watchdog instanceof DOMWatchdog)).toBe(
       true
     );

@@ -1,0 +1,47 @@
+import { describe, expect, it, vi } from 'vitest';
+import { BrowserSession } from '../src/browser/session.js';
+import { BrowserKillEvent, BrowserLaunchEvent } from '../src/browser/events.js';
+import { LocalBrowserWatchdog } from '../src/browser/watchdogs/local-browser-watchdog.js';
+
+describe('local browser watchdog alignment', () => {
+  it('routes BrowserLaunchEvent to BrowserSession.start and returns launch payload', async () => {
+    const session = new BrowserSession();
+    const watchdog = new LocalBrowserWatchdog({ browser_session: session });
+    session.attach_watchdog(watchdog);
+    session.cdp_url = 'http://localhost:9222';
+
+    const startSpy = vi.spyOn(session, 'start').mockResolvedValue(session);
+
+    const dispatchResult = await session.event_bus.dispatch_or_throw(
+      new BrowserLaunchEvent()
+    );
+
+    expect(startSpy).toHaveBeenCalledTimes(1);
+    expect(dispatchResult.event.event_result).toEqual({
+      cdp_url: 'http://localhost:9222',
+    });
+  });
+
+  it('routes BrowserKillEvent to BrowserSession.kill', async () => {
+    const session = new BrowserSession();
+    const watchdog = new LocalBrowserWatchdog({ browser_session: session });
+    session.attach_watchdog(watchdog);
+
+    const killSpy = vi.spyOn(session, 'kill').mockResolvedValue();
+
+    await session.event_bus.dispatch_or_throw(new BrowserKillEvent());
+
+    expect(killSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('BrowserSession.launch dispatches BrowserLaunchEvent through watchdog stack', async () => {
+    const session = new BrowserSession();
+    session.cdp_url = 'http://localhost:9333';
+    const startSpy = vi.spyOn(session, 'start').mockResolvedValue(session);
+
+    const launchResult = await session.launch();
+
+    expect(startSpy).toHaveBeenCalledTimes(1);
+    expect(launchResult).toEqual({ cdp_url: 'http://localhost:9333' });
+  });
+});
