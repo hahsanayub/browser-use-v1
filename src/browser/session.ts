@@ -34,7 +34,9 @@ import {
 import {
   BrowserConnectedEvent,
   BrowserLaunchEvent,
+  BrowserStartEvent,
   BrowserStoppedEvent,
+  BrowserStopEvent,
   DownloadStartedEvent,
   FileDownloadedEvent,
 } from './events.js';
@@ -1098,6 +1100,12 @@ export class BrowserSession {
     if (this.initialized) {
       return this;
     }
+
+    await this.event_bus.dispatch(
+      new BrowserStartEvent({
+        cdp_url: this.cdp_url,
+      })
+    );
 
     const ensurePage = async () => {
       const current = this.agent_current_page;
@@ -3831,6 +3839,7 @@ export class BrowserSession {
     this._stoppingPromise = this._shutdown_browser_session();
 
     try {
+      await this.event_bus.dispatch(new BrowserStopEvent());
       await this._stoppingPromise;
       this._recordRecentEvent('browser_stopped');
       await this.event_bus.dispatch(new BrowserStoppedEvent());
