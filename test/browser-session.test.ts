@@ -59,6 +59,7 @@ vi.mock('../src/telemetry/service.js', () => ({
 // Import after mocks
 import { BrowserSession } from '../src/browser/session.js';
 import { BrowserProfile } from '../src/browser/profile.js';
+import { DownloadProgressEvent } from '../src/browser/events.js';
 import { DomService } from '../src/dom/service.js';
 import { DOMElementNode, DOMTextNode, DOMState } from '../src/dom/views.js';
 
@@ -185,6 +186,51 @@ describe('BrowserSession Basic Operations', () => {
     expect(locator.click).toHaveBeenCalledTimes(1);
     expect(locator.type).toHaveBeenCalledWith('append', { timeout: 5000 });
     expect(locator.fill).not.toHaveBeenCalled();
+  });
+
+  it('dispatches completed DownloadProgressEvent during element click downloads', async () => {
+    const downloadsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bu-click-dl-'));
+    try {
+      const session = new BrowserSession({
+        profile: {
+          downloads_path: downloadsDir,
+        },
+      });
+
+      const locator = {
+        click: vi.fn(async () => {}),
+      };
+      const fakeDownload = {
+        suggestedFilename: () => 'report.csv',
+        url: () => 'https://example.com/report.csv',
+        saveAs: vi.fn(async (targetPath: string) => {
+          fs.writeFileSync(targetPath, 'abc');
+        }),
+      };
+      const fakePage = {
+        waitForEvent: vi.fn(async () => fakeDownload),
+        waitForLoadState: vi.fn(async () => {}),
+      };
+
+      vi.spyOn(session, 'get_locate_element').mockResolvedValue(locator as any);
+      vi.spyOn(session, 'get_current_page').mockResolvedValue(fakePage as any);
+
+      const dispatchSpy = vi.spyOn(session.event_bus, 'dispatch');
+      const downloadPath = await session._click_element_node({
+        xpath: '/html/body/a[1]',
+      } as any);
+
+      expect(downloadPath).toContain('report.csv');
+      expect(fs.existsSync(downloadPath as string)).toBe(true);
+      expect(
+        dispatchSpy.mock.calls.some(
+          ([event]) =>
+            event instanceof DownloadProgressEvent && event.state === 'completed'
+        )
+      ).toBe(true);
+    } finally {
+      fs.rmSync(downloadsDir, { recursive: true, force: true });
+    }
   });
 
   it('aborts navigation when signal is triggered', async () => {

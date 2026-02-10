@@ -39,6 +39,7 @@ import {
   BrowserStoppedEvent,
   BrowserStopEvent,
   DialogOpenedEvent,
+  DownloadProgressEvent,
   DownloadStartedEvent,
   FileDownloadedEvent,
   TabClosedEvent,
@@ -2833,6 +2834,14 @@ export class BrowserSession {
         const stats = fs.existsSync(downloadPath)
           ? fs.statSync(downloadPath)
           : null;
+        await this.event_bus.dispatch(
+          new DownloadProgressEvent({
+            guid: downloadGuid,
+            received_bytes: stats?.size ?? 0,
+            total_bytes: stats?.size ?? 0,
+            state: 'completed',
+          })
+        );
         const fileDownloadedResult = await this.event_bus.dispatch(
           new FileDownloadedEvent({
             guid: downloadGuid,
@@ -4509,12 +4518,49 @@ export class BrowserSession {
           suggested_filename
         );
         const download_path = path.join(downloads_path, unique_filename);
+        const download_guid = uuid7str();
+        const download_url =
+          typeof download.url === 'function'
+            ? download.url()
+            : (this.currentUrl ?? '');
+        await this.event_bus.dispatch(
+          new DownloadStartedEvent({
+            guid: download_guid,
+            url: download_url,
+            suggested_filename,
+            auto_download: false,
+          })
+        );
 
         await download.saveAs(download_path);
         this.logger.info(`⬇️ Downloaded file to: ${download_path}`);
+        const stats = fs.existsSync(download_path)
+          ? fs.statSync(download_path)
+          : null;
+        await this.event_bus.dispatch(
+          new DownloadProgressEvent({
+            guid: download_guid,
+            received_bytes: stats?.size ?? 0,
+            total_bytes: stats?.size ?? 0,
+            state: 'completed',
+          })
+        );
 
-        // Track the downloaded file
-        this.add_downloaded_file(download_path);
+        const fileDownloadedResult = await this.event_bus.dispatch(
+          new FileDownloadedEvent({
+            guid: download_guid,
+            url: download_url,
+            path: download_path,
+            file_name: unique_filename,
+            file_size: stats?.size ?? 0,
+            file_type: path.extname(unique_filename).replace('.', '') || null,
+            mime_type: null,
+            auto_download: false,
+          })
+        );
+        if (fileDownloadedResult.handler_results.length === 0) {
+          this.add_downloaded_file(download_path);
+        }
 
         return download_path;
       } catch (error) {
