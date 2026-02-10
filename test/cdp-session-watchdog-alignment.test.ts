@@ -3,6 +3,9 @@ import { BrowserSession } from '../src/browser/session.js';
 import {
   BrowserConnectedEvent,
   BrowserStoppedEvent,
+  NavigationCompleteEvent,
+  TabClosedEvent,
+  TabCreatedEvent,
 } from '../src/browser/events.js';
 import { CDPSessionWatchdog } from '../src/browser/watchdogs/cdp-session-watchdog.js';
 
@@ -11,6 +14,7 @@ describe('cdp session watchdog alignment', () => {
     const session = new BrowserSession();
     const watchdog = new CDPSessionWatchdog({ browser_session: session });
     session.attach_watchdog(watchdog);
+    const dispatchSpy = vi.spyOn(session.event_bus, 'dispatch');
 
     const listeners: Record<string, (payload: any) => void> = {};
     const cdpSession = {
@@ -66,12 +70,41 @@ describe('cdp session watchdog alignment', () => {
     expect(session.session_manager.get_target_id_for_session('session-1')).toBe(
       'target-2'
     );
+    await Promise.resolve();
+    const createdCall = dispatchSpy.mock.calls.find(
+      ([event]) =>
+        event instanceof TabCreatedEvent && event.target_id === 'target-2'
+    );
+    expect(createdCall).toBeDefined();
+
+    listeners['Target.targetInfoChanged']?.({
+      targetInfo: {
+        targetId: 'target-2',
+        type: 'page',
+        url: 'https://attached.test/dashboard',
+        title: 'Attached Dashboard',
+      },
+    });
+    await Promise.resolve();
+    const navigationCall = dispatchSpy.mock.calls.find(
+      ([event]) =>
+        event instanceof NavigationCompleteEvent &&
+        event.target_id === 'target-2' &&
+        event.url === 'https://attached.test/dashboard'
+    );
+    expect(navigationCall).toBeDefined();
 
     listeners['Target.detachedFromTarget']?.({
       sessionId: 'session-1',
       targetId: 'target-2',
     });
     expect(session.session_manager.get_target('target-2')).toBeNull();
+    await Promise.resolve();
+    const closedCall = dispatchSpy.mock.calls.find(
+      ([event]) =>
+        event instanceof TabClosedEvent && event.target_id === 'target-2'
+    );
+    expect(closedCall).toBeDefined();
   });
 
   it('tears down CDP monitoring listeners when browser stops', async () => {
