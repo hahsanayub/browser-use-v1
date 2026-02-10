@@ -33,14 +33,14 @@ try {
     if (
       process.env.BROWSER_USE_VERBOSE_OBSERVABILITY?.toLowerCase() === 'true'
     ) {
-      logger.info('Lmnr is available for observability');
+      logger.debug('Lmnr is available for observability');
     }
   }
 } catch (error) {
   lmnrObserve = null;
   lmnrAvailable = false;
   if (process.env.BROWSER_USE_VERBOSE_OBSERVABILITY?.toLowerCase() === 'true') {
-    logger.info(
+    logger.debug(
       `Lmnr is not available for observability (${(error as Error).message})`
     );
   }
@@ -64,7 +64,10 @@ const normalizeOptions = (options: ObserveOptions = {}): ObserveOptions => ({
 });
 
 export const observe = (options: ObserveOptions = {}) => {
-  const normalized = normalizeOptions(options);
+  const normalized = normalizeOptions({
+    tags: ['observe', 'observe_debug'],
+    ...options,
+  });
   if (lmnrAvailable && lmnrObserve) {
     return lmnrObserve(normalized);
   }
@@ -72,7 +75,10 @@ export const observe = (options: ObserveOptions = {}) => {
 };
 
 export const observeDebug = (options: ObserveOptions = {}) => {
-  const normalized = normalizeOptions(options);
+  const normalized = normalizeOptions({
+    tags: ['observe_debug'],
+    ...options,
+  });
   if (lmnrAvailable && lmnrObserve && isDebugModeEnv()) {
     return lmnrObserve(normalized);
   }
