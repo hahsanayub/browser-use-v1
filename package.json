@@ -156,6 +156,11 @@
       "import": "./dist/skills/index.js",
       "default": "./dist/skills/index.js"
     },
+    "./sandbox": {
+      "types": "./dist/sandbox/index.d.ts",
+      "import": "./dist/sandbox/index.js",
+      "default": "./dist/sandbox/index.js"
+    },
     "./telemetry": {
       "types": "./dist/telemetry/index.d.ts",
       "import": "./dist/telemetry/index.js",
