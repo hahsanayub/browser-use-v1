@@ -19,8 +19,9 @@ type LegacyPdfParseFn = (
 ) => Promise<LegacyPdfParseResult>;
 
 interface PdfParser {
+  getInfo?: (options?: unknown) => Promise<{ total?: number }>;
   destroy?: () => Promise<void>;
-  getText: () => Promise<{ text?: string; total?: number }>;
+  getText: (options?: unknown) => Promise<{ text?: string; total?: number }>;
 }
 
 type PdfParserConstructor = new (options: { data: Buffer }) => PdfParser;
@@ -62,6 +63,68 @@ export async function extractPdfText(buffer: Buffer): Promise<{
   throw new FileSystemError(
     "Error: Could not parse PDF file due to unsupported 'pdf-parse' module format."
   );
+}
+
+export async function extractPdfTextByPage(buffer: Buffer): Promise<{
+  numPages: number;
+  pageTexts: string[];
+  totalChars: number;
+}> {
+  const pdfParseModule = (await import('pdf-parse')) as {
+    default?: unknown;
+    PDFParse?: unknown;
+  };
+
+  if (typeof pdfParseModule.PDFParse === 'function') {
+    const Parser = pdfParseModule.PDFParse as PdfParserConstructor;
+    const parser = new Parser({ data: buffer });
+    try {
+      let numPages = 0;
+      try {
+        const info = await parser.getInfo?.({ parsePageInfo: false });
+        numPages = Number(info?.total ?? 0);
+      } catch {
+        numPages = 0;
+      }
+
+      if (!Number.isFinite(numPages) || numPages <= 0) {
+        const full = await parser.getText();
+        const text = typeof full?.text === 'string' ? full.text : '';
+        return {
+          numPages: 1,
+          pageTexts: [text],
+          totalChars: text.length,
+        };
+      }
+
+      const pageTexts: string[] = [];
+      let totalChars = 0;
+      for (let pageNumber = 1; pageNumber <= numPages; pageNumber += 1) {
+        const pageResult = await parser.getText({ partial: [pageNumber] });
+        const text = typeof pageResult?.text === 'string' ? pageResult.text : '';
+        pageTexts.push(text);
+        totalChars += text.length;
+      }
+
+      return {
+        numPages,
+        pageTexts,
+        totalChars,
+      };
+    } finally {
+      if (typeof parser.destroy === 'function') {
+        await parser.destroy();
+      }
+    }
+  }
+
+  const parsed = await extractPdfText(buffer);
+  const text = parsed.text ?? '';
+  return {
+    numPages: Math.max(parsed.totalPages, 1),
+    pageTexts: [text],
+    totalChars: text.length,
+  };
 }
 
 export const INVALID_FILENAME_ERROR_MESSAGE =
@@ -641,18 +704,132 @@ export class FileSystem {
         }
 
         if (extension === 'pdf') {
+          const MAX_CHARS = 60000;
           const buffer = await fsp.readFile(filename);
-          const parsed = await extractPdfText(buffer);
-          const totalPages = parsed.totalPages;
-          const extraPages = Math.max(0, totalPages - 10);
-          const snippet = parsed.text.trim();
-          const preview = snippet
-            .split(/\n{2,}/)
-            .slice(0, 10)
-            .join('\n\n');
-          const suffix = extraPages > 0 ? `\n${extraPages} more pages...` : '';
+          const pdf = await extractPdfTextByPage(buffer);
+          const numPages = pdf.numPages;
+          const pageTexts = pdf.pageTexts;
+          const totalChars = pdf.totalChars;
+
+          if (totalChars <= MAX_CHARS) {
+            const contentParts: string[] = [];
+            for (let pageNumber = 1; pageNumber <= pageTexts.length; pageNumber += 1) {
+              const text = pageTexts[pageNumber - 1] ?? '';
+              if (!text.trim()) {
+                continue;
+              }
+              contentParts.push(`--- Page ${pageNumber} ---\n${text}`);
+            }
+
+            result.message =
+              `Read from file ${filename} (${numPages} pages, ${totalChars.toLocaleString()} chars).\n` +
+              `<content>\n${contentParts.join('\n\n')}\n</content>`;
+            return result;
+          }
+
+          const wordToPages = new Map<string, Set<number>>();
+          const pageWords = new Map<number, Set<string>>();
+          for (let pageNumber = 1; pageNumber <= pageTexts.length; pageNumber += 1) {
+            const text = pageTexts[pageNumber - 1] ?? '';
+            const words = new Set(
+              (text.toLowerCase().match(/\b[a-zA-Z]{4,}\b/g) ?? []).map(
+                (word) => word
+              )
+            );
+            pageWords.set(pageNumber, words);
+            for (const word of words) {
+              if (!wordToPages.has(word)) {
+                wordToPages.set(word, new Set());
+              }
+              wordToPages.get(word)!.add(pageNumber);
+            }
+          }
+
+          const pageScores = new Map<number, number>();
+          for (const [pageNumber, words] of pageWords.entries()) {
+            let score = 0;
+            for (const word of words) {
+              const pagesWithWord = wordToPages.get(word)?.size ?? 1;
+              score += Math.log(Math.max(numPages, 1) / pagesWithWord);
+            }
+            pageScores.set(pageNumber, score);
+          }
+
+          const priorityPages: number[] = [1];
+          const sortedPages = Array.from(pageScores.entries()).sort(
+            (a, b) => b[1] - a[1]
+          );
+          for (const [pageNumber] of sortedPages) {
+            if (!priorityPages.includes(pageNumber)) {
+              priorityPages.push(pageNumber);
+            }
+          }
+          for (let pageNumber = 1; pageNumber <= numPages; pageNumber += 1) {
+            if (!priorityPages.includes(pageNumber)) {
+              priorityPages.push(pageNumber);
+            }
+          }
+
+          const contentParts: Array<{ pageNumber: number; content: string }> = [];
+          let charsUsed = 0;
+          const pagesIncluded: number[] = [];
+          const pagesIncludedSet = new Set<number>();
+          for (const pageNumber of priorityPages) {
+            const text = pageTexts[pageNumber - 1] ?? '';
+            if (!text.trim()) {
+              continue;
+            }
+            const pageHeader = `--- Page ${pageNumber} ---\n`;
+            const truncationSuffix = '\n[...truncated]';
+            const remaining = MAX_CHARS - charsUsed;
+            const minUseful = pageHeader.length + truncationSuffix.length + 50;
+            if (remaining < minUseful) {
+              break;
+            }
+
+            let pageContent = `${pageHeader}${text}`;
+            if (pageContent.length > remaining) {
+              pageContent =
+                pageContent.slice(
+                  0,
+                  Math.max(0, remaining - truncationSuffix.length)
+                ) + truncationSuffix;
+            }
+
+            contentParts.push({ pageNumber, content: pageContent });
+            charsUsed += pageContent.length;
+            pagesIncluded.push(pageNumber);
+            pagesIncludedSet.add(pageNumber);
+
+            if (charsUsed >= MAX_CHARS) {
+              break;
+            }
+          }
+
+          contentParts.sort((a, b) => a.pageNumber - b.pageNumber);
+          const extractedText = contentParts.map((part) => part.content).join('\n\n');
+
+          let truncationNote = '';
+          const pagesNotShown = numPages - pagesIncluded.length;
+          if (pagesNotShown > 0) {
+            const skipped: number[] = [];
+            for (let pageNumber = 1; pageNumber <= numPages; pageNumber += 1) {
+              if (!pagesIncludedSet.has(pageNumber)) {
+                skipped.push(pageNumber);
+              }
+            }
+
+            const skippedPreview = skipped.slice(0, 10).join(', ');
+            const skippedSuffix = skipped.length > 10 ? ', ...' : '';
+            truncationNote =
+              `\n\n[Showing ${pagesIncluded.length} of ${numPages} pages. ` +
+              `Skipped pages: [${skippedPreview}${skippedSuffix}]. ` +
+              'Use read_long_content with a specific goal to find relevant sections.]';
+          }
+
           result.message =
-            `Read from file ${filename}.\n<content>\n${preview}${suffix}\n</content>`;
+            `Read from file ${filename} (${numPages} pages, ${totalChars.toLocaleString()} chars total).\n` +
+            `<content>\n${extractedText}${truncationNote}\n</content>`;
           return result;
         }
 
