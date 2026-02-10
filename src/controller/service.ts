@@ -10,6 +10,7 @@ import {
   GoBackEvent,
   NavigateToUrlEvent,
   ScrollEvent,
+  ScrollToTextEvent,
   SendKeysEvent,
   SwitchTabEvent,
   TypeTextEvent,
@@ -2224,34 +2225,44 @@ You will be given a query and the markdown of a webpage that has been filtered t
       { browser_session }
     ) {
       if (!browser_session) throw new Error('Browser session missing');
-      const page: Page | null = await browser_session.get_current_page();
-      if (!page?.evaluate) {
-        throw new BrowserError('Unable to access page for scrolling.');
-      }
-
-      const success = await page.evaluate(
-        ({ text }: { text: string }) => {
-          const iterator = document.createNodeIterator(
-            document.body,
-            NodeFilter.SHOW_ELEMENT
-          );
-          let node: Node | null;
-          while ((node = iterator.nextNode())) {
-            const el = node as HTMLElement;
-            if (!el || !el.textContent) continue;
-            if (el.textContent.toLowerCase().includes(text.toLowerCase())) {
-              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              return true;
-            }
+      await dispatchBrowserEventIfAvailable(
+        browser_session,
+        new ScrollToTextEvent({
+          text: params.text,
+          direction: 'down',
+        }),
+        async () => {
+          const page: Page | null = await browser_session.get_current_page();
+          if (!page?.evaluate) {
+            throw new BrowserError('Unable to access page for scrolling.');
           }
-          return false;
-        },
-        { text: params.text }
-      );
 
-      if (!success) {
-        throw new BrowserError(`Text '${params.text}' not found on page`);
-      }
+          const success = await page.evaluate(
+            ({ text }: { text: string }) => {
+              const iterator = document.createNodeIterator(
+                document.body,
+                NodeFilter.SHOW_ELEMENT
+              );
+              let node: Node | null;
+              while ((node = iterator.nextNode())) {
+                const el = node as HTMLElement;
+                if (!el || !el.textContent) continue;
+                if (el.textContent.toLowerCase().includes(text.toLowerCase())) {
+                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  return true;
+                }
+              }
+              return false;
+            },
+            { text: params.text }
+          );
+
+          if (!success) {
+            throw new BrowserError(`Text '${params.text}' not found on page`);
+          }
+          return null;
+        }
+      );
 
       const msg = `🔍  Scrolled to text: ${params.text}`;
       return new ActionResult({

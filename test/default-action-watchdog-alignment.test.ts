@@ -5,6 +5,7 @@ import {
   ClickCoordinateEvent,
   NavigateToUrlEvent,
   ScrollEvent,
+  ScrollToTextEvent,
   SendKeysEvent,
   SwitchTabEvent,
   WaitEvent,
@@ -135,5 +136,25 @@ describe('default action watchdog alignment', () => {
     );
 
     expect(scrollSpy).toHaveBeenCalledWith('down', 640, { node: null });
+  });
+
+  it('routes scroll-to-text events through BrowserSession.scroll_to_text', async () => {
+    const session = new BrowserSession();
+    session.attach_default_watchdogs();
+
+    const scrollToTextSpy = vi
+      .spyOn(session, 'scroll_to_text')
+      .mockResolvedValue();
+
+    await session.event_bus.dispatch_or_throw(
+      new ScrollToTextEvent({
+        text: 'checkout',
+        direction: 'down',
+      })
+    );
+
+    expect(scrollToTextSpy).toHaveBeenCalledWith('checkout', {
+      direction: 'down',
+    });
   });
 });

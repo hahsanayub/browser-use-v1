@@ -2024,6 +2024,51 @@ export class BrowserSession {
     );
   }
 
+  async scroll_to_text(
+    text: string,
+    options: BrowserActionOptions & { direction?: 'up' | 'down' } = {}
+  ) {
+    const signal = options.signal ?? null;
+    this._throwIfAborted(signal);
+    const page = await this._withAbort(this.get_current_page(), signal);
+    if (!page?.evaluate) {
+      throw new BrowserError('Unable to access page for scrolling.');
+    }
+
+    const success = await this._withAbort(
+      page.evaluate(
+        (payload: { text: string; direction: 'up' | 'down' }) => {
+          const query = payload.text.toLowerCase();
+          const iterator = document.createNodeIterator(
+            document.body,
+            NodeFilter.SHOW_ELEMENT
+          );
+          let node: Node | null;
+          while ((node = iterator.nextNode())) {
+            const el = node as HTMLElement;
+            if (!el || !el.textContent) {
+              continue;
+            }
+            if (el.textContent.toLowerCase().includes(query)) {
+              el.scrollIntoView({
+                behavior: 'smooth',
+                block: payload.direction === 'up' ? 'start' : 'center',
+              });
+              return true;
+            }
+          }
+          return false;
+        },
+        { text, direction: options.direction ?? 'down' }
+      ),
+      signal
+    );
+
+    if (!success) {
+      throw new BrowserError(`Text '${text}' not found on page`);
+    }
+  }
+
   async upload_file(
     element_node: DOMElementNode,
     file_path: string,

@@ -98,6 +98,7 @@ import {
 } from '../src/controller/views.js';
 import { SchemaOptimizer } from '../src/llm/schema.js';
 import { ActionResult } from '../src/agent/views.js';
+import { ScrollToTextEvent } from '../src/browser/events.js';
 import { BrowserError } from '../src/browser/views.js';
 import { FileSystem } from '../src/filesystem/file-system.js';
 import { DOMElementNode, DOMTextNode } from '../src/dom/views.js';
@@ -1213,6 +1214,34 @@ describe('Regression Coverage', () => {
     );
 
     expect(page.evaluate).toHaveBeenCalled();
+    expect(result.extracted_content).toContain('Scrolled to text: checkout');
+  });
+
+  it('find_text dispatches ScrollToTextEvent when browser event bus is available', async () => {
+    const controller = new Controller();
+    const dispatchSpy = vi.fn(async (event: ScrollToTextEvent) => ({
+      event: {
+        event_result: null,
+        event_name: event.event_name,
+      },
+      handler_results: [{ handler_id: 'watchdog', result: null }],
+      errors: [],
+    }));
+    const browserSession = {
+      dispatch_browser_event: dispatchSpy,
+      get_current_page: vi.fn(async () => null),
+    };
+
+    const result = await controller.registry.execute_action(
+      'find_text',
+      { text: 'checkout' },
+      { browser_session: browserSession as any }
+    );
+
+    expect(dispatchSpy).toHaveBeenCalledTimes(1);
+    const dispatchedEvent = dispatchSpy.mock.calls[0]?.[0];
+    expect(dispatchedEvent).toBeInstanceOf(ScrollToTextEvent);
+    expect(dispatchedEvent.text).toBe('checkout');
     expect(result.extracted_content).toContain('Scrolled to text: checkout');
   });
 

@@ -7,6 +7,7 @@ import {
   NavigateToUrlEvent,
   RefreshEvent,
   ScrollEvent,
+  ScrollToTextEvent,
   SendKeysEvent,
   SwitchTabEvent,
   TypeTextEvent,
@@ -26,6 +27,7 @@ export class DefaultActionWatchdog extends BaseWatchdog {
     WaitEvent,
     SendKeysEvent,
     ScrollEvent,
+    ScrollToTextEvent,
     ClickElementEvent,
     TypeTextEvent,
     UploadFileEvent,
@@ -73,6 +75,12 @@ export class DefaultActionWatchdog extends BaseWatchdog {
   async on_ScrollEvent(event: ScrollEvent) {
     await this.browser_session.scroll(event.direction, event.amount, {
       node: event.node ?? null,
+    });
+  }
+
+  async on_ScrollToTextEvent(event: ScrollToTextEvent) {
+    await this.browser_session.scroll_to_text(event.text, {
+      direction: event.direction,
     });
   }
 
