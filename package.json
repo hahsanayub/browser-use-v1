@@ -31,6 +31,11 @@
       "import": "./dist/controller/index.js",
       "default": "./dist/controller/index.js"
     },
+    "./code-use": {
+      "types": "./dist/code-use/index.d.ts",
+      "import": "./dist/code-use/index.js",
+      "default": "./dist/code-use/index.js"
+    },
     "./tools": {
       "types": "./dist/tools/index.d.ts",
       "import": "./dist/tools/index.js",

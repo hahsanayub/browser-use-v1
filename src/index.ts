@@ -55,3 +55,4 @@ export * from './agent/service.js';
 export * from './agent/message-manager/utils.js';
 export * from './skills/index.js';
 export * from './sandbox/index.js';
+export * from './code-use/index.js';
