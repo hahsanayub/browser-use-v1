@@ -1,11 +1,13 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { BrowserSession } from '../src/browser/session.js';
 import {
+  BrowserConnectedEvent,
   BrowserErrorEvent,
   BrowserStartEvent,
+  BrowserStopEvent,
   BrowserStoppedEvent,
 } from '../src/browser/events.js';
 import { HarRecordingWatchdog } from '../src/browser/watchdogs/har-recording-watchdog.js';
@@ -100,6 +102,88 @@ describe('har recording watchdog alignment', () => {
       await session.event_bus.dispatch_or_throw(new BrowserStoppedEvent());
 
       expect(errors).toHaveLength(0);
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('writes HAR fallback from CDP network events when file is missing on stop', async () => {
+    const tmpRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'browser-use-har-watchdog-fallback-')
+    );
+    try {
+      const harPath = path.join(tmpRoot, 'fallback.har');
+      const session = new BrowserSession({
+        profile: {
+          record_har_path: harPath,
+        },
+      });
+      const watchdog = new HarRecordingWatchdog({ browser_session: session });
+      session.attach_watchdog(watchdog);
+
+      const listeners: Record<string, (payload: any) => void> = {};
+      const cdpSession = {
+        send: vi.fn(async () => ({})),
+        on: vi.fn((event: string, handler: (payload: any) => void) => {
+          listeners[event] = handler;
+        }),
+        off: vi.fn(),
+        detach: vi.fn(async () => {}),
+      };
+      vi.spyOn(session, 'get_or_create_cdp_session').mockResolvedValue(
+        cdpSession as any
+      );
+
+      await session.event_bus.dispatch_or_throw(new BrowserStartEvent());
+      await session.event_bus.dispatch_or_throw(
+        new BrowserConnectedEvent({
+          cdp_url: 'http://127.0.0.1:9222',
+        })
+      );
+
+      listeners['Network.requestWillBeSent']?.({
+        requestId: 'request-1',
+        timestamp: 1,
+        wallTime: 1_700_000_000,
+        request: {
+          url: 'https://example.com/data.json',
+          method: 'GET',
+          headers: {
+            accept: 'application/json',
+          },
+        },
+      });
+      listeners['Network.responseReceived']?.({
+        requestId: 'request-1',
+        timestamp: 1.05,
+        response: {
+          status: 200,
+          statusText: 'OK',
+          headers: {
+            'content-type': 'application/json',
+          },
+          mimeType: 'application/json',
+        },
+      });
+      listeners['Network.loadingFinished']?.({
+        requestId: 'request-1',
+        timestamp: 1.2,
+        encodedDataLength: 123,
+      });
+
+      await session.event_bus.dispatch_or_throw(new BrowserStopEvent());
+
+      expect(fs.existsSync(harPath)).toBe(true);
+      const har = JSON.parse(fs.readFileSync(harPath, 'utf-8'));
+      expect(cdpSession.send).toHaveBeenCalledWith('Network.enable');
+      expect(har.log.entries).toHaveLength(1);
+      expect(har.log.entries[0].request.url).toBe(
+        'https://example.com/data.json'
+      );
+
+      await session.event_bus.dispatch_or_throw(new BrowserStoppedEvent());
+      expect(cdpSession.off).toHaveBeenCalled();
+      expect(cdpSession.detach).toHaveBeenCalledTimes(1);
     } finally {
       fs.rmSync(tmpRoot, { recursive: true, force: true });
     }
