@@ -40,7 +40,26 @@ vi.mock('../src/utils.js', () => {
       const normalized = pattern.replace(/\*/g, '');
       return url.includes(normalized);
     },
-    sanitize_surrogates: (text: string) => text,
+    sanitize_surrogates: (text: string) => {
+      let result = '';
+      for (let index = 0; index < text.length; index += 1) {
+        const code = text.charCodeAt(index);
+        if (code >= 0xd800 && code <= 0xdbff) {
+          const nextCode =
+            index + 1 < text.length ? text.charCodeAt(index + 1) : null;
+          if (nextCode != null && nextCode >= 0xdc00 && nextCode <= 0xdfff) {
+            result += text[index] + text[index + 1];
+            index += 1;
+          }
+          continue;
+        }
+        if (code >= 0xdc00 && code <= 0xdfff) {
+          continue;
+        }
+        result += text[index];
+      }
+      return result;
+    },
     log_pretty_path: (p: string) => p,
   };
 });
@@ -2272,6 +2291,50 @@ describe('Regression Coverage', () => {
     expect(result.include_extracted_content_only_once).toBe(false);
     expect(result.long_term_memory).toContain(completion.trim());
     expect(fileSystem.save_extracted_content).not.toHaveBeenCalled();
+  });
+
+  it('extract_structured_data sanitizes isolated surrogate code units in query and content', async () => {
+    const controller = new Controller();
+    const loneHighSurrogate = String.fromCharCode(0xd800);
+    const loneLowSurrogate = String.fromCharCode(0xdc00);
+    let lastUserPrompt = '';
+    const pageExtractionLlm = {
+      ainvoke: vi.fn(async (messages: any[]) => {
+        const prompt = messages?.[1]?.content;
+        lastUserPrompt = typeof prompt === 'string' ? prompt : '';
+        return { completion: 'ok' };
+      }),
+    };
+    const page = {
+      content: vi.fn(
+        async () => `<html><body>Bad ${loneHighSurrogate} content</body></html>`
+      ),
+      frames: vi.fn(() => []),
+      url: vi.fn(() => 'https://example.com'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+      agent_current_page: {
+        url: vi.fn(() => 'https://example.com'),
+      },
+    };
+
+    const result = await controller.registry.execute_action(
+      'extract_structured_data',
+      { query: `Find ${loneLowSurrogate} value`, extract_links: false },
+      {
+        browser_session: browserSession as any,
+        page_extraction_llm: pageExtractionLlm as any,
+      }
+    );
+
+    expect(pageExtractionLlm.ainvoke).toHaveBeenCalled();
+    expect(lastUserPrompt.includes(loneHighSurrogate)).toBe(false);
+    expect(lastUserPrompt.includes(loneLowSurrogate)).toBe(false);
+    expect((result.extracted_content ?? '').includes(loneHighSurrogate)).toBe(false);
+    expect((result.extracted_content ?? '').includes(loneLowSurrogate)).toBe(false);
+    expect((result.long_term_memory ?? '').includes(loneHighSurrogate)).toBe(false);
+    expect((result.long_term_memory ?? '').includes(loneLowSurrogate)).toBe(false);
   });
 
   it('extract_structured_data validates start_from_char against content length', async () => {

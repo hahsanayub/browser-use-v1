@@ -44,6 +44,7 @@ import {
 import { Registry } from './registry/service.js';
 import { SystemMessage, UserMessage } from '../llm/messages.js';
 import { createLogger } from '../logging-config.js';
+import { sanitize_surrogates } from '../utils.js';
 
 type BrowserSession = any;
 type Page = any;
@@ -1359,6 +1360,9 @@ export class Controller<Context = unknown> {
         statsSummary += ` (filtered ${charsFiltered.toLocaleString()} chars of noise)`;
       }
 
+      content = sanitize_surrogates(content);
+      const sanitizedQuery = sanitize_surrogates(params.query);
+
       const parseJsonFromCompletion = (completion: string) => {
         const trimmed = completion.trim();
         const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -1396,7 +1400,7 @@ You will be given a query, a JSON Schema, and the markdown of a webpage that has
 </instructions>`.trim();
         const schemaJson = JSON.stringify(effectiveOutputSchema, null, 2);
         const prompt =
-          `<query>\n${params.query}\n</query>\n\n` +
+          `<query>\n${sanitizedQuery}\n</query>\n\n` +
           `<output_schema>\n${schemaJson}\n</output_schema>\n\n` +
           `<content_stats>\n${statsSummary}\n</content_stats>\n\n` +
           `<webpage_content>\n${content}\n</webpage_content>`;
@@ -1445,7 +1449,7 @@ You will be given a query, a JSON Schema, and the markdown of a webpage that has
         const resultJson = JSON.stringify(normalizedResult);
         const extractedContent =
           `<url>\n${pageUrl}\n</url>\n` +
-          `<query>\n${params.query}\n</query>\n` +
+          `<query>\n${sanitizedQuery}\n</query>\n` +
           `<structured_result>\n${resultJson}\n</structured_result>`;
         const extractionMeta = {
           data: normalizedResult,
@@ -1457,7 +1461,7 @@ You will be given a query, a JSON Schema, and the markdown of a webpage that has
 
         const includeOnce = extractedContent.length >= maxMemoryLength;
         const memory = includeOnce
-          ? `Query: ${params.query}\nContent in ${await fsInstance.save_extracted_content(extractedContent)} and once in <read_state>.`
+          ? `Query: ${sanitizedQuery}\nContent in ${await fsInstance.save_extracted_content(extractedContent)} and once in <read_state>.`
           : extractedContent;
         return new ActionResult({
           extracted_content: extractedContent,
@@ -1490,7 +1494,7 @@ You will be given a query and the markdown of a webpage that has been filtered t
 - Do not answer in conversational format - directly output the relevant information or that the information is unavailable.
 </output>`.trim();
       const prompt =
-        `<query>\n${params.query}\n</query>\n\n` +
+        `<query>\n${sanitizedQuery}\n</query>\n\n` +
         `<content_stats>\n${statsSummary}\n</content_stats>\n\n` +
         `<webpage_content>\n${content}\n</webpage_content>`;
       const response = await (page_extraction_llm as any).ainvoke(
@@ -1506,11 +1510,11 @@ You will be given a query and the markdown of a webpage that has been filtered t
           : JSON.stringify(completion ?? {});
       const extractedContent =
         `<url>\n${pageUrl}\n</url>\n` +
-        `<query>\n${params.query}\n</query>\n` +
+        `<query>\n${sanitizedQuery}\n</query>\n` +
         `<result>\n${completionText}\n</result>`;
       const includeOnce = extractedContent.length >= maxMemoryLength;
       const memory = includeOnce
-        ? `Query: ${params.query}\nContent in ${await fsInstance.save_extracted_content(extractedContent)} and once in <read_state>.`
+        ? `Query: ${sanitizedQuery}\nContent in ${await fsInstance.save_extracted_content(extractedContent)} and once in <read_state>.`
         : extractedContent;
 
       return new ActionResult({
