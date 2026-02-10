@@ -175,4 +175,46 @@ describe('recording watchdog alignment', () => {
       '/tmp/recorded-video.webm'
     );
   });
+
+  it('removes close listener after close callback runs', async () => {
+    const session = new BrowserSession({
+      profile: {
+        record_video_dir: path.join(
+          os.tmpdir(),
+          `browser-use-video-cleanup-${Date.now()}`
+        ),
+      },
+    });
+    const watchdog = new RecordingWatchdog({ browser_session: session });
+    session.attach_watchdog(watchdog);
+
+    const closeListeners: Array<() => void> = [];
+    const page = {
+      on: vi.fn((event: string, listener: () => void) => {
+        if (event === 'close') {
+          closeListeners.push(listener);
+        }
+      }),
+      off: vi.fn(),
+      video: vi.fn(() => ({
+        path: vi.fn(async () => '/tmp/recorded-video-cleanup.webm'),
+      })),
+    } as any;
+    session.browser_context = {
+      pages: vi.fn(() => [page]),
+    } as any;
+    session.agent_current_page = page;
+
+    await session.event_bus.dispatch_or_throw(
+      new BrowserConnectedEvent({
+        cdp_url: 'http://127.0.0.1:9222',
+      })
+    );
+
+    expect(closeListeners).toHaveLength(1);
+    closeListeners[0]();
+    await Promise.resolve();
+
+    expect(page.off).toHaveBeenCalledWith('close', closeListeners[0]);
+  });
 });

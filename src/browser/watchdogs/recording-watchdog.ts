@@ -134,6 +134,12 @@ export class RecordingWatchdog extends BaseWatchdog {
     }
 
     const listener = () => {
+      this._videoCloseListeners.delete(page);
+      if (typeof page.off === 'function') {
+        page.off('close', listener);
+      } else if (typeof page.removeListener === 'function') {
+        page.removeListener('close', listener);
+      }
       void this._captureVideoArtifact(page);
     };
     page.on('close', listener);
