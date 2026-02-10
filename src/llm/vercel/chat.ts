@@ -19,11 +19,16 @@ export interface ChatVercelOptions {
   model?: string;
   apiKey?: string;
   baseURL?: string;
+  timeout?: number | null;
   temperature?: number | null;
   maxTokens?: number | null;
   topP?: number | null;
   seed?: number | null;
   maxRetries?: number;
+  defaultHeaders?: Record<string, string> | null;
+  defaultQuery?: Record<string, string | undefined> | null;
+  fetchImplementation?: typeof fetch;
+  fetchOptions?: RequestInit | null;
   reasoningModels?: string[] | null;
   providerOptions?: Record<string, unknown> | null;
   extraBody?: Record<string, unknown> | null;
@@ -52,11 +57,16 @@ export class ChatVercel implements BaseChatModel {
       model = 'openai/gpt-4o',
       apiKey = process.env.VERCEL_API_KEY,
       baseURL = process.env.VERCEL_BASE_URL || 'https://ai-gateway.vercel.sh/v1',
+      timeout = null,
       temperature = null,
       maxTokens = null,
       topP = null,
       seed = null,
       maxRetries = 5,
+      defaultHeaders = null,
+      defaultQuery = null,
+      fetchImplementation,
+      fetchOptions = null,
       reasoningModels = [...DEFAULT_REASONING_MODELS],
       providerOptions = null,
       extraBody = null,
@@ -78,7 +88,12 @@ export class ChatVercel implements BaseChatModel {
     this.client = new OpenAI({
       apiKey,
       baseURL,
+      timeout: timeout ?? undefined,
       maxRetries,
+      defaultHeaders: defaultHeaders ?? undefined,
+      defaultQuery: defaultQuery ?? undefined,
+      fetch: fetchImplementation,
+      fetchOptions: (fetchOptions ?? undefined) as any,
     });
   }
 

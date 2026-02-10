@@ -123,11 +123,17 @@ describe('OpenAI-compatible providers alignment', () => {
   });
 
   it('supports Vercel providerOptions passthrough with OpenAI-compatible payload', async () => {
+    const customFetch = vi.fn() as unknown as typeof fetch;
     const llm = new ChatVercel({
       model: 'openai/gpt-5-mini',
+      timeout: 25000,
       temperature: 0.3,
       topP: 0.7,
       seed: 11,
+      defaultHeaders: { 'x-vercel-test': '1' },
+      defaultQuery: { purpose: 'alignment' },
+      fetchImplementation: customFetch,
+      fetchOptions: { cache: 'no-store' },
       providerOptions: {
         gateway: {
           order: ['openai', 'anthropic'],
@@ -148,6 +154,14 @@ describe('OpenAI-compatible providers alignment', () => {
           order: ['openai', 'anthropic'],
         },
       },
+    });
+    expect(openaiCtorMock.mock.calls[0]?.[0]).toMatchObject({
+      baseURL: 'https://ai-gateway.vercel.sh/v1',
+      timeout: 25000,
+      defaultHeaders: { 'x-vercel-test': '1' },
+      defaultQuery: { purpose: 'alignment' },
+      fetch: customFetch,
+      fetchOptions: { cache: 'no-store' },
     });
   });
 
