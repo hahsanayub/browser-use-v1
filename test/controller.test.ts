@@ -1525,6 +1525,24 @@ describe('Regression Coverage', () => {
     );
   });
 
+  it('click action returns page-changed guidance when index is unavailable', async () => {
+    const controller = new Controller();
+    const browserSession = {
+      get_dom_element_by_index: vi.fn(async () => null),
+    };
+
+    const result = await controller.registry.execute_action(
+      'click',
+      { index: 99 },
+      { browser_session: browserSession as any }
+    );
+
+    expect(result.error).toBeNull();
+    expect(result.extracted_content).toContain(
+      'Element index 99 not available - page may have changed'
+    );
+  });
+
   it('set_coordinate_clicking re-registers click schema between index-only and coordinate-enabled', () => {
     const controller = new Controller();
     const clickAction = controller.registry.get_action('click');
@@ -1581,6 +1599,26 @@ describe('Regression Coverage', () => {
       'append text',
       expect.objectContaining({ clear: false })
     );
+  });
+
+  it('input_text returns page-changed guidance when index is unavailable', async () => {
+    const controller = new Controller();
+    const browserSession = {
+      get_dom_element_by_index: vi.fn(async () => null),
+      _input_text_element_node: vi.fn(async () => {}),
+    };
+
+    const result = await controller.registry.execute_action(
+      'input_text',
+      { index: 99, text: 'hello', clear: true },
+      { browser_session: browserSession as any }
+    );
+
+    expect(result.error).toBeNull();
+    expect(result.extracted_content).toContain(
+      'Element index 99 not available - page may have changed'
+    );
+    expect(browserSession._input_text_element_node).not.toHaveBeenCalled();
   });
 
   it('input_text does not leak sensitive value and reports matched sensitive key', async () => {

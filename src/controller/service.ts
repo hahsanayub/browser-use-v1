@@ -566,9 +566,11 @@ export class Controller<Context = unknown> {
         signal,
       });
       if (!element) {
-        throw new BrowserError(
-          `Element index ${params.index} does not exist - retry or use alternative actions`
-        );
+        const msg = `Element index ${params.index} not available - page may have changed. Try refreshing browser state.`;
+        logger.warning(`⚠️ ${msg}`);
+        return new ActionResult({
+          extracted_content: msg,
+        });
       }
       const tabsBefore = collectTabIds();
       if (browser_session.is_file_input?.(element)) {
@@ -655,9 +657,11 @@ export class Controller<Context = unknown> {
         { signal }
       );
       if (!element) {
-        throw new BrowserError(
-          `Element index ${params.index} does not exist - retry or use alternative actions`
-        );
+        const msg = `Element index ${params.index} not available - page may have changed. Try refreshing browser state.`;
+        logger.warning(`⚠️ ${msg}`);
+        return new ActionResult({
+          extracted_content: msg,
+        });
       }
 
       const isAutocompleteField = (
