@@ -220,7 +220,7 @@ export class TokenCost {
       this.includeCost && cost && cost.completion_cost > 0
         ? `📤 ${ansi.green}${completionTokensFmt} ($${cost.completion_cost.toFixed(4)})${ansi.reset}`
         : `📤 ${ansi.green}${completionTokensFmt}${ansi.reset}`;
-    costLogger.info(
+    costLogger.debug(
       `🧠 ${ansi.cyan}${model}${ansi.reset} | ${inputPart} | ${completionSection}`
     );
   }
@@ -486,12 +486,11 @@ export class TokenCost {
         ? ` ($${summary.total_completion_cost.toFixed(4)})`
         : '';
 
-    costLogger.info(
+    costLogger.debug(
       `💲 ${ansi.bold}Total Usage Summary${ansi.reset}: ${ansi.blue}${totalTokens} tokens${ansi.reset}${totalCostPart} | ` +
         `⬅️ ${ansi.yellow}${promptTokens}${promptCostPart}${ansi.reset} | ➡️ ${ansi.green}${completionTokens}${completionCostPart}${ansi.reset}`
     );
 
-    costLogger.info(`📊 ${ansi.bold}Per-Model Usage Breakdown${ansi.reset}:`);
     for (const [model, stats] of Object.entries(summary.by_model)) {
       const totalFmt = this.formatTokens(stats.total_tokens);
       const promptFmt = this.formatTokens(stats.prompt_tokens);
@@ -505,7 +504,7 @@ export class TokenCost {
           ? ` ($${stats.cost.toFixed(4)})`
           : '';
 
-      costLogger.info(
+      costLogger.debug(
         `  🤖 ${ansi.cyan}${model}${ansi.reset}: ${ansi.blue}${totalFmt} tokens${ansi.reset}${costPart} | ` +
           `⬅️ ${ansi.yellow}${promptFmt}${ansi.reset} | ➡️ ${ansi.green}${completionFmt}${ansi.reset} | ` +
           `📞 ${stats.invocations} calls | 📈 ${avgFmt}/call`
