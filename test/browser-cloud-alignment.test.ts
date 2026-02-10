@@ -1,0 +1,143 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DeviceAuthClient } from '../src/sync/auth.js';
+import {
+  CloudBrowserAuthError,
+  CloudBrowserClient,
+  CloudBrowserError,
+} from '../src/browser/cloud/index.js';
+
+describe('browser cloud alignment', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.BROWSER_USE_API_KEY;
+  });
+
+  it('creates a cloud browser and stores current session id', async () => {
+    const fetchImpl = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          id: 'browser-session-1',
+          status: 'running',
+          liveUrl: 'https://live.browser-use.com/session/1',
+          cdpUrl: 'wss://cdp.browser-use.com/session/1',
+          timeoutAt: '2026-02-10T00:20:00Z',
+          startedAt: '2026-02-10T00:00:00Z',
+          finishedAt: null,
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }
+      );
+    });
+
+    const client = new CloudBrowserClient({
+      api_base_url: 'https://api.browser-use.test',
+      api_key: 'test-api-key',
+      fetch_impl: fetchImpl as unknown as typeof fetch,
+    });
+    const result = await client.create_browser({
+      cloud_profile_id: 'profile-123',
+      cloud_proxy_country_code: 'us',
+      cloud_timeout: 25,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchImpl.mock.calls[0];
+    expect(url).toBe('https://api.browser-use.test/api/v2/browsers');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toMatchObject({
+      'X-Browser-Use-API-Key': 'test-api-key',
+      'Content-Type': 'application/json',
+    });
+    expect(JSON.parse(String(init.body))).toEqual({
+      profile_id: 'profile-123',
+      proxy_country_code: 'us',
+      timeout: 25,
+    });
+
+    expect(result.id).toBe('browser-session-1');
+    expect(result.cdpUrl).toContain('wss://');
+    expect(client.current_session_id).toBe('browser-session-1');
+  });
+
+  it('stops browser session and clears current session id', async () => {
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'PATCH') {
+        return new Response(
+          JSON.stringify({
+            id: 'browser-session-stop',
+            status: 'stopped',
+            liveUrl: 'https://live.browser-use.com/session/stop',
+            cdpUrl: 'wss://cdp.browser-use.com/session/stop',
+            timeoutAt: '2026-02-10T00:20:00Z',
+            startedAt: '2026-02-10T00:00:00Z',
+            finishedAt: '2026-02-10T00:10:00Z',
+          }),
+          { status: 200 }
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          id: 'browser-session-stop',
+          status: 'running',
+          liveUrl: 'https://live.browser-use.com/session/stop',
+          cdpUrl: 'wss://cdp.browser-use.com/session/stop',
+          timeoutAt: '2026-02-10T00:20:00Z',
+          startedAt: '2026-02-10T00:00:00Z',
+          finishedAt: null,
+        }),
+        { status: 200 }
+      );
+    });
+    const client = new CloudBrowserClient({
+      api_base_url: 'https://api.browser-use.test',
+      api_key: 'test-api-key',
+      fetch_impl: fetchImpl as unknown as typeof fetch,
+    });
+    client.current_session_id = 'browser-session-stop';
+
+    const result = await client.stop_browser();
+
+    expect(result.status).toBe('stopped');
+    expect(client.current_session_id).toBeNull();
+    const patchCall = fetchImpl.mock.calls.find(
+      ([, init]) => init?.method === 'PATCH'
+    );
+    expect(patchCall?.[0]).toBe(
+      'https://api.browser-use.test/api/v2/browsers/browser-session-stop'
+    );
+  });
+
+  it('throws CloudBrowserAuthError when no API key is available', async () => {
+    vi.spyOn(DeviceAuthClient.prototype, 'api_token', 'get').mockReturnValue(
+      null
+    );
+    const client = new CloudBrowserClient({
+      api_base_url: 'https://api.browser-use.test',
+      fetch_impl: vi.fn() as unknown as typeof fetch,
+    });
+
+    await expect(client.create_browser({})).rejects.toBeInstanceOf(
+      CloudBrowserAuthError
+    );
+  });
+
+  it('maps non-auth HTTP errors to CloudBrowserError', async () => {
+    const fetchImpl = vi.fn(async () => {
+      return new Response(JSON.stringify({ detail: 'rate limited' }), {
+        status: 429,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    const client = new CloudBrowserClient({
+      api_base_url: 'https://api.browser-use.test',
+      api_key: 'test-api-key',
+      fetch_impl: fetchImpl as unknown as typeof fetch,
+    });
+
+    await expect(client.create_browser({})).rejects.toBeInstanceOf(
+      CloudBrowserError
+    );
+  });
+});

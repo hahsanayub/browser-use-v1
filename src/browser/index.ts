@@ -1,6 +1,7 @@
 export * from './profile.js';
 export * from './views.js';
 export * from './utils.js';
+export * from './cloud/index.js';
 export * from './session.js';
 export * from './extensions.js';
 export * from './dvd-screensaver.js';
