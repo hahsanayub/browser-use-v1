@@ -58,6 +58,7 @@ import { DOMWatchdog } from './watchdogs/dom-watchdog.js';
 import { DownloadsWatchdog } from './watchdogs/downloads-watchdog.js';
 import { LocalBrowserWatchdog } from './watchdogs/local-browser-watchdog.js';
 import { PermissionsWatchdog } from './watchdogs/permissions-watchdog.js';
+import { SecurityWatchdog } from './watchdogs/security-watchdog.js';
 import { StorageStateWatchdog } from './watchdogs/storage-state-watchdog.js';
 import type { BaseWatchdog } from './watchdogs/base.js';
 
@@ -269,6 +270,7 @@ export class BrowserSession {
       new CrashWatchdog({ browser_session: this }),
       new AboutBlankWatchdog({ browser_session: this }),
       new PermissionsWatchdog({ browser_session: this }),
+      new SecurityWatchdog({ browser_session: this }),
       new DOMWatchdog({ browser_session: this }),
       new DownloadsWatchdog({ browser_session: this }),
       new StorageStateWatchdog({ browser_session: this }),
