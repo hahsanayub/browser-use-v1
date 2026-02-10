@@ -7,14 +7,25 @@ import { SchemaOptimizer } from '../schema.js';
 import { ChatInvokeCompletion, type ChatInvokeUsage } from '../views.js';
 import { VercelMessageSerializer } from './serializer.js';
 
+const DEFAULT_REASONING_MODELS = [
+  'o1',
+  'o3',
+  'o4',
+  'gpt-oss',
+  'deepseek-r1',
+  'qwen3-next-80b-a3b-thinking',
+] as const;
+
 export interface ChatVercelOptions {
   model?: string;
   apiKey?: string;
   baseURL?: string;
   temperature?: number | null;
+  maxTokens?: number | null;
   topP?: number | null;
   seed?: number | null;
   maxRetries?: number;
+  reasoningModels?: string[] | null;
   providerOptions?: Record<string, unknown> | null;
   extraBody?: Record<string, unknown> | null;
   removeMinItemsFromSchema?: boolean;
@@ -26,8 +37,10 @@ export class ChatVercel implements BaseChatModel {
   public provider = 'vercel';
   private client: OpenAI;
   private temperature: number | null;
+  private maxTokens: number | null;
   private topP: number | null;
   private seed: number | null;
+  private reasoningModels: string[] | null;
   private providerOptions: Record<string, unknown> | null;
   private extraBody: Record<string, unknown> | null;
   private removeMinItemsFromSchema: boolean;
@@ -41,9 +54,11 @@ export class ChatVercel implements BaseChatModel {
       apiKey = process.env.VERCEL_API_KEY,
       baseURL = process.env.VERCEL_BASE_URL || 'https://ai-gateway.vercel.sh/v1',
       temperature = null,
+      maxTokens = null,
       topP = null,
       seed = null,
       maxRetries = 5,
+      reasoningModels = [...DEFAULT_REASONING_MODELS],
       providerOptions = null,
       extraBody = null,
       removeMinItemsFromSchema = false,
@@ -52,8 +67,10 @@ export class ChatVercel implements BaseChatModel {
 
     this.model = model;
     this.temperature = temperature;
+    this.maxTokens = maxTokens;
     this.topP = topP;
     this.seed = seed;
+    this.reasoningModels = reasoningModels ? [...reasoningModels] : null;
     this.providerOptions = providerOptions;
     this.extraBody = extraBody;
     this.removeMinItemsFromSchema = removeMinItemsFromSchema;
@@ -92,6 +109,92 @@ export class ChatVercel implements BaseChatModel {
     };
   }
 
+  private getExtraBodyPayload(): Record<string, unknown> | undefined {
+    const payload: Record<string, unknown> = {
+      ...(this.extraBody ?? {}),
+    };
+    if (this.providerOptions) {
+      payload.providerOptions = this.providerOptions;
+    }
+    return Object.keys(payload).length > 0 ? payload : undefined;
+  }
+
+  private cloneMessages(messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]) {
+    return messages.map((message: any) => ({
+      ...message,
+      content: Array.isArray(message?.content)
+        ? message.content.map((part: any) => ({ ...part }))
+        : message?.content,
+    }));
+  }
+
+  private appendJsonInstructionToMessages(
+    messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+    schema: Record<string, unknown>
+  ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
+    const cloned = this.cloneMessages(messages) as any[];
+    const instruction =
+      '\n\nIMPORTANT: You must respond with ONLY a valid JSON object ' +
+      '(no markdown, no code blocks, no explanations) that exactly matches this schema:\n' +
+      `${JSON.stringify(schema, null, 2)}`;
+
+    if (cloned.length > 0 && cloned[0]?.role === 'system') {
+      if (typeof cloned[0].content === 'string') {
+        cloned[0].content = `${cloned[0].content}${instruction}`;
+      } else if (Array.isArray(cloned[0].content)) {
+        cloned[0].content = [...cloned[0].content, { type: 'text', text: instruction }];
+      } else {
+        cloned[0].content = instruction;
+      }
+      return cloned as OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+    }
+
+    for (let i = cloned.length - 1; i >= 0; i -= 1) {
+      if (cloned[i]?.role === 'user') {
+        if (typeof cloned[i].content === 'string') {
+          cloned[i].content = `${cloned[i].content}${instruction}`;
+        } else if (Array.isArray(cloned[i].content)) {
+          cloned[i].content = [...cloned[i].content, { type: 'text', text: instruction }];
+        } else {
+          cloned[i].content = instruction;
+        }
+        return cloned as OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+      }
+    }
+
+    cloned.unshift({
+      role: 'system',
+      content: instruction,
+    });
+    return cloned as OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+  }
+
+  private parseStructuredJson(text: string): unknown {
+    let jsonText = String(text ?? '').trim();
+    if (jsonText.startsWith('```json') && jsonText.endsWith('```')) {
+      jsonText = jsonText.slice(7, -3).trim();
+    } else if (jsonText.startsWith('```') && jsonText.endsWith('```')) {
+      jsonText = jsonText.slice(3, -3).trim();
+    }
+    return JSON.parse(jsonText);
+  }
+
+  private parseOutput<T>(
+    output_format: { parse: (input: string) => T },
+    payload: unknown
+  ): T {
+    const output = output_format as any;
+    if (
+      output &&
+      typeof output === 'object' &&
+      output.schema &&
+      typeof output.schema.parse === 'function'
+    ) {
+      return output.schema.parse(payload);
+    }
+    return output.parse(payload);
+  }
+
   async ainvoke(
     messages: Message[],
     output_format?: undefined,
@@ -113,6 +216,9 @@ export class ChatVercel implements BaseChatModel {
     const modelParams: Record<string, unknown> = {};
     if (this.temperature !== null) {
       modelParams.temperature = this.temperature;
+    }
+    if (this.maxTokens !== null) {
+      modelParams.max_tokens = this.maxTokens;
     }
     if (this.topP !== null) {
       modelParams.top_p = this.topP;
@@ -142,6 +248,69 @@ export class ChatVercel implements BaseChatModel {
       }
       return null;
     })();
+
+    const extraBodyPayload = this.getExtraBodyPayload();
+
+    const isGoogleModel = this.model.startsWith('google/');
+    const isAnthropicModel = this.model.startsWith('anthropic/');
+    const isReasoningModel = (this.reasoningModels ?? []).some((pattern) =>
+      String(this.model).toLowerCase().includes(String(pattern).toLowerCase())
+    );
+
+    if (
+      output_format &&
+      zodSchemaCandidate &&
+      (isGoogleModel || isAnthropicModel || isReasoningModel)
+    ) {
+      try {
+        const rawJsonSchema = zodToJsonSchema(zodSchemaCandidate as any, {
+          name: 'agent_output',
+          target: 'jsonSchema7',
+        });
+        const optimizedJsonSchema = SchemaOptimizer.createGeminiOptimizedSchema(
+          rawJsonSchema as Record<string, unknown>
+        );
+        const requestMessages = this.appendJsonInstructionToMessages(
+          vercelMessages,
+          optimizedJsonSchema
+        );
+
+        const request: Record<string, unknown> = {
+          model: this.model,
+          messages: requestMessages,
+          ...modelParams,
+        };
+        if (extraBodyPayload) {
+          request.extra_body = extraBodyPayload;
+        }
+
+        const response = await this.client.chat.completions.create(
+          request as any,
+          options.signal ? { signal: options.signal } : undefined
+        );
+        const content = response.choices[0].message.content || '';
+        const usage = this.getUsage(response);
+        const stopReason = response.choices[0].finish_reason ?? null;
+
+        const completion = this.parseOutput(
+          output_format,
+          this.parseStructuredJson(content)
+        );
+        return new ChatInvokeCompletion(
+          completion,
+          usage,
+          null,
+          null,
+          stopReason
+        );
+      } catch (error: any) {
+        throw new ModelProviderError(
+          `Failed to parse JSON response: ${error?.message ?? String(error)}`,
+          500,
+          this.model
+        );
+      }
+    }
 
     let responseFormat: OpenAI.Chat.Completions.ChatCompletionCreateParams['response_format'] =
       undefined;
@@ -177,10 +346,9 @@ export class ChatVercel implements BaseChatModel {
       messages: vercelMessages,
       response_format: responseFormat,
       ...modelParams,
-      ...(this.extraBody ?? {}),
     };
-    if (this.providerOptions) {
-      request.providerOptions = this.providerOptions;
+    if (extraBodyPayload) {
+      request.extra_body = extraBodyPayload;
     }
 
     try {
@@ -196,20 +364,9 @@ export class ChatVercel implements BaseChatModel {
       let completion: T | string = content;
       if (output_format) {
         if (zodSchemaCandidate) {
-          const parsedJson = JSON.parse(content);
-          const output = output_format as any;
-          if (
-            output &&
-            typeof output === 'object' &&
-            output.schema &&
-            typeof output.schema.parse === 'function'
-          ) {
-            completion = output.schema.parse(parsedJson);
-          } else {
-            completion = (output_format as any).parse(parsedJson);
-          }
+          completion = this.parseOutput(output_format, JSON.parse(content));
         } else {
-          completion = (output_format as any).parse(content);
+          completion = this.parseOutput(output_format, content);
         }
       }
 

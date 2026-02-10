@@ -126,11 +126,37 @@ describe('OpenAI-compatible providers alignment', () => {
     expect(request.temperature).toBe(0.3);
     expect(request.top_p).toBe(0.7);
     expect(request.seed).toBe(11);
-    expect(request.providerOptions).toEqual({
-      gateway: {
-        order: ['openai', 'anthropic'],
+    expect(request.extra_body).toEqual({
+      providerOptions: {
+        gateway: {
+          order: ['openai', 'anthropic'],
+        },
       },
     });
+  });
+
+  it('uses prompt-based JSON fallback for Vercel reasoning/google/anthropic style models', async () => {
+    openaiCreateMock.mockResolvedValue(
+      buildResponse('```json\n{"value":"ok"}\n```')
+    );
+    const schema = z.object({ value: z.string() });
+    const llm = new ChatVercel({
+      model: 'openai/gpt-oss-120b',
+    });
+
+    const response = await llm.ainvoke([new UserMessage('extract')], schema as any);
+    const request = openaiCreateMock.mock.calls[0]?.[0] ?? {};
+    const lastMessage = request.messages?.[request.messages.length - 1];
+    const contentText =
+      typeof lastMessage?.content === 'string'
+        ? lastMessage.content
+        : JSON.stringify(lastMessage?.content ?? '');
+
+    expect(request.response_format).toBeUndefined();
+    expect(contentText).toContain(
+      'IMPORTANT: You must respond with ONLY a valid JSON object'
+    );
+    expect((response.completion as any).value).toBe('ok');
   });
 
   it('optimizes OpenRouter structured schemas for provider compatibility', async () => {
