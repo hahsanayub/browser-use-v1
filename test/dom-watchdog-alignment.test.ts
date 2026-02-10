@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { BrowserSession } from '../src/browser/session.js';
 import {
+  BrowserErrorEvent,
   BrowserStateRequestEvent,
   TabCreatedEvent,
 } from '../src/browser/events.js';
@@ -45,5 +46,33 @@ describe('dom watchdog alignment', () => {
     );
 
     expect(result.errors).toHaveLength(0);
+  });
+
+  it('emits BrowserErrorEvent when BrowserStateRequestEvent handling fails', async () => {
+    const session = new BrowserSession();
+    const watchdog = new DOMWatchdog({ browser_session: session });
+    session.attach_watchdog(watchdog);
+
+    vi.spyOn(session, 'get_browser_state_with_recovery').mockRejectedValue(
+      new Error('state boom')
+    );
+    const dispatchSpy = vi.spyOn(session.event_bus, 'dispatch');
+
+    await expect(
+      session.event_bus.dispatch_or_throw(
+        new BrowserStateRequestEvent({
+          include_screenshot: true,
+          include_recent_events: false,
+        })
+      )
+    ).rejects.toThrow('BrowserStateRequestEvent');
+
+    const errorCall = dispatchSpy.mock.calls.find(
+      ([event]) => event instanceof BrowserErrorEvent
+    );
+    expect(errorCall).toBeDefined();
+    const errorEvent = errorCall?.[0] as BrowserErrorEvent;
+    expect(errorEvent.error_type).toBe('BrowserStateRequestFailed');
+    expect(errorEvent.message).toContain('state boom');
   });
 });
