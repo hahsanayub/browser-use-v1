@@ -98,7 +98,7 @@ export class TokenCost {
         return;
       }
     } catch (error) {
-      logger.warning(
+      logger.debug(
         `Failed to load token pricing cache: ${(error as Error).message}`
       );
     }
@@ -165,7 +165,7 @@ export class TokenCost {
         JSON.stringify(cached, null, 2)
       );
     } catch (error) {
-      logger.error(
+      logger.debug(
         `Failed to fetch LiteLLM pricing: ${(error as Error).message}`
       );
       this.pricingData = this.pricingData ?? {};
