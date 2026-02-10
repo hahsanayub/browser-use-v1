@@ -3628,7 +3628,13 @@ Context: ${context}`;
         if (result == null) {
           return new ActionResult();
         }
-        return new ActionResult({ extracted_content: JSON.stringify(result) });
+        const resultType =
+          result && typeof result === 'object'
+            ? result.constructor?.name ?? typeof result
+            : typeof result;
+        throw new Error(
+          `Invalid action result type: ${resultType} of ${String(result)}`
+        );
       } catch (error: any) {
         if (error instanceof BrowserError) {
           if (error.long_term_memory != null) {

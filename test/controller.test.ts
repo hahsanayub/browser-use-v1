@@ -3022,4 +3022,22 @@ describe('Regression Coverage', () => {
       )
     ).rejects.toBeInstanceOf(BrowserError);
   });
+
+  it('controller.act returns error for non-ActionResult object outputs', async () => {
+    const controller = new Controller();
+
+    controller.registry.action('Custom object action')(
+      async function custom_object_action() {
+        return { ok: true };
+      }
+    );
+
+    const result = await controller.act(
+      { custom_object_action: {} },
+      { browser_session: {} as any }
+    );
+
+    expect(result.error).toContain('Invalid action result type');
+    expect(result.extracted_content).toBeNull();
+  });
 });
