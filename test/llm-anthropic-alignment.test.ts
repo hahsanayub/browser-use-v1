@@ -71,6 +71,8 @@ describe('ChatAnthropic alignment', () => {
   });
 
   it('passes python-aligned client options and invoke params', async () => {
+    const fetchMock = vi.fn(async () => new Response()) as unknown as typeof fetch;
+
     const llm = new ChatAnthropic({
       model: 'claude-sonnet-4-20250514',
       apiKey: 'test-key',
@@ -84,6 +86,8 @@ describe('ChatAnthropic alignment', () => {
       maxRetries: 6,
       defaultHeaders: { 'x-trace-id': 'trace-1' },
       defaultQuery: { purpose: 'alignment' },
+      fetchImplementation: fetchMock,
+      fetchOptions: { cache: 'no-store' },
     });
 
     await llm.ainvoke([new SystemMessage('sys'), new UserMessage('hello')]);
@@ -96,6 +100,8 @@ describe('ChatAnthropic alignment', () => {
       maxRetries: 6,
       defaultHeaders: { 'x-trace-id': 'trace-1' },
       defaultQuery: { purpose: 'alignment' },
+      fetch: fetchMock,
+      fetchOptions: { cache: 'no-store' },
     });
 
     const request = anthropicMock.anthropicCreateMock.mock.calls[0]?.[0] ?? {};

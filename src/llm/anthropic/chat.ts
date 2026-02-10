@@ -2,6 +2,7 @@ import Anthropic, {
   APIConnectionError,
   APIError,
   RateLimitError,
+  type ClientOptions,
 } from '@anthropic-ai/sdk';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
@@ -24,6 +25,8 @@ export interface ChatAnthropicOptions {
   maxRetries?: number;
   defaultHeaders?: Record<string, string>;
   defaultQuery?: Record<string, string | undefined>;
+  fetchImplementation?: ClientOptions['fetch'];
+  fetchOptions?: ClientOptions['fetchOptions'];
   removeMinItemsFromSchema?: boolean;
   removeDefaultsFromSchema?: boolean;
 }
@@ -55,6 +58,8 @@ export class ChatAnthropic implements BaseChatModel {
       maxRetries = 10,
       defaultHeaders,
       defaultQuery,
+      fetchImplementation,
+      fetchOptions,
       removeMinItemsFromSchema = false,
       removeDefaultsFromSchema = false,
     } = normalizedOptions;
@@ -75,6 +80,8 @@ export class ChatAnthropic implements BaseChatModel {
       maxRetries,
       defaultHeaders,
       defaultQuery,
+      ...(fetchImplementation ? { fetch: fetchImplementation } : {}),
+      ...(fetchOptions ? { fetchOptions } : {}),
     });
   }
 
