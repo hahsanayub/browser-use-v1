@@ -1,12 +1,10 @@
 import {
-  BrowserStateRequestEvent,
   ClickElementEvent,
   CloseTabEvent,
   GoBackEvent,
   GoForwardEvent,
   NavigateToUrlEvent,
   RefreshEvent,
-  ScreenshotEvent,
   SendKeysEvent,
   SwitchTabEvent,
   TypeTextEvent,
@@ -20,8 +18,6 @@ export class DefaultActionWatchdog extends BaseWatchdog {
     NavigateToUrlEvent,
     SwitchTabEvent,
     CloseTabEvent,
-    ScreenshotEvent,
-    BrowserStateRequestEvent,
     GoBackEvent,
     GoForwardEvent,
     RefreshEvent,
@@ -47,18 +43,6 @@ export class DefaultActionWatchdog extends BaseWatchdog {
 
   async on_CloseTabEvent(event: CloseTabEvent) {
     await this.browser_session.close_tab(event.target_id);
-  }
-
-  async on_ScreenshotEvent(event: ScreenshotEvent) {
-    return this.browser_session.take_screenshot(event.full_page);
-  }
-
-  async on_BrowserStateRequestEvent(event: BrowserStateRequestEvent) {
-    return this.browser_session.get_browser_state_with_recovery({
-      cache_clickable_elements_hashes: true,
-      include_screenshot: event.include_screenshot,
-      include_recent_events: event.include_recent_events,
-    });
   }
 
   async on_GoBackEvent() {

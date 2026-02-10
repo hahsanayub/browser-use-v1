@@ -8,17 +8,23 @@ import {
   WaitEvent,
 } from '../src/browser/events.js';
 import { DefaultActionWatchdog } from '../src/browser/watchdogs/default-action-watchdog.js';
+import { DOMWatchdog } from '../src/browser/watchdogs/dom-watchdog.js';
 
 describe('default action watchdog alignment', () => {
-  it('attaches default action watchdog only once', () => {
+  it('attaches default watchdog stack only once', () => {
     const session = new BrowserSession();
 
     session.attach_default_watchdogs();
     session.attach_default_watchdogs();
 
     const watchdogs = session.get_watchdogs();
-    expect(watchdogs).toHaveLength(1);
-    expect(watchdogs[0]).toBeInstanceOf(DefaultActionWatchdog);
+    expect(watchdogs).toHaveLength(2);
+    expect(watchdogs.some((watchdog) => watchdog instanceof DOMWatchdog)).toBe(
+      true
+    );
+    expect(
+      watchdogs.some((watchdog) => watchdog instanceof DefaultActionWatchdog)
+    ).toBe(true);
   });
 
   it('routes navigation and tab switch events to BrowserSession methods', async () => {

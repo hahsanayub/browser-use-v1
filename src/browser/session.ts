@@ -37,6 +37,7 @@ import {
 } from './dvd-screensaver.js';
 import { SessionManager } from './session-manager.js';
 import { DefaultActionWatchdog } from './watchdogs/default-action-watchdog.js';
+import { DOMWatchdog } from './watchdogs/dom-watchdog.js';
 import type { BaseWatchdog } from './watchdogs/base.js';
 
 const execAsync = promisify(exec);
@@ -219,7 +220,10 @@ export class BrowserSession {
     if (this._defaultWatchdogsAttached) {
       return;
     }
-    this.attach_watchdog(new DefaultActionWatchdog({ browser_session: this }));
+    this.attach_watchdogs([
+      new DOMWatchdog({ browser_session: this }),
+      new DefaultActionWatchdog({ browser_session: this }),
+    ]);
     this._defaultWatchdogsAttached = true;
   }
 
