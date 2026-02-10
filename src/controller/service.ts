@@ -4,11 +4,14 @@ import { validate as validateJsonSchema } from '@cfworker/json-schema';
 import { z } from 'zod';
 import { ActionResult } from '../agent/views.js';
 import {
+  ClickElementEvent,
   CloseTabEvent,
   GoBackEvent,
   NavigateToUrlEvent,
   SendKeysEvent,
   SwitchTabEvent,
+  TypeTextEvent,
+  UploadFileEvent,
   WaitEvent,
 } from '../browser/events.js';
 import { BrowserError } from '../browser/views.js';
@@ -671,9 +674,17 @@ export class Controller<Context = unknown> {
         });
       }
 
-      const downloadPath = await browser_session._click_element_node(element, {
-        signal,
-      });
+      const downloadPath = await dispatchBrowserEventIfAvailable(
+        browser_session,
+        new ClickElementEvent({
+          node: element,
+          button: 'left',
+        }),
+        () =>
+          browser_session._click_element_node(element, {
+            signal,
+          })
+      );
       let msg: string;
       if (downloadPath) {
         msg = `💾 Downloaded file to ${downloadPath}`;
@@ -799,10 +810,19 @@ export class Controller<Context = unknown> {
         );
       };
 
-      await browser_session._input_text_element_node(element, params.text, {
-        clear: params.clear,
-        signal,
-      });
+      await dispatchBrowserEventIfAvailable(
+        browser_session,
+        new TypeTextEvent({
+          node: element,
+          text: params.text,
+          clear: params.clear ?? true,
+        }),
+        () =>
+          browser_session._input_text_element_node(element, params.text, {
+            clear: params.clear,
+            signal,
+          })
+      );
 
       let actualValue: string | null = null;
       try {
@@ -995,12 +1015,21 @@ export class Controller<Context = unknown> {
         throw new BrowserError('No file upload element found on the page');
       }
 
-      const locator = await browser_session.get_locate_element(node);
-      if (!locator) {
-        throw new BrowserError('No file upload element found on the page');
-      }
-
-      await locator.setInputFiles(uploadPath);
+      await dispatchBrowserEventIfAvailable(
+        browser_session,
+        new UploadFileEvent({
+          node,
+          file_path: uploadPath,
+        }),
+        async () => {
+          const locator = await browser_session.get_locate_element(node);
+          if (!locator) {
+            throw new BrowserError('No file upload element found on the page');
+          }
+          await locator.setInputFiles(uploadPath);
+          return null;
+        }
+      );
       const msg = `📁 Successfully uploaded file to index ${params.index}`;
       return new ActionResult({
         extracted_content: msg,
