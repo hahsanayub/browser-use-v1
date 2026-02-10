@@ -338,6 +338,21 @@ export class BrowserSession {
     );
   }
 
+  async get_or_create_cdp_session(page: Page | null = null): Promise<any> {
+    if (!this.browser_context?.newCDPSession) {
+      throw new Error(
+        'CDP sessions are not available for this browser context'
+      );
+    }
+
+    const targetPage = page ?? (await this.get_current_page());
+    if (!targetPage) {
+      throw new Error('No active page available to create CDP session');
+    }
+
+    return this.browser_context.newCDPSession(targetPage);
+  }
+
   private async _waitForStableNetwork(
     page: Page,
     signal: AbortSignal | null = null
@@ -3228,7 +3243,7 @@ export class BrowserSession {
       );
 
       // Create CDP session for the screenshot
-      cdp_session = await (this.browser_context as any).newCDPSession(page);
+      cdp_session = await this.get_or_create_cdp_session(page);
 
       // Capture screenshot via CDP
       const screenshot_response = await cdp_session.send(
@@ -4603,7 +4618,7 @@ export class BrowserSession {
   ): Promise<boolean> {
     try {
       // Use CDP to synthesize scroll gesture - works in all contexts including PDFs
-      const cdpSession = await this.browser_context!.newCDPSession(page);
+      const cdpSession = await this.get_or_create_cdp_session(page);
 
       // Get viewport center for scroll origin
       const viewport = await page.evaluate(() => ({
@@ -4896,7 +4911,7 @@ export class BrowserSession {
       try {
         // Create CDP session from the clean page
         const cdpSession = await Promise.race([
-          this.browser_context.newCDPSession(tempPage),
+          this.get_or_create_cdp_session(tempPage),
           new Promise<never>((_, reject) =>
             setTimeout(
               () => reject(new Error('Timeout creating CDP session')),

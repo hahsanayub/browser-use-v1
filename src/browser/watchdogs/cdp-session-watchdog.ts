@@ -56,10 +56,9 @@ export class CDPSessionWatchdog extends BaseWatchdog {
     }
 
     try {
-      const cdpSession =
-        (await this.browser_session.browser_context.newCDPSession(
-          page
-        )) as CDPSessionLike;
+      const cdpSession = (await this.browser_session.get_or_create_cdp_session(
+        page
+      )) as CDPSessionLike;
       this._rootCdpSession = cdpSession;
 
       await cdpSession.send?.('Target.setDiscoverTargets', {
