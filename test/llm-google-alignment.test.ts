@@ -19,7 +19,9 @@ vi.mock('@google/genai', () => {
 });
 
 import {
+  ContentPartImageParam,
   ContentPartTextParam,
+  ImageURL,
   SystemMessage,
   UserMessage,
 } from '../src/llm/messages.js';
@@ -79,6 +81,24 @@ describe('Google LLM alignment', () => {
     expect(systemInstruction).toBeNull();
     expect((contents[0] as any).parts[0].text).toContain('sys header');
     expect((contents[0] as any).parts[1].text).toBe('task body');
+  });
+
+  it('uses ImageURL media_type for inline data mime type', () => {
+    const serializer = new GoogleMessageSerializer();
+    const { contents } = serializer.serializeWithSystem([
+      new UserMessage([
+        new ContentPartImageParam(
+          new ImageURL('data:image/jpeg;base64,Zm9v', 'auto', 'image/png')
+        ),
+      ]),
+    ]);
+
+    expect((contents[0] as any).parts[0]).toEqual({
+      inlineData: {
+        mimeType: 'image/png',
+        data: 'Zm9v',
+      },
+    });
   });
 
   it('passes generation params and returns usage with cached/image/thought tokens', async () => {

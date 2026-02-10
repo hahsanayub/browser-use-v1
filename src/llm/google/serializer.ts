@@ -156,14 +156,11 @@ export class GoogleMessageSerializer {
       return { text: imageUrl } as Part;
     }
 
-    const header = imageUrl.slice(0, commaIndex);
     const data = imageUrl.slice(commaIndex + 1);
-    const headerMimeType = header.match(/^data:([^;]+)/i)?.[1] ?? null;
-    const mimeType = headerMimeType ?? part.image_url.media_type;
 
     return {
       inlineData: {
-        mimeType,
+        mimeType: part.image_url.media_type,
         data,
       },
     } as Part;
