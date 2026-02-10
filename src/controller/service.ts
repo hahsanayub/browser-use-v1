@@ -3,6 +3,14 @@ import path from 'node:path';
 import { validate as validateJsonSchema } from '@cfworker/json-schema';
 import { z } from 'zod';
 import { ActionResult } from '../agent/views.js';
+import {
+  CloseTabEvent,
+  GoBackEvent,
+  NavigateToUrlEvent,
+  SendKeysEvent,
+  SwitchTabEvent,
+  WaitEvent,
+} from '../browser/events.js';
 import { BrowserError } from '../browser/views.js';
 import {
   chunkMarkdownByStructure,
@@ -141,6 +149,18 @@ const waitWithSignal = async (
       signal.addEventListener('abort', onAbort, { once: true });
     }
   });
+};
+
+const dispatchBrowserEventIfAvailable = async <T = unknown>(
+  browser_session: any,
+  event: any,
+  fallback: () => Promise<T>
+) => {
+  if (typeof browser_session?.dispatch_browser_event === 'function') {
+    const dispatchResult = await browser_session.dispatch_browser_event(event);
+    return (dispatchResult?.event?.event_result as T) ?? null;
+  }
+  return fallback();
 };
 
 const runWithTimeoutAndSignal = async <T>(
@@ -300,8 +320,14 @@ export class Controller<Context = unknown> {
 
       const requestedEngine = String(params.engine ?? 'duckduckgo');
       const engine = requestedEngine.toLowerCase();
-      const encodedQuery = encodeURIComponent(params.query).replace(/%20/g, '+');
-      const searchUrlByEngine: Record<'duckduckgo' | 'google' | 'bing', string> = {
+      const encodedQuery = encodeURIComponent(params.query).replace(
+        /%20/g,
+        '+'
+      );
+      const searchUrlByEngine: Record<
+        'duckduckgo' | 'google' | 'bing',
+        string
+      > = {
         duckduckgo: `https://duckduckgo.com/?q=${encodedQuery}`,
         google: `https://www.google.com/search?q=${encodedQuery}&udm=14`,
         bing: `https://www.bing.com/search?q=${encodedQuery}`,
@@ -357,7 +383,10 @@ export class Controller<Context = unknown> {
     type GoToUrlAction = z.infer<typeof GoToUrlActionSchema>;
     const navigateImpl = async function (
       params: GoToUrlAction,
-      { browser_session, signal }: { browser_session?: any; signal?: AbortSignal | null }
+      {
+        browser_session,
+        signal,
+      }: { browser_session?: any; signal?: AbortSignal | null }
     ) {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
@@ -372,7 +401,11 @@ export class Controller<Context = unknown> {
             long_term_memory: `Opened new tab with URL ${params.url}`,
           });
         }
-        await browser_session.navigate_to(params.url, { signal });
+        await dispatchBrowserEventIfAvailable(
+          browser_session,
+          new NavigateToUrlEvent({ url: params.url, new_tab: false }),
+          () => browser_session.navigate_to(params.url, { signal })
+        );
         const msg = `🔗 Navigated to ${params.url}`;
         return new ActionResult({
           extracted_content: msg,
@@ -421,34 +454,38 @@ export class Controller<Context = unknown> {
     this.registry.action('Navigate to URL...', {
       param_model: GoToUrlActionSchema,
       terminates_sequence: true,
-    })(async function navigate(params: GoToUrlAction, { browser_session, signal }) {
+    })(async function navigate(
+      params: GoToUrlAction,
+      { browser_session, signal }
+    ) {
       return navigateImpl(params, { browser_session, signal });
     });
 
     this.registry.action('Go back', {
       param_model: NoParamsActionSchema,
       terminates_sequence: true,
-    })(
-      async function go_back(_params, { browser_session, signal }) {
-        if (!browser_session) throw new Error('Browser session missing');
-        throwIfAborted(signal);
-        try {
-          await browser_session.go_back({ signal });
-          const memory = 'Navigated back';
-          return new ActionResult({ extracted_content: memory });
-        } catch (error) {
-          return new ActionResult({
-            error: `Failed to go back: ${String((error as Error)?.message ?? error)}`,
-          });
-        }
+    })(async function go_back(_params, { browser_session, signal }) {
+      if (!browser_session) throw new Error('Browser session missing');
+      throwIfAborted(signal);
+      try {
+        await dispatchBrowserEventIfAvailable(
+          browser_session,
+          new GoBackEvent(),
+          () => browser_session.go_back({ signal })
+        );
+        const memory = 'Navigated back';
+        return new ActionResult({ extracted_content: memory });
+      } catch (error) {
+        return new ActionResult({
+          error: `Failed to go back: ${String((error as Error)?.message ?? error)}`,
+        });
       }
-    );
+    });
 
     type WaitAction = z.infer<typeof WaitActionSchema>;
-    this.registry.action(
-      'Wait for x seconds.',
-      { param_model: WaitActionSchema }
-    )(async function wait(params: WaitAction, { signal }) {
+    this.registry.action('Wait for x seconds.', {
+      param_model: WaitActionSchema,
+    })(async function wait(params: WaitAction, { signal, browser_session }) {
       const seconds = params.seconds ?? 3;
       const actualSeconds = Math.min(
         Math.max(seconds - DEFAULT_WAIT_OFFSET, 0),
@@ -456,7 +493,18 @@ export class Controller<Context = unknown> {
       );
       const msg = `🕒 Waited for ${seconds} second${seconds === 1 ? '' : 's'}`;
       if (actualSeconds > 0) {
-        await waitWithSignal(actualSeconds * 1000, signal);
+        if (browser_session) {
+          await dispatchBrowserEventIfAvailable(
+            browser_session,
+            new WaitEvent({
+              seconds: actualSeconds,
+              max_seconds: MAX_WAIT_SECONDS,
+            }),
+            () => waitWithSignal(actualSeconds * 1000, signal)
+          );
+        } else {
+          await waitWithSignal(actualSeconds * 1000, signal);
+        }
       }
       return new ActionResult({
         extracted_content: msg,
@@ -594,13 +642,17 @@ export class Controller<Context = unknown> {
 
       if (params.index == null) {
         return new ActionResult({
-          error: 'Must provide either index or both coordinate_x and coordinate_y',
+          error:
+            'Must provide either index or both coordinate_x and coordinate_y',
         });
       }
 
-      const element = await browser_session.get_dom_element_by_index(params.index, {
-        signal,
-      });
+      const element = await browser_session.get_dom_element_by_index(
+        params.index,
+        {
+          signal,
+        }
+      );
       if (!element) {
         const msg = `Element index ${params.index} not available - page may have changed. Try refreshing browser state.`;
         logger.warning(`⚠️ ${msg}`);
@@ -622,7 +674,7 @@ export class Controller<Context = unknown> {
       const downloadPath = await browser_session._click_element_node(element, {
         signal,
       });
-      let msg = '';
+      let msg: string;
       if (downloadPath) {
         msg = `💾 Downloaded file to ${downloadPath}`;
       } else {
@@ -1017,7 +1069,10 @@ export class Controller<Context = unknown> {
       if (typeof params.tab_id === 'string' && params.tab_id.trim()) {
         return params.tab_id.trim();
       }
-      if (typeof params.page_id === 'number' && Number.isFinite(params.page_id)) {
+      if (
+        typeof params.page_id === 'number' &&
+        Number.isFinite(params.page_id)
+      ) {
         return params.page_id;
       }
       return -1;
@@ -1040,7 +1095,9 @@ export class Controller<Context = unknown> {
           typeof matchedTab?.tab_id === 'string' && matchedTab.tab_id.trim()
             ? matchedTab.tab_id.trim()
             : null;
-        return matchedTabId ?? String(numericIdentifier).padStart(4, '0').slice(-4);
+        return (
+          matchedTabId ?? String(numericIdentifier).padStart(4, '0').slice(-4)
+        );
       }
       return 'unknown';
     };
@@ -1059,7 +1116,13 @@ export class Controller<Context = unknown> {
       const identifier = resolveTabIdentifier(params);
       const tabId = formatTabId(identifier, browser_session);
       try {
-        await browser_session.switch_to_tab(identifier, { signal });
+        const switchTargetId =
+          identifier === -1 ? null : String(identifier).trim();
+        await dispatchBrowserEventIfAvailable(
+          browser_session,
+          new SwitchTabEvent({ target_id: switchTargetId }),
+          () => browser_session.switch_to_tab(identifier, { signal })
+        );
         const page: Page | null = await browser_session.get_current_page();
         try {
           await page?.wait_for_load_state?.('domcontentloaded', {
@@ -1074,7 +1137,9 @@ export class Controller<Context = unknown> {
           long_term_memory: memory,
         });
       } catch (error) {
-        tabLogger.warning(`Tab switch may have failed: ${(error as Error).message}`);
+        tabLogger.warning(
+          `Tab switch may have failed: ${(error as Error).message}`
+        );
         const memory = `Attempted to switch to tab #${tabId}`;
         return new ActionResult({
           extracted_content: memory,
@@ -1086,7 +1151,10 @@ export class Controller<Context = unknown> {
     this.registry.action('Switch tab', {
       param_model: SwitchTabActionSchema,
       terminates_sequence: true,
-    })(async function switch_tab(params: SwitchTabAction, { browser_session, signal }) {
+    })(async function switch_tab(
+      params: SwitchTabAction,
+      { browser_session, signal }
+    ) {
       return switchImpl(params, { browser_session, signal });
     });
 
@@ -1094,7 +1162,10 @@ export class Controller<Context = unknown> {
       param_model: SwitchTabActionSchema,
       terminates_sequence: true,
       action_name: 'switch',
-    })(async function switch_alias(params: SwitchTabAction, { browser_session, signal }) {
+    })(async function switch_alias(
+      params: SwitchTabAction,
+      { browser_session, signal }
+    ) {
       return switchImpl(params, { browser_session, signal });
     });
 
@@ -1114,9 +1185,20 @@ export class Controller<Context = unknown> {
       const identifier = resolveTabIdentifier(params);
       const closedTabId = formatTabId(identifier, browser_session);
       try {
-        await browser_session.switch_to_tab(identifier, { signal });
-        const page: Page | null = await browser_session.get_current_page();
-        await page?.close?.();
+        const resolvedCloseTargetId =
+          identifier === -1
+            ? (browser_session?.active_tab?.target_id ??
+              browser_session?.active_tab?.tab_id ??
+              null)
+            : String(identifier).trim();
+        if (!resolvedCloseTargetId) {
+          throw new Error('Could not resolve target tab to close');
+        }
+        await dispatchBrowserEventIfAvailable(
+          browser_session,
+          new CloseTabEvent({ target_id: resolvedCloseTargetId }),
+          () => browser_session.close_tab(identifier)
+        );
         const memory = `Closed tab #${closedTabId}`;
         return new ActionResult({
           extracted_content: memory,
@@ -1136,13 +1218,19 @@ export class Controller<Context = unknown> {
 
     this.registry.action('Close an existing tab', {
       param_model: CloseTabActionSchema,
-    })(async function close_tab(params: CloseTabAction, { browser_session, signal }) {
+    })(async function close_tab(
+      params: CloseTabAction,
+      { browser_session, signal }
+    ) {
       return closeImpl(params, { browser_session, signal });
     });
 
     this.registry.action('Close an existing tab', {
       param_model: CloseTabActionSchema,
-    })(async function close(params: CloseTabAction, { browser_session, signal }) {
+    })(async function close(
+      params: CloseTabAction,
+      { browser_session, signal }
+    ) {
       return closeImpl(params, { browser_session, signal });
     });
   }
@@ -1157,12 +1245,9 @@ export class Controller<Context = unknown> {
     type ExtractStructuredAction = z.infer<
       typeof ExtractStructuredDataActionSchema
     >;
-    this.registry.action(
-      extractStructuredDescription,
-      {
-        param_model: ExtractStructuredDataActionSchema,
-      }
-    )(async function extract_structured_data(
+    this.registry.action(extractStructuredDescription, {
+      param_model: ExtractStructuredDataActionSchema,
+    })(async function extract_structured_data(
       params: ExtractStructuredAction,
       { page, page_extraction_llm, extraction_schema, file_system, signal }
     ) {
@@ -1333,8 +1418,9 @@ export class Controller<Context = unknown> {
 
       let effectiveOutputSchema = params.output_schema ?? extraction_schema;
       if (effectiveOutputSchema != null) {
-        const unsupportedKeyword =
-          findUnsupportedJsonSchemaKeyword(effectiveOutputSchema);
+        const unsupportedKeyword = findUnsupportedJsonSchemaKeyword(
+          effectiveOutputSchema
+        );
         if (unsupportedKeyword) {
           contentLogger.warning(
             `Invalid output_schema, falling back to free-text extraction: unsupported keyword '${unsupportedKeyword}'`
@@ -1485,10 +1571,10 @@ You will be given a query and the markdown of a webpage that has been filtered t
       });
     });
 
-    this.registry.action(
-      extractStructuredDescription,
-      { param_model: ExtractStructuredDataActionSchema, action_name: 'extract' }
-    )(async function extract(
+    this.registry.action(extractStructuredDescription, {
+      param_model: ExtractStructuredDataActionSchema,
+      action_name: 'extract',
+    })(async function extract(
       params: ExtractStructuredAction,
       {
         browser_session,
@@ -1622,24 +1708,24 @@ You will be given a query and the markdown of a webpage that has been filtered t
           cssScope: params.css_scope ?? null,
           maxResults: params.max_results,
         }
-      )) as
-        | {
-            error?: string;
-            matches?: Array<{
-              position: number;
-              match: string;
-              snippet: string;
-            }>;
-            total?: number;
-            truncated?: boolean;
-          }
-        | null;
+      )) as {
+        error?: string;
+        matches?: Array<{
+          position: number;
+          match: string;
+          snippet: string;
+        }>;
+        total?: number;
+        truncated?: boolean;
+      } | null;
 
       if (!searchResult) {
         return new ActionResult({ error: 'search_page returned no result' });
       }
       if (searchResult.error) {
-        return new ActionResult({ error: `search_page: ${searchResult.error}` });
+        return new ActionResult({
+          error: `search_page: ${searchResult.error}`,
+        });
       }
 
       const total = searchResult.total ?? 0;
@@ -1747,19 +1833,17 @@ You will be given a query and the markdown of a webpage that has been filtered t
           maxResults: params.max_results,
           includeText: params.include_text,
         }
-      )) as
-        | {
-            error?: string;
-            elements?: Array<{
-              index: number;
-              tag: string;
-              text: string;
-              attributes: Record<string, string>;
-            }>;
-            total?: number;
-            truncated?: boolean;
-          }
-        | null;
+      )) as {
+        error?: string;
+        elements?: Array<{
+          index: number;
+          tag: string;
+          text: string;
+          attributes: Record<string, string>;
+        }>;
+        total?: number;
+        truncated?: boolean;
+      } | null;
 
       if (!result) {
         return new ActionResult({ error: 'find_elements returned no result' });
@@ -1832,7 +1916,9 @@ You will be given a query and the markdown of a webpage that has been filtered t
             return height || 0;
           } catch (error) {
             if (i === retries - 1) {
-              throw new Error(`Scroll failed due to an error: ${error}`);
+              throw new Error(`Scroll failed due to an error: ${error}`, {
+                cause: error,
+              });
             }
             await waitWithSignal(1000, signal);
           }
@@ -2159,7 +2245,7 @@ You will be given a query and the markdown of a webpage that has been filtered t
     this.registry.action(
       'Read the complete content of a file. Use this to view file contents before editing or to retrieve data from files. Supports text files (txt, md, json, csv, jsonl), documents (pdf, docx), and images (jpg, png).',
       {
-      param_model: ReadFileActionSchema,
+        param_model: ReadFileActionSchema,
       }
     )(async function read_file(
       params: ReadFileAction,
@@ -2214,12 +2300,7 @@ You will be given a query and the markdown of a webpage that has been filtered t
       { param_model: ReadLongContentActionSchema }
     )(async function read_long_content(
       params: ReadLongContentAction,
-      {
-        browser_session,
-        page_extraction_llm,
-        available_file_paths,
-        signal,
-      }
+      { browser_session, page_extraction_llm, available_file_paths, signal }
     ) {
       throwIfAborted(signal);
 
@@ -2276,7 +2357,7 @@ Context: ${context}`;
             .map((line) =>
               line
                 .trim()
-                .replace(/^[\-\d\.\)\s]+/, '')
+                .replace(/^[-\d.)\s]+/, '')
                 .trim()
             )
             .filter(Boolean);
@@ -2349,7 +2430,11 @@ Context: ${context}`;
 
       const readPdfByPage = async (
         filePath: string
-      ): Promise<{ numPages: number; pageTexts: string[]; totalChars: number }> => {
+      ): Promise<{
+        numPages: number;
+        pageTexts: string[];
+        totalChars: number;
+      }> => {
         const buffer = await fsp.readFile(filePath);
         try {
           const pdfParseModule = (await import('pdf-parse')) as {
@@ -2384,7 +2469,11 @@ Context: ${context}`;
 
               const pageTexts: string[] = [];
               let totalChars = 0;
-              for (let pageNumber = 1; pageNumber <= numPages; pageNumber += 1) {
+              for (
+                let pageNumber = 1;
+                pageNumber <= numPages;
+                pageNumber += 1
+              ) {
                 const pageResult = await parser.getText({
                   partial: [pageNumber],
                 });
@@ -2449,7 +2538,9 @@ Context: ${context}`;
           const allowedPaths = new Set(
             Array.isArray(available_file_paths) ? available_file_paths : []
           );
-          const downloadedFiles = Array.isArray(browser_session?.downloaded_files)
+          const downloadedFiles = Array.isArray(
+            browser_session?.downloaded_files
+          )
             ? browser_session.downloaded_files
             : [];
           for (const filePath of downloadedFiles) {
@@ -2484,7 +2575,11 @@ Context: ${context}`;
 
             if (totalChars <= maxChars) {
               const contentParts: string[] = [];
-              for (let pageIndex = 0; pageIndex < pageTexts.length; pageIndex += 1) {
+              for (
+                let pageIndex = 0;
+                pageIndex < pageTexts.length;
+                pageIndex += 1
+              ) {
                 const pageText = pageTexts[pageIndex] ?? '';
                 if (!pageText.trim()) {
                   continue;
@@ -2613,8 +2708,7 @@ Context: ${context}`;
           const truncated = content.slice(0, maxChars);
           return new ActionResult({
             extracted_content: `Content from ${sourceName} (first ${maxChars.toLocaleString()} of ${content.length.toLocaleString()} chars):\n\n${truncated}`,
-            long_term_memory:
-              `Read ${sourceName} (truncated to ${maxChars.toLocaleString()} chars, no matches for search terms)`,
+            long_term_memory: `Read ${sourceName} (truncated to ${maxChars.toLocaleString()} chars, no matches for search terms)`,
             include_extracted_content_only_once: true,
           });
         }
@@ -2629,7 +2723,9 @@ Context: ${context}`;
 
         const resultParts: string[] = [];
         let totalChars = 0;
-        const orderedIndices = Array.from(selectedIndices).sort((a, b) => a - b);
+        const orderedIndices = Array.from(selectedIndices).sort(
+          (a, b) => a - b
+        );
         for (const index of orderedIndices) {
           const chunk = chunks[index];
           if (!chunk) {
@@ -2703,7 +2799,7 @@ Context: ${context}`;
     this.registry.action(
       'Replace specific text within a file by searching for old_str and replacing with new_str. Use this for targeted edits like updating todo checkboxes or modifying specific lines without rewriting the entire file.',
       {
-      param_model: ReplaceFileStrActionSchema,
+        param_model: ReplaceFileStrActionSchema,
       }
     )(async function replace_file_str(params: ReplaceAction, { file_system }) {
       const fsInstance = file_system ?? new FileSystem(process.cwd(), false);
@@ -2721,11 +2817,15 @@ Context: ${context}`;
     this.registry.action(
       'Replace specific text within a file by searching for old_str and replacing with new_str. Use this for targeted edits like updating todo checkboxes or modifying specific lines without rewriting the entire file.',
       {
-      param_model: ReplaceFileStrActionSchema,
-      action_name: 'replace_file',
+        param_model: ReplaceFileStrActionSchema,
+        action_name: 'replace_file',
       }
     )(async function replace_file(params: ReplaceAction, ctx) {
-      return registry.execute_action('replace_file_str', params as any, ctx as any);
+      return registry.execute_action(
+        'replace_file_str',
+        params as any,
+        ctx as any
+      );
     });
   }
 
@@ -2876,24 +2976,34 @@ Context: ${context}`;
       param_model: SendKeysActionSchema,
     })(async function send_keys(params: SendKeysAction, { browser_session }) {
       if (!browser_session) throw new Error('Browser session missing');
-      const page: Page | null = await browser_session.get_current_page();
-      const keyboard = page?.keyboard;
-      if (!keyboard) {
-        throw new BrowserError(
-          'Keyboard input is not available on the current page.'
-        );
-      }
-      try {
-        await keyboard.press(params.keys);
-      } catch (error) {
-        if (error instanceof Error && error.message.includes('Unknown key')) {
-          for (const char of params.keys) {
-            await keyboard.press(char);
+      await dispatchBrowserEventIfAvailable(
+        browser_session,
+        new SendKeysEvent({ keys: params.keys }),
+        async () => {
+          const page: Page | null = await browser_session.get_current_page();
+          const keyboard = page?.keyboard;
+          if (!keyboard) {
+            throw new BrowserError(
+              'Keyboard input is not available on the current page.'
+            );
           }
-        } else {
-          throw error;
+          try {
+            await keyboard.press(params.keys);
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              error.message.includes('Unknown key')
+            ) {
+              for (const char of params.keys) {
+                await keyboard.press(char);
+              }
+            } else {
+              throw error;
+            }
+          }
+          return null;
         }
-      }
+      );
       const msg = `⌨️  Sent keys: ${params.keys}`;
       return new ActionResult({
         extracted_content: msg,
@@ -3008,10 +3118,13 @@ Context: ${context}`;
       });
     });
 
-    this.registry.action('Get all options from a native dropdown or ARIA menu', {
-      param_model: DropdownOptionsActionSchema,
-      action_name: 'dropdown_options',
-    })(async function dropdown_options(params: DropdownAction, ctx) {
+    this.registry.action(
+      'Get all options from a native dropdown or ARIA menu',
+      {
+        param_model: DropdownOptionsActionSchema,
+        action_name: 'dropdown_options',
+      }
+    )(async function dropdown_options(params: DropdownAction, ctx) {
       return registry.execute_action(
         'get_dropdown_options',
         params as any,
@@ -3112,7 +3225,9 @@ Context: ${context}`;
                 root.dispatchEvent(new Event('input', { bubbles: true }));
                 root.dispatchEvent(new Event('change', { bubbles: true }));
                 const selectedOption =
-                  root.selectedIndex >= 0 ? root.options[root.selectedIndex] : null;
+                  root.selectedIndex >= 0
+                    ? root.options[root.selectedIndex]
+                    : null;
                 const selectedText = selectedOption?.textContent?.trim() ?? '';
                 const selectedValue = (root.value ?? '').trim();
                 const verified =
@@ -3564,7 +3679,7 @@ Context: ${context}`;
         }
         const resultType =
           result && typeof result === 'object'
-            ? result.constructor?.name ?? typeof result
+            ? (result.constructor?.name ?? typeof result)
             : typeof result;
         throw new Error(
           `Invalid action result type: ${resultType} of ${String(result)}`

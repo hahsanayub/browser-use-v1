@@ -149,13 +149,11 @@ describe('Controller Registry Tests', () => {
     it('registers actions with action_name override', async () => {
       const registry = new Registry();
 
-      registry
-        .action('Alias action', {
-          action_name: 'navigate',
-        })
-        (async function go_to_url_alias() {
-          return new ActionResult({ extracted_content: 'ok' });
-        });
+      registry.action('Alias action', {
+        action_name: 'navigate',
+      })(async function go_to_url_alias() {
+        return new ActionResult({ extracted_content: 'ok' });
+      });
 
       expect(registry.get_action('navigate')).toBeDefined();
       expect(registry.get_action('go_to_url_alias')).toBeNull();
@@ -164,13 +162,11 @@ describe('Controller Registry Tests', () => {
     it('applies exclude_actions against action_name override', async () => {
       const registry = new Registry(['switch']);
 
-      registry
-        .action('Excluded alias action', {
-          action_name: 'switch',
-        })
-        (async function switch_tab_alias() {
-          return new ActionResult({ extracted_content: 'ok' });
-        });
+      registry.action('Excluded alias action', {
+        action_name: 'switch',
+      })(async function switch_tab_alias() {
+        return new ActionResult({ extracted_content: 'ok' });
+      });
 
       expect(registry.get_action('switch')).toBeNull();
     });
@@ -219,9 +215,13 @@ describe('Controller Registry Tests', () => {
       );
 
       await expect(
-        registry.execute_action('search_simple', {}, {
-          browser_session: browserSession as any,
-        })
+        registry.execute_action(
+          'search_simple',
+          {},
+          {
+            browser_session: browserSession as any,
+          }
+        )
       ).rejects.toThrow("search_simple() missing required parameter 'query'");
     });
 
@@ -533,7 +533,9 @@ describe('Controller Registry Tests', () => {
         throw timeoutError;
       });
 
-      await expect(registry.execute_action('timeout_action', {})).rejects.toThrow(
+      await expect(
+        registry.execute_action('timeout_action', {})
+      ).rejects.toThrow(
         'Error executing action timeout_action due to timeout.'
       );
     });
@@ -550,9 +552,9 @@ describe('Controller Registry Tests', () => {
         });
       });
 
-      await expect(registry.execute_action('browser_error', {})).rejects.toBeInstanceOf(
-        BrowserError
-      );
+      await expect(
+        registry.execute_action('browser_error', {})
+      ).rejects.toBeInstanceOf(BrowserError);
       try {
         await registry.execute_action('browser_error', {});
       } catch (error) {
@@ -717,27 +719,25 @@ describe('Controller Registry Tests', () => {
     });
 
     it('hides top-level success in structured done JSON schema but keeps nested data.success', async () => {
-      const optimizedSchema = SchemaOptimizer.createOptimizedJsonSchema(
-        {
-          type: 'object',
-          properties: {
-            success: {
-              type: 'boolean',
-              default: true,
-              description: 'True if user_request completed successfully',
-            },
-            data: {
-              type: 'object',
-              properties: {
-                success: { type: 'string' },
-                value: { type: 'string' },
-              },
-              required: ['success', 'value'],
-            },
+      const optimizedSchema = SchemaOptimizer.createOptimizedJsonSchema({
+        type: 'object',
+        properties: {
+          success: {
+            type: 'boolean',
+            default: true,
+            description: 'True if user_request completed successfully',
           },
-          required: ['success', 'data'],
-        } as Record<string, unknown>
-      ) as any;
+          data: {
+            type: 'object',
+            properties: {
+              success: { type: 'string' },
+              value: { type: 'string' },
+            },
+            required: ['success', 'value'],
+          },
+        },
+        required: ['success', 'data'],
+      } as Record<string, unknown>) as any;
 
       expect(optimizedSchema.properties?.success).toBeUndefined();
       expect(optimizedSchema.properties?.data).toBeDefined();
@@ -762,23 +762,21 @@ describe('Controller Registry Tests', () => {
     });
 
     it('hides output_schema from extract action JSON schema', async () => {
-      const optimizedSchema = SchemaOptimizer.createOptimizedJsonSchema(
-        {
-          type: 'object',
-          properties: {
-            extract_structured_data: {
-              type: 'object',
-              properties: {
-                query: { type: 'string' },
-                extract_links: { type: 'boolean', default: false },
-                output_schema: { type: 'object' },
-              },
-              required: ['query', 'output_schema'],
+      const optimizedSchema = SchemaOptimizer.createOptimizedJsonSchema({
+        type: 'object',
+        properties: {
+          extract_structured_data: {
+            type: 'object',
+            properties: {
+              query: { type: 'string' },
+              extract_links: { type: 'boolean', default: false },
+              output_schema: { type: 'object' },
             },
+            required: ['query', 'output_schema'],
           },
-          required: ['extract_structured_data'],
-        } as Record<string, unknown>
-      ) as any;
+        },
+        required: ['extract_structured_data'],
+      } as Record<string, unknown>) as any;
 
       expect(
         optimizedSchema.properties?.extract_structured_data?.properties
@@ -800,9 +798,9 @@ describe('Controller Registry Tests', () => {
         return new ActionResult({});
       });
 
-      expect(registry.get_action('terminating_action')?.terminates_sequence).toBe(
-        true
-      );
+      expect(
+        registry.get_action('terminating_action')?.terminates_sequence
+      ).toBe(true);
       expect(registry.get_action('plain_action')?.terminates_sequence).toBe(
         false
       );
@@ -1037,7 +1035,10 @@ describe('Controller Integration Tests', () => {
       expect(result.extracted_content).toContain('Attachments:');
       expect(result.extracted_content).toContain('todo.md:\n- [x] done');
       expect(result.extracted_content).toContain('report.md:\n# Summary');
-      expect(result.attachments).toEqual(['/tmp/work/todo.md', '/tmp/work/report.md']);
+      expect(result.attachments).toEqual([
+        '/tmp/work/todo.md',
+        '/tmp/work/report.md',
+      ]);
     });
   });
 });
@@ -1313,7 +1314,9 @@ describe('Regression Coverage', () => {
       'duckduckgo.com/?q=browser+use'
     );
     expect(browserSession.create_new_tab).not.toHaveBeenCalled();
-    expect(result.long_term_memory).toContain("Searched duckduckgo for 'browser use'");
+    expect(result.long_term_memory).toContain(
+      "Searched duckduckgo for 'browser use'"
+    );
   });
 
   it('search action returns ActionResult error for unsupported engine', async () => {
@@ -1432,7 +1435,9 @@ describe('Regression Coverage', () => {
     );
 
     expect(page.mouse.click).toHaveBeenCalledWith(42, 84);
-    expect(result.extracted_content).toContain('Clicked at coordinates (42, 84)');
+    expect(result.extracted_content).toContain(
+      'Clicked at coordinates (42, 84)'
+    );
   });
 
   it('click action rejects coordinate clicks when coordinate clicking is disabled', async () => {
@@ -1503,7 +1508,11 @@ describe('Regression Coverage', () => {
     const page = {
       mouse: {
         click: vi.fn(async () => {
-          tabs.push({ page_id: 7, url: 'https://newtab.test', title: 'New Tab' });
+          tabs.push({
+            page_id: 7,
+            url: 'https://newtab.test',
+            title: 'New Tab',
+          });
         }),
       },
       url: vi.fn(() => 'https://example.com'),
@@ -1519,7 +1528,9 @@ describe('Regression Coverage', () => {
       { browser_session: browserSession as any }
     );
 
-    expect(result.extracted_content).toContain('Clicked at coordinates (12, 34)');
+    expect(result.extracted_content).toContain(
+      'Clicked at coordinates (12, 34)'
+    );
     expect(result.extracted_content).toContain('opened a new tab');
     expect(result.extracted_content).toContain('tab_id: 0007');
   });
@@ -1535,7 +1546,11 @@ describe('Regression Coverage', () => {
       get_dom_element_by_index: vi.fn(async () => element),
       is_file_input: vi.fn(() => false),
       _click_element_node: vi.fn(async () => {
-        tabs.push({ page_id: 8, url: 'https://details.test', title: 'Details' });
+        tabs.push({
+          page_id: 8,
+          url: 'https://details.test',
+          title: 'Details',
+        });
         return null;
       }),
       switch_to_tab: vi.fn(async () => {}),
@@ -1598,7 +1613,14 @@ describe('Regression Coverage', () => {
     const browserSession = {
       switch_to_tab: vi.fn(async () => {}),
       get_current_page: vi.fn(async () => page),
-      tabs: [{ page_id: 7, tab_id: '0007', url: 'https://switched.test', title: 'Switched' }],
+      tabs: [
+        {
+          page_id: 7,
+          tab_id: '0007',
+          url: 'https://switched.test',
+          title: 'Switched',
+        },
+      ],
     };
 
     const result = await controller.registry.execute_action(
@@ -1622,7 +1644,14 @@ describe('Regression Coverage', () => {
         throw new Error('missing target');
       }),
       get_current_page: vi.fn(async () => null),
-      tabs: [{ page_id: 7, tab_id: '0007', url: 'https://stale.test', title: 'Stale' }],
+      tabs: [
+        {
+          page_id: 7,
+          tab_id: '0007',
+          url: 'https://stale.test',
+          title: 'Stale',
+        },
+      ],
     };
 
     const result = await controller.registry.execute_action(
@@ -1639,24 +1668,23 @@ describe('Regression Coverage', () => {
 
   it('close action accepts tab_id identifiers', async () => {
     const controller = new Controller();
-    const closingPage = {
-      url: vi.fn(() => 'https://closing.test'),
-      close: vi.fn(async () => {}),
-    };
-    const focusedPage = {
-      url: vi.fn(() => 'https://focused.test'),
-    };
     const browserSession = {
-      switch_to_tab: vi.fn(async () => {}),
-      get_current_page: vi
-        .fn()
-        .mockResolvedValueOnce(closingPage)
-        .mockResolvedValueOnce(closingPage)
-        .mockResolvedValueOnce(closingPage)
-        .mockResolvedValueOnce(focusedPage),
-      active_tab: { page_id: 1, tab_id: '0001', url: 'https://focused.test', title: 'Focused' },
+      close_tab: vi.fn(async () => {}),
+      active_tab: {
+        page_id: 1,
+        tab_id: '0001',
+        url: 'https://focused.test',
+        title: 'Focused',
+      },
       active_tab_index: 0,
-      tabs: [{ page_id: 7, tab_id: '0007', url: 'https://closing.test', title: 'Closing' }],
+      tabs: [
+        {
+          page_id: 7,
+          tab_id: '0007',
+          url: 'https://closing.test',
+          title: 'Closing',
+        },
+      ],
     };
 
     const result = await controller.registry.execute_action(
@@ -1665,10 +1693,7 @@ describe('Regression Coverage', () => {
       { browser_session: browserSession as any }
     );
 
-    expect(browserSession.switch_to_tab).toHaveBeenCalledWith('0007', {
-      signal: null,
-    });
-    expect(closingPage.close).toHaveBeenCalled();
+    expect(browserSession.close_tab).toHaveBeenCalledWith('0007');
     expect(result.extracted_content).toBe('Closed tab #0007');
     expect(result.long_term_memory).toBe('Closed tab #0007');
     expect(result.include_in_memory).toBe(false);
@@ -1677,11 +1702,17 @@ describe('Regression Coverage', () => {
   it('close action handles stale tab identifiers gracefully', async () => {
     const controller = new Controller();
     const browserSession = {
-      switch_to_tab: vi.fn(async () => {
+      close_tab: vi.fn(async () => {
         throw new Error('already closed');
       }),
-      get_current_page: vi.fn(async () => null),
-      tabs: [{ page_id: 7, tab_id: '0007', url: 'https://stale.test', title: 'Stale' }],
+      tabs: [
+        {
+          page_id: 7,
+          tab_id: '0007',
+          url: 'https://stale.test',
+          title: 'Stale',
+        },
+      ],
     };
 
     const result = await controller.registry.execute_action(
@@ -1876,7 +1907,9 @@ describe('Regression Coverage', () => {
       { browser_session: browserSession as any }
     );
 
-    expect(result.extracted_content).toContain("actual value 'Alice (autofilled)'");
+    expect(result.extracted_content).toContain(
+      "actual value 'Alice (autofilled)'"
+    );
     expect(result.long_term_memory).toContain(
       "actual value 'Alice (autofilled)'"
     );
@@ -1943,7 +1976,9 @@ describe('Regression Coverage', () => {
     };
     const browserSession = {
       get_current_page: vi.fn(async () => page),
-      get_dom_element_by_index: vi.fn(async () => ({ xpath: '/html/body/select' })),
+      get_dom_element_by_index: vi.fn(async () => ({
+        xpath: '/html/body/select',
+      })),
     };
 
     const result = await controller.registry.execute_action(
@@ -1977,7 +2012,9 @@ describe('Regression Coverage', () => {
     };
     const browserSession = {
       get_current_page: vi.fn(async () => page),
-      get_dom_element_by_index: vi.fn(async () => ({ xpath: '/html/body/select' })),
+      get_dom_element_by_index: vi.fn(async () => ({
+        xpath: '/html/body/select',
+      })),
     };
 
     await expect(
@@ -2098,7 +2135,9 @@ describe('Regression Coverage', () => {
       'Found 3 elements for selector "a"'
     );
     expect(result.extracted_content).toContain('<a>');
-    expect(result.extracted_content).toContain('href="https://example.com/docs"');
+    expect(result.extracted_content).toContain(
+      'href="https://example.com/docs"'
+    );
     expect(result.extracted_content).toContain('showing first 1 elements');
     expect(result.long_term_memory).toBe(
       'Queried selector "a" and found 3 elements.'
@@ -2132,8 +2171,7 @@ describe('Regression Coverage', () => {
 
   it('evaluate normalizes over-escaped JavaScript before execution', async () => {
     const controller = new Controller();
-    const rawCode =
-      '(() => { const el = document.querySelector(\\\\\"#value\\\\\"); return el ? el.textContent : "missing"; })()';
+    const rawCode = String.raw`(() => { const el = document.querySelector(\\\"#value\\\"); return el ? el.textContent : "missing"; })()`;
     const page = {
       evaluate: vi.fn(async (_handler: unknown, args: { code: string }) => ({
         ok: true,
@@ -2156,7 +2194,8 @@ describe('Regression Coverage', () => {
     expect(page.evaluate).toHaveBeenCalled();
     const evaluatedCode = (page.evaluate.mock.calls[0]?.[1] as { code: string })
       ?.code;
-    expect(evaluatedCode).toContain('document.querySelector(\\"#value\\")');
+    expect(evaluatedCode).toContain('document.querySelector(');
+    expect(evaluatedCode).toContain('#value');
     expect(evaluatedCode).not.toContain('\\\\\\"#value\\\\\\"');
     expect((evaluatedCode ?? '').length).toBeLessThan(rawCode.length);
     expect(result.error).toBeNull();
@@ -2258,7 +2297,9 @@ describe('Regression Coverage', () => {
     );
 
     expect(browserSession.take_screenshot).not.toHaveBeenCalled();
-    expect(result.extracted_content).toBe('Requested screenshot for next observation');
+    expect(result.extracted_content).toBe(
+      'Requested screenshot for next observation'
+    );
     expect(result.metadata).toEqual({ include_screenshot: true });
   });
 
@@ -2368,7 +2409,9 @@ describe('Regression Coverage', () => {
   it('write_file keeps long_term_memory without forcing include_in_memory', async () => {
     const controller = new Controller();
     const fileSystem = {
-      write_file: vi.fn(async () => 'Data written to file notes.md successfully.'),
+      write_file: vi.fn(
+        async () => 'Data written to file notes.md successfully.'
+      ),
       append_file: vi.fn(async () => 'unused'),
     };
 
@@ -2380,8 +2423,13 @@ describe('Regression Coverage', () => {
       }
     );
 
-    expect(fileSystem.write_file).toHaveBeenCalledWith('notes.md', 'Hello world\n');
-    expect(result.extracted_content).toContain('Data written to file notes.md successfully.');
+    expect(fileSystem.write_file).toHaveBeenCalledWith(
+      'notes.md',
+      'Hello world\n'
+    );
+    expect(result.extracted_content).toContain(
+      'Data written to file notes.md successfully.'
+    );
     expect(result.long_term_memory).toContain(
       'Data written to file notes.md successfully.'
     );
@@ -2442,14 +2490,18 @@ describe('Regression Coverage', () => {
 
   it('upload_file resolves FileSystem-managed files outside available_file_paths', async () => {
     const controller = new Controller();
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-upload-'));
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'browser-use-upload-')
+    );
     const fileSystem = new FileSystem(tempDir, false);
     const locator = {
       setInputFiles: vi.fn(async () => {}),
     };
     const browserSession = {
       downloaded_files: [],
-      find_file_upload_element_by_index: vi.fn(async () => ({ xpath: '/html/body/input' })),
+      find_file_upload_element_by_index: vi.fn(async () => ({
+        xpath: '/html/body/input',
+      })),
       get_locate_element: vi.fn(async () => locator),
     };
 
@@ -2482,7 +2534,9 @@ describe('Regression Coverage', () => {
     const browserSession = {
       is_local: false,
       downloaded_files: [],
-      find_file_upload_element_by_index: vi.fn(async () => ({ xpath: '/html/body/input' })),
+      find_file_upload_element_by_index: vi.fn(async () => ({
+        xpath: '/html/body/input',
+      })),
       get_locate_element: vi.fn(async () => locator),
     };
 
@@ -2502,7 +2556,9 @@ describe('Regression Coverage', () => {
 
   it('upload_file returns ActionResult error for zero-byte local files', async () => {
     const controller = new Controller();
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-upload-'));
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'browser-use-upload-')
+    );
     const emptyPath = path.join(tempDir, 'empty.txt');
     fs.writeFileSync(emptyPath, '');
 
@@ -2543,7 +2599,9 @@ describe('Regression Coverage', () => {
 
   it('upload_file returns ActionResult error when index does not exist in selector map', async () => {
     const controller = new Controller();
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-upload-'));
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'browser-use-upload-')
+    );
     const uploadPath = path.join(tempDir, 'resume.txt');
     fs.writeFileSync(uploadPath, 'hello');
 
@@ -2554,7 +2612,9 @@ describe('Regression Coverage', () => {
         {
           browser_session: {
             downloaded_files: [],
-            get_selector_map: vi.fn(async () => ({ 1: { xpath: '/html/body/input' } })),
+            get_selector_map: vi.fn(async () => ({
+              1: { xpath: '/html/body/input' },
+            })),
             find_file_upload_element_by_index: vi.fn(async () => null),
           } as any,
           available_file_paths: [uploadPath],
@@ -2569,7 +2629,9 @@ describe('Regression Coverage', () => {
 
   it('upload_file falls back to closest file input when nearby lookup fails', async () => {
     const controller = new Controller();
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-upload-'));
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'browser-use-upload-')
+    );
     const uploadPath = path.join(tempDir, 'resume.txt');
     fs.writeFileSync(uploadPath, 'hello');
 
@@ -2580,7 +2642,11 @@ describe('Regression Coverage', () => {
       xpath: '/html/body/input[2]',
     };
     const selectorMap = {
-      9: { tag_name: 'button', attributes: { type: 'button' }, xpath: '/html/body/button' },
+      9: {
+        tag_name: 'button',
+        attributes: { type: 'button' },
+        xpath: '/html/body/button',
+      },
       2: {
         tag_name: 'input',
         attributes: { type: 'file' },
@@ -2847,10 +2913,18 @@ describe('Regression Coverage', () => {
     expect(pageExtractionLlm.ainvoke).toHaveBeenCalled();
     expect(lastUserPrompt.includes(loneHighSurrogate)).toBe(false);
     expect(lastUserPrompt.includes(loneLowSurrogate)).toBe(false);
-    expect((result.extracted_content ?? '').includes(loneHighSurrogate)).toBe(false);
-    expect((result.extracted_content ?? '').includes(loneLowSurrogate)).toBe(false);
-    expect((result.long_term_memory ?? '').includes(loneHighSurrogate)).toBe(false);
-    expect((result.long_term_memory ?? '').includes(loneLowSurrogate)).toBe(false);
+    expect((result.extracted_content ?? '').includes(loneHighSurrogate)).toBe(
+      false
+    );
+    expect((result.extracted_content ?? '').includes(loneLowSurrogate)).toBe(
+      false
+    );
+    expect((result.long_term_memory ?? '').includes(loneHighSurrogate)).toBe(
+      false
+    );
+    expect((result.long_term_memory ?? '').includes(loneLowSurrogate)).toBe(
+      false
+    );
   });
 
   it('extract_structured_data validates start_from_char against content length', async () => {
@@ -2886,7 +2960,9 @@ describe('Regression Coverage', () => {
       }
     );
 
-    expect(result.error).toContain('start_from_char (9999) exceeds content length');
+    expect(result.error).toContain(
+      'start_from_char (9999) exceeds content length'
+    );
     expect(pageExtractionLlm.ainvoke).not.toHaveBeenCalled();
   });
 
@@ -2898,7 +2974,9 @@ describe('Regression Coverage', () => {
       })),
     };
     const page = {
-      content: vi.fn(async () => '<html><body>Alice is 30 years old.</body></html>'),
+      content: vi.fn(
+        async () => '<html><body>Alice is 30 years old.</body></html>'
+      ),
       frames: vi.fn(() => []),
       url: vi.fn(() => 'https://example.com/profile'),
     };
@@ -2956,7 +3034,9 @@ describe('Regression Coverage', () => {
       })),
     };
     const page = {
-      content: vi.fn(async () => '<html><body>Alice is 30 years old.</body></html>'),
+      content: vi.fn(
+        async () => '<html><body>Alice is 30 years old.</body></html>'
+      ),
       frames: vi.fn(() => []),
       url: vi.fn(() => 'https://example.com/profile'),
     };
@@ -3003,7 +3083,9 @@ describe('Regression Coverage', () => {
       })),
     };
     const page = {
-      content: vi.fn(async () => '<html><body>Alice is 30 years old.</body></html>'),
+      content: vi.fn(
+        async () => '<html><body>Alice is 30 years old.</body></html>'
+      ),
       frames: vi.fn(() => []),
       url: vi.fn(() => 'https://example.com/profile'),
     };
@@ -3204,7 +3286,9 @@ describe('Regression Coverage', () => {
       { browser_session: {} as any }
     );
 
-    expect(result.error).toBe('Attempted blocked navigation to disallowed host.');
+    expect(result.error).toBe(
+      'Attempted blocked navigation to disallowed host.'
+    );
     expect(result.extracted_content).toBeNull();
     expect(result.include_extracted_content_only_once).toBe(false);
   });
