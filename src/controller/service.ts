@@ -7,10 +7,12 @@ import {
   ClickCoordinateEvent,
   ClickElementEvent,
   CloseTabEvent,
+  GetDropdownOptionsEvent,
   GoBackEvent,
   NavigateToUrlEvent,
   ScrollEvent,
   ScrollToTextEvent,
+  SelectDropdownOptionEvent,
   SendKeysEvent,
   SwitchTabEvent,
   TypeTextEvent,
@@ -3092,7 +3094,6 @@ Context: ${context}`;
     ) {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
-      const page: Page | null = await browser_session.get_current_page();
       const domElement = await browser_session.get_dom_element_by_index(
         params.index,
         { signal }
@@ -3104,6 +3105,33 @@ Context: ${context}`;
           extracted_content: msg,
         });
       }
+      if (typeof browser_session.dispatch_browser_event === 'function') {
+        const dispatchResult = await browser_session.dispatch_browser_event(
+          new GetDropdownOptionsEvent({ node: domElement })
+        );
+        const eventResult = dispatchResult?.event?.event_result as
+          | Record<string, string>
+          | null
+          | undefined;
+        const eventMessage =
+          eventResult?.message ??
+          eventResult?.short_term_memory ??
+          eventResult?.formatted_options ??
+          null;
+        if (eventMessage) {
+          const memory =
+            eventResult?.long_term_memory ??
+            `Found dropdown options for index ${params.index}.`;
+          return new ActionResult({
+            extracted_content: eventMessage,
+            include_in_memory: true,
+            include_extracted_content_only_once: true,
+            long_term_memory: memory,
+          });
+        }
+      }
+
+      const page: Page | null = await browser_session.get_current_page();
       if (!page?.evaluate) {
         throw new BrowserError(
           'Unable to evaluate dropdown options on current page.'
@@ -3197,7 +3225,6 @@ Context: ${context}`;
     ) {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
-      const page: Page | null = await browser_session.get_current_page();
       const domElement = await browser_session.get_dom_element_by_index(
         params.index,
         { signal }
@@ -3214,6 +3241,33 @@ Context: ${context}`;
           'DOM element does not include an XPath selector.'
         );
       }
+      if (typeof browser_session.dispatch_browser_event === 'function') {
+        const dispatchResult = await browser_session.dispatch_browser_event(
+          new SelectDropdownOptionEvent({
+            node: domElement,
+            text: params.text,
+          })
+        );
+        const eventResult = dispatchResult?.event?.event_result as
+          | Record<string, string>
+          | null
+          | undefined;
+        const eventMessage =
+          eventResult?.message ??
+          eventResult?.short_term_memory ??
+          eventResult?.matched_text ??
+          null;
+        if (eventMessage) {
+          const memory = eventResult?.long_term_memory ?? eventMessage;
+          return new ActionResult({
+            extracted_content: eventMessage,
+            include_in_memory: true,
+            long_term_memory: memory,
+          });
+        }
+      }
+
+      const page: Page | null = await browser_session.get_current_page();
       if (!page) {
         throw new BrowserError('No active page for selection.');
       }

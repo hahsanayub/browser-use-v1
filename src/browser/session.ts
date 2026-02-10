@@ -2069,6 +2069,355 @@ export class BrowserSession {
     }
   }
 
+  async get_dropdown_options(
+    element_node: DOMElementNode,
+    options: BrowserActionOptions = {}
+  ) {
+    const signal = options.signal ?? null;
+    this._throwIfAborted(signal);
+    const page = await this._withAbort(this.get_current_page(), signal);
+    if (!page?.evaluate) {
+      throw new BrowserError(
+        'Unable to evaluate dropdown options on current page.'
+      );
+    }
+    if (!element_node?.xpath) {
+      throw new BrowserError('DOM element does not include an XPath selector.');
+    }
+
+    const payload = await this._withAbort(
+      page.evaluate(
+        ({ xpath }: { xpath: string }) => {
+          const element = document.evaluate(
+            xpath,
+            document,
+            null,
+            XPathResult.FIRST_ORDERED_NODE_TYPE,
+            null
+          ).singleNodeValue as HTMLElement | null;
+          if (!element) return null;
+
+          if (element.tagName?.toLowerCase() === 'select') {
+            const options = Array.from(
+              (element as HTMLSelectElement).options
+            ).map((opt, index) => ({
+              text: opt.textContent?.trim() ?? '',
+              value: (opt.value ?? '').trim(),
+              index,
+            }));
+            return { type: 'select', options };
+          }
+
+          const ariaRoles = new Set(['menu', 'listbox', 'combobox']);
+          const role = element.getAttribute('role');
+          if (role && ariaRoles.has(role)) {
+            const nodes = element.querySelectorAll(
+              '[role="menuitem"],[role="option"]'
+            );
+            const options = Array.from(nodes).map((node, index) => ({
+              text: node.textContent?.trim() ?? '',
+              value: node.textContent?.trim() ?? '',
+              index,
+            }));
+            return { type: 'aria', options };
+          }
+
+          return null;
+        },
+        { xpath: element_node.xpath }
+      ),
+      signal
+    );
+
+    if (!payload || !Array.isArray((payload as any).options)) {
+      throw new BrowserError('No options found for the specified dropdown.');
+    }
+
+    const normalizedOptions = (payload as any).options
+      .map((option: any, index: number) => ({
+        index:
+          typeof option?.index === 'number' && Number.isFinite(option.index)
+            ? option.index
+            : index,
+        text: String(option?.text ?? ''),
+        value: String(option?.value ?? ''),
+      }))
+      .filter(
+        (option: any) => option.text.length > 0 || option.value.length > 0
+      );
+
+    if (normalizedOptions.length === 0) {
+      throw new BrowserError('No options found for the specified dropdown.');
+    }
+
+    const formattedOptions = normalizedOptions.map(
+      (option: { index: number; text: string; value: string }) =>
+        `${option.index}: text=${JSON.stringify(option.text)}, value=${JSON.stringify(option.value)}`
+    );
+    formattedOptions.push(
+      'Prefer exact text first; if needed select_dropdown_option also supports case-insensitive text/value matching.'
+    );
+    const message = formattedOptions.join('\n');
+    const indexForMemory = element_node.highlight_index ?? 'unknown';
+
+    return {
+      type: String((payload as any).type ?? 'unknown'),
+      options: JSON.stringify(normalizedOptions),
+      formatted_options: formattedOptions.join('\n'),
+      message,
+      short_term_memory: message,
+      long_term_memory: `Found dropdown options for index ${indexForMemory}.`,
+    } satisfies Record<string, string>;
+  }
+
+  async select_dropdown_option(
+    element_node: DOMElementNode,
+    text: string,
+    options: BrowserActionOptions = {}
+  ) {
+    const signal = options.signal ?? null;
+    this._throwIfAborted(signal);
+    if (!element_node?.xpath) {
+      throw new BrowserError('DOM element does not include an XPath selector.');
+    }
+
+    const page = await this._withAbort(this.get_current_page(), signal);
+    if (!page) {
+      throw new BrowserError('No active page for selection.');
+    }
+
+    const formatAvailableOptions = (
+      opts: Array<{ index: number; text: string; value: string }>
+    ) =>
+      opts
+        .map(
+          (opt) =>
+            `  - [${opt.index}] text=${JSON.stringify(opt.text)} value=${JSON.stringify(opt.value)}`
+        )
+        .join('\n');
+
+    const pageFrames = (() => {
+      const framesAccessor = (page as any).frames;
+      if (typeof framesAccessor === 'function') {
+        try {
+          const result = framesAccessor.call(page);
+          return Array.isArray(result) ? result : [];
+        } catch {
+          return [];
+        }
+      }
+      return Array.isArray(framesAccessor) ? framesAccessor : [];
+    })();
+
+    for (const frame of pageFrames) {
+      try {
+        const typeInfo: any = await this._withAbort(
+          frame.evaluate((xpath: string) => {
+            const element = document.evaluate(
+              xpath,
+              document,
+              null,
+              XPathResult.FIRST_ORDERED_NODE_TYPE,
+              null
+            ).singleNodeValue as HTMLElement | null;
+            if (!element) return { found: false };
+            const tagName = element.tagName?.toLowerCase();
+            const role = element.getAttribute?.('role');
+            if (tagName === 'select') return { found: true, type: 'select' };
+            if (role && ['menu', 'listbox', 'combobox'].includes(role))
+              return { found: true, type: 'aria' };
+            return { found: false };
+          }, element_node.xpath),
+          signal
+        );
+
+        if (!typeInfo?.found) {
+          continue;
+        }
+
+        if (typeInfo.type === 'select') {
+          const selection: any = await this._withAbort(
+            frame.evaluate(
+              ({
+                xpath,
+                optionText,
+              }: {
+                xpath: string;
+                optionText: string;
+              }) => {
+                const root = document.evaluate(
+                  xpath,
+                  document,
+                  null,
+                  XPathResult.FIRST_ORDERED_NODE_TYPE,
+                  null
+                ).singleNodeValue as HTMLSelectElement | null;
+                if (!root || root.tagName?.toLowerCase() !== 'select') {
+                  return { found: false };
+                }
+
+                const options = Array.from(root.options).map((opt, index) => ({
+                  index,
+                  text: opt.textContent?.trim() ?? '',
+                  value: (opt.value ?? '').trim(),
+                }));
+                const normalize = (value: string) => value.trim().toLowerCase();
+                const targetRaw = optionText.trim();
+                const targetLower = normalize(optionText);
+
+                let matchedIndex = options.findIndex(
+                  (opt) => opt.text === targetRaw || opt.value === targetRaw
+                );
+                if (matchedIndex < 0) {
+                  matchedIndex = options.findIndex(
+                    (opt) =>
+                      normalize(opt.text) === targetLower ||
+                      normalize(opt.value) === targetLower
+                  );
+                }
+                if (matchedIndex < 0) {
+                  return { found: true, success: false, options };
+                }
+
+                const matched = options[matchedIndex];
+                root.value = matched.value;
+                root.dispatchEvent(new Event('input', { bubbles: true }));
+                root.dispatchEvent(new Event('change', { bubbles: true }));
+                const selectedOption =
+                  root.selectedIndex >= 0
+                    ? root.options[root.selectedIndex]
+                    : null;
+                const selectedText = selectedOption?.textContent?.trim() ?? '';
+                const selectedValue = (root.value ?? '').trim();
+                const verified =
+                  normalize(selectedValue) === normalize(matched.value) ||
+                  normalize(selectedText) === normalize(matched.text);
+
+                return {
+                  found: true,
+                  success: verified,
+                  options,
+                  selectedText,
+                  selectedValue,
+                  matched,
+                };
+              },
+              { xpath: element_node.xpath, optionText: text }
+            ),
+            signal
+          );
+
+          if (selection?.found && selection.success) {
+            const matchedText = selection.matched?.text ?? text;
+            const matchedValue = selection.matched?.value ?? '';
+            const msg = `Selected option ${matchedText} (${matchedValue})`;
+            return {
+              message: msg,
+              short_term_memory: msg,
+              long_term_memory: msg,
+              matched_text: String(matchedText),
+              matched_value: String(matchedValue),
+            } satisfies Record<string, string>;
+          }
+          if (selection?.found) {
+            const details = formatAvailableOptions(
+              (selection.options as Array<{
+                index: number;
+                text: string;
+                value: string;
+              }>) ?? []
+            );
+            throw new BrowserError(
+              `Could not select option '${text}' for index ${element_node.highlight_index ?? 'unknown'}.\nAvailable options:\n${details}`
+            );
+          }
+          continue;
+        }
+
+        const clicked: any = await this._withAbort(
+          frame.evaluate(
+            ({ xpath, optionText }: { xpath: string; optionText: string }) => {
+              const root = document.evaluate(
+                xpath,
+                document,
+                null,
+                XPathResult.FIRST_ORDERED_NODE_TYPE,
+                null
+              ).singleNodeValue as HTMLElement | null;
+              if (!root) return false;
+              const nodes = root.querySelectorAll(
+                '[role="menuitem"],[role="option"]'
+              );
+              const options = Array.from(nodes).map((node, index) => ({
+                index,
+                text: node.textContent?.trim() ?? '',
+                value: node.textContent?.trim() ?? '',
+              }));
+              const normalize = (value: string) => value.trim().toLowerCase();
+              const targetRaw = optionText.trim();
+              const targetLower = normalize(optionText);
+
+              let matchedIndex = options.findIndex(
+                (opt) => opt.text === targetRaw || opt.value === targetRaw
+              );
+              if (matchedIndex < 0) {
+                matchedIndex = options.findIndex(
+                  (opt) =>
+                    normalize(opt.text) === targetLower ||
+                    normalize(opt.value) === targetLower
+                );
+              }
+              if (matchedIndex < 0) {
+                return { found: true, success: false, options };
+              }
+              (nodes[matchedIndex] as HTMLElement).click();
+              return {
+                found: true,
+                success: true,
+                options,
+                matched: options[matchedIndex],
+              };
+            },
+            { xpath: element_node.xpath, optionText: text }
+          ),
+          signal
+        );
+
+        if (clicked?.found && clicked.success) {
+          const matchedText = clicked.matched?.text ?? text;
+          const msg = `Selected menu item ${matchedText}`;
+          return {
+            message: msg,
+            short_term_memory: msg,
+            long_term_memory: msg,
+            matched_text: String(matchedText),
+          } satisfies Record<string, string>;
+        }
+        if (clicked?.found) {
+          const details = formatAvailableOptions(
+            (clicked.options as Array<{
+              index: number;
+              text: string;
+              value: string;
+            }>) ?? []
+          );
+          throw new BrowserError(
+            `Could not select option '${text}' for index ${element_node.highlight_index ?? 'unknown'}.\nAvailable options:\n${details}`
+          );
+        }
+      } catch (error) {
+        if (error instanceof BrowserError) {
+          throw error;
+        }
+        continue;
+      }
+    }
+
+    throw new BrowserError(
+      `Could not select option '${text}' for index ${element_node.highlight_index ?? 'unknown'}`
+    );
+  }
+
   async upload_file(
     element_node: DOMElementNode,
     file_path: string,

@@ -98,7 +98,11 @@ import {
 } from '../src/controller/views.js';
 import { SchemaOptimizer } from '../src/llm/schema.js';
 import { ActionResult } from '../src/agent/views.js';
-import { ScrollToTextEvent } from '../src/browser/events.js';
+import {
+  GetDropdownOptionsEvent,
+  ScrollToTextEvent,
+  SelectDropdownOptionEvent,
+} from '../src/browser/events.js';
 import { BrowserError } from '../src/browser/views.js';
 import { FileSystem } from '../src/filesystem/file-system.js';
 import { DOMElementNode, DOMTextNode } from '../src/dom/views.js';
@@ -1984,6 +1988,79 @@ describe('Regression Coverage', () => {
     );
 
     expect(result.error).toBe('Element index 77 not found in browser state');
+  });
+
+  it('get_dropdown_options dispatches GetDropdownOptionsEvent when browser event bus is available', async () => {
+    const controller = new Controller();
+    const dispatchSpy = vi.fn(
+      async (event: GetDropdownOptionsEvent) =>
+        ({
+          event: {
+            event_result: {
+              message: '0: text="United States", value="us"',
+              long_term_memory: 'Found dropdown options for index 1.',
+            },
+            event_name: event.event_name,
+          },
+          handler_results: [{ handler_id: 'watchdog', result: null }],
+          errors: [],
+        }) as any
+    );
+    const browserSession = {
+      dispatch_browser_event: dispatchSpy,
+      get_dom_element_by_index: vi.fn(async () => ({
+        xpath: '/html/body/select',
+      })),
+      get_current_page: vi.fn(async () => null),
+    };
+
+    const result = await controller.registry.execute_action(
+      'get_dropdown_options',
+      { index: 1 },
+      { browser_session: browserSession as any }
+    );
+
+    expect(dispatchSpy).toHaveBeenCalledTimes(1);
+    const dispatchedEvent = dispatchSpy.mock.calls[0]?.[0];
+    expect(dispatchedEvent).toBeInstanceOf(GetDropdownOptionsEvent);
+    expect(result.extracted_content).toContain('United States');
+  });
+
+  it('select_dropdown_option dispatches SelectDropdownOptionEvent when browser event bus is available', async () => {
+    const controller = new Controller();
+    const dispatchSpy = vi.fn(
+      async (event: SelectDropdownOptionEvent) =>
+        ({
+          event: {
+            event_result: {
+              message: 'Selected option United Kingdom (uk)',
+              long_term_memory: 'Selected option United Kingdom (uk)',
+            },
+            event_name: event.event_name,
+          },
+          handler_results: [{ handler_id: 'watchdog', result: null }],
+          errors: [],
+        }) as any
+    );
+    const browserSession = {
+      dispatch_browser_event: dispatchSpy,
+      get_dom_element_by_index: vi.fn(async () => ({
+        xpath: '/html/body/select',
+      })),
+      get_current_page: vi.fn(async () => null),
+    };
+
+    const result = await controller.registry.execute_action(
+      'select_dropdown_option',
+      { index: 1, text: 'United Kingdom' },
+      { browser_session: browserSession as any }
+    );
+
+    expect(dispatchSpy).toHaveBeenCalledTimes(1);
+    const dispatchedEvent = dispatchSpy.mock.calls[0]?.[0];
+    expect(dispatchedEvent).toBeInstanceOf(SelectDropdownOptionEvent);
+    expect(dispatchedEvent.text).toBe('United Kingdom');
+    expect(result.extracted_content).toContain('United Kingdom');
   });
 
   it('select_dropdown_option matches options case-insensitively by text/value', async () => {

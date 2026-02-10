@@ -3,13 +3,16 @@ import { BrowserSession } from '../src/browser/session.js';
 import {
   BrowserStateRequestEvent,
   ClickCoordinateEvent,
+  GetDropdownOptionsEvent,
   NavigateToUrlEvent,
   ScrollEvent,
   ScrollToTextEvent,
+  SelectDropdownOptionEvent,
   SendKeysEvent,
   SwitchTabEvent,
   WaitEvent,
 } from '../src/browser/events.js';
+import { DOMElementNode } from '../src/dom/views.js';
 import { DefaultActionWatchdog } from '../src/browser/watchdogs/default-action-watchdog.js';
 import { CDPSessionWatchdog } from '../src/browser/watchdogs/cdp-session-watchdog.js';
 import { DownloadsWatchdog } from '../src/browser/watchdogs/downloads-watchdog.js';
@@ -156,5 +159,60 @@ describe('default action watchdog alignment', () => {
     expect(scrollToTextSpy).toHaveBeenCalledWith('checkout', {
       direction: 'down',
     });
+  });
+
+  it('routes get-dropdown-options events through BrowserSession.get_dropdown_options', async () => {
+    const session = new BrowserSession();
+    session.attach_default_watchdogs();
+
+    const node = new DOMElementNode(
+      true,
+      null,
+      'select',
+      '/html/body/select[1]',
+      {},
+      []
+    );
+    const getOptionsSpy = vi
+      .spyOn(session, 'get_dropdown_options')
+      .mockResolvedValue({
+        message: '0: text="One", value="one"',
+      } as Record<string, string>);
+
+    await session.event_bus.dispatch_or_throw(
+      new GetDropdownOptionsEvent({
+        node,
+      })
+    );
+
+    expect(getOptionsSpy).toHaveBeenCalledWith(node);
+  });
+
+  it('routes select-dropdown-option events through BrowserSession.select_dropdown_option', async () => {
+    const session = new BrowserSession();
+    session.attach_default_watchdogs();
+
+    const node = new DOMElementNode(
+      true,
+      null,
+      'select',
+      '/html/body/select[1]',
+      {},
+      []
+    );
+    const selectSpy = vi
+      .spyOn(session, 'select_dropdown_option')
+      .mockResolvedValue({
+        message: 'Selected option One (one)',
+      } as Record<string, string>);
+
+    await session.event_bus.dispatch_or_throw(
+      new SelectDropdownOptionEvent({
+        node,
+        text: 'One',
+      })
+    );
+
+    expect(selectSpy).toHaveBeenCalledWith(node, 'One');
   });
 });

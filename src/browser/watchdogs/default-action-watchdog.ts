@@ -2,12 +2,14 @@ import {
   ClickCoordinateEvent,
   ClickElementEvent,
   CloseTabEvent,
+  GetDropdownOptionsEvent,
   GoBackEvent,
   GoForwardEvent,
   NavigateToUrlEvent,
   RefreshEvent,
   ScrollEvent,
   ScrollToTextEvent,
+  SelectDropdownOptionEvent,
   SendKeysEvent,
   SwitchTabEvent,
   TypeTextEvent,
@@ -32,6 +34,8 @@ export class DefaultActionWatchdog extends BaseWatchdog {
     TypeTextEvent,
     UploadFileEvent,
     ClickCoordinateEvent,
+    GetDropdownOptionsEvent,
+    SelectDropdownOptionEvent,
   ];
 
   async on_NavigateToUrlEvent(event: NavigateToUrlEvent) {
@@ -114,5 +118,13 @@ export class DefaultActionWatchdog extends BaseWatchdog {
 
   async on_UploadFileEvent(event: UploadFileEvent) {
     await this.browser_session.upload_file(event.node, event.file_path);
+  }
+
+  async on_GetDropdownOptionsEvent(event: GetDropdownOptionsEvent) {
+    return this.browser_session.get_dropdown_options(event.node);
+  }
+
+  async on_SelectDropdownOptionEvent(event: SelectDropdownOptionEvent) {
+    return this.browser_session.select_dropdown_option(event.node, event.text);
   }
 }
