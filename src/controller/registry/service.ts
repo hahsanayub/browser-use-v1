@@ -246,6 +246,14 @@ const isSpecialContextMissingError = (error: unknown): boolean => {
   );
 };
 
+const safeJsonStringify = (value: unknown): string => {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+};
+
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
 const decodeBase32Secret = (secret: string) => {
@@ -439,7 +447,7 @@ export class Registry<Context = unknown> {
         const parsed = action.paramSchema.safeParse(params);
         if (!parsed.success) {
           throw new Error(
-            `Invalid parameters for action ${action_name}: ${parsed.error.message}`
+            `Invalid parameters ${safeJsonStringify(params)} for action ${action_name}: ${parsed.error.message}`
           );
         }
 

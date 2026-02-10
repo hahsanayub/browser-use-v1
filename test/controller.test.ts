@@ -1206,7 +1206,7 @@ describe('Regression Coverage', () => {
         { coordinate_x: 42, coordinate_y: 84 },
         { browser_session: browserSession as any }
       )
-    ).rejects.toThrow('Invalid parameters for action click');
+    ).rejects.toThrow(/Invalid parameters .* for action click/);
     expect(page.mouse.click).not.toHaveBeenCalled();
   });
 
