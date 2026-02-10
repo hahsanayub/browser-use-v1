@@ -1713,6 +1713,27 @@ describe('Regression Coverage', () => {
     expect(result.long_term_memory).toContain('by 0.5 pages');
   });
 
+  it('scroll returns index-not-found error when target element is unavailable', async () => {
+    const controller = new Controller();
+    const page = {
+      evaluate: vi.fn(async () => 1000),
+      url: vi.fn(() => 'https://example.com'),
+    };
+    const browserSession = {
+      get_current_page: vi.fn(async () => page),
+      get_dom_element_by_index: vi.fn(async () => null),
+      _scrollContainer: vi.fn(async () => {}),
+    };
+
+    const result = await controller.registry.execute_action(
+      'scroll',
+      { down: true, pages: 1, index: 77 },
+      { browser_session: browserSession as any }
+    );
+
+    expect(result.error).toBe('Element index 77 not found in browser state');
+  });
+
   it('select_dropdown_option matches options case-insensitively by text/value', async () => {
     const controller = new Controller();
     const frame = {

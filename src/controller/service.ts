@@ -1905,9 +1905,9 @@ You will be given a query and the markdown of a webpage that has been filtered t
             { signal }
           );
           if (!elementNode) {
-            throw new Error(
-              `Element index ${params.index} does not exist - retry or use alternative actions`
-            );
+            return new ActionResult({
+              error: `Element index ${params.index} not found in browser state`,
+            });
           }
 
           // Try direct container scrolling (no events that might close dropdowns)
