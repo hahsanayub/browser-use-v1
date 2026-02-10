@@ -8,6 +8,7 @@ export * from './downloads-watchdog.js';
 export * from './local-browser-watchdog.js';
 export * from './permissions-watchdog.js';
 export * from './popups-watchdog.js';
+export * from './recording-watchdog.js';
 export * from './screenshot-watchdog.js';
 export * from './security-watchdog.js';
 export * from './storage-state-watchdog.js';

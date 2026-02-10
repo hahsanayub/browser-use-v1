@@ -62,6 +62,7 @@ import { DownloadsWatchdog } from './watchdogs/downloads-watchdog.js';
 import { LocalBrowserWatchdog } from './watchdogs/local-browser-watchdog.js';
 import { PermissionsWatchdog } from './watchdogs/permissions-watchdog.js';
 import { PopupsWatchdog } from './watchdogs/popups-watchdog.js';
+import { RecordingWatchdog } from './watchdogs/recording-watchdog.js';
 import { ScreenshotWatchdog } from './watchdogs/screenshot-watchdog.js';
 import { SecurityWatchdog } from './watchdogs/security-watchdog.js';
 import { StorageStateWatchdog } from './watchdogs/storage-state-watchdog.js';
@@ -279,6 +280,7 @@ export class BrowserSession {
       new SecurityWatchdog({ browser_session: this }),
       new DOMWatchdog({ browser_session: this }),
       new ScreenshotWatchdog({ browser_session: this }),
+      new RecordingWatchdog({ browser_session: this }),
       new DownloadsWatchdog({ browser_session: this }),
       new StorageStateWatchdog({ browser_session: this }),
       new DefaultActionWatchdog({ browser_session: this }),
@@ -4388,10 +4390,12 @@ export class BrowserSession {
       return;
     }
 
-    this._stoppingPromise = this._shutdown_browser_session();
+    this._stoppingPromise = (async () => {
+      await this.event_bus.dispatch(new BrowserStopEvent());
+      await this._shutdown_browser_session();
+    })();
 
     try {
-      await this.event_bus.dispatch(new BrowserStopEvent());
       await this._stoppingPromise;
       this._recordRecentEvent('browser_stopped');
       await this.event_bus.dispatch(new BrowserStoppedEvent());
@@ -4500,6 +4504,21 @@ export class BrowserSession {
   }
 
   // region - Trace Recording
+
+  /**
+   * Start tracing on browser context if traces_dir is configured
+   * Note: Currently optional as it may cause performance issues in some cases
+   */
+  async start_trace_recording(): Promise<void> {
+    await this._startContextTracing();
+  }
+
+  /**
+   * Save browser trace recording if active
+   */
+  async save_trace_recording(): Promise<void> {
+    await this._saveTraceRecording();
+  }
 
   /**
    * Start tracing on browser context if traces_dir is configured
