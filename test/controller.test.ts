@@ -2530,6 +2530,68 @@ describe('Regression Coverage', () => {
     }
   });
 
+  it('upload_file falls back to closest file input when nearby lookup fails', async () => {
+    const controller = new Controller();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-upload-'));
+    const uploadPath = path.join(tempDir, 'resume.txt');
+    fs.writeFileSync(uploadPath, 'hello');
+
+    const closestFileInput = {
+      tag_name: 'input',
+      attributes: { type: 'file' },
+      absolute_position: { y: 520 },
+      xpath: '/html/body/input[2]',
+    };
+    const selectorMap = {
+      9: { tag_name: 'button', attributes: { type: 'button' }, xpath: '/html/body/button' },
+      2: {
+        tag_name: 'input',
+        attributes: { type: 'file' },
+        absolute_position: { y: 120 },
+        xpath: '/html/body/input[1]',
+      },
+      5: closestFileInput,
+    };
+
+    const locator = {
+      setInputFiles: vi.fn(async () => {}),
+    };
+    const browserSession = {
+      downloaded_files: [],
+      get_selector_map: vi.fn(async () => selectorMap),
+      find_file_upload_element_by_index: vi.fn(async () => null),
+      get_current_page: vi.fn(async () => ({
+        url: vi.fn(() => 'https://example.com'),
+        evaluate: vi.fn(async () => 500),
+      })),
+      is_file_input: vi.fn(
+        (node: any) =>
+          node?.tag_name === 'input' &&
+          String(node?.attributes?.type ?? '').toLowerCase() === 'file'
+      ),
+      get_locate_element: vi.fn(async () => locator),
+    };
+
+    try {
+      const result = await controller.registry.execute_action(
+        'upload_file',
+        { index: 9, path: uploadPath },
+        {
+          browser_session: browserSession as any,
+          available_file_paths: [uploadPath],
+        }
+      );
+
+      expect(browserSession.get_locate_element).toHaveBeenCalledWith(
+        closestFileInput
+      );
+      expect(locator.setInputFiles).toHaveBeenCalledWith(uploadPath);
+      expect(result.extracted_content).toContain('Successfully uploaded file');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('read_long_content blocks files outside available_file_paths', async () => {
     const controller = new Controller();
 

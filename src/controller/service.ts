@@ -856,8 +856,9 @@ export class Controller<Context = unknown> {
         }
       }
 
+      let selectorMap: Record<string, unknown> | null = null;
       if (typeof browser_session.get_selector_map === 'function') {
-        const selectorMap = await browser_session.get_selector_map({ signal });
+        selectorMap = await browser_session.get_selector_map({ signal });
         if (!(params.index in (selectorMap ?? {}))) {
           return new ActionResult({
             error: `Element with index ${params.index} does not exist.`,
@@ -865,23 +866,63 @@ export class Controller<Context = unknown> {
         }
       }
 
-      const node = await browser_session.find_file_upload_element_by_index(
+      let node = await browser_session.find_file_upload_element_by_index(
         params.index,
         3,
         3,
         { signal }
       );
+
+      if (
+        !node &&
+        selectorMap &&
+        typeof browser_session.is_file_input === 'function'
+      ) {
+        let currentScrollY = 0;
+        try {
+          const page = await browser_session.get_current_page?.();
+          if (page?.evaluate) {
+            const evaluated = await page.evaluate(
+              () => window.scrollY || window.pageYOffset || 0
+            );
+            const numeric =
+              typeof evaluated === 'number' ? evaluated : Number(evaluated);
+            if (Number.isFinite(numeric)) {
+              currentScrollY = numeric;
+            }
+          }
+        } catch {
+          currentScrollY = 0;
+        }
+
+        let closest: any = null;
+        let minDistance = Number.POSITIVE_INFINITY;
+        for (const element of Object.values(selectorMap)) {
+          if (!browser_session.is_file_input(element as any)) {
+            continue;
+          }
+          const y = Number((element as any)?.absolute_position?.y ?? 0);
+          const distance = Number.isFinite(y)
+            ? Math.abs(y - currentScrollY)
+            : 0;
+          if (!closest || distance < minDistance) {
+            closest = element;
+            minDistance = distance;
+          }
+        }
+
+        if (closest) {
+          node = closest;
+        }
+      }
+
       if (!node) {
-        throw new BrowserError(
-          `No file upload element found at index ${params.index}`
-        );
+        throw new BrowserError('No file upload element found on the page');
       }
 
       const locator = await browser_session.get_locate_element(node);
       if (!locator) {
-        throw new BrowserError(
-          `No file upload element found at index ${params.index}`
-        );
+        throw new BrowserError('No file upload element found on the page');
       }
 
       await locator.setInputFiles(uploadPath);
