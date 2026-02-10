@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CreateAgentOutputFileEvent,
   CreateAgentTaskEvent,
   CreateAgentStepEvent,
   UpdateAgentSessionEvent,
 } from '../src/agent/cloud-events.js';
 
 describe('cloud events alignment', () => {
+  const oversizedBase64 = 'a'.repeat(Math.floor((50 * 1024 * 1024 * 4) / 3) + 2);
+
   it('CreateAgentStepEvent.fromAgentStep includes screenshot as data URL', () => {
     const event = CreateAgentStepEvent.fromAgentStep(
       {
@@ -151,5 +154,33 @@ describe('cloud events alignment', () => {
         _task_start_time: 1_760_000_000,
       } as any)
     ).toThrow('task exceeds maximum length of 100000');
+  });
+
+  it('CreateAgentOutputFileEvent enforces python-aligned 50MB base64 size guard', () => {
+    expect(
+      () =>
+        new CreateAgentOutputFileEvent({
+          task_id: 'task-oversized-file',
+          file_name: 'big.gif',
+          file_content: `data:image/gif;base64,${oversizedBase64}`,
+          content_type: 'image/gif',
+        })
+    ).toThrow('file_content exceeds maximum size of 52428800 bytes');
+  });
+
+  it('CreateAgentStepEvent enforces python-aligned screenshot data URL size guard', () => {
+    expect(
+      () =>
+        new CreateAgentStepEvent({
+          agent_task_id: 'task-oversized-screenshot',
+          step: 1,
+          evaluation_previous_goal: '',
+          memory: '',
+          next_goal: '',
+          actions: [],
+          screenshot_url: `data:image/png;base64,${oversizedBase64}`,
+          url: 'https://example.com',
+        })
+    ).toThrow('screenshot_url exceeds maximum size of 52428800 bytes');
   });
 });

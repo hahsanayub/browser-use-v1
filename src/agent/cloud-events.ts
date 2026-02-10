@@ -13,6 +13,12 @@ const MAX_END_REASON_LENGTH = 100;
 
 const logger = createLogger('browser_use.agent.cloud_events');
 
+const estimateBase64DecodedBytes = (value: string) =>
+  Math.floor((value.length * 3) / 4);
+
+const extractBase64Payload = (value: string) =>
+  value.includes(',') ? value.split(',').slice(1).join(',') : value;
+
 interface AgentReference {
   task_id: string;
   session_id: string;
@@ -179,7 +185,18 @@ export class CreateAgentOutputFileEvent extends BaseEvent {
     super('CreateAgentOutputFileEvent', init);
     this.task_id = init.task_id;
     this.file_name = init.file_name;
-    this.file_content = init.file_content ?? null;
+    if (init.file_content != null) {
+      const payload = extractBase64Payload(init.file_content);
+      const estimatedSize = estimateBase64DecodedBytes(payload);
+      if (estimatedSize > MAX_FILE_CONTENT_SIZE) {
+        throw new Error(
+          `file_content exceeds maximum size of ${MAX_FILE_CONTENT_SIZE} bytes`
+        );
+      }
+      this.file_content = init.file_content;
+    } else {
+      this.file_content = null;
+    }
     this.content_type = init.content_type ?? null;
     this.created_at = init.created_at ?? new Date();
   }
@@ -247,6 +264,15 @@ export class CreateAgentStepEvent extends BaseEvent {
     this.memory = init.memory;
     this.next_goal = init.next_goal;
     this.actions = init.actions;
+    if (init.screenshot_url?.startsWith('data:')) {
+      const payload = extractBase64Payload(init.screenshot_url);
+      const estimatedSize = estimateBase64DecodedBytes(payload);
+      if (estimatedSize > MAX_FILE_CONTENT_SIZE) {
+        throw new Error(
+          `screenshot_url exceeds maximum size of ${MAX_FILE_CONTENT_SIZE} bytes`
+        );
+      }
+    }
     this.screenshot_url = init.screenshot_url ?? null;
     this.url = init.url;
   }
