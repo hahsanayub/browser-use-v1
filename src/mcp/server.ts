@@ -37,7 +37,6 @@ import {
   type Prompt,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import { createLogger } from '../logging-config.js';
 import type { Controller } from '../controller/service.js';
 import { Controller as DefaultController } from '../controller/service.js';
@@ -52,6 +51,7 @@ import {
   get_default_llm,
   get_default_profile,
 } from '../config.js';
+import { zodSchemaToJsonSchema } from '../llm/schema.js';
 import { productTelemetry } from '../telemetry/service.js';
 import { MCPServerTelemetryEvent } from '../telemetry/views.js';
 import { get_browser_use_version } from '../utils.js';
@@ -1047,7 +1047,7 @@ export class MCPServer {
       description,
       inputSchema:
         inputSchema instanceof z.ZodType
-          ? zodToJsonSchema(inputSchema as any)
+          ? zodSchemaToJsonSchema(inputSchema as any)
           : inputSchema,
       handler,
     };
