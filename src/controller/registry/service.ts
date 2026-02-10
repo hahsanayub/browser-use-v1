@@ -254,6 +254,9 @@ const safeJsonStringify = (value: unknown): string => {
   }
 };
 
+const isTimeoutError = (error: unknown): boolean =>
+  error instanceof Error && error.name === 'TimeoutError';
+
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
 const decodeBase32Secret = (secret: string) => {
@@ -502,6 +505,9 @@ export class Registry<Context = unknown> {
         } catch (error) {
           if (signal?.aborted || isAbortError(error)) {
             throw createAbortError(signal?.reason ?? error);
+          }
+          if (isTimeoutError(error)) {
+            throw new Error(`Error executing action ${action_name} due to timeout.`);
           }
           if (isSpecialContextMissingError(error)) {
             throw error;

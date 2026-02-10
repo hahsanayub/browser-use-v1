@@ -485,6 +485,20 @@ describe('Controller Registry Tests', () => {
       ).rejects.toThrow('Unexpected error');
     });
 
+    it('uses python-c011 timeout error wording when action throws TimeoutError', async () => {
+      const registry = new Registry();
+
+      registry.action('Timeout action')(async function timeout_action() {
+        const timeoutError = new Error('operation timed out');
+        timeoutError.name = 'TimeoutError';
+        throw timeoutError;
+      });
+
+      await expect(registry.execute_action('timeout_action', {})).rejects.toThrow(
+        'Error executing action timeout_action due to timeout.'
+      );
+    });
+
     it('preserves BrowserError metadata when action throws BrowserError', async () => {
       const registry = new Registry();
 
