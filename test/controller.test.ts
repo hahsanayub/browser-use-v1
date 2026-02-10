@@ -1004,6 +1004,40 @@ describe('Controller Integration Tests', () => {
         },
       });
     });
+
+    it('done action includes todo.md in displayed attachments for python parity', async () => {
+      const controller = new Controller();
+      const fileSystem = {
+        display_file: vi.fn((fileName: string) => {
+          if (fileName === 'todo.md') {
+            return '- [x] done';
+          }
+          if (fileName === 'report.md') {
+            return '# Summary';
+          }
+          return '';
+        }),
+        get_dir: vi.fn(() => '/tmp/work'),
+      };
+
+      const result = await controller.registry.execute_action(
+        'done',
+        {
+          text: 'Task complete',
+          success: true,
+          files_to_display: ['todo.md', 'report.md'],
+        },
+        {
+          file_system: fileSystem as any,
+        }
+      );
+
+      expect(result.is_done).toBe(true);
+      expect(result.extracted_content).toContain('Attachments:');
+      expect(result.extracted_content).toContain('todo.md:\n- [x] done');
+      expect(result.extracted_content).toContain('report.md:\n# Summary');
+      expect(result.attachments).toEqual(['/tmp/work/todo.md', '/tmp/work/report.md']);
+    });
   });
 });
 

@@ -3493,9 +3493,6 @@ Context: ${context}`;
         if (displayFilesInDoneText) {
           let attachmentText = '';
           for (const fileName of params.files_to_display) {
-            if (fileName === 'todo.md') {
-              continue;
-            }
             const content = fsInstance.display_file(fileName);
             if (content) {
               attachmentText += `\n\n${fileName}:\n${content}`;
@@ -3508,9 +3505,6 @@ Context: ${context}`;
           }
         } else {
           for (const fileName of params.files_to_display) {
-            if (fileName === 'todo.md') {
-              continue;
-            }
             const content = fsInstance.display_file(fileName);
             if (content) {
               attachments.push(fileName);
