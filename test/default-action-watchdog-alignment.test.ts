@@ -4,6 +4,7 @@ import {
   BrowserStateRequestEvent,
   ClickCoordinateEvent,
   NavigateToUrlEvent,
+  ScrollEvent,
   SendKeysEvent,
   SwitchTabEvent,
   WaitEvent,
@@ -118,5 +119,21 @@ describe('default action watchdog alignment', () => {
     );
 
     expect(clickSpy).toHaveBeenCalledWith(120, 260, { button: 'left' });
+  });
+
+  it('routes scroll events through BrowserSession.scroll', async () => {
+    const session = new BrowserSession();
+    session.attach_default_watchdogs();
+
+    const scrollSpy = vi.spyOn(session, 'scroll').mockResolvedValue();
+
+    await session.event_bus.dispatch_or_throw(
+      new ScrollEvent({
+        direction: 'down',
+        amount: 640,
+      })
+    );
+
+    expect(scrollSpy).toHaveBeenCalledWith('down', 640, { node: null });
   });
 });

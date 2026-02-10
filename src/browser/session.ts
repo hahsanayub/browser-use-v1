@@ -1945,6 +1945,85 @@ export class BrowserSession {
     );
   }
 
+  async scroll(
+    direction: 'up' | 'down' | 'left' | 'right',
+    amount: number,
+    options: BrowserActionOptions & { node?: DOMElementNode | null } = {}
+  ) {
+    const signal = options.signal ?? null;
+    this._throwIfAborted(signal);
+    const normalizedAmount = Math.max(Math.floor(Math.abs(amount)), 0);
+    if (normalizedAmount === 0) {
+      return;
+    }
+
+    const page = await this._withAbort(this.get_current_page(), signal);
+    if (!page?.evaluate) {
+      throw new BrowserError('Unable to access current page for scrolling.');
+    }
+
+    const node = options.node ?? null;
+    if (node?.xpath) {
+      const scrolled = await this._withAbort(
+        page.evaluate(
+          (payload: {
+            xpath: string;
+            direction: 'up' | 'down' | 'left' | 'right';
+            amount: number;
+          }) => {
+            const root = document.evaluate(
+              payload.xpath,
+              document,
+              null,
+              XPathResult.FIRST_ORDERED_NODE_TYPE,
+              null
+            ).singleNodeValue as HTMLElement | null;
+            if (!root) {
+              return false;
+            }
+            const topDelta =
+              payload.direction === 'up'
+                ? -payload.amount
+                : payload.direction === 'down'
+                  ? payload.amount
+                  : 0;
+            const leftDelta =
+              payload.direction === 'left'
+                ? -payload.amount
+                : payload.direction === 'right'
+                  ? payload.amount
+                  : 0;
+            root.scrollBy({
+              top: topDelta,
+              left: leftDelta,
+              behavior: 'auto',
+            });
+            return true;
+          },
+          { xpath: node.xpath, direction, amount: normalizedAmount }
+        ),
+        signal
+      );
+      if (scrolled) {
+        return;
+      }
+    }
+
+    if (direction === 'up' || direction === 'down') {
+      const pixels =
+        direction === 'down' ? -normalizedAmount : normalizedAmount;
+      await this._withAbort(this._scrollContainer(pixels), signal);
+      return;
+    }
+
+    const horizontalDelta =
+      direction === 'left' ? -normalizedAmount : normalizedAmount;
+    await this._withAbort(
+      page.evaluate((x: number) => window.scrollBy(x, 0), horizontalDelta),
+      signal
+    );
+  }
+
   async upload_file(
     element_node: DOMElementNode,
     file_path: string,

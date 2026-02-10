@@ -9,6 +9,7 @@ import {
   CloseTabEvent,
   GoBackEvent,
   NavigateToUrlEvent,
+  ScrollEvent,
   SendKeysEvent,
   SwitchTabEvent,
   TypeTextEvent,
@@ -2125,7 +2126,14 @@ You will be given a query and the markdown of a webpage that has been filtered t
           `🔄 Performing page-level scrolling. Reason: ${scrollTarget}`
         );
         try {
-          await (browser_session as any)._scrollContainer(dy);
+          await dispatchBrowserEventIfAvailable(
+            browser_session,
+            new ScrollEvent({
+              direction,
+              amount: Math.abs(dy),
+            }),
+            () => (browser_session as any)._scrollContainer(dy)
+          );
         } catch (error) {
           // Hard fallback: always works on root scroller
           await page.evaluate((y: number) => window.scrollBy(0, y), dy);
