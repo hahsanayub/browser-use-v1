@@ -263,4 +263,28 @@ describe('Google LLM alignment', () => {
 
     expect(serializedSchema).not.toContain('output_schema');
   });
+
+  it('adds placeholder property for empty object schemas in Gemini mode', async () => {
+    const llm = new ChatGoogle({
+      model: 'gemini-2.5-flash',
+      supportsStructuredOutput: true,
+    });
+
+    const cleaned = (llm as any)._cleanSchemaForGoogle({
+      type: 'object',
+      properties: {
+        meta: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      required: ['meta'],
+    });
+
+    const metaSchema = (cleaned as any).properties?.meta ?? {};
+
+    expect(metaSchema.properties?._placeholder).toEqual({
+      type: 'string',
+    });
+  });
 });

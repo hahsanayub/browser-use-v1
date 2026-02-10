@@ -171,6 +171,19 @@ export class ChatGoogle implements BaseChatModel {
       }
     }
 
+    const schemaType = String(cleaned.type ?? '').toUpperCase();
+    if (
+      schemaType === 'OBJECT' &&
+      cleaned.properties &&
+      typeof cleaned.properties === 'object' &&
+      !Array.isArray(cleaned.properties) &&
+      Object.keys(cleaned.properties).length === 0
+    ) {
+      cleaned.properties = {
+        _placeholder: { type: 'string' },
+      };
+    }
+
     return cleaned;
   }
 
