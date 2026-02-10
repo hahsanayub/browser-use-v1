@@ -58,13 +58,17 @@ export class StorageStateWatchdog extends BaseWatchdog {
       | null
       | undefined;
     const normalized = storageState ?? {};
-    this._lastSavedSnapshot = this._snapshotStorageState(normalized);
+    const merged = this._mergeStorageStates(this._readStoredState(targetPath), {
+      cookies: Array.isArray(normalized.cookies) ? normalized.cookies : [],
+      origins: Array.isArray(normalized.origins) ? normalized.origins : [],
+    });
+    this._lastSavedSnapshot = this._snapshotStorageState(merged);
 
     const dirPath = path.dirname(targetPath);
     fs.mkdirSync(dirPath, { recursive: true });
 
     const tempPath = `${targetPath}.tmp`;
-    fs.writeFileSync(tempPath, JSON.stringify(normalized, null, 2));
+    fs.writeFileSync(tempPath, JSON.stringify(merged, null, 2));
 
     if (fs.existsSync(targetPath)) {
       const backupPath = `${targetPath}.bak`;
@@ -80,12 +84,8 @@ export class StorageStateWatchdog extends BaseWatchdog {
     await this.event_bus.dispatch(
       new StorageStateSavedEvent({
         path: targetPath,
-        cookies_count: Array.isArray(normalized.cookies)
-          ? normalized.cookies.length
-          : 0,
-        origins_count: Array.isArray(normalized.origins)
-          ? normalized.origins.length
-          : 0,
+        cookies_count: Array.isArray(merged.cookies) ? merged.cookies.length : 0,
+        origins_count: Array.isArray(merged.origins) ? merged.origins.length : 0,
       })
     );
   }
@@ -207,5 +207,61 @@ export class StorageStateWatchdog extends BaseWatchdog {
       cookies,
       origins,
     });
+  }
+
+  private _readStoredState(targetPath: string): StorageStatePayload {
+    if (!fs.existsSync(targetPath)) {
+      return {
+        cookies: [],
+        origins: [],
+      };
+    }
+
+    try {
+      const raw = fs.readFileSync(targetPath, 'utf-8');
+      const parsed = JSON.parse(raw) as StorageStatePayload;
+      return {
+        cookies: Array.isArray(parsed.cookies) ? parsed.cookies : [],
+        origins: Array.isArray(parsed.origins) ? parsed.origins : [],
+      };
+    } catch (error) {
+      this.browser_session.logger.debug(
+        `[StorageStateWatchdog] Failed to parse existing storage state: ${(error as Error).message}`
+      );
+      return {
+        cookies: [],
+        origins: [],
+      };
+    }
+  }
+
+  private _mergeStorageStates(
+    existing: StorageStatePayload,
+    incoming: StorageStatePayload
+  ): StorageStatePayload {
+    const mergedCookies = new Map<string, unknown>();
+    const toCookieKey = (cookie: any) =>
+      `${String(cookie?.name ?? '')}::${String(cookie?.domain ?? '')}::${String(cookie?.path ?? '')}`;
+
+    for (const cookie of Array.isArray(existing.cookies) ? existing.cookies : []) {
+      mergedCookies.set(toCookieKey(cookie), cookie);
+    }
+    for (const cookie of Array.isArray(incoming.cookies) ? incoming.cookies : []) {
+      mergedCookies.set(toCookieKey(cookie), cookie);
+    }
+
+    const mergedOrigins = new Map<string, unknown>();
+    const toOriginKey = (origin: any) => String(origin?.origin ?? '');
+    for (const origin of Array.isArray(existing.origins) ? existing.origins : []) {
+      mergedOrigins.set(toOriginKey(origin), origin);
+    }
+    for (const origin of Array.isArray(incoming.origins) ? incoming.origins : []) {
+      mergedOrigins.set(toOriginKey(origin), origin);
+    }
+
+    return {
+      cookies: [...mergedCookies.values()],
+      origins: [...mergedOrigins.values()],
+    };
   }
 }

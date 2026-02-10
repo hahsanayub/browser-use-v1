@@ -110,6 +110,76 @@ describe('storage state watchdog alignment', () => {
     }
   });
 
+  it('merges existing storage state entries when saving', async () => {
+    const { tempDir, storagePath } = createTempStoragePath();
+    try {
+      fs.writeFileSync(
+        storagePath,
+        JSON.stringify(
+          {
+            cookies: [
+              {
+                name: 'old',
+                value: '1',
+                domain: '.example.com',
+                path: '/',
+              },
+            ],
+            origins: [
+              {
+                origin: 'https://persisted.example.com',
+                localStorage: [{ name: 'a', value: '1' }],
+              },
+            ],
+          },
+          null,
+          2
+        )
+      );
+
+      const session = new BrowserSession({
+        profile: {
+          storage_state: storagePath,
+        },
+      });
+      session.browser_context = {
+        storageState: vi.fn(async () => ({
+          cookies: [
+            {
+              name: 'new',
+              value: '2',
+              domain: '.example.com',
+              path: '/',
+            },
+          ],
+          origins: [
+            {
+              origin: 'https://fresh.example.com',
+              localStorage: [{ name: 'b', value: '2' }],
+            },
+          ],
+        })),
+      } as any;
+      session.attach_watchdog(
+        new StorageStateWatchdog({ browser_session: session })
+      );
+
+      await session.event_bus.dispatch_or_throw(new SaveStorageStateEvent());
+
+      const merged = JSON.parse(fs.readFileSync(storagePath, 'utf-8'));
+      expect(merged.cookies).toHaveLength(2);
+      expect(merged.origins).toHaveLength(2);
+      expect(
+        merged.cookies.some((cookie: any) => cookie.name === 'old')
+      ).toBe(true);
+      expect(
+        merged.cookies.some((cookie: any) => cookie.name === 'new')
+      ).toBe(true);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('bridges browser lifecycle events to load/save storage events', async () => {
     const { tempDir, storagePath } = createTempStoragePath();
     try {
