@@ -16,6 +16,11 @@
       "import": "./dist/agent/index.js",
       "default": "./dist/agent/index.js"
     },
+    "./actor": {
+      "types": "./dist/actor/index.d.ts",
+      "import": "./dist/actor/index.js",
+      "default": "./dist/actor/index.js"
+    },
     "./browser": {
       "types": "./dist/browser/index.d.ts",
       "import": "./dist/browser/index.js",
