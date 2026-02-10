@@ -3,6 +3,7 @@ import type { BaseChatModel } from '../src/llm/base.js';
 import { Agent } from '../src/agent/service.js';
 import { BrowserStateHistory } from '../src/browser/views.js';
 import { ActionResult, AgentHistory } from '../src/agent/views.js';
+import { construct_simple_judge_messages } from '../src/agent/judge.js';
 
 const createLlm = (completion: string) => {
   const ainvoke = vi.fn(async () => ({ completion, usage: null }));
@@ -24,6 +25,32 @@ const createLlm = (completion: string) => {
 };
 
 describe('Agent simple judge alignment', () => {
+  it('injects current_date into simple judge prompt with c011 wording', () => {
+    const messages = construct_simple_judge_messages({
+      task: 'Check latest stock close price',
+      final_result: 'AAPL closed at 199.10',
+      current_date: '2026-02-10',
+    });
+
+    const systemPrompt = (messages[0] as any)?.text ?? '';
+    expect(systemPrompt).toContain("Today's date is 2026-02-10.");
+    expect(systemPrompt).toContain(
+      "dates and times close to today's date (2026-02-10) are NOT fabricated"
+    );
+  });
+
+  it('falls back to no-task/no-response placeholders in simple judge prompts', () => {
+    const messages = construct_simple_judge_messages({
+      task: '',
+      final_result: '',
+      current_date: '2026-02-10',
+    });
+
+    const userPrompt = (messages[1] as any)?.text ?? '';
+    expect(userPrompt).toContain('No task provided');
+    expect(userPrompt).toContain('No response provided');
+  });
+
   it('overrides done success when simple judge rejects final response', async () => {
     const { llm, ainvoke } = createLlm(
       '{"is_correct": false, "reason": "Missing required fields"}'
