@@ -8,6 +8,7 @@ import {
   BrowserConnectedEvent,
   BrowserErrorEvent,
   BrowserStopEvent,
+  TabCreatedEvent,
 } from '../src/browser/events.js';
 import { RecordingWatchdog } from '../src/browser/watchdogs/recording-watchdog.js';
 
@@ -123,5 +124,55 @@ describe('recording watchdog alignment', () => {
     expect(errors).toHaveLength(1);
     expect(errors[0].error_type).toBe('RecordingStartFailed');
     expect(errors[0].message).toContain('trace start boom');
+  });
+
+  it('tracks Playwright video artifact paths when page closes', async () => {
+    const session = new BrowserSession({
+      profile: {
+        record_video_dir: path.join(
+          os.tmpdir(),
+          `browser-use-video-${Date.now()}`
+        ),
+      },
+    });
+    const watchdog = new RecordingWatchdog({ browser_session: session });
+    session.attach_watchdog(watchdog);
+
+    const closeListeners: Array<() => void> = [];
+    const page = {
+      on: vi.fn((event: string, listener: () => void) => {
+        if (event === 'close') {
+          closeListeners.push(listener);
+        }
+      }),
+      off: vi.fn(),
+      video: vi.fn(() => ({
+        path: vi.fn(async () => '/tmp/recorded-video.webm'),
+      })),
+    } as any;
+    session.browser_context = {
+      pages: vi.fn(() => [page]),
+    } as any;
+    session.agent_current_page = page;
+
+    await session.event_bus.dispatch_or_throw(
+      new BrowserConnectedEvent({
+        cdp_url: 'http://127.0.0.1:9222',
+      })
+    );
+    await session.event_bus.dispatch_or_throw(
+      new TabCreatedEvent({
+        target_id: 'target-video',
+        url: 'https://example.com/video-tab',
+      })
+    );
+
+    expect(closeListeners).toHaveLength(1);
+    closeListeners[0]();
+    await Promise.resolve();
+
+    expect(session.get_downloaded_files()).toContain(
+      '/tmp/recorded-video.webm'
+    );
   });
 });
