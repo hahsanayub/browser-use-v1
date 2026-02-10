@@ -2207,28 +2207,45 @@ describe('Regression Coverage', () => {
     expect(result.extracted_content).toContain('Successfully uploaded file');
   });
 
-  it('upload_file rejects zero-byte files', async () => {
+  it('upload_file returns ActionResult error for zero-byte local files', async () => {
     const controller = new Controller();
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-upload-'));
     const emptyPath = path.join(tempDir, 'empty.txt');
     fs.writeFileSync(emptyPath, '');
 
     try {
-      await expect(
-        controller.registry.execute_action(
-          'upload_file',
-          { index: 1, path: emptyPath },
-          {
-            browser_session: {
-              downloaded_files: [],
-            } as any,
-            available_file_paths: [emptyPath],
-          }
-        )
-      ).rejects.toThrow('is empty (0 bytes)');
+      const result = await controller.registry.execute_action(
+        'upload_file',
+        { index: 1, path: emptyPath },
+        {
+          browser_session: {
+            downloaded_files: [],
+          } as any,
+          available_file_paths: [emptyPath],
+        }
+      );
+
+      expect(result.error).toContain('is empty (0 bytes)');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
+  });
+
+  it('upload_file returns ActionResult error for unavailable local path', async () => {
+    const controller = new Controller();
+    const result = await controller.registry.execute_action(
+      'upload_file',
+      { index: 1, path: '/tmp/not-allowed-upload.txt' },
+      {
+        browser_session: {
+          downloaded_files: [],
+        } as any,
+        available_file_paths: [],
+      }
+    );
+
+    expect(result.error).toContain('is not available');
+    expect(result.error).toContain('available_file_paths');
   });
 
   it('read_long_content blocks files outside available_file_paths', async () => {

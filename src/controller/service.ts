@@ -803,20 +803,22 @@ export class Controller<Context = unknown> {
         } else if (!isLocalBrowser) {
           // Remote browser paths may only exist on the remote runtime.
         } else {
-          throw new BrowserError(
-            `File path ${params.path} is not available. To fix: add this file path to available_file_paths when creating the Agent.`
-          );
+          return new ActionResult({
+            error: `File path ${params.path} is not available. To fix: add this file path to available_file_paths when creating the Agent.`,
+          });
         }
       }
 
       if (isLocalBrowser) {
         if (!fs.existsSync(uploadPath)) {
-          throw new BrowserError(`File ${uploadPath} does not exist`);
+          return new ActionResult({
+            error: `File ${uploadPath} does not exist`,
+          });
         }
         if (fs.statSync(uploadPath).size === 0) {
-          throw new BrowserError(
-            `File ${uploadPath} is empty (0 bytes). The file may not have been saved correctly.`
-          );
+          return new ActionResult({
+            error: `File ${uploadPath} is empty (0 bytes). The file may not have been saved correctly.`,
+          });
         }
       }
 
