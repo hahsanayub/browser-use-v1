@@ -2246,7 +2246,6 @@ You will be given a query and the markdown of a webpage that has been filtered t
       }
       return new ActionResult({
         extracted_content: result,
-        include_in_memory: true,
         long_term_memory: memory,
         images,
         include_extracted_content_only_once: true,
@@ -2740,7 +2739,6 @@ Context: ${context}`;
         : await fsInstance.write_file(params.file_name, content);
       return new ActionResult({
         extracted_content: result,
-        include_in_memory: true,
         long_term_memory: result,
       });
     });
@@ -2760,7 +2758,6 @@ Context: ${context}`;
       );
       return new ActionResult({
         extracted_content: result,
-        include_in_memory: true,
         long_term_memory: result,
       });
     });

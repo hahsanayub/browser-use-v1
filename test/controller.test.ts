@@ -1181,6 +1181,7 @@ describe('Regression Coverage', () => {
       'done'
     );
     expect(result.extracted_content).toContain('Replaced 1 occurrence');
+    expect(result.include_in_memory).toBe(false);
   });
 
   it('find_text alias delegates to scroll_to_text behavior', async () => {
@@ -2065,9 +2066,33 @@ describe('Regression Coverage', () => {
 
     expect(fileSystem.read_file).toHaveBeenCalledWith('sample.txt', true);
     expect(result.extracted_content).toBe(content);
+    expect(result.include_in_memory).toBe(false);
     expect(result.long_term_memory).not.toBe(content);
     expect(result.long_term_memory).toContain('more lines...');
     expect(result.include_extracted_content_only_once).toBe(true);
+  });
+
+  it('write_file keeps long_term_memory without forcing include_in_memory', async () => {
+    const controller = new Controller();
+    const fileSystem = {
+      write_file: vi.fn(async () => 'Data written to file notes.md successfully.'),
+      append_file: vi.fn(async () => 'unused'),
+    };
+
+    const result = await controller.registry.execute_action(
+      'write_file',
+      { file_name: 'notes.md', content: 'Hello world' },
+      {
+        file_system: fileSystem as any,
+      }
+    );
+
+    expect(fileSystem.write_file).toHaveBeenCalledWith('notes.md', 'Hello world\n');
+    expect(result.extracted_content).toContain('Data written to file notes.md successfully.');
+    expect(result.long_term_memory).toContain(
+      'Data written to file notes.md successfully.'
+    );
+    expect(result.include_in_memory).toBe(false);
   });
 
   it('read_file returns image payload for external image files', async () => {
