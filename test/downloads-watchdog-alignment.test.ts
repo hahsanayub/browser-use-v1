@@ -131,6 +131,46 @@ describe('downloads watchdog alignment', () => {
     expect(onStart).not.toHaveBeenCalled();
   });
 
+  it('accepts python-aligned positional callback registration', async () => {
+    const session = new BrowserSession();
+    const watchdog = new DownloadsWatchdog({ browser_session: session });
+    session.attach_watchdog(watchdog);
+
+    const onStart = vi.fn();
+    const onProgress = vi.fn();
+    const onComplete = vi.fn();
+    watchdog.register_download_callbacks(onStart, onProgress, onComplete);
+
+    await session.event_bus.dispatch_or_throw(
+      new DownloadStartedEvent({
+        guid: 'download-guid-positional',
+        url: 'https://example.com/positional.bin',
+        suggested_filename: 'positional.bin',
+      })
+    );
+    await session.event_bus.dispatch_or_throw(
+      new DownloadProgressEvent({
+        guid: 'download-guid-positional',
+        received_bytes: 5,
+        total_bytes: 5,
+        state: 'completed',
+      })
+    );
+    await session.event_bus.dispatch_or_throw(
+      new FileDownloadedEvent({
+        guid: 'download-guid-positional',
+        url: 'https://example.com/positional.bin',
+        path: '/tmp/positional.bin',
+        file_name: 'positional.bin',
+        file_size: 5,
+      })
+    );
+
+    expect(onStart).toHaveBeenCalledTimes(1);
+    expect(onProgress).toHaveBeenCalledTimes(1);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
   it('ensures downloads directory exists on BrowserLaunchEvent', async () => {
     const downloadsPath = `/tmp/browser-use-downloads-${Date.now()}`;
     const session = new BrowserSession({

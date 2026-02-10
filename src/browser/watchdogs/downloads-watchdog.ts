@@ -58,6 +58,11 @@ export class DownloadsWatchdog extends BaseWatchdog {
     DownloadProgressEvent,
     FileDownloadedEvent,
   ];
+  static override EMITS = [
+    DownloadStartedEvent,
+    DownloadProgressEvent,
+    FileDownloadedEvent,
+  ];
 
   private _activeDownloads = new Map<string, ActiveDownload>();
   private _downloadStartCallbacks: Array<(info: DownloadStartInfo) => void> =
@@ -97,6 +102,9 @@ export class DownloadsWatchdog extends BaseWatchdog {
 
   on_BrowserStoppedEvent() {
     this._activeDownloads.clear();
+    this._downloadStartCallbacks = [];
+    this._downloadProgressCallbacks = [];
+    this._downloadCompleteCallbacks = [];
   }
 
   on_TabCreatedEvent() {
@@ -199,49 +207,106 @@ export class DownloadsWatchdog extends BaseWatchdog {
     }));
   }
 
-  register_download_callbacks({
-    on_start,
-    on_progress,
-    on_complete,
-  }: {
-    on_start?: ((info: DownloadStartInfo) => void) | null;
-    on_progress?: ((info: DownloadProgressInfo) => void) | null;
-    on_complete?: ((info: DownloadCompleteInfo) => void) | null;
-  } = {}) {
+  register_download_callbacks(
+    on_start_or_options:
+      | ((info: DownloadStartInfo) => void)
+      | {
+          on_start?: ((info: DownloadStartInfo) => void) | null;
+          on_progress?: ((info: DownloadProgressInfo) => void) | null;
+          on_complete?: ((info: DownloadCompleteInfo) => void) | null;
+        }
+      | null = null,
+    on_progress: ((info: DownloadProgressInfo) => void) | null = null,
+    on_complete: ((info: DownloadCompleteInfo) => void) | null = null
+  ) {
+    const { on_start, on_progress: resolvedProgress, on_complete: resolvedEnd } =
+      this._normalizeCallbackRegistration(
+        on_start_or_options,
+        on_progress,
+        on_complete
+      );
     if (on_start) {
       this._downloadStartCallbacks.push(on_start);
     }
-    if (on_progress) {
-      this._downloadProgressCallbacks.push(on_progress);
+    if (resolvedProgress) {
+      this._downloadProgressCallbacks.push(resolvedProgress);
     }
-    if (on_complete) {
-      this._downloadCompleteCallbacks.push(on_complete);
+    if (resolvedEnd) {
+      this._downloadCompleteCallbacks.push(resolvedEnd);
     }
   }
 
-  unregister_download_callbacks({
-    on_start,
-    on_progress,
-    on_complete,
-  }: {
-    on_start?: ((info: DownloadStartInfo) => void) | null;
-    on_progress?: ((info: DownloadProgressInfo) => void) | null;
-    on_complete?: ((info: DownloadCompleteInfo) => void) | null;
-  } = {}) {
+  unregister_download_callbacks(
+    on_start_or_options:
+      | ((info: DownloadStartInfo) => void)
+      | {
+          on_start?: ((info: DownloadStartInfo) => void) | null;
+          on_progress?: ((info: DownloadProgressInfo) => void) | null;
+          on_complete?: ((info: DownloadCompleteInfo) => void) | null;
+        }
+      | null = null,
+    on_progress: ((info: DownloadProgressInfo) => void) | null = null,
+    on_complete: ((info: DownloadCompleteInfo) => void) | null = null
+  ) {
+    const { on_start, on_progress: resolvedProgress, on_complete: resolvedEnd } =
+      this._normalizeCallbackRegistration(
+        on_start_or_options,
+        on_progress,
+        on_complete
+      );
     if (on_start) {
       this._downloadStartCallbacks = this._downloadStartCallbacks.filter(
         (callback) => callback !== on_start
       );
     }
-    if (on_progress) {
+    if (resolvedProgress) {
       this._downloadProgressCallbacks = this._downloadProgressCallbacks.filter(
-        (callback) => callback !== on_progress
+        (callback) => callback !== resolvedProgress
       );
     }
-    if (on_complete) {
+    if (resolvedEnd) {
       this._downloadCompleteCallbacks = this._downloadCompleteCallbacks.filter(
-        (callback) => callback !== on_complete
+        (callback) => callback !== resolvedEnd
       );
     }
+  }
+
+  protected override onDetached() {
+    this._activeDownloads.clear();
+    this._downloadStartCallbacks = [];
+    this._downloadProgressCallbacks = [];
+    this._downloadCompleteCallbacks = [];
+  }
+
+  private _normalizeCallbackRegistration(
+    on_start_or_options:
+      | ((info: DownloadStartInfo) => void)
+      | {
+          on_start?: ((info: DownloadStartInfo) => void) | null;
+          on_progress?: ((info: DownloadProgressInfo) => void) | null;
+          on_complete?: ((info: DownloadCompleteInfo) => void) | null;
+        }
+      | null,
+    on_progress: ((info: DownloadProgressInfo) => void) | null,
+    on_complete: ((info: DownloadCompleteInfo) => void) | null
+  ) {
+    if (
+      on_start_or_options &&
+      typeof on_start_or_options === 'object' &&
+      !Array.isArray(on_start_or_options)
+    ) {
+      return {
+        on_start: on_start_or_options.on_start ?? null,
+        on_progress: on_start_or_options.on_progress ?? null,
+        on_complete: on_start_or_options.on_complete ?? null,
+      };
+    }
+
+    return {
+      on_start:
+        typeof on_start_or_options === 'function' ? on_start_or_options : null,
+      on_progress,
+      on_complete,
+    };
   }
 }
