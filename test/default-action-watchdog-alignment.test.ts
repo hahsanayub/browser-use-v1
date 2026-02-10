@@ -21,6 +21,7 @@ import { DownloadsWatchdog } from '../src/browser/watchdogs/downloads-watchdog.j
 import { DOMWatchdog } from '../src/browser/watchdogs/dom-watchdog.js';
 import { LocalBrowserWatchdog } from '../src/browser/watchdogs/local-browser-watchdog.js';
 import { PermissionsWatchdog } from '../src/browser/watchdogs/permissions-watchdog.js';
+import { ScreenshotWatchdog } from '../src/browser/watchdogs/screenshot-watchdog.js';
 import { SecurityWatchdog } from '../src/browser/watchdogs/security-watchdog.js';
 import { StorageStateWatchdog } from '../src/browser/watchdogs/storage-state-watchdog.js';
 
@@ -32,7 +33,7 @@ describe('default action watchdog alignment', () => {
     session.attach_default_watchdogs();
 
     const watchdogs = session.get_watchdogs();
-    expect(watchdogs).toHaveLength(10);
+    expect(watchdogs).toHaveLength(11);
     expect(
       watchdogs.some((watchdog) => watchdog instanceof LocalBrowserWatchdog)
     ).toBe(true);
@@ -53,6 +54,9 @@ describe('default action watchdog alignment', () => {
     ).toBe(true);
     expect(
       watchdogs.some((watchdog) => watchdog instanceof SecurityWatchdog)
+    ).toBe(true);
+    expect(
+      watchdogs.some((watchdog) => watchdog instanceof ScreenshotWatchdog)
     ).toBe(true);
     expect(
       watchdogs.some((watchdog) => watchdog instanceof DownloadsWatchdog)
