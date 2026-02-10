@@ -1042,14 +1042,12 @@ export class Controller<Context = unknown> {
 
     this.registry.action('Close an existing tab', {
       param_model: CloseTabActionSchema,
-      terminates_sequence: true,
     })(async function close_tab(params: CloseTabAction, { browser_session, signal }) {
       return closeImpl(params, { browser_session, signal });
     });
 
     this.registry.action('Close an existing tab', {
       param_model: CloseTabActionSchema,
-      terminates_sequence: true,
     })(async function close(params: CloseTabAction, { browser_session, signal }) {
       return closeImpl(params, { browser_session, signal });
     });

@@ -1159,6 +1159,16 @@ describe('Regression Coverage', () => {
     expect(actions.has('replace_file')).toBe(true);
   });
 
+  it('keeps switch as terminating but close as non-terminating for c011 parity', () => {
+    const controller = new Controller();
+
+    const switchAction = controller.registry.get_action('switch');
+    const closeAction = controller.registry.get_action('close');
+
+    expect(switchAction?.terminates_sequence).toBe(true);
+    expect(closeAction?.terminates_sequence).toBe(false);
+  });
+
   it('replace_file alias delegates to replace_file_str handler', async () => {
     const controller = new Controller();
     const fileSystem = {
