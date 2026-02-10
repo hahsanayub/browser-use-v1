@@ -70,7 +70,9 @@ describe('ChatAzure alignment', () => {
       model: 'gpt-4o',
       apiKey: 'test-key',
       endpoint: 'https://example.openai.azure.com',
+      baseURL: 'https://example.openai.azure.com/openai/',
       apiVersion: '2024-12-01-preview',
+      azureAdToken: 'aad-token',
       timeout: 33333,
       temperature: 0.1,
       frequencyPenalty: 0.2,
@@ -97,6 +99,7 @@ describe('ChatAzure alignment', () => {
     expect(azureCtorMock.mock.calls[0]?.[0]).toMatchObject({
       apiKey: 'test-key',
       endpoint: 'https://example.openai.azure.com',
+      baseURL: 'https://example.openai.azure.com/openai/',
       apiVersion: '2024-12-01-preview',
       timeout: 33333,
       maxRetries: 7,
@@ -105,6 +108,10 @@ describe('ChatAzure alignment', () => {
       fetch: customFetch,
       fetchOptions: { cache: 'no-store' },
     });
+    const ctorOptions = azureCtorMock.mock.calls[0]?.[0] as any;
+    const azureTokenProvider = ctorOptions?.azureADTokenProvider;
+    expect(typeof azureTokenProvider).toBe('function');
+    await expect(azureTokenProvider()).resolves.toBe('aad-token');
   });
 
   it('auto-switches to responses api for codex models', async () => {

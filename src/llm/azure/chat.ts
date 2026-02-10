@@ -36,8 +36,11 @@ export interface ChatAzureOptions {
   model?: string;
   apiKey?: string;
   endpoint?: string;
+  baseURL?: string;
   apiVersion?: string;
   deployment?: string;
+  azureAdToken?: string | null;
+  azureAdTokenProvider?: (() => Promise<string>) | null;
   timeout?: number | null;
   temperature?: number | null;
   frequencyPenalty?: number | null;
@@ -88,8 +91,11 @@ export class ChatAzure implements BaseChatModel {
       model = 'gpt-4o',
       apiKey = process.env.AZURE_OPENAI_API_KEY ?? process.env.AZURE_OPENAI_KEY,
       endpoint = process.env.AZURE_OPENAI_ENDPOINT,
+      baseURL = undefined,
       apiVersion = process.env.AZURE_OPENAI_API_VERSION ?? '2024-12-01-preview',
       deployment = process.env.AZURE_OPENAI_DEPLOYMENT ?? model,
+      azureAdToken = null,
+      azureAdTokenProvider = null,
       timeout = null,
       temperature = 0.2,
       frequencyPenalty = 0.3,
@@ -127,8 +133,14 @@ export class ChatAzure implements BaseChatModel {
     this.client = new AzureOpenAI({
       apiKey,
       endpoint,
+      baseURL,
       apiVersion,
       deployment,
+      azureADTokenProvider:
+        azureAdTokenProvider ??
+        (azureAdToken
+          ? async () => String(azureAdToken)
+          : undefined),
       timeout: timeout ?? undefined,
       maxRetries,
       defaultHeaders: defaultHeaders ?? undefined,
