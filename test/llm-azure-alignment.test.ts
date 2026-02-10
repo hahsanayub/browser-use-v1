@@ -65,15 +65,21 @@ describe('ChatAzure alignment', () => {
   });
 
   it('uses chat completions mode for regular models', async () => {
+    const customFetch = vi.fn() as unknown as typeof fetch;
     const llm = new ChatAzure({
       model: 'gpt-4o',
       apiKey: 'test-key',
       endpoint: 'https://example.openai.azure.com',
       apiVersion: '2024-12-01-preview',
+      timeout: 33333,
       temperature: 0.1,
       frequencyPenalty: 0.2,
       serviceTier: 'priority',
       maxRetries: 7,
+      defaultHeaders: { 'x-azure-test': '1' },
+      defaultQuery: { purpose: 'alignment' },
+      fetchImplementation: customFetch,
+      fetchOptions: { cache: 'no-store' },
     });
 
     const response = await llm.ainvoke([new UserMessage('hello')]);
@@ -92,7 +98,12 @@ describe('ChatAzure alignment', () => {
       apiKey: 'test-key',
       endpoint: 'https://example.openai.azure.com',
       apiVersion: '2024-12-01-preview',
+      timeout: 33333,
       maxRetries: 7,
+      defaultHeaders: { 'x-azure-test': '1' },
+      defaultQuery: { purpose: 'alignment' },
+      fetch: customFetch,
+      fetchOptions: { cache: 'no-store' },
     });
   });
 

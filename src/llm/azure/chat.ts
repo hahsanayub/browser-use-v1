@@ -38,6 +38,7 @@ export interface ChatAzureOptions {
   endpoint?: string;
   apiVersion?: string;
   deployment?: string;
+  timeout?: number | null;
   temperature?: number | null;
   frequencyPenalty?: number | null;
   reasoningEffort?: 'low' | 'medium' | 'high';
@@ -46,6 +47,10 @@ export interface ChatAzureOptions {
   topP?: number | null;
   seed?: number | null;
   maxRetries?: number;
+  defaultHeaders?: Record<string, string> | null;
+  defaultQuery?: Record<string, string | undefined> | null;
+  fetchImplementation?: typeof fetch;
+  fetchOptions?: RequestInit | null;
   useResponsesApi?: boolean | 'auto';
   addSchemaToSystemPrompt?: boolean;
   dontForceStructuredOutput?: boolean;
@@ -85,6 +90,7 @@ export class ChatAzure implements BaseChatModel {
       endpoint = process.env.AZURE_OPENAI_ENDPOINT,
       apiVersion = process.env.AZURE_OPENAI_API_VERSION ?? '2024-12-01-preview',
       deployment = process.env.AZURE_OPENAI_DEPLOYMENT ?? model,
+      timeout = null,
       temperature = 0.2,
       frequencyPenalty = 0.3,
       reasoningEffort = 'low',
@@ -93,6 +99,10 @@ export class ChatAzure implements BaseChatModel {
       topP = null,
       seed = null,
       maxRetries = 5,
+      defaultHeaders = null,
+      defaultQuery = null,
+      fetchImplementation,
+      fetchOptions = null,
       useResponsesApi = 'auto',
       addSchemaToSystemPrompt = false,
       dontForceStructuredOutput = false,
@@ -119,7 +129,12 @@ export class ChatAzure implements BaseChatModel {
       endpoint,
       apiVersion,
       deployment,
+      timeout: timeout ?? undefined,
       maxRetries,
+      defaultHeaders: defaultHeaders ?? undefined,
+      defaultQuery: defaultQuery ?? undefined,
+      fetch: fetchImplementation,
+      fetchOptions: (fetchOptions ?? undefined) as any,
     });
   }
 

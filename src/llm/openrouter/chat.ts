@@ -10,10 +10,15 @@ export interface ChatOpenRouterOptions {
   model?: string;
   apiKey?: string;
   baseURL?: string;
+  timeout?: number | null;
   temperature?: number | null;
   topP?: number | null;
   seed?: number | null;
   maxRetries?: number;
+  defaultHeaders?: Record<string, string> | null;
+  defaultQuery?: Record<string, string | undefined> | null;
+  fetchImplementation?: typeof fetch;
+  fetchOptions?: RequestInit | null;
   httpReferer?: string | null;
   extraBody?: Record<string, unknown> | null;
   removeMinItemsFromSchema?: boolean;
@@ -39,10 +44,15 @@ export class ChatOpenRouter implements BaseChatModel {
       model = 'openai/gpt-4o',
       apiKey = process.env.OPENROUTER_API_KEY,
       baseURL = 'https://openrouter.ai/api/v1',
+      timeout = null,
       temperature = null,
       topP = null,
       seed = null,
       maxRetries = 10,
+      defaultHeaders = null,
+      defaultQuery = null,
+      fetchImplementation,
+      fetchOptions = null,
       httpReferer = null,
       extraBody = null,
       removeMinItemsFromSchema = false,
@@ -61,7 +71,12 @@ export class ChatOpenRouter implements BaseChatModel {
     this.client = new OpenAI({
       apiKey,
       baseURL,
+      timeout: timeout ?? undefined,
       maxRetries,
+      defaultHeaders: defaultHeaders ?? undefined,
+      defaultQuery: defaultQuery ?? undefined,
+      fetch: fetchImplementation,
+      fetchOptions: (fetchOptions ?? undefined) as any,
     });
   }
 

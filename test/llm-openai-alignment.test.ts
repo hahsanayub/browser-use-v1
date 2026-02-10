@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 const openaiCreateMock = vi.fn();
+const openaiCtorMock = vi.fn();
 
 vi.mock('openai', () => {
   class OpenAI {
@@ -10,6 +11,10 @@ vi.mock('openai', () => {
         create: openaiCreateMock,
       },
     };
+
+    constructor(options?: unknown) {
+      openaiCtorMock(options);
+    }
   }
   return { default: OpenAI };
 });
@@ -31,6 +36,7 @@ const buildResponse = (content: string) => ({
 describe('ChatOpenAI alignment', () => {
   beforeEach(() => {
     openaiCreateMock.mockReset();
+    openaiCtorMock.mockReset();
     openaiCreateMock.mockResolvedValue(buildResponse('ok'));
   });
 
@@ -56,6 +62,36 @@ describe('ChatOpenAI alignment', () => {
     expect(request.reasoning_effort).toBe('medium');
     expect(request.temperature).toBeUndefined();
     expect(request.frequency_penalty).toBeUndefined();
+  });
+
+  it('passes python-aligned client options to OpenAI constructor', () => {
+    const customFetch = vi.fn() as unknown as typeof fetch;
+    new ChatOpenAI({
+      model: 'gpt-4o',
+      apiKey: 'sk-test',
+      organization: 'org-test',
+      project: 'proj-test',
+      baseURL: 'https://example.openai.test/v1',
+      timeout: 12345,
+      maxRetries: 7,
+      defaultHeaders: { 'x-test-header': '1' },
+      defaultQuery: { purpose: 'alignment' },
+      fetchImplementation: customFetch,
+      fetchOptions: { cache: 'no-store' },
+    });
+
+    expect(openaiCtorMock.mock.calls[0]?.[0]).toMatchObject({
+      apiKey: 'sk-test',
+      organization: 'org-test',
+      project: 'proj-test',
+      baseURL: 'https://example.openai.test/v1',
+      timeout: 12345,
+      maxRetries: 7,
+      defaultHeaders: { 'x-test-header': '1' },
+      defaultQuery: { purpose: 'alignment' },
+      fetch: customFetch,
+      fetchOptions: { cache: 'no-store' },
+    });
   });
 
   it('honors custom reasoning model list', async () => {

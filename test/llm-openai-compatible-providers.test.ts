@@ -81,12 +81,19 @@ describe('OpenAI-compatible providers alignment', () => {
     });
   });
 
-  it('supports OpenRouter options including HTTP-Referer and extra body', async () => {
+  it('supports OpenRouter options including HTTP-Referer, extra body, and client params', async () => {
+    const customFetch = vi.fn() as unknown as typeof fetch;
     const llm = new ChatOpenRouter({
       model: 'openai/gpt-4o',
       temperature: 0.4,
       topP: 0.8,
       seed: 42,
+      timeout: 40000,
+      maxRetries: 9,
+      defaultHeaders: { 'x-openrouter-test': '1' },
+      defaultQuery: { purpose: 'alignment' },
+      fetchImplementation: customFetch,
+      fetchOptions: { cache: 'no-store' },
       httpReferer: 'https://example.com/app',
       extraBody: {
         provider: { order: ['openai'] },
@@ -104,6 +111,15 @@ describe('OpenAI-compatible providers alignment', () => {
       'HTTP-Referer': 'https://example.com/app',
     });
     expect(request.provider).toEqual({ order: ['openai'] });
+    expect(openaiCtorMock.mock.calls[0]?.[0]).toMatchObject({
+      baseURL: 'https://openrouter.ai/api/v1',
+      timeout: 40000,
+      maxRetries: 9,
+      defaultHeaders: { 'x-openrouter-test': '1' },
+      defaultQuery: { purpose: 'alignment' },
+      fetch: customFetch,
+      fetchOptions: { cache: 'no-store' },
+    });
   });
 
   it('supports Vercel providerOptions passthrough with OpenAI-compatible payload', async () => {

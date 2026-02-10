@@ -24,13 +24,19 @@ export interface ChatOpenAIOptions {
   model?: string;
   apiKey?: string;
   organization?: string;
+  project?: string;
   baseURL?: string;
+  timeout?: number | null;
   temperature?: number | null;
   frequencyPenalty?: number | null;
   reasoningEffort?: 'low' | 'medium' | 'high';
   serviceTier?: 'auto' | 'default' | 'flex' | 'priority' | 'scale' | null;
   maxCompletionTokens?: number | null;
   maxRetries?: number;
+  defaultHeaders?: Record<string, string> | null;
+  defaultQuery?: Record<string, string | undefined> | null;
+  fetchImplementation?: typeof fetch;
+  fetchOptions?: RequestInit | null;
   seed?: number | null;
   topP?: number | null;
   addSchemaToSystemPrompt?: boolean;
@@ -68,13 +74,19 @@ export class ChatOpenAI implements BaseChatModel {
       model = 'gpt-4o',
       apiKey,
       organization,
+      project,
       baseURL,
+      timeout = null,
       temperature = 0.2,
       frequencyPenalty = 0.3,
       reasoningEffort = 'low',
       serviceTier = null,
       maxCompletionTokens = 4096,
       maxRetries = 5,
+      defaultHeaders = null,
+      defaultQuery = null,
+      fetchImplementation,
+      fetchOptions = null,
       seed = null,
       topP = null,
       addSchemaToSystemPrompt = false,
@@ -103,8 +115,14 @@ export class ChatOpenAI implements BaseChatModel {
     this.client = new OpenAI({
       apiKey,
       organization,
+      project,
       baseURL,
+      timeout: timeout ?? undefined,
       maxRetries,
+      defaultHeaders: defaultHeaders ?? undefined,
+      defaultQuery: defaultQuery ?? undefined,
+      fetch: fetchImplementation,
+      fetchOptions: (fetchOptions ?? undefined) as any,
     });
   }
 
