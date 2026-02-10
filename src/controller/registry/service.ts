@@ -328,20 +328,20 @@ export class Registry<Context = unknown> {
         return handler;
       }
 
+      const parsedHandlerParams = extractFunctionParameters(handler as any);
       let normalizedHandler: RegistryActionHandler<Params, Context> = handler;
       if (!options.param_model) {
-        const parsedParams = extractFunctionParameters(handler as any);
         const supportsCompatSignature = Boolean(
-          parsedParams &&
-            parsedParams.length > 0 &&
+          parsedHandlerParams &&
+            parsedHandlerParams.length > 0 &&
             !(
-              parsedParams.length <= 2 &&
-              parsedParams[0]?.name === 'params'
+              parsedHandlerParams.length <= 2 &&
+              parsedHandlerParams[0]?.name === 'params'
             )
         );
 
-        if (supportsCompatSignature && parsedParams) {
-          const actionParams = parsedParams.filter(
+        if (supportsCompatSignature && parsedHandlerParams) {
+          const actionParams = parsedHandlerParams.filter(
             (entry) => !SPECIAL_PARAM_NAMES.has(entry.name)
           );
 
@@ -360,7 +360,7 @@ export class Registry<Context = unknown> {
               has_sensitive_data?: boolean;
             }
           ) => {
-            const args = parsedParams.map((entry) => {
+            const args = parsedHandlerParams.map((entry) => {
               if (SPECIAL_PARAM_NAMES.has(entry.name)) {
                 const value = (ctx as Record<string, unknown>)[entry.name];
                 if (

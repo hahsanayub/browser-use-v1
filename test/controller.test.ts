@@ -237,6 +237,27 @@ describe('Controller Registry Tests', () => {
       );
     });
 
+    it('rejects variadic action signatures even when param_model is provided', () => {
+      const registry = new Registry();
+
+      expect(() =>
+        registry.action('Invalid variadic model action', {
+          param_model: z.object({
+            query: z.string(),
+          }),
+        })(async function bad_signature_with_model(
+          params: { query: string },
+          ...rest: unknown[]
+        ) {
+          return new ActionResult({
+            extracted_content: `${params.query}:${rest.length}`,
+          });
+        })
+      ).toThrow(
+        "Action 'bad_signature_with_model' has ...rest which is not allowed. Actions must have explicit positional parameters only."
+      );
+    });
+
     it('raises clear error when required special params are missing in simple signatures', async () => {
       const registry = new Registry();
 
