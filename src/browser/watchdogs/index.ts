@@ -1,5 +1,6 @@
 export * from './base.js';
 export * from './cdp-session-watchdog.js';
+export * from './crash-watchdog.js';
 export * from './default-action-watchdog.js';
 export * from './dom-watchdog.js';
 export * from './downloads-watchdog.js';
