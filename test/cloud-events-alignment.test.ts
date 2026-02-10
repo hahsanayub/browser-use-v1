@@ -111,4 +111,45 @@ describe('cloud events alignment', () => {
     expect(event.llm_model.length).toBe(200);
     expect(event.toJSON().llm_model).toHaveLength(200);
   });
+
+  it('CreateAgentTaskEvent enforces python-aligned task max length 100000', () => {
+    expect(
+      () =>
+        new CreateAgentTaskEvent({
+          agent_session_id: 'session-3',
+          llm_model: 'model',
+          task: 'x'.repeat(100_001),
+        })
+    ).toThrow('task exceeds maximum length of 100000');
+  });
+
+  it('CreateAgentTaskEvent.fromAgent validates oversized task without truncating', () => {
+    expect(() =>
+      CreateAgentTaskEvent.fromAgent({
+        task_id: 'task-3',
+        session_id: 'session-4',
+        task: 'x'.repeat(100_001),
+        llm: { model_name: 'model' },
+        state: {
+          stopped: false,
+          paused: false,
+          n_steps: 0,
+          model_dump: () => ({}),
+        },
+        history: {
+          final_result: () => null,
+          is_done: () => false,
+        },
+        browser_session: {
+          id: 'browser-session-1',
+        },
+        cloud_sync: {
+          auth_client: {
+            device_id: 'device-4',
+          },
+        },
+        _task_start_time: 1_760_000_000,
+      } as any)
+    ).toThrow('task exceeds maximum length of 100000');
+  });
 });

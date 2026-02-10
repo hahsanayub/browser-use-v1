@@ -349,6 +349,9 @@ export class CreateAgentTaskEvent extends BaseEvent {
         `llm_model exceeds maximum length of ${MAX_LLM_MODEL_LENGTH}`
       );
     }
+    if (init.task.length > MAX_TASK_LENGTH) {
+      throw new Error(`task exceeds maximum length of ${MAX_TASK_LENGTH}`);
+    }
     this.llm_model = init.llm_model;
     this.task = init.task;
     this.stopped = init.stopped ?? false;
@@ -369,7 +372,7 @@ export class CreateAgentTaskEvent extends BaseEvent {
       id: String(agent.task_id),
       device_id: getDeviceId(agent),
       agent_session_id: String(agent.session_id),
-      task: agent.task.slice(0, MAX_TASK_LENGTH),
+      task: agent.task,
       llm_model: agent.llm.model_name || agent.llm.model || 'unknown',
       agent_state: serializeAgentState(agent),
       stopped: false,
