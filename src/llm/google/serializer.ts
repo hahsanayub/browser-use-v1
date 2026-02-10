@@ -25,6 +25,7 @@ export class GoogleMessageSerializer {
   ): SerializedGoogleMessages {
     const contents: Content[] = [];
     const systemParts: string[] = [];
+    let systemInstruction: string | null = null;
     let injectedSystemIntoUser = false;
 
     for (const message of messages) {
@@ -36,7 +37,11 @@ export class GoogleMessageSerializer {
       ) {
         const text = this.extractMessageText(message);
         if (text) {
-          systemParts.push(text);
+          if (includeSystemInUser) {
+            systemParts.push(text);
+          } else {
+            systemInstruction = text;
+          }
         }
         continue;
       }
@@ -69,10 +74,7 @@ export class GoogleMessageSerializer {
 
     return {
       contents,
-      systemInstruction:
-        includeSystemInUser || systemParts.length === 0
-          ? null
-          : systemParts.join('\n\n'),
+      systemInstruction: includeSystemInUser ? null : systemInstruction,
     };
   }
 
