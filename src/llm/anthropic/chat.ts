@@ -4,13 +4,12 @@ import Anthropic, {
   RateLimitError,
   type ClientOptions,
 } from '@anthropic-ai/sdk';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ChatInvokeCompletion, ChatInvokeUsage } from '../views.js';
 import { type Message } from '../messages.js';
 import { AnthropicMessageSerializer } from './serializer.js';
 import { ModelProviderError, ModelRateLimitError } from '../exceptions.js';
-import { SchemaOptimizer } from '../schema.js';
+import { SchemaOptimizer, zodSchemaToJsonSchema } from '../schema.js';
 
 export interface ChatAnthropicOptions {
   model?: string;
@@ -196,7 +195,7 @@ export class ChatAnthropic implements BaseChatModel {
 
     if (output_format && zodSchemaCandidate) {
       try {
-        const rawJsonSchema = zodToJsonSchema(zodSchemaCandidate as any, {
+        const rawJsonSchema = zodSchemaToJsonSchema(zodSchemaCandidate as any, {
           name: 'Response',
           target: 'jsonSchema7',
         });

@@ -1,9 +1,9 @@
 import { setTimeout as sleep } from 'node:timers/promises';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import { CONFIG } from '../../config.js';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ModelProviderError, ModelRateLimitError } from '../exceptions.js';
 import type { Message } from '../messages.js';
+import { zodSchemaToJsonSchema } from '../schema.js';
 import { ChatInvokeCompletion, type ChatInvokeUsage } from '../views.js';
 
 const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
@@ -126,7 +126,7 @@ export class ChatBrowserUse implements BaseChatModel {
       typeof output.safeParse === 'function' &&
       typeof output.parse === 'function'
     ) {
-      return zodToJsonSchema(output, {
+      return zodSchemaToJsonSchema(output, {
         name: 'Response',
         target: 'jsonSchema7',
       }) as Record<string, unknown>;
@@ -137,7 +137,7 @@ export class ChatBrowserUse implements BaseChatModel {
       typeof output.schema.safeParse === 'function' &&
       typeof output.schema.parse === 'function'
     ) {
-      return zodToJsonSchema(output.schema, {
+      return zodSchemaToJsonSchema(output.schema, {
         name: 'Response',
         target: 'jsonSchema7',
       }) as Record<string, unknown>;

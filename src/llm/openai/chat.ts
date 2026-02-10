@@ -1,12 +1,11 @@
 import OpenAI from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources/index.mjs';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ChatInvokeCompletion, ChatInvokeUsage } from '../views.js';
 import type { Message } from '../messages.js';
 import { OpenAIMessageSerializer } from './serializer.js';
 import { ModelProviderError, ModelRateLimitError } from '../exceptions.js';
-import { SchemaOptimizer } from '../schema.js';
+import { SchemaOptimizer, zodSchemaToJsonSchema } from '../schema.js';
 
 // Reasoning models that support reasoning_effort parameter
 const DEFAULT_REASONING_MODELS = [
@@ -218,7 +217,7 @@ export class ChatOpenAI implements BaseChatModel {
       undefined;
     if (zodSchemaCandidate) {
       try {
-        const rawJsonSchema = zodToJsonSchema(zodSchemaCandidate, {
+        const rawJsonSchema = zodSchemaToJsonSchema(zodSchemaCandidate, {
           name: 'agent_output',
           target: 'jsonSchema7',
         });

@@ -1,10 +1,9 @@
 import { GoogleGenAI } from '@google/genai';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ModelProviderError } from '../exceptions.js';
 import { ChatInvokeCompletion, type ChatInvokeUsage } from '../views.js';
 import type { Message } from '../messages.js';
-import { SchemaOptimizer } from '../schema.js';
+import { SchemaOptimizer, zodSchemaToJsonSchema } from '../schema.js';
 import { GoogleMessageSerializer } from './serializer.js';
 
 export interface ChatGoogleOptions {
@@ -184,6 +183,19 @@ export class ChatGoogle implements BaseChatModel {
       };
     }
 
+    if (
+      Array.isArray(cleaned.required) &&
+      cleaned.properties &&
+      typeof cleaned.properties === 'object' &&
+      !Array.isArray(cleaned.properties)
+    ) {
+      const validKeys = new Set(Object.keys(cleaned.properties));
+      cleaned.required = cleaned.required.filter(
+        (name: unknown) =>
+          typeof name === 'string' && validKeys.has(name)
+      );
+    }
+
     return cleaned;
   }
 
@@ -352,7 +364,7 @@ export class ChatGoogle implements BaseChatModel {
     let cleanSchemaForJson: Record<string, unknown> | null = null;
     if (schemaForJson) {
       try {
-        const jsonSchema = zodToJsonSchema(schemaForJson as any);
+        const jsonSchema = zodSchemaToJsonSchema(schemaForJson as any);
         const optimizedSchema = SchemaOptimizer.createGeminiOptimizedSchema(
           jsonSchema as Record<string, unknown>
         );

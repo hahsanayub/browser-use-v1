@@ -1,9 +1,8 @@
 import OpenAI from 'openai';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ModelProviderError, ModelRateLimitError } from '../exceptions.js';
 import type { Message } from '../messages.js';
-import { SchemaOptimizer } from '../schema.js';
+import { SchemaOptimizer, zodSchemaToJsonSchema } from '../schema.js';
 import { ChatInvokeCompletion, type ChatInvokeUsage } from '../views.js';
 import {
   CerebrasMessageSerializer,
@@ -208,7 +207,7 @@ export class ChatCerebras implements BaseChatModel {
     const zodSchemaCandidate = this.getSchemaCandidate(output_format);
     let requestMessages = cerebrasMessages;
     if (zodSchemaCandidate) {
-      const rawSchema = zodToJsonSchema(zodSchemaCandidate, {
+      const rawSchema = zodSchemaToJsonSchema(zodSchemaCandidate, {
         name: 'agent_output',
         target: 'jsonSchema7',
       });

@@ -1,4 +1,32 @@
+import { z } from 'zod';
+import { zodToJsonSchema } from 'zod-to-json-schema';
+
 type JsonSchema = Record<string, unknown>;
+
+interface ZodJsonSchemaOptions {
+  name?: string;
+  target?: string;
+  [key: string]: unknown;
+}
+
+export const zodSchemaToJsonSchema = (
+  schema: unknown,
+  options: ZodJsonSchemaOptions = {}
+): JsonSchema => {
+  try {
+    const toJSONSchema = (z as any)?.toJSONSchema;
+    if (typeof toJSONSchema === 'function') {
+      const converted = toJSONSchema(schema as any) as JsonSchema;
+      if (converted && typeof converted === 'object') {
+        return converted;
+      }
+    }
+  } catch {
+    // Fall back to zod-to-json-schema below.
+  }
+
+  return zodToJsonSchema(schema as any, options as any) as JsonSchema;
+};
 
 export class SchemaOptimizer {
   static createOptimizedJsonSchema(

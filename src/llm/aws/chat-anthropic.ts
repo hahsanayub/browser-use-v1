@@ -24,13 +24,12 @@ import {
   ConverseCommand,
   type Tool as BedrockTool,
 } from '@aws-sdk/client-bedrock-runtime';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ModelProviderError, ModelRateLimitError } from '../exceptions.js';
 import { ChatInvokeCompletion } from '../views.js';
 import { type Message } from '../messages.js';
 import { AnthropicMessageSerializer } from '../anthropic/serializer.js';
-import { SchemaOptimizer } from '../schema.js';
+import { SchemaOptimizer, zodSchemaToJsonSchema } from '../schema.js';
 
 export interface ChatAnthropicBedrockConfig {
   /** Model ID, defaults to Claude 3.5 Sonnet */
@@ -363,7 +362,7 @@ export class ChatAnthropicBedrock implements BaseChatModel {
    * Simple Zod to JSON Schema conversion for structured output
    */
   private _zodToJsonSchema(schema: any): any {
-    return zodToJsonSchema(schema, {
+    return zodSchemaToJsonSchema(schema, {
       name: 'Response',
       target: 'jsonSchema7',
     });

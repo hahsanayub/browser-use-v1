@@ -3,12 +3,11 @@ import {
   ConverseCommand,
   type Tool as BedrockTool,
 } from '@aws-sdk/client-bedrock-runtime';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ModelProviderError, ModelRateLimitError } from '../exceptions.js';
 import { ChatInvokeCompletion } from '../views.js';
 import { type Message } from '../messages.js';
-import { SchemaOptimizer } from '../schema.js';
+import { SchemaOptimizer, zodSchemaToJsonSchema } from '../schema.js';
 import { AWSBedrockMessageSerializer } from './serializer.js';
 
 export interface ChatBedrockConverseOptions {
@@ -201,7 +200,7 @@ export class ChatBedrockConverse implements BaseChatModel {
     let toolConfig: any = undefined;
     if (output_format && zodSchemaCandidate) {
       try {
-        const rawJsonSchema = zodToJsonSchema(zodSchemaCandidate as any, {
+        const rawJsonSchema = zodSchemaToJsonSchema(zodSchemaCandidate as any, {
           name: 'Response',
           target: 'jsonSchema7',
         });

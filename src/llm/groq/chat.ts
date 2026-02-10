@@ -1,9 +1,8 @@
 import Groq from 'groq-sdk';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ModelProviderError, ModelRateLimitError } from '../exceptions.js';
 import type { Message } from '../messages.js';
-import { SchemaOptimizer } from '../schema.js';
+import { SchemaOptimizer, zodSchemaToJsonSchema } from '../schema.js';
 import { ChatInvokeCompletion, type ChatInvokeUsage } from '../views.js';
 import { GroqMessageSerializer } from './serializer.js';
 
@@ -153,7 +152,7 @@ export class ChatGroq implements BaseChatModel {
     if (zodSchemaCandidate) {
       if (JsonSchemaModels.includes(this.model)) {
         try {
-          const rawJsonSchema = zodToJsonSchema(zodSchemaCandidate, {
+          const rawJsonSchema = zodSchemaToJsonSchema(zodSchemaCandidate, {
             name: 'agent_output',
             target: 'jsonSchema7',
           });

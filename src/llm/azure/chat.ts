@@ -1,6 +1,5 @@
 import { AzureOpenAI } from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources/index.mjs';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import {
   ModelProviderError,
@@ -9,7 +8,7 @@ import {
 import type { Message } from '../messages.js';
 import { OpenAIMessageSerializer } from '../openai/serializer.js';
 import { ResponsesAPIMessageSerializer } from '../openai/responses-serializer.js';
-import { SchemaOptimizer } from '../schema.js';
+import { SchemaOptimizer, zodSchemaToJsonSchema } from '../schema.js';
 import { ChatInvokeCompletion, type ChatInvokeUsage } from '../views.js';
 
 const RESPONSES_API_ONLY_MODELS = [
@@ -354,7 +353,7 @@ export class ChatAzure implements BaseChatModel {
     let responseFormat: any = undefined;
     if (zodSchemaCandidate) {
       try {
-        const rawJsonSchema = zodToJsonSchema(zodSchemaCandidate, {
+        const rawJsonSchema = zodSchemaToJsonSchema(zodSchemaCandidate, {
           name: 'agent_output',
           target: 'jsonSchema7',
         });
@@ -457,7 +456,7 @@ export class ChatAzure implements BaseChatModel {
 
     if (zodSchemaCandidate) {
       try {
-        const rawJsonSchema = zodToJsonSchema(zodSchemaCandidate, {
+        const rawJsonSchema = zodSchemaToJsonSchema(zodSchemaCandidate, {
           name: 'agent_output',
           target: 'jsonSchema7',
         });

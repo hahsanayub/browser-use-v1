@@ -1,9 +1,8 @@
 import OpenAI from 'openai';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ModelProviderError, ModelRateLimitError } from '../exceptions.js';
 import type { Message } from '../messages.js';
-import { SchemaOptimizer } from '../schema.js';
+import { SchemaOptimizer, zodSchemaToJsonSchema } from '../schema.js';
 import { ChatInvokeCompletion, type ChatInvokeUsage } from '../views.js';
 import { DeepSeekMessageSerializer } from './serializer.js';
 
@@ -142,7 +141,7 @@ export class ChatDeepSeek implements BaseChatModel {
 
     try {
       if (output_format && zodSchemaCandidate) {
-        const rawSchema = zodToJsonSchema(zodSchemaCandidate as any, {
+        const rawSchema = zodSchemaToJsonSchema(zodSchemaCandidate as any, {
           name: 'response',
           target: 'jsonSchema7',
         });

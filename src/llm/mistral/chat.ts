@@ -1,9 +1,9 @@
 import OpenAI from 'openai';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ModelProviderError, ModelRateLimitError } from '../exceptions.js';
 import type { Message } from '../messages.js';
 import { ChatInvokeCompletion, type ChatInvokeUsage } from '../views.js';
+import { zodSchemaToJsonSchema } from '../schema.js';
 import { OpenAIMessageSerializer } from '../openai/serializer.js';
 import { MistralSchemaOptimizer } from './schema.js';
 
@@ -162,7 +162,7 @@ export class ChatMistral implements BaseChatModel {
 
     if (zodSchemaCandidate) {
       try {
-        const rawJsonSchema = zodToJsonSchema(zodSchemaCandidate, {
+        const rawJsonSchema = zodSchemaToJsonSchema(zodSchemaCandidate, {
           name: 'agent_output',
           target: 'jsonSchema7',
         });

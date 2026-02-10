@@ -4,11 +4,11 @@ import {
   type Config as OllamaClientConfig,
   type Options as OllamaOptions,
 } from 'ollama';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ModelProviderError } from '../exceptions.js';
 import { ChatInvokeCompletion } from '../views.js';
 import type { Message } from '../messages.js';
+import { zodSchemaToJsonSchema } from '../schema.js';
 import { OllamaMessageSerializer } from './serializer.js';
 
 export interface ChatOllamaOptions {
@@ -159,7 +159,7 @@ export class ChatOllama implements BaseChatModel {
 
     let format: string | object | undefined = undefined;
     if (zodSchemaCandidate) {
-      format = zodToJsonSchema(zodSchemaCandidate as any, {
+      format = zodSchemaToJsonSchema(zodSchemaCandidate as any, {
         name: 'Response',
         target: 'jsonSchema7',
       }) as object;

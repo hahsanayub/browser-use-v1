@@ -10,6 +10,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 // Mock utils
 vi.mock('../src/utils.js', () => {
@@ -47,7 +48,7 @@ import {
   ToolCall,
   FunctionCall,
 } from '../src/llm/messages.js';
-import { SchemaOptimizer } from '../src/llm/schema.js';
+import { SchemaOptimizer, zodSchemaToJsonSchema } from '../src/llm/schema.js';
 import {
   ModelError,
   ModelProviderError,
@@ -327,6 +328,22 @@ describe('Schema Optimizer', () => {
       expect(JSON.stringify(optimized)).not.toContain('minItems');
       expect(JSON.stringify(optimized)).not.toContain('min_items');
       expect(JSON.stringify(optimized)).not.toContain('"default"');
+    });
+
+    it('converts zod v4 schemas into non-empty JSON schema payloads', () => {
+      const zodSchema = z.object({
+        value: z.string(),
+        items: z.array(z.string()).min(1),
+      });
+
+      const converted = zodSchemaToJsonSchema(zodSchema as any, {
+        name: 'agent_output',
+        target: 'jsonSchema7',
+      });
+
+      expect((converted as any).type).toBe('object');
+      expect((converted as any).properties?.value?.type).toBe('string');
+      expect((converted as any).properties?.items?.type).toBe('array');
     });
 
     it('provides Gemini-optimized schema helper with strict compatibility', () => {
