@@ -4550,6 +4550,7 @@ export class BrowserSession {
         this.logger.warning(
           `Failed to start tracing: ${(error as Error).message}`
         );
+        throw error;
       }
     }
   }
@@ -4581,6 +4582,7 @@ export class BrowserSession {
         this.logger.warning(
           `Failed to save trace recording: ${(error as Error).message}`
         );
+        throw error;
       }
     }
   }

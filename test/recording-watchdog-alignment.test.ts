@@ -89,4 +89,39 @@ describe('recording watchdog alignment', () => {
     expect(errors).toHaveLength(1);
     expect(errors[0].error_type).toBe('RecordingStartFailed');
   });
+
+  it('emits BrowserErrorEvent when browser_context tracing start fails', async () => {
+    const session = new BrowserSession({
+      profile: {
+        traces_dir: path.join(os.tmpdir(), `browser-use-traces-${Date.now()}`),
+      },
+    });
+    const watchdog = new RecordingWatchdog({ browser_session: session });
+    session.attach_watchdog(watchdog);
+
+    (session as any).browser_context = {
+      tracing: {
+        start: vi.fn().mockRejectedValue(new Error('trace start boom')),
+      },
+    };
+
+    const errors: BrowserErrorEvent[] = [];
+    session.event_bus.on(
+      'BrowserErrorEvent',
+      (event) => {
+        errors.push(event as BrowserErrorEvent);
+      },
+      { handler_id: 'test.recording.watchdog.context.start.errors' }
+    );
+
+    await session.event_bus.dispatch_or_throw(
+      new BrowserConnectedEvent({
+        cdp_url: 'http://127.0.0.1:9222',
+      })
+    );
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0].error_type).toBe('RecordingStartFailed');
+    expect(errors[0].message).toContain('trace start boom');
+  });
 });
