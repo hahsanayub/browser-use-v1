@@ -161,6 +161,11 @@
       "import": "./dist/sync/index.js",
       "default": "./dist/sync/index.js"
     },
+    "./skill-cli": {
+      "types": "./dist/skill-cli/index.d.ts",
+      "import": "./dist/skill-cli/index.js",
+      "default": "./dist/skill-cli/index.js"
+    },
     "./skills": {
       "types": "./dist/skills/index.d.ts",
       "import": "./dist/skills/index.js",
