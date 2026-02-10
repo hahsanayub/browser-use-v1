@@ -301,6 +301,9 @@ const createBrowserSessionStub = (initialUrl = 'https://start.test') => {
     browser_profile: {},
     downloaded_files: [],
     navigateCalls,
+    async start() {
+      return;
+    },
     async get_browser_state_with_recovery() {
       return buildState();
     },
@@ -1125,6 +1128,7 @@ describe('Component Tests (Mocked Dependencies)', () => {
       async navigate_to(url: string) {
         tabs[activeTabIndex].url = url;
       },
+      async start() {},
       async stop() {},
       get_selector_map: async () => ({ 0: root }),
     };
