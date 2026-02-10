@@ -383,10 +383,22 @@ export class Controller<Context = unknown> {
           'net::',
         ];
         if (networkFailures.some((needle) => errorMsg.includes(needle))) {
-          const message = `Site unavailable: ${params.url} - ${errorMsg}`;
-          throw new BrowserError(message);
+          return new ActionResult({
+            error: `Navigation failed - site unavailable: ${params.url}`,
+          });
         }
-        throw error;
+        if (
+          error instanceof Error &&
+          error.name === 'RuntimeError' &&
+          errorMsg.includes('CDP client not initialized')
+        ) {
+          return new ActionResult({
+            error: `Browser connection error: ${errorMsg}`,
+          });
+        }
+        return new ActionResult({
+          error: `Navigation failed: ${errorMsg}`,
+        });
       }
     };
 
@@ -414,9 +426,15 @@ export class Controller<Context = unknown> {
       async function go_back(_params, { browser_session, signal }) {
         if (!browser_session) throw new Error('Browser session missing');
         throwIfAborted(signal);
-        await browser_session.go_back({ signal });
-        const msg = '🔙  Navigated back';
-        return new ActionResult({ extracted_content: msg });
+        try {
+          await browser_session.go_back({ signal });
+          const memory = 'Navigated back';
+          return new ActionResult({ extracted_content: memory });
+        } catch (error) {
+          return new ActionResult({
+            error: `Failed to go back: ${String((error as Error)?.message ?? error)}`,
+          });
+        }
       }
     );
 

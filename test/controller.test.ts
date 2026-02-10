@@ -1352,6 +1352,65 @@ describe('Regression Coverage', () => {
     );
   });
 
+  it('go_to_url returns site-unavailable error for network failures', async () => {
+    const controller = new Controller();
+    const browserSession = {
+      navigate_to: vi.fn(async () => {
+        throw new Error('net::ERR_NAME_NOT_RESOLVED');
+      }),
+      create_new_tab: vi.fn(async () => {}),
+    };
+
+    const result = await controller.registry.execute_action(
+      'go_to_url',
+      { url: 'https://missing.test', new_tab: false },
+      { browser_session: browserSession as any }
+    );
+
+    expect(result.error).toBe(
+      'Navigation failed - site unavailable: https://missing.test'
+    );
+  });
+
+  it('go_to_url returns browser-connection error for cdp runtime failures', async () => {
+    const controller = new Controller();
+    const browserSession = {
+      navigate_to: vi.fn(async () => {
+        const runtimeError = new Error('CDP client not initialized');
+        runtimeError.name = 'RuntimeError';
+        throw runtimeError;
+      }),
+      create_new_tab: vi.fn(async () => {}),
+    };
+
+    const result = await controller.registry.execute_action(
+      'go_to_url',
+      { url: 'https://example.test', new_tab: false },
+      { browser_session: browserSession as any }
+    );
+
+    expect(result.error).toBe(
+      'Browser connection error: CDP client not initialized'
+    );
+  });
+
+  it('go_back returns ActionResult error when browser go_back fails', async () => {
+    const controller = new Controller();
+    const browserSession = {
+      go_back: vi.fn(async () => {
+        throw new Error('history empty');
+      }),
+    };
+
+    const result = await controller.registry.execute_action(
+      'go_back',
+      {},
+      { browser_session: browserSession as any }
+    );
+
+    expect(result.error).toBe('Failed to go back: history empty');
+  });
+
   it('click action supports coordinate clicks without index', async () => {
     const controller = new Controller();
     controller.set_coordinate_clicking(true);
