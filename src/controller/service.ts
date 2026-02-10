@@ -2955,6 +2955,7 @@ Context: ${context}`;
 
   private registerDropdownActions() {
     const registry = this.registry;
+    const dropdownLogger = this.logger;
     const formatAvailableOptions = (
       options: Array<{ index: number; text: string; value: string }>
     ) =>
@@ -2981,7 +2982,11 @@ Context: ${context}`;
         { signal }
       );
       if (!domElement) {
-        throw new BrowserError(`Element index ${params.index} does not exist.`);
+        const msg = `Element index ${params.index} not available - page may have changed. Try refreshing browser state.`;
+        dropdownLogger.warning(`⚠️ ${msg}`);
+        return new ActionResult({
+          extracted_content: msg,
+        });
       }
       if (!page?.evaluate) {
         throw new BrowserError(
@@ -3078,6 +3083,13 @@ Context: ${context}`;
         params.index,
         { signal }
       );
+      if (!domElement) {
+        const msg = `Element index ${params.index} not available - page may have changed. Try refreshing browser state.`;
+        dropdownLogger.warning(`⚠️ ${msg}`);
+        return new ActionResult({
+          extracted_content: msg,
+        });
+      }
       if (!domElement?.xpath) {
         throw new BrowserError(
           'DOM element does not include an XPath selector.'

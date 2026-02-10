@@ -1778,6 +1778,50 @@ describe('Regression Coverage', () => {
     ).rejects.toThrow('Available options');
   });
 
+  it('get_dropdown_options returns page-changed guidance when index is unavailable', async () => {
+    const controller = new Controller();
+    const browserSession = {
+      get_current_page: vi.fn(async () => ({
+        evaluate: vi.fn(async () => null),
+        url: vi.fn(() => 'https://example.com'),
+      })),
+      get_dom_element_by_index: vi.fn(async () => null),
+    };
+
+    const result = await controller.registry.execute_action(
+      'get_dropdown_options',
+      { index: 99 },
+      { browser_session: browserSession as any }
+    );
+
+    expect(result.error).toBeNull();
+    expect(result.extracted_content).toContain(
+      'Element index 99 not available - page may have changed'
+    );
+  });
+
+  it('select_dropdown_option returns page-changed guidance when index is unavailable', async () => {
+    const controller = new Controller();
+    const browserSession = {
+      get_current_page: vi.fn(async () => ({
+        frames: [],
+        url: vi.fn(() => 'https://example.com'),
+      })),
+      get_dom_element_by_index: vi.fn(async () => null),
+    };
+
+    const result = await controller.registry.execute_action(
+      'select_dropdown_option',
+      { index: 99, text: 'United Kingdom' },
+      { browser_session: browserSession as any }
+    );
+
+    expect(result.error).toBeNull();
+    expect(result.extracted_content).toContain(
+      'Element index 99 not available - page may have changed'
+    );
+  });
+
   it('search_page returns formatted matches with memory summary', async () => {
     const controller = new Controller();
     const page = {
