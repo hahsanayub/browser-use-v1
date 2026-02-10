@@ -3637,11 +3637,19 @@ Context: ${context}`;
         return new ActionResult({ extracted_content: JSON.stringify(result) });
       } catch (error: any) {
         if (error instanceof BrowserError) {
-          return new ActionResult({
-            error: error.short_term_memory ?? error.message,
-            include_in_memory: true,
-            long_term_memory: error.long_term_memory ?? error.message,
-          });
+          if (error.long_term_memory != null) {
+            if (error.short_term_memory != null) {
+              return new ActionResult({
+                extracted_content: error.short_term_memory,
+                error: error.long_term_memory,
+                include_extracted_content_only_once: true,
+              });
+            }
+            return new ActionResult({
+              error: error.long_term_memory,
+            });
+          }
+          throw error;
         }
         return new ActionResult({
           error: String(error?.message ?? error ?? ''),

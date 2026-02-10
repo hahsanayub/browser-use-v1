@@ -2927,7 +2927,7 @@ describe('Regression Coverage', () => {
     expect(result.extracted_content).not.toContain('<structured_result>');
   });
 
-  it('controller.act maps BrowserError to ActionResult memory fields', async () => {
+  it('controller.act maps BrowserError with short+long memory to c011 envelope', async () => {
     const controller = new Controller();
 
     controller.registry.action('Custom browser error action')(
@@ -2945,10 +2945,52 @@ describe('Regression Coverage', () => {
       { browser_session: {} as any }
     );
 
-    expect(result.error).toBe('Open an allowed URL instead.');
-    expect(result.long_term_memory).toBe(
+    expect(result.extracted_content).toBe('Open an allowed URL instead.');
+    expect(result.error).toBe(
       'Attempted blocked navigation to disallowed host.'
     );
-    expect(result.include_in_memory).toBe(true);
+    expect(result.include_extracted_content_only_once).toBe(true);
+    expect(result.long_term_memory).toBeNull();
+  });
+
+  it('controller.act maps BrowserError with only long_term_memory to ActionResult.error', async () => {
+    const controller = new Controller();
+
+    controller.registry.action('Custom browser error action')(
+      async function custom_browser_error_action() {
+        throw new BrowserError({
+          message: 'Navigation blocked by policy',
+          long_term_memory: 'Attempted blocked navigation to disallowed host.',
+        });
+      }
+    );
+
+    const result = await controller.act(
+      { custom_browser_error_action: {} },
+      { browser_session: {} as any }
+    );
+
+    expect(result.error).toBe('Attempted blocked navigation to disallowed host.');
+    expect(result.extracted_content).toBeNull();
+    expect(result.include_extracted_content_only_once).toBe(false);
+  });
+
+  it('controller.act rethrows BrowserError without long_term_memory', async () => {
+    const controller = new Controller();
+
+    controller.registry.action('Custom browser error action')(
+      async function custom_browser_error_action() {
+        throw new BrowserError({
+          message: 'Navigation blocked by policy',
+        });
+      }
+    );
+
+    await expect(
+      controller.act(
+        { custom_browser_error_action: {} },
+        { browser_session: {} as any }
+      )
+    ).rejects.toBeInstanceOf(BrowserError);
   });
 });
