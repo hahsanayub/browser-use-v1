@@ -1,6 +1,9 @@
+import fs from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { BrowserSession } from '../src/browser/session.js';
 import {
+  BrowserLaunchEvent,
+  BrowserStoppedEvent,
   DownloadStartedEvent,
   FileDownloadedEvent,
 } from '../src/browser/events.js';
@@ -52,5 +55,40 @@ describe('downloads watchdog alignment', () => {
     await session.event_bus.dispatch_or_throw(fileEvent);
 
     expect(session.get_downloaded_files()).toEqual(['/tmp/archive.zip']);
+  });
+
+  it('ensures downloads directory exists on BrowserLaunchEvent', async () => {
+    const downloadsPath = `/tmp/browser-use-downloads-${Date.now()}`;
+    const session = new BrowserSession({
+      profile: {
+        downloads_path: downloadsPath,
+      },
+    });
+    const watchdog = new DownloadsWatchdog({ browser_session: session });
+    session.attach_watchdog(watchdog);
+
+    await session.event_bus.dispatch_or_throw(new BrowserLaunchEvent());
+
+    expect(fs.existsSync(downloadsPath)).toBe(true);
+    fs.rmSync(downloadsPath, { recursive: true, force: true });
+  });
+
+  it('clears active download cache on BrowserStoppedEvent', async () => {
+    const session = new BrowserSession();
+    const watchdog = new DownloadsWatchdog({ browser_session: session });
+    session.attach_watchdog(watchdog);
+
+    await session.event_bus.dispatch_or_throw(
+      new DownloadStartedEvent({
+        guid: 'download-guid-3',
+        url: 'https://example.com/large.bin',
+        suggested_filename: 'large.bin',
+      })
+    );
+    expect(watchdog.get_active_downloads()).toHaveLength(1);
+
+    await session.event_bus.dispatch_or_throw(new BrowserStoppedEvent());
+
+    expect(watchdog.get_active_downloads()).toHaveLength(0);
   });
 });
