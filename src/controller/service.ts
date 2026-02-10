@@ -50,6 +50,7 @@ import {
   normalizeStructuredDataBySchema,
 } from '../tools/extraction/schema-utils.js';
 import type { ExtractionResult } from '../tools/extraction/views.js';
+import { getClickDescription } from '../tools/utils.js';
 
 type BrowserSession = any;
 type Page = any;
@@ -625,9 +626,26 @@ export class Controller<Context = unknown> {
       if (downloadPath) {
         msg = `💾 Downloaded file to ${downloadPath}`;
       } else {
-        const snippet =
-          element.get_all_text_till_next_clickable_element?.(2) ?? '';
-        msg = `🖱️  Clicked button with index ${params.index}: ${snippet}`;
+        let elementDescription = '';
+        if (
+          typeof element?.tag_name === 'string' &&
+          typeof element?.get_all_text_till_next_clickable_element ===
+            'function'
+        ) {
+          try {
+            elementDescription = getClickDescription(element as any);
+          } catch {
+            elementDescription = '';
+          }
+        }
+
+        if (elementDescription) {
+          msg = `🖱️ Clicked ${elementDescription}`;
+        } else {
+          const snippet =
+            element.get_all_text_till_next_clickable_element?.(2) ?? '';
+          msg = `🖱️ Clicked button with index ${params.index}: ${snippet}`;
+        }
       }
 
       msg += await detectNewTabNote(tabsBefore);

@@ -100,6 +100,7 @@ import { SchemaOptimizer } from '../src/llm/schema.js';
 import { ActionResult } from '../src/agent/views.js';
 import { BrowserError } from '../src/browser/views.js';
 import { FileSystem } from '../src/filesystem/file-system.js';
+import { DOMElementNode, DOMTextNode } from '../src/dom/views.js';
 
 describe('Controller Registry Tests', () => {
   describe('Action Registration', () => {
@@ -1550,6 +1551,42 @@ describe('Regression Coverage', () => {
     expect(result.extracted_content).toContain('opened a new tab');
     expect(result.extracted_content).toContain('tab_id: 0008');
     expect(browserSession.switch_to_tab).not.toHaveBeenCalled();
+  });
+
+  it('click action uses python-aligned element description when DOM metadata is available', async () => {
+    const controller = new Controller();
+    const element = new DOMElementNode(
+      true,
+      null,
+      'input',
+      '/html/body/input[1]',
+      {
+        type: 'checkbox',
+        checked: 'checked',
+        id: 'accept_terms',
+      },
+      []
+    );
+    element.children = [new DOMTextNode(true, element, 'Accept terms')];
+
+    const browserSession = {
+      tabs: [{ page_id: 1, url: 'https://example.com', title: 'Example' }],
+      get_dom_element_by_index: vi.fn(async () => element),
+      is_file_input: vi.fn(() => false),
+      _click_element_node: vi.fn(async () => null),
+    };
+
+    const result = await controller.registry.execute_action(
+      'click',
+      { index: 3 },
+      { browser_session: browserSession as any }
+    );
+
+    expect(result.extracted_content).toContain(
+      'Clicked input type=checkbox checkbox-state=checked'
+    );
+    expect(result.extracted_content).toContain('"Accept terms"');
+    expect(result.extracted_content).toContain('id=accept_terms');
   });
 
   it('switch action accepts tab_id identifiers', async () => {
