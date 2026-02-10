@@ -12,6 +12,11 @@ import { AboutBlankWatchdog } from '../src/browser/watchdogs/aboutblank-watchdog
 describe('aboutblank watchdog alignment', () => {
   it('emits screensaver shown event when about:blank tab is created', async () => {
     const session = new BrowserSession();
+    const page = {
+      url: vi.fn(() => 'about:blank'),
+      evaluate: vi.fn(async () => {}),
+    } as any;
+    vi.spyOn(session, 'get_current_page').mockResolvedValue(page);
     const watchdog = new AboutBlankWatchdog({ browser_session: session });
     session.attach_watchdog(watchdog);
 
@@ -34,6 +39,7 @@ describe('aboutblank watchdog alignment', () => {
     expect(events).toHaveLength(1);
     expect(events[0].target_id).toBe('target-aboutblank-1');
     expect(events[0].error).toBeNull();
+    expect(page.evaluate).toHaveBeenCalledTimes(1);
   });
 
   it('stops emitting screensaver events after browser stop request', async () => {
@@ -102,5 +108,38 @@ describe('aboutblank watchdog alignment', () => {
     );
 
     expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('reports injection error in AboutBlankDVDScreensaverShownEvent when overlay setup fails', async () => {
+    const session = new BrowserSession();
+    const page = {
+      url: vi.fn(() => 'about:blank'),
+      evaluate: vi.fn(async () => {
+        throw new Error('overlay failed');
+      }),
+    } as any;
+    vi.spyOn(session, 'get_current_page').mockResolvedValue(page);
+
+    const watchdog = new AboutBlankWatchdog({ browser_session: session });
+    session.attach_watchdog(watchdog);
+
+    const events: AboutBlankDVDScreensaverShownEvent[] = [];
+    session.event_bus.on(
+      'AboutBlankDVDScreensaverShownEvent',
+      (event) => {
+        events.push(event as AboutBlankDVDScreensaverShownEvent);
+      },
+      { handler_id: 'test.aboutblank.overlay-error' }
+    );
+
+    await session.event_bus.dispatch_or_throw(
+      new TabCreatedEvent({
+        target_id: 'target-aboutblank-error',
+        url: 'about:blank',
+      })
+    );
+
+    expect(events).toHaveLength(1);
+    expect(events[0].error).toContain('overlay failed');
   });
 });
