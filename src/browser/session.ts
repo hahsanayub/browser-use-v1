@@ -32,6 +32,7 @@ import {
   URLNotAllowedError,
 } from './views.js';
 import {
+  AgentFocusChangedEvent,
   BrowserConnectedEvent,
   BrowserLaunchEvent,
   BrowserStartEvent,
@@ -40,6 +41,8 @@ import {
   DialogOpenedEvent,
   DownloadStartedEvent,
   FileDownloadedEvent,
+  TabClosedEvent,
+  TabCreatedEvent,
 } from './events.js';
 import { DOMElementNode, DOMState, type SelectorMap } from '../dom/views.js';
 import { normalize_url } from './utils.js';
@@ -1788,6 +1791,12 @@ export class BrowserSession {
       page_id: newTab.page_id,
       tab_id: newTab.tab_id,
     });
+    await this.event_bus.dispatch(
+      new TabCreatedEvent({
+        target_id: newTab.target_id ?? newTab.tab_id ?? 'unknown_target',
+        url: normalized,
+      })
+    );
     this.cachedBrowserState = null;
     return this.agent_current_page;
   }
@@ -1867,6 +1876,12 @@ export class BrowserSession {
       page_id: tab.page_id,
       tab_id: tab.tab_id,
     });
+    await this.event_bus.dispatch(
+      new AgentFocusChangedEvent({
+        target_id: tab.target_id ?? tab.tab_id,
+        url: tab.url,
+      })
+    );
     this.cachedBrowserState = null;
     return page;
   }
@@ -1908,11 +1923,22 @@ export class BrowserSession {
       const tab = this._tabs[this.currentTabIndex];
       this.currentUrl = tab.url;
       this.currentTitle = tab.title;
+      await this.event_bus.dispatch(
+        new AgentFocusChangedEvent({
+          target_id: tab.target_id ?? tab.tab_id ?? 'unknown_target',
+          url: tab.url,
+        })
+      );
     } else {
       this.currentUrl = 'about:blank';
       this.currentTitle = 'about:blank';
       this._setActivePage(null);
     }
+    await this.event_bus.dispatch(
+      new TabClosedEvent({
+        target_id: closingTab.target_id ?? closingTab.tab_id,
+      })
+    );
   }
 
   async wait(seconds: number, options: BrowserActionOptions = {}) {
