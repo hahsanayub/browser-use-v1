@@ -328,6 +328,26 @@ describe('Schema Optimizer', () => {
       expect(JSON.stringify(optimized)).not.toContain('min_items');
       expect(JSON.stringify(optimized)).not.toContain('"default"');
     });
+
+    it('provides Gemini-optimized schema helper with strict compatibility', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          tags: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+        },
+      };
+
+      const optimized = SchemaOptimizer.createGeminiOptimizedSchema(schema);
+
+      expect(optimized.type).toBe('object');
+      expect(optimized.additionalProperties).toBe(false);
+      expect(optimized.required).toContain('title');
+      expect(optimized.required).toContain('tags');
+    });
   });
 
   describe('makeStrictCompatible', () => {

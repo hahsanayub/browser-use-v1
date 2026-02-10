@@ -156,6 +156,10 @@ export class SchemaOptimizer {
     return optimizedSchema;
   }
 
+  static createGeminiOptimizedSchema(schema: JsonSchema): JsonSchema {
+    return SchemaOptimizer.createOptimizedJsonSchema(schema);
+  }
+
   static makeStrictCompatible(schema: any) {
     if (Array.isArray(schema)) {
       schema.forEach(SchemaOptimizer.makeStrictCompatible);

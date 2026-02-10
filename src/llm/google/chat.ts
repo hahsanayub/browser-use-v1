@@ -4,6 +4,7 @@ import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ModelProviderError } from '../exceptions.js';
 import { ChatInvokeCompletion, type ChatInvokeUsage } from '../views.js';
 import type { Message } from '../messages.js';
+import { SchemaOptimizer } from '../schema.js';
 import { GoogleMessageSerializer } from './serializer.js';
 
 export interface ChatGoogleOptions {
@@ -339,7 +340,10 @@ export class ChatGoogle implements BaseChatModel {
     if (schemaForJson) {
       try {
         const jsonSchema = zodToJsonSchema(schemaForJson as any);
-        cleanSchemaForJson = this._cleanSchemaForGoogle(jsonSchema);
+        const optimizedSchema = SchemaOptimizer.createGeminiOptimizedSchema(
+          jsonSchema as Record<string, unknown>
+        );
+        cleanSchemaForJson = this._cleanSchemaForGoogle(optimizedSchema);
       } catch {
         cleanSchemaForJson = null;
       }
