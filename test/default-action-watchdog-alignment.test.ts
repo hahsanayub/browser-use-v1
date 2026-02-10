@@ -18,6 +18,7 @@ import { CDPSessionWatchdog } from '../src/browser/watchdogs/cdp-session-watchdo
 import { DownloadsWatchdog } from '../src/browser/watchdogs/downloads-watchdog.js';
 import { DOMWatchdog } from '../src/browser/watchdogs/dom-watchdog.js';
 import { LocalBrowserWatchdog } from '../src/browser/watchdogs/local-browser-watchdog.js';
+import { StorageStateWatchdog } from '../src/browser/watchdogs/storage-state-watchdog.js';
 
 describe('default action watchdog alignment', () => {
   it('attaches default watchdog stack only once', () => {
@@ -27,7 +28,7 @@ describe('default action watchdog alignment', () => {
     session.attach_default_watchdogs();
 
     const watchdogs = session.get_watchdogs();
-    expect(watchdogs).toHaveLength(5);
+    expect(watchdogs).toHaveLength(6);
     expect(
       watchdogs.some((watchdog) => watchdog instanceof LocalBrowserWatchdog)
     ).toBe(true);
@@ -39,6 +40,9 @@ describe('default action watchdog alignment', () => {
     );
     expect(
       watchdogs.some((watchdog) => watchdog instanceof DownloadsWatchdog)
+    ).toBe(true);
+    expect(
+      watchdogs.some((watchdog) => watchdog instanceof StorageStateWatchdog)
     ).toBe(true);
     expect(
       watchdogs.some((watchdog) => watchdog instanceof DefaultActionWatchdog)
