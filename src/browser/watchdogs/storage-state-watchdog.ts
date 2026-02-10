@@ -24,12 +24,18 @@ export class StorageStateWatchdog extends BaseWatchdog {
   ];
 
   static override EMITS = [StorageStateSavedEvent, StorageStateLoadedEvent];
+  private _monitorInterval: NodeJS.Timeout | null = null;
+  private _autoSaveIntervalMs = 30_000;
+  private _monitoring = false;
+  private _lastSavedSnapshot: string | null = null;
 
   async on_BrowserConnectedEvent() {
+    this._startMonitoring();
     await this.event_bus.dispatch(new LoadStorageStateEvent());
   }
 
   async on_BrowserStopEvent() {
+    this._stopMonitoring();
     await this.event_bus.dispatch(new SaveStorageStateEvent());
   }
 
@@ -52,6 +58,7 @@ export class StorageStateWatchdog extends BaseWatchdog {
       | null
       | undefined;
     const normalized = storageState ?? {};
+    this._lastSavedSnapshot = this._snapshotStorageState(normalized);
 
     const dirPath = path.dirname(targetPath);
     fs.mkdirSync(dirPath, { recursive: true });
@@ -101,6 +108,10 @@ export class StorageStateWatchdog extends BaseWatchdog {
     const parsed = JSON.parse(raw) as StorageStatePayload;
     const cookies = Array.isArray(parsed.cookies) ? parsed.cookies : [];
     const origins = Array.isArray(parsed.origins) ? parsed.origins : [];
+    this._lastSavedSnapshot = this._snapshotStorageState({
+      cookies,
+      origins,
+    });
 
     if (cookies.length > 0 && typeof browserContext.addCookies === 'function') {
       await browserContext.addCookies(cookies as any[]);
@@ -113,6 +124,10 @@ export class StorageStateWatchdog extends BaseWatchdog {
         origins_count: origins.length,
       })
     );
+  }
+
+  protected override onDetached() {
+    this._stopMonitoring();
   }
 
   private _resolveStoragePath(pathFromEvent: string | null): string | null {
@@ -132,5 +147,65 @@ export class StorageStateWatchdog extends BaseWatchdog {
     }
 
     return null;
+  }
+
+  private _startMonitoring() {
+    if (this._monitorInterval) {
+      return;
+    }
+    if (!this._resolveStoragePath(null)) {
+      return;
+    }
+    this._monitorInterval = setInterval(() => {
+      void this._checkAndAutoSave().catch((error) => {
+        this.browser_session.logger.debug(
+          `[StorageStateWatchdog] Auto-save monitor failed: ${(error as Error).message}`
+        );
+      });
+    }, this._autoSaveIntervalMs);
+  }
+
+  private _stopMonitoring() {
+    if (!this._monitorInterval) {
+      return;
+    }
+    clearInterval(this._monitorInterval);
+    this._monitorInterval = null;
+  }
+
+  private async _checkAndAutoSave() {
+    if (this._monitoring) {
+      return;
+    }
+
+    const browserContext = this.browser_session.browser_context;
+    if (!browserContext?.storageState) {
+      return;
+    }
+
+    this._monitoring = true;
+    try {
+      const storageState = (await browserContext.storageState()) as
+        | StorageStatePayload
+        | null
+        | undefined;
+      const normalized = storageState ?? {};
+      const snapshot = this._snapshotStorageState(normalized);
+      if (snapshot === this._lastSavedSnapshot) {
+        return;
+      }
+      await this.event_bus.dispatch(new SaveStorageStateEvent());
+    } finally {
+      this._monitoring = false;
+    }
+  }
+
+  private _snapshotStorageState(state: StorageStatePayload) {
+    const cookies = Array.isArray(state.cookies) ? state.cookies : [];
+    const origins = Array.isArray(state.origins) ? state.origins : [];
+    return JSON.stringify({
+      cookies,
+      origins,
+    });
   }
 }

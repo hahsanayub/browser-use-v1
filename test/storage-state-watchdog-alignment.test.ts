@@ -147,4 +147,51 @@ describe('storage state watchdog alignment', () => {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  it('starts periodic auto-save on connect and stops it on browser stop', async () => {
+    vi.useFakeTimers();
+    const { tempDir, storagePath } = createTempStoragePath();
+    try {
+      const storageState = vi
+        .fn()
+        .mockResolvedValueOnce({
+          cookies: [{ name: 'sid', value: '1' }],
+          origins: [],
+        })
+        .mockResolvedValue({
+          cookies: [{ name: 'sid', value: '2' }],
+          origins: [],
+        });
+
+      const session = new BrowserSession({
+        profile: {
+          storage_state: storagePath,
+        },
+      });
+      session.browser_context = {
+        storageState,
+        addCookies: vi.fn(async () => {}),
+      } as any;
+
+      const watchdog = new StorageStateWatchdog({ browser_session: session });
+      (watchdog as any)._autoSaveIntervalMs = 10;
+      session.attach_watchdog(watchdog);
+
+      await session.event_bus.dispatch_or_throw(
+        new BrowserConnectedEvent({ cdp_url: 'ws://example' })
+      );
+      await vi.advanceTimersByTimeAsync(30);
+
+      expect(storageState).toHaveBeenCalled();
+
+      await session.event_bus.dispatch_or_throw(new BrowserStopEvent());
+      const callCountAfterStop = storageState.mock.calls.length;
+
+      await vi.advanceTimersByTimeAsync(50);
+      expect(storageState.mock.calls.length).toBe(callCountAfterStop);
+    } finally {
+      vi.useRealTimers();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 });
