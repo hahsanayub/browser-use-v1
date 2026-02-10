@@ -50,6 +50,7 @@ import {
   withDVDScreensaver,
 } from './dvd-screensaver.js';
 import { SessionManager } from './session-manager.js';
+import { AboutBlankWatchdog } from './watchdogs/aboutblank-watchdog.js';
 import { CDPSessionWatchdog } from './watchdogs/cdp-session-watchdog.js';
 import { CrashWatchdog } from './watchdogs/crash-watchdog.js';
 import { DefaultActionWatchdog } from './watchdogs/default-action-watchdog.js';
@@ -265,6 +266,7 @@ export class BrowserSession {
       new LocalBrowserWatchdog({ browser_session: this }),
       new CDPSessionWatchdog({ browser_session: this }),
       new CrashWatchdog({ browser_session: this }),
+      new AboutBlankWatchdog({ browser_session: this }),
       new DOMWatchdog({ browser_session: this }),
       new DownloadsWatchdog({ browser_session: this }),
       new StorageStateWatchdog({ browser_session: this }),

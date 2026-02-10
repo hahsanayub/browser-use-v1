@@ -1,4 +1,5 @@
 export * from './base.js';
+export * from './aboutblank-watchdog.js';
 export * from './cdp-session-watchdog.js';
 export * from './crash-watchdog.js';
 export * from './default-action-watchdog.js';

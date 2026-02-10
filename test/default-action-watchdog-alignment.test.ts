@@ -13,6 +13,7 @@ import {
   WaitEvent,
 } from '../src/browser/events.js';
 import { DOMElementNode } from '../src/dom/views.js';
+import { AboutBlankWatchdog } from '../src/browser/watchdogs/aboutblank-watchdog.js';
 import { DefaultActionWatchdog } from '../src/browser/watchdogs/default-action-watchdog.js';
 import { CDPSessionWatchdog } from '../src/browser/watchdogs/cdp-session-watchdog.js';
 import { CrashWatchdog } from '../src/browser/watchdogs/crash-watchdog.js';
@@ -29,7 +30,7 @@ describe('default action watchdog alignment', () => {
     session.attach_default_watchdogs();
 
     const watchdogs = session.get_watchdogs();
-    expect(watchdogs).toHaveLength(7);
+    expect(watchdogs).toHaveLength(8);
     expect(
       watchdogs.some((watchdog) => watchdog instanceof LocalBrowserWatchdog)
     ).toBe(true);
@@ -38,6 +39,9 @@ describe('default action watchdog alignment', () => {
     ).toBe(true);
     expect(
       watchdogs.some((watchdog) => watchdog instanceof CrashWatchdog)
+    ).toBe(true);
+    expect(
+      watchdogs.some((watchdog) => watchdog instanceof AboutBlankWatchdog)
     ).toBe(true);
     expect(watchdogs.some((watchdog) => watchdog instanceof DOMWatchdog)).toBe(
       true
