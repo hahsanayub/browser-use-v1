@@ -4,6 +4,7 @@ import { validate as validateJsonSchema } from '@cfworker/json-schema';
 import { z } from 'zod';
 import { ActionResult } from '../agent/views.js';
 import {
+  ClickCoordinateEvent,
   ClickElementEvent,
   CloseTabEvent,
   GoBackEvent,
@@ -628,7 +629,14 @@ export class Controller<Context = unknown> {
           params.coordinate_y,
           browser_session
         );
-        await page.mouse.click(actualX, actualY);
+        await dispatchBrowserEventIfAvailable(
+          browser_session,
+          new ClickCoordinateEvent({
+            coordinate_x: actualX,
+            coordinate_y: actualY,
+          }),
+          () => page.mouse.click(actualX, actualY)
+        );
         const coordinateMessage =
           `🖱️ Clicked at coordinates (${params.coordinate_x}, ${params.coordinate_y})` +
           (await detectNewTabNote(tabsBefore));

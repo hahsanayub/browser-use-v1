@@ -1921,6 +1921,30 @@ export class BrowserSession {
     }
   }
 
+  async click_coordinates(
+    coordinate_x: number,
+    coordinate_y: number,
+    options: BrowserActionOptions & {
+      button?: 'left' | 'right' | 'middle';
+    } = {}
+  ) {
+    const signal = options.signal ?? null;
+    this._throwIfAborted(signal);
+    const page = await this._withAbort(this.get_current_page(), signal);
+    if (!page?.mouse?.click) {
+      throw new BrowserError(
+        'Unable to perform coordinate click on the current page.'
+      );
+    }
+
+    await this._withAbort(
+      page.mouse.click(coordinate_x, coordinate_y, {
+        button: options.button ?? 'left',
+      }),
+      signal
+    );
+  }
+
   async upload_file(
     element_node: DOMElementNode,
     file_path: string,

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { BrowserSession } from '../src/browser/session.js';
 import {
   BrowserStateRequestEvent,
+  ClickCoordinateEvent,
   NavigateToUrlEvent,
   SendKeysEvent,
   SwitchTabEvent,
@@ -100,5 +101,22 @@ describe('default action watchdog alignment', () => {
 
     expect(waitSpy).toHaveBeenCalledWith(2);
     expect(sendKeysSpy).toHaveBeenCalledWith('Control+A');
+  });
+
+  it('routes coordinate click events through BrowserSession.click_coordinates', async () => {
+    const session = new BrowserSession();
+    session.attach_default_watchdogs();
+
+    const clickSpy = vi.spyOn(session, 'click_coordinates').mockResolvedValue();
+
+    await session.event_bus.dispatch_or_throw(
+      new ClickCoordinateEvent({
+        coordinate_x: 120,
+        coordinate_y: 260,
+        button: 'left',
+      })
+    );
+
+    expect(clickSpy).toHaveBeenCalledWith(120, 260, { button: 'left' });
   });
 });

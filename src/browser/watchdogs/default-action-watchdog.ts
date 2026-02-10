@@ -1,4 +1,5 @@
 import {
+  ClickCoordinateEvent,
   ClickElementEvent,
   CloseTabEvent,
   GoBackEvent,
@@ -26,6 +27,7 @@ export class DefaultActionWatchdog extends BaseWatchdog {
     ClickElementEvent,
     TypeTextEvent,
     UploadFileEvent,
+    ClickCoordinateEvent,
   ];
 
   async on_NavigateToUrlEvent(event: NavigateToUrlEvent) {
@@ -68,6 +70,20 @@ export class DefaultActionWatchdog extends BaseWatchdog {
 
   async on_ClickElementEvent(event: ClickElementEvent) {
     return this.browser_session._click_element_node(event.node);
+  }
+
+  async on_ClickCoordinateEvent(event: ClickCoordinateEvent) {
+    await this.browser_session.click_coordinates(
+      event.coordinate_x,
+      event.coordinate_y,
+      {
+        button: event.button,
+      }
+    );
+    return {
+      coordinate_x: event.coordinate_x,
+      coordinate_y: event.coordinate_y,
+    };
   }
 
   async on_TypeTextEvent(event: TypeTextEvent) {
