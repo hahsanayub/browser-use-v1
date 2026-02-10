@@ -7,7 +7,7 @@ export type SearchGoogleAction = z.infer<typeof SearchGoogleActionSchema>;
 
 export const SearchActionSchema = z.object({
   query: z.string(),
-  engine: z.enum(['duckduckgo', 'google', 'bing']).default('duckduckgo'),
+  engine: z.string().default('duckduckgo'),
 });
 export type SearchAction = z.infer<typeof SearchActionSchema>;
 

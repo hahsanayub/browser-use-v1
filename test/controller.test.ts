@@ -1309,10 +1309,47 @@ describe('Regression Coverage', () => {
 
     expect(browserSession.navigate_to).toHaveBeenCalledTimes(1);
     expect(browserSession.navigate_to.mock.calls[0][0]).toContain(
-      'duckduckgo.com/?q=browser%20use'
+      'duckduckgo.com/?q=browser+use'
     );
     expect(browserSession.create_new_tab).not.toHaveBeenCalled();
     expect(result.long_term_memory).toContain("Searched duckduckgo for 'browser use'");
+  });
+
+  it('search action returns ActionResult error for unsupported engine', async () => {
+    const controller = new Controller();
+    const browserSession = {
+      navigate_to: vi.fn(async () => {}),
+    };
+
+    const result = await controller.registry.execute_action(
+      'search',
+      { query: 'browser use', engine: 'askjeeves' },
+      { browser_session: browserSession as any }
+    );
+
+    expect(browserSession.navigate_to).not.toHaveBeenCalled();
+    expect(result.error).toBe(
+      'Unsupported search engine: askjeeves. Options: duckduckgo, google, bing'
+    );
+  });
+
+  it('search action returns ActionResult error when navigation fails', async () => {
+    const controller = new Controller();
+    const browserSession = {
+      navigate_to: vi.fn(async () => {
+        throw new Error('network down');
+      }),
+    };
+
+    const result = await controller.registry.execute_action(
+      'search',
+      { query: 'browser use', engine: 'google' },
+      { browser_session: browserSession as any }
+    );
+
+    expect(result.error).toBe(
+      'Failed to search google for "browser use": network down'
+    );
   });
 
   it('click action supports coordinate clicks without index', async () => {

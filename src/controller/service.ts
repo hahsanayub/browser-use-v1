@@ -292,22 +292,34 @@ export class Controller<Context = unknown> {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
 
-      const engine = params.engine ?? 'duckduckgo';
-      const searchUrlByEngine: Record<SearchAction['engine'], string> = {
-        duckduckgo: `https://duckduckgo.com/?q=${encodeURIComponent(params.query)}`,
-        google: `https://www.google.com/search?q=${encodeURIComponent(params.query)}&udm=14`,
-        bing: `https://www.bing.com/search?q=${encodeURIComponent(params.query)}`,
+      const requestedEngine = String(params.engine ?? 'duckduckgo');
+      const engine = requestedEngine.toLowerCase();
+      const encodedQuery = encodeURIComponent(params.query).replace(/%20/g, '+');
+      const searchUrlByEngine: Record<'duckduckgo' | 'google' | 'bing', string> = {
+        duckduckgo: `https://duckduckgo.com/?q=${encodedQuery}`,
+        google: `https://www.google.com/search?q=${encodedQuery}&udm=14`,
+        bing: `https://www.bing.com/search?q=${encodedQuery}`,
       };
-      const searchUrl = searchUrlByEngine[engine];
+      const searchUrl =
+        searchUrlByEngine[engine as 'duckduckgo' | 'google' | 'bing'];
+      if (!searchUrl) {
+        return new ActionResult({
+          error: `Unsupported search engine: ${requestedEngine}. Options: duckduckgo, google, bing`,
+        });
+      }
 
-      await browser_session.navigate_to(searchUrl, { signal });
-
-      const msg = `🔍 Searched ${engine} for "${params.query}"`;
-      return new ActionResult({
-        extracted_content: msg,
-        include_in_memory: true,
-        long_term_memory: `Searched ${engine} for '${params.query}'`,
-      });
+      try {
+        await browser_session.navigate_to(searchUrl, { signal });
+        const memory = `Searched ${requestedEngine} for '${params.query}'`;
+        return new ActionResult({
+          extracted_content: memory,
+          long_term_memory: memory,
+        });
+      } catch (error) {
+        return new ActionResult({
+          error: `Failed to search ${requestedEngine} for "${params.query}": ${String((error as Error)?.message ?? error)}`,
+        });
+      }
     });
 
     type SearchGoogleAction = z.infer<typeof SearchGoogleActionSchema>;
