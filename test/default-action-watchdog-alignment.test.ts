@@ -112,8 +112,88 @@ describe('default action watchdog alignment', () => {
       new SwitchTabEvent({ target_id: 'tab_test_target' })
     );
 
-    expect(navigateSpy).toHaveBeenCalledWith('https://example.com');
+    expect(navigateSpy).toHaveBeenCalledWith('https://example.com', {
+      wait_until: 'load',
+      timeout_ms: null,
+    });
     expect(switchSpy).toHaveBeenCalledWith('tab_test_target');
+  });
+
+  it('routes new-tab navigation through BrowserSession.create_new_tab', async () => {
+    const session = new BrowserSession();
+    session.attach_default_watchdogs();
+
+    const createTabSpy = vi
+      .spyOn(session, 'create_new_tab')
+      .mockResolvedValue(null as any);
+    const navigateSpy = vi
+      .spyOn(session, 'navigate_to')
+      .mockResolvedValue(null as any);
+
+    await session.event_bus.dispatch_or_throw(
+      new NavigateToUrlEvent({
+        url: 'https://example.com/new-tab',
+        new_tab: true,
+        wait_until: 'networkidle',
+        timeout_ms: 7000,
+      })
+    );
+
+    expect(createTabSpy).toHaveBeenCalledWith('https://example.com/new-tab', {
+      wait_until: 'networkidle',
+      timeout_ms: 7000,
+    });
+    expect(navigateSpy).not.toHaveBeenCalled();
+  });
+
+  it('switches to the most recently opened tab when target_id is null', async () => {
+    const session = new BrowserSession();
+    session.attach_default_watchdogs();
+
+    (session as any)._tabs = [
+      {
+        page_id: 0,
+        tab_id: '0000',
+        target_id: 'tab_target_old',
+        url: 'about:blank',
+        title: 'about:blank',
+        parent_page_id: null,
+      },
+      {
+        page_id: 1,
+        tab_id: '0001',
+        target_id: 'tab_target_new',
+        url: 'https://example.com/new',
+        title: 'new',
+        parent_page_id: null,
+      },
+    ];
+
+    const switchSpy = vi
+      .spyOn(session, 'switch_to_tab')
+      .mockResolvedValue(null as any);
+
+    await session.event_bus.dispatch_or_throw(new SwitchTabEvent());
+
+    expect(switchSpy).toHaveBeenCalledWith('tab_target_new');
+  });
+
+  it('creates about:blank tab when switch request has no target and no tabs exist', async () => {
+    const session = new BrowserSession();
+    session.attach_default_watchdogs();
+
+    (session as any)._tabs = [];
+    const createTabSpy = vi
+      .spyOn(session, 'create_new_tab')
+      .mockResolvedValue(null as any);
+    const switchSpy = vi
+      .spyOn(session, 'switch_to_tab')
+      .mockResolvedValue(null as any);
+
+    await session.event_bus.dispatch_or_throw(new SwitchTabEvent());
+
+    expect(createTabSpy).toHaveBeenCalledWith('about:blank');
+    expect(switchSpy).not.toHaveBeenCalled();
   });
 
   it('routes BrowserStateRequestEvent and returns handler result', async () => {

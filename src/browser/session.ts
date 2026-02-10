@@ -43,6 +43,7 @@ import {
   FileDownloadedEvent,
   TabClosedEvent,
   TabCreatedEvent,
+  type WaitUntilState,
 } from './events.js';
 import { DOMElementNode, DOMState, type SelectorMap } from '../dom/views.js';
 import { normalize_url } from './utils.js';
@@ -112,6 +113,11 @@ export interface BrowserStateOptions {
 export interface BrowserActionOptions {
   signal?: AbortSignal | null;
   clear?: boolean;
+}
+
+export interface BrowserNavigationOptions extends BrowserActionOptions {
+  wait_until?: WaitUntilState;
+  timeout_ms?: number | null;
 }
 
 interface RecentBrowserEvent {
@@ -1722,18 +1728,30 @@ export class BrowserSession {
     return this._tabs.slice();
   }
 
-  async navigate_to(url: string, options: BrowserActionOptions = {}) {
+  async navigate_to(url: string, options: BrowserNavigationOptions = {}) {
     const signal = options.signal ?? null;
     this._throwIfAborted(signal);
     this._assert_url_allowed(url);
     const normalized = normalize_url(url);
+    const waitUntil = options.wait_until ?? 'domcontentloaded';
+    const timeoutMs =
+      typeof options.timeout_ms === 'number' &&
+      Number.isFinite(options.timeout_ms)
+        ? Math.max(0, options.timeout_ms)
+        : null;
     this._recordRecentEvent('navigation_started', { url: normalized });
     const page = await this._withAbort(this.get_current_page(), signal);
     if (page?.goto) {
       try {
         this.currentPageLoadingStatus = null;
+        const gotoOptions: Record<string, unknown> = {
+          waitUntil,
+        };
+        if (timeoutMs !== null) {
+          gotoOptions.timeout = timeoutMs;
+        }
         await this._withAbort(
-          page.goto(normalized, { waitUntil: 'domcontentloaded' }),
+          page.goto(normalized, gotoOptions as any),
           signal
         );
         const finalUrl = page.url();
@@ -1766,11 +1784,17 @@ export class BrowserSession {
     return this.agent_current_page;
   }
 
-  async create_new_tab(url: string, options: BrowserActionOptions = {}) {
+  async create_new_tab(url: string, options: BrowserNavigationOptions = {}) {
     const signal = options.signal ?? null;
     this._throwIfAborted(signal);
     this._assert_url_allowed(url);
     const normalized = normalize_url(url);
+    const waitUntil = options.wait_until ?? 'domcontentloaded';
+    const timeoutMs =
+      typeof options.timeout_ms === 'number' &&
+      Number.isFinite(options.timeout_ms)
+        ? Math.max(0, options.timeout_ms)
+        : null;
     const newTab: TabInfo = this._createTabInfo({
       page_id: this._tabCounter++,
       url: normalized,
@@ -1795,8 +1819,14 @@ export class BrowserSession {
         )) ?? null;
       if (page) {
         this.currentPageLoadingStatus = null;
+        const gotoOptions: Record<string, unknown> = {
+          waitUntil,
+        };
+        if (timeoutMs !== null) {
+          gotoOptions.timeout = timeoutMs;
+        }
         await this._withAbort(
-          page.goto(normalized, { waitUntil: 'domcontentloaded' }),
+          page.goto(normalized, gotoOptions as any),
           signal
         );
         const finalUrl = page.url();

@@ -39,11 +39,40 @@ export class DefaultActionWatchdog extends BaseWatchdog {
   ];
 
   async on_NavigateToUrlEvent(event: NavigateToUrlEvent) {
-    await this.browser_session.navigate_to(event.url);
+    if (event.new_tab) {
+      await this.browser_session.create_new_tab(event.url, {
+        wait_until: event.wait_until,
+        timeout_ms: event.timeout_ms,
+      });
+      return;
+    }
+
+    await this.browser_session.navigate_to(event.url, {
+      wait_until: event.wait_until,
+      timeout_ms: event.timeout_ms,
+    });
   }
 
   async on_SwitchTabEvent(event: SwitchTabEvent) {
-    const identifier = event.target_id ?? -1;
+    let identifier: number | string;
+    if (event.target_id) {
+      identifier = event.target_id;
+    } else {
+      const tabs = this.browser_session.tabs;
+      if (tabs.length === 0) {
+        await this.browser_session.create_new_tab('about:blank');
+        return (
+          this.browser_session.active_tab?.target_id ??
+          this.browser_session.active_tab?.tab_id ??
+          'unknown_target'
+        );
+      }
+
+      const latestTab = tabs[tabs.length - 1];
+      identifier =
+        latestTab.target_id ?? latestTab.tab_id ?? latestTab.page_id;
+    }
+
     const page = await this.browser_session.switch_to_tab(identifier);
     const activeTargetId = this.browser_session.active_tab?.target_id ?? null;
     return (
