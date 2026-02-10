@@ -30,6 +30,9 @@ export class LocalBrowserWatchdog extends BaseWatchdog {
   }
 
   on_BrowserStopEvent() {
+    if (!this.browser_session._owns_browser_resources) {
+      return;
+    }
     // Fire-and-forget to avoid blocking BrowserStopEvent handler completion.
     void this.event_bus.dispatch(new BrowserKillEvent()).catch(() => {
       // Ignore shutdown re-entrancy errors during stop lifecycle.

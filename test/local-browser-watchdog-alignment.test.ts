@@ -89,4 +89,28 @@ describe('local browser watchdog alignment', () => {
 
     expect(killSpy).toHaveBeenCalledTimes(0);
   });
+
+  it('does not dispatch BrowserKillEvent on stop for non-owning sessions', async () => {
+    const session = new BrowserSession({
+      browser: {} as any,
+    });
+    const watchdog = new LocalBrowserWatchdog({ browser_session: session });
+    session.attach_watchdog(watchdog);
+
+    const killEvents: BrowserKillEvent[] = [];
+    session.event_bus.on(
+      'BrowserKillEvent',
+      (event) => {
+        killEvents.push(event as BrowserKillEvent);
+      },
+      { handler_id: 'test.local-watchdog.non-owning.kill-event' }
+    );
+    const killSpy = vi.spyOn(session, 'kill').mockResolvedValue();
+
+    await session.event_bus.dispatch_or_throw(new BrowserStopEvent());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(killEvents).toHaveLength(0);
+    expect(killSpy).toHaveBeenCalledTimes(0);
+  });
 });
