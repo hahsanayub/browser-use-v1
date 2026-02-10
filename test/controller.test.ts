@@ -220,6 +220,23 @@ describe('Controller Registry Tests', () => {
       expect(result.extracted_content).toBe('hello world');
     });
 
+    it('rejects python-compatible simple signatures that use rest params', () => {
+      const registry = new Registry();
+
+      expect(() =>
+        registry.action('Invalid variadic action')(async function bad_signature(
+          query: string,
+          ...rest: unknown[]
+        ) {
+          return new ActionResult({
+            extracted_content: `${query}:${rest.length}`,
+          });
+        })
+      ).toThrow(
+        "Action 'bad_signature' has ...rest which is not allowed. Actions must have explicit positional parameters only."
+      );
+    });
+
     it('raises clear error when required special params are missing in simple signatures', async () => {
       const registry = new Registry();
 
@@ -234,7 +251,9 @@ describe('Controller Registry Tests', () => {
 
       await expect(
         registry.execute_action('needs_browser', { query: 'demo' })
-      ).rejects.toThrow('requires browser_session but none provided');
+      ).rejects.toThrow(
+        /^Action needs_browser requires browser_session but none provided\.$/
+      );
     });
   });
 

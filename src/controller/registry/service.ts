@@ -175,12 +175,17 @@ const extractFunctionParameters = (
 
   const parsed: ParsedFunctionParam[] = [];
   for (const token of tokens) {
+    if (token.startsWith('...')) {
+      const fnName = fn.name || '<anonymous>';
+      throw new Error(
+        `Action '${fnName}' has ${token} which is not allowed. Actions must have explicit positional parameters only.`
+      );
+    }
     if (
       token.includes('{') ||
       token.includes('}') ||
       token.includes('[') ||
-      token.includes(']') ||
-      token.startsWith('...')
+      token.includes(']')
     ) {
       return null;
     }
@@ -229,6 +234,16 @@ const wrapActionExecutionError = (
     (wrapped as Error & { cause?: unknown }).cause = error;
   }
   return wrapped;
+};
+
+const isSpecialContextMissingError = (error: unknown): boolean => {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return (
+    error.message.includes('requires browser_session but none provided') ||
+    error.message.includes('requires page_extraction_llm but none provided')
+  );
 };
 
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -479,6 +494,9 @@ export class Registry<Context = unknown> {
         } catch (error) {
           if (signal?.aborted || isAbortError(error)) {
             throw createAbortError(signal?.reason ?? error);
+          }
+          if (isSpecialContextMissingError(error)) {
+            throw error;
           }
           throw wrapActionExecutionError(action_name, error);
         }
