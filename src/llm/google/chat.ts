@@ -11,6 +11,13 @@ export interface ChatGoogleOptions {
   apiKey?: string;
   apiVersion?: string;
   baseUrl?: string;
+  vertexai?: boolean;
+  vertexAi?: boolean;
+  project?: string;
+  location?: string;
+  httpOptions?: Record<string, unknown>;
+  googleAuthOptions?: Record<string, unknown>;
+  credentials?: Record<string, unknown>;
   temperature?: number | null;
   topP?: number | null;
   seed?: number | null;
@@ -49,9 +56,16 @@ export class ChatGoogle implements BaseChatModel {
       typeof options === 'string' ? { model: options } : options;
     const {
       model = 'gemini-2.5-flash',
-      apiKey = process.env.GOOGLE_API_KEY || '',
+      apiKey = process.env.GOOGLE_API_KEY,
       apiVersion = process.env.GOOGLE_API_VERSION || 'v1',
       baseUrl = process.env.GOOGLE_API_BASE_URL,
+      vertexai,
+      vertexAi,
+      project,
+      location,
+      httpOptions,
+      googleAuthOptions,
+      credentials,
       temperature = 0.5,
       topP = null,
       seed = null,
@@ -82,11 +96,28 @@ export class ChatGoogle implements BaseChatModel {
     this.retryBaseDelay = retryBaseDelay;
     this.retryMaxDelay = retryMaxDelay;
 
-    this.client = new GoogleGenAI({
-      apiKey,
+    const resolvedGoogleAuthOptions =
+      credentials == null
+        ? googleAuthOptions
+        : {
+            ...(googleAuthOptions ?? {}),
+            credentials,
+          };
+
+    const resolvedVertexAi = vertexai ?? vertexAi;
+
+    const clientOptions: Record<string, unknown> = {
+      ...(apiKey != null ? { apiKey } : {}),
       ...(baseUrl ? { baseUrl } : {}),
       ...(apiVersion ? { apiVersion } : {}),
-    });
+      ...(resolvedVertexAi != null ? { vertexai: resolvedVertexAi } : {}),
+      ...(project ? { project } : {}),
+      ...(location ? { location } : {}),
+      ...(httpOptions ? { httpOptions } : {}),
+      ...(resolvedGoogleAuthOptions ? { googleAuthOptions: resolvedGoogleAuthOptions } : {}),
+    };
+
+    this.client = new GoogleGenAI(clientOptions as any);
   }
 
   get name(): string {

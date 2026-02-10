@@ -134,6 +134,45 @@ describe('Google LLM alignment', () => {
     });
   });
 
+  it('passes python-aligned Google client options through constructor', () => {
+    new ChatGoogle({
+      model: 'gemini-2.5-flash',
+      apiKey: 'test-key',
+      apiVersion: 'v1',
+      baseUrl: 'https://example.googleapis.com',
+      vertexai: true,
+      project: 'test-project',
+      location: 'us-central1',
+      httpOptions: {
+        timeout: 30000,
+      },
+      googleAuthOptions: {
+        scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+      },
+      credentials: {
+        client_email: 'svc@example.iam.gserviceaccount.com',
+      },
+    });
+
+    expect(googleCtorMock).toHaveBeenCalledWith({
+      apiKey: 'test-key',
+      apiVersion: 'v1',
+      baseUrl: 'https://example.googleapis.com',
+      vertexai: true,
+      project: 'test-project',
+      location: 'us-central1',
+      httpOptions: {
+        timeout: 30000,
+      },
+      googleAuthOptions: {
+        scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+        credentials: {
+          client_email: 'svc@example.iam.gserviceaccount.com',
+        },
+      },
+    });
+  });
+
   it('passes generation params and returns usage with cached/image/thought tokens', async () => {
     const llm = new ChatGoogle({
       model: 'gemini-2.5-flash',
