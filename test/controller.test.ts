@@ -1467,7 +1467,9 @@ describe('Regression Coverage', () => {
     expect(browserSession.switch_to_tab).toHaveBeenCalledWith('0007', {
       signal: null,
     });
-    expect(result.extracted_content).toContain('Switched to tab #0007');
+    expect(result.extracted_content).toBe('Switched to tab #0007');
+    expect(result.long_term_memory).toBe('Switched to tab #0007');
+    expect(result.include_in_memory).toBe(false);
   });
 
   it('switch action handles stale tab identifiers gracefully', async () => {
@@ -1524,8 +1526,9 @@ describe('Regression Coverage', () => {
       signal: null,
     });
     expect(closingPage.close).toHaveBeenCalled();
-    expect(result.extracted_content).toContain('Closed tab #0007');
-    expect(result.extracted_content).toContain('focused on tab #0001');
+    expect(result.extracted_content).toBe('Closed tab #0007');
+    expect(result.long_term_memory).toBe('Closed tab #0007');
+    expect(result.include_in_memory).toBe(false);
   });
 
   it('close action handles stale tab identifiers gracefully', async () => {

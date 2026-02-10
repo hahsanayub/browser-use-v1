@@ -974,13 +974,10 @@ export class Controller<Context = unknown> {
         } catch {
           /* ignore */
         }
-        const pageUrl =
-          typeof page?.url === 'function' ? page.url() : page?.url ?? '';
-        const msg = `🔄  Switched to tab #${tabId} with url ${pageUrl}`;
+        const memory = `Switched to tab #${tabId}`;
         return new ActionResult({
-          extracted_content: msg,
-          include_in_memory: true,
-          long_term_memory: `Switched to tab ${tabId}`,
+          extracted_content: memory,
+          long_term_memory: memory,
         });
       } catch (error) {
         tabLogger.warning(`Tab switch may have failed: ${(error as Error).message}`);
@@ -1025,23 +1022,11 @@ export class Controller<Context = unknown> {
       try {
         await browser_session.switch_to_tab(identifier, { signal });
         const page: Page | null = await browser_session.get_current_page();
-        const url = typeof page?.url === 'function' ? page.url() : page?.url ?? '';
         await page?.close?.();
-        const newPage = await browser_session.get_current_page();
-        const activeTab = browser_session.active_tab ?? null;
-        const focusedTabId =
-          typeof activeTab?.tab_id === 'string' && activeTab.tab_id.trim()
-            ? activeTab.tab_id.trim()
-            : typeof activeTab?.page_id === 'number'
-              ? String(activeTab.page_id).padStart(4, '0').slice(-4)
-              : String(browser_session.active_tab_index ?? '');
-        const newPageUrl =
-          typeof newPage?.url === 'function' ? newPage.url() : newPage?.url ?? '';
-        const msg = `❌  Closed tab #${closedTabId} with ${url}, now focused on tab #${focusedTabId} with url ${newPageUrl}`;
+        const memory = `Closed tab #${closedTabId}`;
         return new ActionResult({
-          extracted_content: msg,
-          include_in_memory: true,
-          long_term_memory: `Closed tab ${closedTabId} with url ${url}, now focused on tab ${focusedTabId} with url ${newPageUrl}.`,
+          extracted_content: memory,
+          long_term_memory: memory,
         });
       } catch (error) {
         tabLogger.warning(
