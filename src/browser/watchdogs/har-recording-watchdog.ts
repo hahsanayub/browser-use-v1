@@ -299,10 +299,6 @@ export class HarRecordingWatchdog extends BaseWatchdog {
     }
 
     const entries = [...this._entries.values()];
-    if (entries.length === 0) {
-      return;
-    }
-
     const harEntries = entries.map((entry) => {
       const waitMs =
         entry.ts_request != null && entry.ts_response != null

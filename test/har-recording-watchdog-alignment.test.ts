@@ -188,4 +188,42 @@ describe('har recording watchdog alignment', () => {
       fs.rmSync(tmpRoot, { recursive: true, force: true });
     }
   });
+
+  it('writes an empty HAR fallback on BrowserStopEvent without network entries', async () => {
+    const tmpRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'browser-use-har-watchdog-empty-fallback-')
+    );
+    try {
+      const harPath = path.join(tmpRoot, 'empty-fallback.har');
+      const session = new BrowserSession({
+        profile: {
+          record_har_path: harPath,
+        },
+      });
+      const watchdog = new HarRecordingWatchdog({ browser_session: session });
+      session.attach_watchdog(watchdog);
+
+      const errors: BrowserErrorEvent[] = [];
+      session.event_bus.on(
+        'BrowserErrorEvent',
+        (event) => {
+          errors.push(event as BrowserErrorEvent);
+        },
+        { handler_id: 'test.har.watchdog.empty-fallback.errors' }
+      );
+
+      await session.event_bus.dispatch_or_throw(new BrowserStartEvent());
+      await session.event_bus.dispatch_or_throw(new BrowserStopEvent());
+      await session.event_bus.dispatch_or_throw(new BrowserStoppedEvent());
+
+      expect(fs.existsSync(harPath)).toBe(true);
+      const har = JSON.parse(fs.readFileSync(harPath, 'utf-8'));
+      expect(har.log.version).toBe('1.2');
+      expect(Array.isArray(har.log.entries)).toBe(true);
+      expect(har.log.entries).toHaveLength(0);
+      expect(errors).toHaveLength(0);
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
 });
