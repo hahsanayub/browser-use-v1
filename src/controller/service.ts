@@ -905,6 +905,7 @@ export class Controller<Context = unknown> {
   }
 
   private registerTabActions() {
+    const tabLogger = this.logger;
     type SwitchTabAction = z.infer<typeof SwitchTabActionSchema>;
     const resolveTabIdentifier = (params: {
       tab_id?: string;
@@ -953,23 +954,33 @@ export class Controller<Context = unknown> {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
       const identifier = resolveTabIdentifier(params);
-      await browser_session.switch_to_tab(identifier, { signal });
-      const page: Page | null = await browser_session.get_current_page();
-      try {
-        await page?.wait_for_load_state?.('domcontentloaded', {
-          timeout: 5000,
-        });
-      } catch {
-        /* ignore */
-      }
       const tabId = formatTabId(identifier, browser_session);
-      const pageUrl = typeof page?.url === 'function' ? page.url() : page?.url ?? '';
-      const msg = `🔄  Switched to tab #${tabId} with url ${pageUrl}`;
-      return new ActionResult({
-        extracted_content: msg,
-        include_in_memory: true,
-        long_term_memory: `Switched to tab ${tabId}`,
-      });
+      try {
+        await browser_session.switch_to_tab(identifier, { signal });
+        const page: Page | null = await browser_session.get_current_page();
+        try {
+          await page?.wait_for_load_state?.('domcontentloaded', {
+            timeout: 5000,
+          });
+        } catch {
+          /* ignore */
+        }
+        const pageUrl =
+          typeof page?.url === 'function' ? page.url() : page?.url ?? '';
+        const msg = `🔄  Switched to tab #${tabId} with url ${pageUrl}`;
+        return new ActionResult({
+          extracted_content: msg,
+          include_in_memory: true,
+          long_term_memory: `Switched to tab ${tabId}`,
+        });
+      } catch (error) {
+        tabLogger.warning(`Tab switch may have failed: ${(error as Error).message}`);
+        const memory = `Attempted to switch to tab #${tabId}`;
+        return new ActionResult({
+          extracted_content: memory,
+          long_term_memory: memory,
+        });
+      }
     };
 
     this.registry.action('Switch tab', {
@@ -1001,27 +1012,38 @@ export class Controller<Context = unknown> {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
       const identifier = resolveTabIdentifier(params);
-      await browser_session.switch_to_tab(identifier, { signal });
-      const page: Page | null = await browser_session.get_current_page();
-      const url = typeof page?.url === 'function' ? page.url() : page?.url ?? '';
       const closedTabId = formatTabId(identifier, browser_session);
-      await page?.close?.();
-      const newPage = await browser_session.get_current_page();
-      const activeTab = browser_session.active_tab ?? null;
-      const focusedTabId =
-        typeof activeTab?.tab_id === 'string' && activeTab.tab_id.trim()
-          ? activeTab.tab_id.trim()
-          : typeof activeTab?.page_id === 'number'
-            ? String(activeTab.page_id).padStart(4, '0').slice(-4)
-            : String(browser_session.active_tab_index ?? '');
-      const newPageUrl =
-        typeof newPage?.url === 'function' ? newPage.url() : newPage?.url ?? '';
-      const msg = `❌  Closed tab #${closedTabId} with ${url}, now focused on tab #${focusedTabId} with url ${newPageUrl}`;
-      return new ActionResult({
-        extracted_content: msg,
-        include_in_memory: true,
-        long_term_memory: `Closed tab ${closedTabId} with url ${url}, now focused on tab ${focusedTabId} with url ${newPageUrl}.`,
-      });
+      try {
+        await browser_session.switch_to_tab(identifier, { signal });
+        const page: Page | null = await browser_session.get_current_page();
+        const url = typeof page?.url === 'function' ? page.url() : page?.url ?? '';
+        await page?.close?.();
+        const newPage = await browser_session.get_current_page();
+        const activeTab = browser_session.active_tab ?? null;
+        const focusedTabId =
+          typeof activeTab?.tab_id === 'string' && activeTab.tab_id.trim()
+            ? activeTab.tab_id.trim()
+            : typeof activeTab?.page_id === 'number'
+              ? String(activeTab.page_id).padStart(4, '0').slice(-4)
+              : String(browser_session.active_tab_index ?? '');
+        const newPageUrl =
+          typeof newPage?.url === 'function' ? newPage.url() : newPage?.url ?? '';
+        const msg = `❌  Closed tab #${closedTabId} with ${url}, now focused on tab #${focusedTabId} with url ${newPageUrl}`;
+        return new ActionResult({
+          extracted_content: msg,
+          include_in_memory: true,
+          long_term_memory: `Closed tab ${closedTabId} with url ${url}, now focused on tab ${focusedTabId} with url ${newPageUrl}.`,
+        });
+      } catch (error) {
+        tabLogger.warning(
+          `Tab ${closedTabId} may already be closed: ${(error as Error).message}`
+        );
+        const memory = `Tab #${closedTabId} closed (was already closed or invalid)`;
+        return new ActionResult({
+          extracted_content: memory,
+          long_term_memory: memory,
+        });
+      }
     };
 
     this.registry.action('Close an existing tab', {

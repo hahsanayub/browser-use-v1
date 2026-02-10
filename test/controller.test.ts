@@ -1470,6 +1470,28 @@ describe('Regression Coverage', () => {
     expect(result.extracted_content).toContain('Switched to tab #0007');
   });
 
+  it('switch action handles stale tab identifiers gracefully', async () => {
+    const controller = new Controller();
+    const browserSession = {
+      switch_to_tab: vi.fn(async () => {
+        throw new Error('missing target');
+      }),
+      get_current_page: vi.fn(async () => null),
+      tabs: [{ page_id: 7, tab_id: '0007', url: 'https://stale.test', title: 'Stale' }],
+    };
+
+    const result = await controller.registry.execute_action(
+      'switch',
+      { tab_id: '0007' },
+      { browser_session: browserSession as any }
+    );
+
+    expect(result.error).toBeNull();
+    expect(result.extracted_content).toContain(
+      'Attempted to switch to tab #0007'
+    );
+  });
+
   it('close action accepts tab_id identifiers', async () => {
     const controller = new Controller();
     const closingPage = {
@@ -1504,6 +1526,28 @@ describe('Regression Coverage', () => {
     expect(closingPage.close).toHaveBeenCalled();
     expect(result.extracted_content).toContain('Closed tab #0007');
     expect(result.extracted_content).toContain('focused on tab #0001');
+  });
+
+  it('close action handles stale tab identifiers gracefully', async () => {
+    const controller = new Controller();
+    const browserSession = {
+      switch_to_tab: vi.fn(async () => {
+        throw new Error('already closed');
+      }),
+      get_current_page: vi.fn(async () => null),
+      tabs: [{ page_id: 7, tab_id: '0007', url: 'https://stale.test', title: 'Stale' }],
+    };
+
+    const result = await controller.registry.execute_action(
+      'close',
+      { tab_id: '0007' },
+      { browser_session: browserSession as any }
+    );
+
+    expect(result.error).toBeNull();
+    expect(result.extracted_content).toContain(
+      'Tab #0007 closed (was already closed or invalid)'
+    );
   });
 
   it('click action returns python-aligned error when index and coordinates are missing', async () => {
