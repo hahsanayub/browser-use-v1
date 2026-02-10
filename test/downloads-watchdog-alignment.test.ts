@@ -1,9 +1,10 @@
 import fs from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { BrowserSession } from '../src/browser/session.js';
 import {
   BrowserLaunchEvent,
   BrowserStateRequestEvent,
+  DownloadProgressEvent,
   BrowserStoppedEvent,
   DownloadStartedEvent,
   FileDownloadedEvent,
@@ -57,6 +58,77 @@ describe('downloads watchdog alignment', () => {
     await session.event_bus.dispatch_or_throw(fileEvent);
 
     expect(session.get_downloaded_files()).toEqual(['/tmp/archive.zip']);
+  });
+
+  it('tracks progress and notifies direct download callbacks', async () => {
+    const session = new BrowserSession();
+    const watchdog = new DownloadsWatchdog({ browser_session: session });
+    session.attach_watchdog(watchdog);
+
+    const onStart = vi.fn();
+    const onProgress = vi.fn();
+    const onComplete = vi.fn();
+    watchdog.register_download_callbacks({
+      on_start: onStart,
+      on_progress: onProgress,
+      on_complete: onComplete,
+    });
+
+    await session.event_bus.dispatch_or_throw(
+      new DownloadStartedEvent({
+        guid: 'download-guid-callback',
+        url: 'https://example.com/report.csv',
+        suggested_filename: 'report.csv',
+      })
+    );
+    await session.event_bus.dispatch_or_throw(
+      new DownloadProgressEvent({
+        guid: 'download-guid-callback',
+        received_bytes: 64,
+        total_bytes: 128,
+        state: 'inProgress',
+      })
+    );
+    await session.event_bus.dispatch_or_throw(
+      new FileDownloadedEvent({
+        guid: 'download-guid-callback',
+        url: 'https://example.com/report.csv',
+        path: '/tmp/report.csv',
+        file_name: 'report.csv',
+        file_size: 128,
+      })
+    );
+
+    expect(onStart).toHaveBeenCalledTimes(1);
+    expect(onProgress).toHaveBeenCalledTimes(1);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+
+    const tracked = watchdog.get_active_downloads();
+    expect(tracked).toHaveLength(0);
+  });
+
+  it('supports unregistering direct download callbacks', async () => {
+    const session = new BrowserSession();
+    const watchdog = new DownloadsWatchdog({ browser_session: session });
+    session.attach_watchdog(watchdog);
+
+    const onStart = vi.fn();
+    watchdog.register_download_callbacks({
+      on_start: onStart,
+    });
+    watchdog.unregister_download_callbacks({
+      on_start: onStart,
+    });
+
+    await session.event_bus.dispatch_or_throw(
+      new DownloadStartedEvent({
+        guid: 'download-guid-unregister',
+        url: 'https://example.com/unregister.bin',
+        suggested_filename: 'unregister.bin',
+      })
+    );
+
+    expect(onStart).not.toHaveBeenCalled();
   });
 
   it('ensures downloads directory exists on BrowserLaunchEvent', async () => {
