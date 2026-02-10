@@ -242,13 +242,19 @@ describe('OpenAI-compatible providers alignment', () => {
   });
 
   it('uses Mistral max_tokens and strict json_schema response format', async () => {
+    const customFetch = vi.fn() as unknown as typeof fetch;
     openaiCreateMock.mockResolvedValue(buildResponse('{"value":"ok"}'));
     const schema = z.object({ value: z.string() });
     const llm = new ChatMistral({
       model: 'mistral-medium-latest',
+      timeout: 18000,
       maxTokens: 512,
       topP: 0.9,
       seed: 7,
+      defaultHeaders: { 'x-mistral-test': '1' },
+      defaultQuery: { purpose: 'alignment' },
+      fetchImplementation: customFetch,
+      fetchOptions: { cache: 'no-store' },
     });
 
     const response = await llm.ainvoke([new UserMessage('extract')], schema as any);
@@ -262,6 +268,14 @@ describe('OpenAI-compatible providers alignment', () => {
     expect(request.response_format?.type).toBe('json_schema');
     expect(request.response_format?.json_schema?.strict).toBe(true);
     expect((response.completion as any).value).toBe('ok');
+    expect(openaiCtorMock.mock.calls[0]?.[0]).toMatchObject({
+      baseURL: 'https://api.mistral.ai/v1',
+      timeout: 18000,
+      defaultHeaders: { 'x-mistral-test': '1' },
+      defaultQuery: { purpose: 'alignment' },
+      fetch: customFetch,
+      fetchOptions: { cache: 'no-store' },
+    });
   });
 
   it('uses Cerebras prompt-based JSON extraction for structured output', async () => {

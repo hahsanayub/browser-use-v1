@@ -12,6 +12,10 @@ export interface ChatMistralOptions {
   apiKey?: string;
   baseURL?: string;
   timeout?: number | null;
+  defaultHeaders?: Record<string, string> | null;
+  defaultQuery?: Record<string, string | undefined> | null;
+  fetchImplementation?: typeof fetch;
+  fetchOptions?: RequestInit | null;
   clientParams?: Record<string, unknown> | null;
   temperature?: number | null;
   maxTokens?: number | null;
@@ -43,6 +47,10 @@ export class ChatMistral implements BaseChatModel {
       apiKey = process.env.MISTRAL_API_KEY,
       baseURL = process.env.MISTRAL_BASE_URL || 'https://api.mistral.ai/v1',
       timeout = null,
+      defaultHeaders = null,
+      defaultQuery = null,
+      fetchImplementation,
+      fetchOptions = null,
       clientParams = null,
       temperature = 0.2,
       maxTokens = 4096,
@@ -68,6 +76,10 @@ export class ChatMistral implements BaseChatModel {
       baseURL,
       ...(timeout !== null ? { timeout } : {}),
       maxRetries,
+      defaultHeaders: defaultHeaders ?? undefined,
+      defaultQuery: defaultQuery ?? undefined,
+      fetch: fetchImplementation,
+      fetchOptions: (fetchOptions ?? undefined) as any,
       ...(clientParams ?? {}),
     });
   }
