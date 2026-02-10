@@ -2,6 +2,7 @@ import type { Content, Part } from '@google/genai';
 import {
   AssistantMessage,
   ContentPartImageParam,
+  ContentPartRefusalParam,
   ContentPartTextParam,
   SystemMessage,
   UserMessage,
@@ -90,6 +91,8 @@ export class GoogleMessageSerializer {
         for (const part of message.content) {
           if (part instanceof ContentPartTextParam) {
             parts.push({ text: part.text });
+          } else if (part instanceof ContentPartRefusalParam) {
+            parts.push({ text: `[Refusal] ${part.refusal}` });
           } else if (part instanceof ContentPartImageParam) {
             parts.push(this.serializeImagePart(part));
           }
@@ -116,6 +119,10 @@ export class GoogleMessageSerializer {
           message.content.forEach((part) => {
             if (part instanceof ContentPartTextParam) {
               parts.push({ text: part.text });
+            } else if (part instanceof ContentPartRefusalParam) {
+              parts.push({ text: `[Refusal] ${part.refusal}` });
+            } else if (part instanceof ContentPartImageParam) {
+              parts.push(this.serializeImagePart(part));
             }
           });
         }

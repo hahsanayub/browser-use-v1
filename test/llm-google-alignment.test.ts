@@ -19,7 +19,9 @@ vi.mock('@google/genai', () => {
 });
 
 import {
+  AssistantMessage,
   ContentPartImageParam,
+  ContentPartRefusalParam,
   ContentPartTextParam,
   ImageURL,
   SystemMessage,
@@ -98,6 +100,20 @@ describe('Google LLM alignment', () => {
         mimeType: 'image/png',
         data: 'Zm9v',
       },
+    });
+  });
+
+  it('serializes refusal parts as text in assistant messages', () => {
+    const serializer = new GoogleMessageSerializer();
+    const { contents } = serializer.serializeWithSystem([
+      new AssistantMessage({
+        content: [new ContentPartRefusalParam('cannot comply')],
+      }),
+    ]);
+
+    expect((contents[0] as any).role).toBe('model');
+    expect((contents[0] as any).parts[0]).toEqual({
+      text: '[Refusal] cannot comply',
     });
   });
 
