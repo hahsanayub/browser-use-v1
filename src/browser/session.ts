@@ -36,6 +36,7 @@ import {
   withDVDScreensaver,
 } from './dvd-screensaver.js';
 import { SessionManager } from './session-manager.js';
+import { DefaultActionWatchdog } from './watchdogs/default-action-watchdog.js';
 import type { BaseWatchdog } from './watchdogs/base.js';
 
 const execAsync = promisify(exec);
@@ -134,6 +135,7 @@ export class BrowserSession {
   private _recentEvents: RecentBrowserEvent[] = [];
   private readonly _maxRecentEvents = 100;
   private _watchdogs: Set<BaseWatchdog> = new Set();
+  private _defaultWatchdogsAttached = false;
 
   constructor(init: BrowserSessionInit = {}) {
     const sourceProfileConfig = init.browser_profile
@@ -206,10 +208,19 @@ export class BrowserSession {
     for (const watchdog of [...this._watchdogs]) {
       this.detach_watchdog(watchdog);
     }
+    this._defaultWatchdogsAttached = false;
   }
 
   get_watchdogs() {
     return [...this._watchdogs];
+  }
+
+  attach_default_watchdogs() {
+    if (this._defaultWatchdogsAttached) {
+      return;
+    }
+    this.attach_watchdog(new DefaultActionWatchdog({ browser_session: this }));
+    this._defaultWatchdogsAttached = true;
   }
 
   private _formatTabId(pageId: number): string {
@@ -1039,6 +1050,8 @@ export class BrowserSession {
   }
 
   async start() {
+    this.attach_default_watchdogs();
+
     if (this.initialized) {
       return this;
     }
@@ -1709,6 +1722,12 @@ export class BrowserSession {
       if (byTabId !== -1) {
         return byTabId;
       }
+      const byTargetId = this._tabs.findIndex(
+        (tab) => tab.target_id === normalized
+      );
+      if (byTargetId !== -1) {
+        return byTargetId;
+      }
       const numeric = Number.parseInt(normalized, 10);
       if (Number.isFinite(numeric)) {
         return this._resolveTabIndex(numeric);
@@ -1811,6 +1830,72 @@ export class BrowserSession {
       this.currentTitle = 'about:blank';
       this._setActivePage(null);
     }
+  }
+
+  async wait(seconds: number, options: BrowserActionOptions = {}) {
+    const signal = options.signal ?? null;
+    this._throwIfAborted(signal);
+    const boundedSeconds = Math.max(Number(seconds) || 0, 0);
+    const delayMs = boundedSeconds * 1000;
+    if (delayMs <= 0) {
+      return;
+    }
+    await this._waitWithAbort(delayMs, signal);
+  }
+
+  async send_keys(keys: string, options: BrowserActionOptions = {}) {
+    const signal = options.signal ?? null;
+    this._throwIfAborted(signal);
+    const page = await this._withAbort(this.get_current_page(), signal);
+    const keyboard = page?.keyboard;
+    if (!keyboard) {
+      throw new BrowserError(
+        'Keyboard input is not available on the current page.'
+      );
+    }
+
+    try {
+      await this._withAbort(keyboard.press(keys), signal);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Unknown key')) {
+        for (const char of keys) {
+          await this._withAbort(keyboard.press(char), signal);
+        }
+        return;
+      }
+      throw error;
+    }
+  }
+
+  async upload_file(
+    element_node: DOMElementNode,
+    file_path: string,
+    options: BrowserActionOptions = {}
+  ) {
+    const signal = options.signal ?? null;
+    this._throwIfAborted(signal);
+    const locator = await this.get_locate_element(element_node);
+    if (!locator) {
+      throw new Error('Element not found');
+    }
+    if (!fs.existsSync(file_path)) {
+      throw new Error(`File does not exist: ${file_path}`);
+    }
+
+    const locatorWithUpload = locator as unknown as {
+      setInputFiles?: (
+        filePath: string,
+        options?: { timeout?: number }
+      ) => Promise<void>;
+    };
+    if (typeof locatorWithUpload.setInputFiles !== 'function') {
+      throw new Error('Element does not support file upload');
+    }
+
+    await this._withAbort(
+      locatorWithUpload.setInputFiles(file_path, { timeout: 5000 }),
+      signal
+    );
   }
 
   async go_back(options: BrowserActionOptions = {}) {
