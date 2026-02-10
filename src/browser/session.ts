@@ -6,6 +6,7 @@ import { spawn, exec, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createLogger } from '../logging-config.js';
 import { match_url_with_domain_pattern, uuid7str } from '../utils.js';
+import { EventBus } from '../event-bus.js';
 import {
   async_playwright,
   type Browser,
@@ -34,6 +35,7 @@ import {
   showSpinner,
   withDVDScreensaver,
 } from './dvd-screensaver.js';
+import type { BaseWatchdog } from './watchdogs/base.js';
 
 const execAsync = promisify(exec);
 
@@ -92,6 +94,7 @@ interface RecentBrowserEvent {
 export class BrowserSession {
   readonly id: string;
   readonly browser_profile: BrowserProfile;
+  readonly event_bus: EventBus;
   browser: Browser | null;
   browser_context: BrowserContext | null;
   agent_current_page: Page | null;
@@ -128,6 +131,7 @@ export class BrowserSession {
   private readonly _maxClosedPopupMessages = 20;
   private _recentEvents: RecentBrowserEvent[] = [];
   private readonly _maxRecentEvents = 100;
+  private _watchdogs: Set<BaseWatchdog> = new Set();
 
   constructor(init: BrowserSessionInit = {}) {
     const sourceProfileConfig = init.browser_profile
@@ -137,6 +141,7 @@ export class BrowserSession {
       : (init.profile ?? {});
     this.browser_profile = new BrowserProfile(sourceProfileConfig);
     this.id = init.id ?? uuid7str();
+    this.event_bus = new EventBus(`BrowserSession_${this.id.slice(-4)}`);
     this.browser = init.browser ?? null;
     this.browser_context = init.browser_context ?? null;
     this.agent_current_page = init.page ?? null;
@@ -169,6 +174,38 @@ export class BrowserSession {
     this.tabPages.set(this._tabs[0].page_id, this.agent_current_page ?? null);
     this._attachDialogHandler(this.agent_current_page);
     this._recordRecentEvent('session_initialized', { url: this.currentUrl });
+  }
+
+  attach_watchdog(watchdog: BaseWatchdog) {
+    if (this._watchdogs.has(watchdog)) {
+      return;
+    }
+    watchdog.attach_to_session();
+    this._watchdogs.add(watchdog);
+  }
+
+  attach_watchdogs(watchdogs: BaseWatchdog[]) {
+    for (const watchdog of watchdogs) {
+      this.attach_watchdog(watchdog);
+    }
+  }
+
+  detach_watchdog(watchdog: BaseWatchdog) {
+    if (!this._watchdogs.has(watchdog)) {
+      return;
+    }
+    watchdog.detach_from_session();
+    this._watchdogs.delete(watchdog);
+  }
+
+  detach_all_watchdogs() {
+    for (const watchdog of [...this._watchdogs]) {
+      this.detach_watchdog(watchdog);
+    }
+  }
+
+  get_watchdogs() {
+    return [...this._watchdogs];
   }
 
   private _formatTabId(pageId: number): string {
@@ -459,7 +496,10 @@ export class BrowserSession {
     ) {
       event.error_message = details.error_message.trim();
     }
-    if (typeof details.page_id === 'number' && Number.isFinite(details.page_id)) {
+    if (
+      typeof details.page_id === 'number' &&
+      Number.isFinite(details.page_id)
+    ) {
       event.page_id = details.page_id;
     }
     if (typeof details.tab_id === 'string' && details.tab_id.trim()) {
@@ -594,7 +634,9 @@ export class BrowserSession {
             continue;
           }
 
-          const resourceType = String((entry as any).initiatorType ?? '').toLowerCase();
+          const resourceType = String(
+            (entry as any).initiatorType ?? ''
+          ).toLowerCase();
           if (
             (resourceType === 'img' ||
               resourceType === 'image' ||
@@ -1166,7 +1208,8 @@ export class BrowserSession {
       this.logger.info(`Successfully connected to browser PID ${browserPid}`);
     } catch (error) {
       throw new Error(
-        `Failed to connect to browser PID ${browserPid}: ${(error as Error).message}`
+        `Failed to connect to browser PID ${browserPid}: ${(error as Error).message}`,
+        { cause: error }
       );
     }
   }
@@ -1204,6 +1247,8 @@ export class BrowserSession {
     this.initialized = false;
     this.attachedAgentId = null;
     this.attachedSharedAgentIds.clear();
+    this.detach_all_watchdogs();
+    await this.event_bus.stop();
 
     const closeWithTimeout = async (
       label: string,
@@ -1343,8 +1388,6 @@ export class BrowserSession {
     let pageInfo = null;
     let pixelsAbove = 0;
     let pixelsBelow = 0;
-    let pixelsLeft = 0;
-    let pixelsRight = 0;
     if (page) {
       try {
         const metrics = await this._withAbort(
@@ -1379,8 +1422,8 @@ export class BrowserSession {
           (metrics.pageHeight ?? 0) - (metrics.scrollY + viewportHeight),
           0
         );
-        pixelsLeft = Math.max(metrics.scrollX ?? 0, 0);
-        pixelsRight = Math.max(
+        const pixelsLeft = Math.max(metrics.scrollX ?? 0, 0);
+        const pixelsRight = Math.max(
           (metrics.pageWidth ?? 0) - (metrics.scrollX + viewportWidth),
           0
         );
@@ -1433,7 +1476,9 @@ export class BrowserSession {
         : [],
       is_pdf_viewer: Boolean(this.currentUrl?.toLowerCase().endsWith('.pdf')),
       loading_status: this.currentPageLoadingStatus,
-      recent_events: includeRecentEvents ? this._getRecentEventsSummary() : null,
+      recent_events: includeRecentEvents
+        ? this._getRecentEventsSummary()
+        : null,
       pending_network_requests: pendingNetworkRequests,
       pagination_buttons: paginationButtons,
       closed_popup_messages: this._getClosedPopupMessagesSnapshot(),
@@ -3589,10 +3634,10 @@ export class BrowserSession {
       this.initialized ||
       Boolean(
         this.browser ||
-          this.browser_context ||
-          this.browser_pid ||
-          this._subprocess ||
-          this._childProcesses.size > 0
+        this.browser_context ||
+        this.browser_pid ||
+        this._subprocess ||
+        this._childProcesses.size > 0
       );
     if (!hasActiveResources) {
       return;

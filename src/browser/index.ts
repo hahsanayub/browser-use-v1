@@ -6,6 +6,7 @@ export * from './extensions.js';
 export * from './dvd-screensaver.js';
 export * from './playwright-manager.js';
 export * from './events.js';
+export * from './watchdogs/index.js';
 
 // Export from context.ts (primary aliases for Browser/BrowserContext)
 export type {
