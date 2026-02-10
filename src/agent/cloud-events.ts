@@ -8,6 +8,7 @@ const MAX_URL_LENGTH = 100_000;
 const MAX_TASK_LENGTH = 100_000;
 const MAX_COMMENT_LENGTH = 2_000;
 const MAX_FILE_CONTENT_SIZE = 50 * 1024 * 1024;
+const MAX_LLM_MODEL_LENGTH = 200;
 const MAX_END_REASON_LENGTH = 100;
 
 const logger = createLogger('browser_use.agent.cloud_events');
@@ -343,6 +344,11 @@ export class CreateAgentTaskEvent extends BaseEvent {
   }) {
     super('CreateAgentTaskEvent', init);
     this.agent_session_id = init.agent_session_id;
+    if (init.llm_model.length > MAX_LLM_MODEL_LENGTH) {
+      throw new Error(
+        `llm_model exceeds maximum length of ${MAX_LLM_MODEL_LENGTH}`
+      );
+    }
     this.llm_model = init.llm_model;
     this.task = init.task;
     this.stopped = init.stopped ?? false;

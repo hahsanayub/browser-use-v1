@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CreateAgentTaskEvent,
   CreateAgentStepEvent,
   UpdateAgentSessionEvent,
 } from '../src/agent/cloud-events.js';
@@ -87,5 +88,27 @@ describe('cloud events alignment', () => {
           end_reason: 'x'.repeat(101),
         })
     ).toThrow('end_reason exceeds maximum length of 100');
+  });
+
+  it('CreateAgentTaskEvent enforces python c011 llm_model max length 200', () => {
+    expect(
+      () =>
+        new CreateAgentTaskEvent({
+          agent_session_id: 'session-1',
+          llm_model: 'x'.repeat(201),
+          task: 'run task',
+        })
+    ).toThrow('llm_model exceeds maximum length of 200');
+  });
+
+  it('CreateAgentTaskEvent accepts 200-character llm_model', () => {
+    const event = new CreateAgentTaskEvent({
+      agent_session_id: 'session-2',
+      llm_model: 'x'.repeat(200),
+      task: 'run task',
+    });
+
+    expect(event.llm_model.length).toBe(200);
+    expect(event.toJSON().llm_model).toHaveLength(200);
   });
 });
