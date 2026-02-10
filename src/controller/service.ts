@@ -782,6 +782,7 @@ export class Controller<Context = unknown> {
       if (!browser_session) throw new Error('Browser session missing');
       throwIfAborted(signal);
       let uploadPath = params.path;
+      const isLocalBrowser = (browser_session as any)?.is_local !== false;
 
       const allowedPaths = new Set<string>(available_file_paths ?? []);
       const downloadedFiles = Array.isArray(browser_session?.downloaded_files)
@@ -799,6 +800,8 @@ export class Controller<Context = unknown> {
             : null;
         if (managedFile && fsInstance?.get_dir) {
           uploadPath = path.join(fsInstance.get_dir(), uploadPath);
+        } else if (!isLocalBrowser) {
+          // Remote browser paths may only exist on the remote runtime.
         } else {
           throw new BrowserError(
             `File path ${params.path} is not available. To fix: add this file path to available_file_paths when creating the Agent.`
@@ -806,13 +809,15 @@ export class Controller<Context = unknown> {
         }
       }
 
-      if (!fs.existsSync(uploadPath)) {
-        throw new BrowserError(`File ${uploadPath} does not exist`);
-      }
-      if (fs.statSync(uploadPath).size === 0) {
-        throw new BrowserError(
-          `File ${uploadPath} is empty (0 bytes). The file may not have been saved correctly.`
-        );
+      if (isLocalBrowser) {
+        if (!fs.existsSync(uploadPath)) {
+          throw new BrowserError(`File ${uploadPath} does not exist`);
+        }
+        if (fs.statSync(uploadPath).size === 0) {
+          throw new BrowserError(
+            `File ${uploadPath} is empty (0 bytes). The file may not have been saved correctly.`
+          );
+        }
       }
 
       const node = await browser_session.find_file_upload_element_by_index(

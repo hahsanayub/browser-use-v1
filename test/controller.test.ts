@@ -2156,6 +2156,32 @@ describe('Regression Coverage', () => {
     }
   });
 
+  it('upload_file allows remote browser paths outside available_file_paths', async () => {
+    const controller = new Controller();
+    const locator = {
+      setInputFiles: vi.fn(async () => {}),
+    };
+    const browserSession = {
+      is_local: false,
+      downloaded_files: [],
+      find_file_upload_element_by_index: vi.fn(async () => ({ xpath: '/html/body/input' })),
+      get_locate_element: vi.fn(async () => locator),
+    };
+
+    const remotePath = '/remote/runtime/artifact.txt';
+    const result = await controller.registry.execute_action(
+      'upload_file',
+      { index: 1, path: remotePath },
+      {
+        browser_session: browserSession as any,
+        available_file_paths: [],
+      }
+    );
+
+    expect(locator.setInputFiles).toHaveBeenCalledWith(remotePath);
+    expect(result.extracted_content).toContain('Successfully uploaded file');
+  });
+
   it('upload_file rejects zero-byte files', async () => {
     const controller = new Controller();
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-upload-'));
