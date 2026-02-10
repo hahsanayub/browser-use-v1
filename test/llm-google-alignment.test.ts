@@ -173,6 +173,27 @@ describe('Google LLM alignment', () => {
     });
   });
 
+  it('does not force apiVersion when neither option nor env is set', () => {
+    const previousApiVersion = process.env.GOOGLE_API_VERSION;
+    delete process.env.GOOGLE_API_VERSION;
+
+    try {
+      new ChatGoogle({
+        model: 'gemini-2.5-flash',
+        apiKey: 'test-key',
+      });
+
+      const ctorOptions = googleCtorMock.mock.calls[0]?.[0] ?? {};
+      expect(ctorOptions).not.toHaveProperty('apiVersion');
+    } finally {
+      if (previousApiVersion === undefined) {
+        delete process.env.GOOGLE_API_VERSION;
+      } else {
+        process.env.GOOGLE_API_VERSION = previousApiVersion;
+      }
+    }
+  });
+
   it('passes generation params and returns usage with cached/image/thought tokens', async () => {
     const llm = new ChatGoogle({
       model: 'gemini-2.5-flash',

@@ -57,7 +57,7 @@ export class ChatGoogle implements BaseChatModel {
     const {
       model = 'gemini-2.5-flash',
       apiKey = process.env.GOOGLE_API_KEY,
-      apiVersion = process.env.GOOGLE_API_VERSION || 'v1',
+      apiVersion = process.env.GOOGLE_API_VERSION,
       baseUrl = process.env.GOOGLE_API_BASE_URL,
       vertexai,
       vertexAi,
