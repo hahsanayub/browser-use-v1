@@ -1,7 +1,10 @@
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { BrowserSession } from '../src/browser/session.js';
 import {
+  BrowserConnectedEvent,
   BrowserLaunchEvent,
   BrowserStateRequestEvent,
   DownloadProgressEvent,
@@ -230,5 +233,88 @@ describe('downloads watchdog alignment', () => {
     expect(navigationEvents[0].target_id).toBe(session.active_tab?.target_id);
     expect(navigationEvents[0].url).toBe(session.active_tab?.url);
     expect(navigationEvents[0].event_parent_id).toBe(stateEvent.event_id);
+  });
+
+  it('detects downloadable network responses via CDP monitoring and materializes PDF bodies', async () => {
+    const downloadsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bu-cdp-dl-'));
+    try {
+      const session = new BrowserSession({
+        profile: {
+          downloads_path: downloadsDir,
+          auto_download_pdfs: true,
+        },
+      });
+      const watchdog = new DownloadsWatchdog({ browser_session: session });
+      session.attach_watchdog(watchdog);
+
+      const listeners = new Map<string, (payload: any) => void>();
+      const cdpSend = vi.fn(async (method: string) => {
+        if (method === 'Network.getResponseBody') {
+          return {
+            body: Buffer.from('%PDF-1.4').toString('base64'),
+            base64Encoded: true,
+          };
+        }
+        return {};
+      });
+      vi.spyOn(session, 'get_or_create_cdp_session').mockResolvedValue({
+        send: cdpSend,
+        on: (event: string, handler: (payload: any) => void) => {
+          listeners.set(event, handler);
+        },
+        off: (event: string) => {
+          listeners.delete(event);
+        },
+        detach: vi.fn(async () => {}),
+      } as any);
+      session.browser_context = {
+        newCDPSession: vi.fn(async () => ({})),
+      } as any;
+
+      const started: DownloadStartedEvent[] = [];
+      const progressed: DownloadProgressEvent[] = [];
+      const completed: FileDownloadedEvent[] = [];
+      session.event_bus.on(
+        'DownloadStartedEvent',
+        (event) => started.push(event as DownloadStartedEvent),
+        { handler_id: 'test.downloads.cdp.start' }
+      );
+      session.event_bus.on(
+        'DownloadProgressEvent',
+        (event) => progressed.push(event as DownloadProgressEvent),
+        { handler_id: 'test.downloads.cdp.progress' }
+      );
+      session.event_bus.on(
+        'FileDownloadedEvent',
+        (event) => completed.push(event as FileDownloadedEvent),
+        { handler_id: 'test.downloads.cdp.complete' }
+      );
+
+      await session.event_bus.dispatch_or_throw(
+        new BrowserConnectedEvent({ cdp_url: 'ws://example' })
+      );
+
+      listeners.get('Network.responseReceived')?.({
+        requestId: 'req-pdf-1',
+        response: {
+          url: 'https://example.com/files/report.pdf',
+          mimeType: 'application/pdf',
+          headers: {},
+        },
+      });
+      listeners.get('Network.loadingFinished')?.({
+        requestId: 'req-pdf-1',
+        encodedDataLength: 8,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(started).toHaveLength(1);
+      expect(progressed).toHaveLength(1);
+      expect(completed).toHaveLength(1);
+      expect(completed[0].mime_type).toBe('application/pdf');
+      expect(fs.existsSync(completed[0].path)).toBe(true);
+    } finally {
+      fs.rmSync(downloadsDir, { recursive: true, force: true });
+    }
   });
 });

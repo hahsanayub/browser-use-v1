@@ -1,5 +1,7 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import {
+  BrowserConnectedEvent,
   BrowserLaunchEvent,
   BrowserStateRequestEvent,
   BrowserStoppedEvent,
@@ -11,6 +13,13 @@ import {
   TabCreatedEvent,
 } from '../events.js';
 import { BaseWatchdog } from './base.js';
+
+type CDPSessionLike = {
+  send?: (method: string, params?: Record<string, unknown>) => Promise<any>;
+  on?: (event: string, listener: (payload: any) => void) => void;
+  off?: (event: string, listener: (payload: any) => void) => void;
+  detach?: () => Promise<void>;
+};
 
 type ActiveDownload = {
   url: string;
@@ -48,6 +57,7 @@ type DownloadCompleteInfo = {
 
 export class DownloadsWatchdog extends BaseWatchdog {
   static override LISTENS_TO = [
+    BrowserConnectedEvent,
     BrowserLaunchEvent,
     BrowserStateRequestEvent,
     BrowserStoppedEvent,
@@ -73,6 +83,27 @@ export class DownloadsWatchdog extends BaseWatchdog {
   private _downloadCompleteCallbacks: Array<
     (info: DownloadCompleteInfo) => void
   > = [];
+  private _cdpSession: CDPSessionLike | null = null;
+  private _cdpListeners: Array<{
+    event: string;
+    handler: (payload: any) => void;
+  }> = [];
+  private _networkDownloads = new Map<
+    string,
+    {
+      guid: string;
+      url: string;
+      suggested_filename: string;
+      mime_type: string | null;
+      file_type: string | null;
+      auto_download: boolean;
+    }
+  >();
+  private _detectedDownloadUrls = new Set<string>();
+
+  async on_BrowserConnectedEvent() {
+    await this._startCdpDownloadMonitoring();
+  }
 
   on_BrowserLaunchEvent() {
     const downloadsPath = this.browser_session.browser_profile.downloads_path;
@@ -105,6 +136,9 @@ export class DownloadsWatchdog extends BaseWatchdog {
     this._downloadStartCallbacks = [];
     this._downloadProgressCallbacks = [];
     this._downloadCompleteCallbacks = [];
+    this._networkDownloads.clear();
+    this._detectedDownloadUrls.clear();
+    void this._stopCdpDownloadMonitoring();
   }
 
   on_TabCreatedEvent() {
@@ -152,6 +186,9 @@ export class DownloadsWatchdog extends BaseWatchdog {
       existing.received_bytes = event.received_bytes;
       existing.total_bytes = event.total_bytes;
       existing.state = event.state;
+      if (event.state === 'completed' || event.state === 'canceled') {
+        this._activeDownloads.delete(event.guid);
+      }
     }
 
     const progressInfo: DownloadProgressInfo = {
@@ -276,6 +313,9 @@ export class DownloadsWatchdog extends BaseWatchdog {
     this._downloadStartCallbacks = [];
     this._downloadProgressCallbacks = [];
     this._downloadCompleteCallbacks = [];
+    this._networkDownloads.clear();
+    this._detectedDownloadUrls.clear();
+    void this._stopCdpDownloadMonitoring();
   }
 
   private _normalizeCallbackRegistration(
@@ -308,5 +348,266 @@ export class DownloadsWatchdog extends BaseWatchdog {
       on_progress,
       on_complete,
     };
+  }
+
+  private async _startCdpDownloadMonitoring() {
+    if (this._cdpSession) {
+      return;
+    }
+    if (!this.browser_session.browser_context?.newCDPSession) {
+      return;
+    }
+
+    try {
+      const session = (await this.browser_session.get_or_create_cdp_session(
+        null
+      )) as CDPSessionLike;
+      await session.send?.('Network.enable');
+      this._cdpSession = session;
+
+      const onResponseReceived = (payload: any) => {
+        void this._handleNetworkResponse(payload);
+      };
+      const onLoadingFinished = (payload: any) => {
+        void this._handleNetworkLoadingFinished(payload);
+      };
+
+      session.on?.('Network.responseReceived', onResponseReceived);
+      session.on?.('Network.loadingFinished', onLoadingFinished);
+      this._cdpListeners = [
+        {
+          event: 'Network.responseReceived',
+          handler: onResponseReceived,
+        },
+        {
+          event: 'Network.loadingFinished',
+          handler: onLoadingFinished,
+        },
+      ];
+    } catch (error) {
+      this.browser_session.logger.debug(
+        `[DownloadsWatchdog] CDP download monitoring unavailable: ${(error as Error).message}`
+      );
+      await this._stopCdpDownloadMonitoring();
+    }
+  }
+
+  private async _stopCdpDownloadMonitoring() {
+    if (!this._cdpSession) {
+      return;
+    }
+
+    for (const listener of this._cdpListeners) {
+      this._cdpSession.off?.(listener.event, listener.handler);
+    }
+    this._cdpListeners = [];
+    try {
+      await this._cdpSession.detach?.();
+    } catch {
+      // Ignore detach errors during shutdown.
+    } finally {
+      this._cdpSession = null;
+    }
+  }
+
+  private async _handleNetworkResponse(payload: any) {
+    const requestId = String(payload?.requestId ?? '');
+    if (!requestId) {
+      return;
+    }
+    const response = payload?.response ?? {};
+    const url = String(response?.url ?? '').trim();
+    if (!url || this._detectedDownloadUrls.has(url)) {
+      return;
+    }
+
+    const headers = this._normalizeHeaders(response?.headers);
+    const mimeType =
+      typeof response?.mimeType === 'string'
+        ? response.mimeType.toLowerCase()
+        : '';
+    const contentDisposition = headers['content-disposition'] ?? '';
+    const isPdf =
+      mimeType.includes('application/pdf') || /\.pdf(?:$|\?)/i.test(url);
+    const isAttachment = /attachment/i.test(contentDisposition);
+    const isBinary = mimeType.includes('application/octet-stream');
+
+    if (!isPdf && !isAttachment && !isBinary) {
+      return;
+    }
+
+    this._detectedDownloadUrls.add(url);
+
+    const suggestedFilename = this._resolveSuggestedFilename(
+      contentDisposition,
+      url
+    );
+    const guid = `cdp-${requestId}`;
+    const autoDownload = isPdf && this.browser_session.auto_download_pdfs();
+    const fileType = this._inferFileType(suggestedFilename, mimeType);
+
+    this._networkDownloads.set(requestId, {
+      guid,
+      url,
+      suggested_filename: suggestedFilename,
+      mime_type: mimeType || null,
+      file_type: fileType,
+      auto_download: autoDownload,
+    });
+
+    await this.event_bus.dispatch(
+      new DownloadStartedEvent({
+        guid,
+        url,
+        suggested_filename: suggestedFilename,
+        auto_download: autoDownload,
+      })
+    );
+  }
+
+  private async _handleNetworkLoadingFinished(payload: any) {
+    const requestId = String(payload?.requestId ?? '');
+    if (!requestId) {
+      return;
+    }
+
+    const metadata = this._networkDownloads.get(requestId);
+    if (!metadata) {
+      return;
+    }
+    this._networkDownloads.delete(requestId);
+
+    const encodedDataLength =
+      typeof payload?.encodedDataLength === 'number'
+        ? Math.max(0, Math.floor(payload.encodedDataLength))
+        : 0;
+
+    await this.event_bus.dispatch(
+      new DownloadProgressEvent({
+        guid: metadata.guid,
+        received_bytes: encodedDataLength,
+        total_bytes: encodedDataLength,
+        state: 'completed',
+      })
+    );
+
+    if (
+      !metadata.auto_download ||
+      !metadata.mime_type?.includes('application/pdf')
+    ) {
+      return;
+    }
+
+    const downloadsPath = this.browser_session.browser_profile.downloads_path;
+    if (!downloadsPath || !this._cdpSession?.send) {
+      return;
+    }
+
+    try {
+      const responseBody = await this._cdpSession.send('Network.getResponseBody', {
+        requestId,
+      });
+      const body =
+        typeof responseBody?.body === 'string' ? responseBody.body : '';
+      if (!body) {
+        return;
+      }
+
+      fs.mkdirSync(downloadsPath, { recursive: true });
+      const uniqueFilename = await this._getUniqueFilename(
+        downloadsPath,
+        metadata.suggested_filename
+      );
+      const filePath = path.join(downloadsPath, uniqueFilename);
+      const content = responseBody?.base64Encoded
+        ? Buffer.from(body, 'base64')
+        : Buffer.from(body, 'utf8');
+      fs.writeFileSync(filePath, content);
+
+      await this.event_bus.dispatch(
+        new FileDownloadedEvent({
+          guid: metadata.guid,
+          url: metadata.url,
+          path: filePath,
+          file_name: uniqueFilename,
+          file_size: content.length,
+          file_type: metadata.file_type,
+          mime_type: metadata.mime_type,
+          auto_download: true,
+        })
+      );
+    } catch (error) {
+      this.browser_session.logger.debug(
+        `[DownloadsWatchdog] Failed to materialize CDP download body: ${(error as Error).message}`
+      );
+    }
+  }
+
+  private _normalizeHeaders(input: unknown): Record<string, string> {
+    if (!input || typeof input !== 'object') {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(input as Record<string, unknown>).map(([k, v]) => [
+        k.toLowerCase(),
+        String(v),
+      ])
+    );
+  }
+
+  private _resolveSuggestedFilename(contentDisposition: string, url: string) {
+    const filenameMatch = /filename\\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i.exec(
+      contentDisposition
+    );
+    const fromHeader =
+      filenameMatch?.[1] || filenameMatch?.[2] || '';
+    const candidate = decodeURIComponent(fromHeader || '').trim();
+    if (candidate) {
+      return this._sanitizeFilename(candidate);
+    }
+
+    try {
+      const parsed = new URL(url);
+      const basename = path.basename(parsed.pathname);
+      if (basename) {
+        return this._sanitizeFilename(basename);
+      }
+    } catch {
+      // Ignore URL parsing errors and fallback below.
+    }
+
+    return 'download';
+  }
+
+  private _sanitizeFilename(filename: string) {
+    const sanitized = filename
+      .replace(/[\\/:*?"<>|]+/g, '_')
+      .replace(/\\s+/g, ' ')
+      .trim();
+    return sanitized || 'download';
+  }
+
+  private _inferFileType(filename: string, mimeType: string) {
+    const ext = path.extname(filename).replace('.', '').toLowerCase();
+    if (ext) {
+      return ext;
+    }
+    if (mimeType.includes('pdf')) {
+      return 'pdf';
+    }
+    return null;
+  }
+
+  private async _getUniqueFilename(directory: string, filename: string) {
+    const ext = path.extname(filename);
+    const basename = ext ? filename.slice(0, -ext.length) : filename;
+    let candidate = filename || 'download';
+    let counter = 1;
+    while (fs.existsSync(path.join(directory, candidate))) {
+      candidate = `${basename || 'download'}_${counter}${ext}`;
+      counter += 1;
+    }
+    return candidate;
   }
 }
