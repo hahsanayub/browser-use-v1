@@ -15,6 +15,17 @@ type StorageStatePayload = {
   origins?: unknown[];
 };
 
+type OriginStorageEntry = {
+  name?: unknown;
+  value?: unknown;
+};
+
+type OriginState = {
+  origin?: unknown;
+  localStorage?: OriginStorageEntry[];
+  sessionStorage?: OriginStorageEntry[];
+};
+
 export class StorageStateWatchdog extends BaseWatchdog {
   static override LISTENS_TO = [
     BrowserConnectedEvent,
@@ -115,6 +126,10 @@ export class StorageStateWatchdog extends BaseWatchdog {
 
     if (cookies.length > 0 && typeof browserContext.addCookies === 'function') {
       await browserContext.addCookies(cookies as any[]);
+    }
+
+    if (origins.length > 0) {
+      await this._applyOriginsStorage(origins as OriginState[]);
     }
 
     await this.event_bus.dispatch(
@@ -263,5 +278,123 @@ export class StorageStateWatchdog extends BaseWatchdog {
       cookies: [...mergedCookies.values()],
       origins: [...mergedOrigins.values()],
     };
+  }
+
+  private async _applyOriginsStorage(origins: OriginState[]) {
+    const browserContext = this.browser_session.browser_context as
+      | {
+          newPage?: () => Promise<{
+            goto?: (url: string, options?: Record<string, unknown>) => Promise<unknown>;
+            evaluate?: (
+              fn: (payload: {
+                localStorageEntries: Array<{ name: string; value: string }>;
+                sessionStorageEntries: Array<{ name: string; value: string }>;
+              }) => void,
+              arg: {
+                localStorageEntries: Array<{ name: string; value: string }>;
+                sessionStorageEntries: Array<{ name: string; value: string }>;
+              }
+            ) => Promise<unknown>;
+            close?: () => Promise<unknown>;
+          }>;
+        }
+      | null;
+
+    if (!browserContext?.newPage) {
+      return;
+    }
+
+    for (const originState of origins) {
+      const origin =
+        typeof originState?.origin === 'string' ? originState.origin.trim() : '';
+      if (!origin || !/^https?:\/\//i.test(origin)) {
+        continue;
+      }
+
+      const localStorageEntries = this._normalizeStorageEntries(
+        originState?.localStorage
+      );
+      const sessionStorageEntries = this._normalizeStorageEntries(
+        originState?.sessionStorage
+      );
+      if (localStorageEntries.length === 0 && sessionStorageEntries.length === 0) {
+        continue;
+      }
+
+      let page:
+        | {
+            goto?: (url: string, options?: Record<string, unknown>) => Promise<unknown>;
+            evaluate?: (
+              fn: (payload: {
+                localStorageEntries: Array<{ name: string; value: string }>;
+                sessionStorageEntries: Array<{ name: string; value: string }>;
+              }) => void,
+              arg: {
+                localStorageEntries: Array<{ name: string; value: string }>;
+                sessionStorageEntries: Array<{ name: string; value: string }>;
+              }
+            ) => Promise<unknown>;
+            close?: () => Promise<unknown>;
+          }
+        | null = null;
+
+      try {
+        page = await browserContext.newPage();
+        await page.goto?.(origin, {
+          waitUntil: 'domcontentloaded',
+          timeout: 5_000,
+        });
+        await page.evaluate?.(
+          (payload) => {
+            for (const entry of payload.localStorageEntries) {
+              window.localStorage.setItem(entry.name, entry.value);
+            }
+            for (const entry of payload.sessionStorageEntries) {
+              window.sessionStorage.setItem(entry.name, entry.value);
+            }
+          },
+          {
+            localStorageEntries,
+            sessionStorageEntries,
+          }
+        );
+      } catch (error) {
+        this.browser_session.logger.debug(
+          `[StorageStateWatchdog] Failed to apply origin storage for ${origin}: ${(error as Error).message}`
+        );
+      } finally {
+        try {
+          await page?.close?.();
+        } catch {
+          // Ignore cleanup errors.
+        }
+      }
+    }
+  }
+
+  private _normalizeStorageEntries(entries: unknown) {
+    if (!Array.isArray(entries)) {
+      return [] as Array<{ name: string; value: string }>;
+    }
+
+    const normalized: Array<{ name: string; value: string }> = [];
+    for (const entry of entries) {
+      const name =
+        entry && typeof entry === 'object' && 'name' in entry
+          ? String((entry as any).name ?? '')
+          : '';
+      if (!name) {
+        continue;
+      }
+      const value =
+        entry && typeof entry === 'object' && 'value' in entry
+          ? String((entry as any).value ?? '')
+          : '';
+      normalized.push({
+        name,
+        value,
+      });
+    }
+    return normalized;
   }
 }

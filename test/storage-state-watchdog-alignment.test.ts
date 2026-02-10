@@ -110,6 +110,70 @@ describe('storage state watchdog alignment', () => {
     }
   });
 
+  it('replays origins localStorage and sessionStorage entries on load', async () => {
+    const { tempDir, storagePath } = createTempStoragePath();
+    try {
+      fs.writeFileSync(
+        storagePath,
+        JSON.stringify(
+          {
+            cookies: [],
+            origins: [
+              {
+                origin: 'https://example.com',
+                localStorage: [{ name: 'token', value: 'abc' }],
+                sessionStorage: [{ name: 'sid', value: 'xyz' }],
+              },
+            ],
+          },
+          null,
+          2
+        )
+      );
+
+      const goto = vi.fn(async () => {});
+      const evaluate = vi.fn(async () => {});
+      const close = vi.fn(async () => {});
+      const newPage = vi.fn(async () => ({
+        goto,
+        evaluate,
+        close,
+      }));
+
+      const session = new BrowserSession({
+        profile: {
+          storage_state: storagePath,
+        },
+      });
+      session.browser_context = {
+        addCookies: vi.fn(async () => {}),
+        newPage,
+      } as any;
+      session.attach_watchdog(
+        new StorageStateWatchdog({ browser_session: session })
+      );
+
+      await session.event_bus.dispatch_or_throw(new LoadStorageStateEvent());
+
+      expect(newPage).toHaveBeenCalledTimes(1);
+      expect(goto).toHaveBeenCalledWith('https://example.com', {
+        waitUntil: 'domcontentloaded',
+        timeout: 5000,
+      });
+      expect(evaluate).toHaveBeenCalledTimes(1);
+      const payload = evaluate.mock.calls[0][1];
+      expect(payload.localStorageEntries).toEqual([
+        { name: 'token', value: 'abc' },
+      ]);
+      expect(payload.sessionStorageEntries).toEqual([
+        { name: 'sid', value: 'xyz' },
+      ]);
+      expect(close).toHaveBeenCalledTimes(1);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('merges existing storage state entries when saving', async () => {
     const { tempDir, storagePath } = createTempStoragePath();
     try {
