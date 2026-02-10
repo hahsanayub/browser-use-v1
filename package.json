@@ -26,6 +26,11 @@
       "import": "./dist/browser/index.js",
       "default": "./dist/browser/index.js"
     },
+    "./browser/cloud": {
+      "types": "./dist/browser/cloud/index.d.ts",
+      "import": "./dist/browser/cloud/index.js",
+      "default": "./dist/browser/cloud/index.js"
+    },
     "./controller": {
       "types": "./dist/controller/index.d.ts",
       "import": "./dist/controller/index.js",
