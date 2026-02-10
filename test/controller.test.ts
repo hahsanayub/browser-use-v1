@@ -971,6 +971,39 @@ describe('Controller Integration Tests', () => {
       expect(result.is_done).toBe(true);
       expect(result.extracted_content).toBe('Task completed successfully');
     });
+
+    it('structured done action preserves nested value objects', async () => {
+      const controller = new Controller({
+        output_model: z.object({
+          measurement: z.object({
+            value: z.number(),
+            unit: z.string(),
+          }),
+        }),
+      });
+
+      const result = await controller.registry.execute_action('done', {
+        success: true,
+        data: {
+          measurement: {
+            value: 42,
+            unit: 'kg',
+          },
+        },
+      });
+
+      expect(result.is_done).toBe(true);
+      expect(result.success).toBe(true);
+      expect(result.extracted_content).toBe(
+        '{"measurement":{"value":42,"unit":"kg"}}'
+      );
+      expect(JSON.parse(result.extracted_content ?? '{}')).toEqual({
+        measurement: {
+          value: 42,
+          unit: 'kg',
+        },
+      });
+    });
   });
 });
 

@@ -3460,19 +3460,12 @@ Context: ${context}`;
         'Complete task - with return text and success flag.',
         { param_model: structuredSchema }
       )(async function done(params: StructuredParams) {
-        const data =
+        const payload =
           params.data &&
           typeof params.data === 'object' &&
           !Array.isArray(params.data)
             ? (params.data as Record<string, unknown>)
             : {};
-        const payload: Record<string, unknown> = { ...data };
-        for (const key of Object.keys(payload)) {
-          const value = payload[key];
-          if (value && typeof value === 'object' && 'value' in value) {
-            payload[key] = (value as any).value;
-          }
-        }
         return new ActionResult({
           is_done: true,
           success: params.success,
