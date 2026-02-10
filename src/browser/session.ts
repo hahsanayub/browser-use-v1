@@ -951,7 +951,13 @@ export class BrowserSession {
   }
 
   private _determineOwnership() {
-    if (this.cdp_url || this.wss_url || this.browser || this.browser_context) {
+    if (
+      this.cdp_url ||
+      this.wss_url ||
+      this.browser ||
+      this.browser_context ||
+      this.browser_pid
+    ) {
       return false;
     }
     return true;

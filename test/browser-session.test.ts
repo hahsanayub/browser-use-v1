@@ -103,6 +103,15 @@ describe('BrowserSession Basic Operations', () => {
     expect(copied).not.toBe(session);
   });
 
+  it('treats sessions initialized with browser_pid as non-owning', () => {
+    const session = new BrowserSession({
+      browser_profile: new BrowserProfile({}),
+      browser_pid: 12345,
+    });
+
+    expect(session._owns_browser_resources).toBe(false);
+  });
+
   it('enforces single-agent attachment claims', () => {
     const session = new BrowserSession({
       browser_profile: new BrowserProfile({}),
