@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { BrowserSession } from '../src/browser/session.js';
 import {
   BrowserLaunchEvent,
+  BrowserStateRequestEvent,
   BrowserStoppedEvent,
   DownloadStartedEvent,
   FileDownloadedEvent,
+  NavigationCompleteEvent,
 } from '../src/browser/events.js';
 import { DownloadsWatchdog } from '../src/browser/watchdogs/downloads-watchdog.js';
 
@@ -90,5 +92,31 @@ describe('downloads watchdog alignment', () => {
     await session.event_bus.dispatch_or_throw(new BrowserStoppedEvent());
 
     expect(watchdog.get_active_downloads()).toHaveLength(0);
+  });
+
+  it('bridges BrowserStateRequestEvent to NavigationCompleteEvent for active tab', async () => {
+    const session = new BrowserSession();
+    const watchdog = new DownloadsWatchdog({ browser_session: session });
+    session.attach_watchdog(watchdog);
+
+    const navigationEvents: NavigationCompleteEvent[] = [];
+    session.event_bus.on(
+      'NavigationCompleteEvent',
+      (event) => {
+        navigationEvents.push(event as NavigationCompleteEvent);
+      },
+      { handler_id: 'test.downloads.state.nav-complete' }
+    );
+
+    const stateEvent = new BrowserStateRequestEvent({
+      include_screenshot: false,
+      include_recent_events: false,
+    });
+    await session.event_bus.dispatch_or_throw(stateEvent);
+
+    expect(navigationEvents).toHaveLength(1);
+    expect(navigationEvents[0].target_id).toBe(session.active_tab?.target_id);
+    expect(navigationEvents[0].url).toBe(session.active_tab?.url);
+    expect(navigationEvents[0].event_parent_id).toBe(stateEvent.event_id);
   });
 });

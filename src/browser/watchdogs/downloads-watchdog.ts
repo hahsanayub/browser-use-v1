@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import {
   BrowserLaunchEvent,
+  BrowserStateRequestEvent,
   BrowserStoppedEvent,
   DownloadStartedEvent,
   FileDownloadedEvent,
@@ -13,6 +14,7 @@ import { BaseWatchdog } from './base.js';
 export class DownloadsWatchdog extends BaseWatchdog {
   static override LISTENS_TO = [
     BrowserLaunchEvent,
+    BrowserStateRequestEvent,
     BrowserStoppedEvent,
     TabCreatedEvent,
     TabClosedEvent,
@@ -32,6 +34,24 @@ export class DownloadsWatchdog extends BaseWatchdog {
       return;
     }
     fs.mkdirSync(downloadsPath, { recursive: true });
+  }
+
+  async on_BrowserStateRequestEvent(event: BrowserStateRequestEvent) {
+    const activeTab = this.browser_session.active_tab;
+    if (!activeTab?.target_id || !activeTab.url) {
+      return;
+    }
+
+    await this.event_bus.dispatch(
+      new NavigationCompleteEvent({
+        target_id: activeTab.target_id,
+        url: activeTab.url,
+        status: null,
+        error_message: null,
+        loading_status: null,
+        event_parent_id: event.event_id,
+      })
+    );
   }
 
   on_BrowserStoppedEvent() {
