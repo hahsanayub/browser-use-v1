@@ -35,6 +35,7 @@ import {
   showSpinner,
   withDVDScreensaver,
 } from './dvd-screensaver.js';
+import { SessionManager } from './session-manager.js';
 import type { BaseWatchdog } from './watchdogs/base.js';
 
 const execAsync = promisify(exec);
@@ -95,6 +96,7 @@ export class BrowserSession {
   readonly id: string;
   readonly browser_profile: BrowserProfile;
   readonly event_bus: EventBus;
+  readonly session_manager: SessionManager;
   browser: Browser | null;
   browser_context: BrowserContext | null;
   agent_current_page: Page | null;
@@ -142,6 +144,7 @@ export class BrowserSession {
     this.browser_profile = new BrowserProfile(sourceProfileConfig);
     this.id = init.id ?? uuid7str();
     this.event_bus = new EventBus(`BrowserSession_${this.id.slice(-4)}`);
+    this.session_manager = new SessionManager();
     this.browser = init.browser ?? null;
     this.browser_context = init.browser_context ?? null;
     this.agent_current_page = init.page ?? null;
@@ -172,6 +175,7 @@ export class BrowserSession {
     this.historyStack.push(this.currentUrl);
     this.ownsBrowserResources = this._determineOwnership();
     this.tabPages.set(this._tabs[0].page_id, this.agent_current_page ?? null);
+    this._syncSessionManagerFromTabs();
     this._attachDialogHandler(this.agent_current_page);
     this._recordRecentEvent('session_initialized', { url: this.currentUrl });
   }
@@ -228,10 +232,23 @@ export class BrowserSession {
     return {
       page_id,
       tab_id: this._formatTabId(page_id),
+      target_id: this._buildSyntheticTargetId(page_id),
       url,
       title,
       parent_page_id,
     };
+  }
+
+  private _buildSyntheticTargetId(pageId: number) {
+    return `tab_${this.id.slice(-4)}_${this._formatTabId(pageId)}`;
+  }
+
+  private _syncSessionManagerFromTabs() {
+    this.session_manager.sync_tabs(
+      this._tabs,
+      this.currentTabIndex,
+      (page_id) => this._buildSyntheticTargetId(page_id)
+    );
   }
 
   private async _waitForStableNetwork(
@@ -453,6 +470,7 @@ export class BrowserSession {
     const currentTab = this._tabs[this.currentTabIndex];
     if (currentTab) {
       this.tabPages.set(currentTab.page_id, page ?? null);
+      this.session_manager.set_focused_target(currentTab.target_id ?? null);
     }
     this._attachDialogHandler(page);
     this.agent_current_page = page ?? null;
@@ -1318,6 +1336,7 @@ export class BrowserSession {
     this.playwright = null;
     this.cachedBrowserState = null;
     this._tabs = [];
+    this.session_manager.clear();
     this.downloaded_files = [];
     this._closedPopupMessages = [];
     this._dialogHandlersAttached = new WeakSet<Page>();
@@ -1562,6 +1581,7 @@ export class BrowserSession {
       tab.url = this.currentUrl;
       tab.title = this.currentTitle || this.currentUrl;
     }
+    this._syncSessionManagerFromTabs();
     return this._tabs.slice();
   }
 
@@ -1602,6 +1622,7 @@ export class BrowserSession {
       this._tabs[this.currentTabIndex].url = normalized;
       this._tabs[this.currentTabIndex].title = normalized;
     }
+    this._syncSessionManagerFromTabs();
     this._setActivePage(page ?? null);
     this._recordRecentEvent('navigation_completed', { url: normalized });
     this.cachedBrowserState = null;
@@ -1660,6 +1681,7 @@ export class BrowserSession {
       );
     }
     this.tabPages.set(newTab.page_id, page);
+    this._syncSessionManagerFromTabs();
     this._setActivePage(page);
     this.currentPageLoadingStatus = null;
     if (!this.human_current_page) {
@@ -1724,6 +1746,7 @@ export class BrowserSession {
     this.currentTabIndex = index;
     this.currentUrl = tab.url;
     this.currentTitle = tab.title;
+    this._syncSessionManagerFromTabs();
     const page = this.tabPages.get(tab.page_id) ?? null;
     this._setActivePage(page);
     if (page?.bringToFront) {
@@ -1773,6 +1796,7 @@ export class BrowserSession {
     if (this.currentTabIndex >= this._tabs.length) {
       this.currentTabIndex = Math.max(0, this._tabs.length - 1);
     }
+    this._syncSessionManagerFromTabs();
     const tab = this._tabs[this.currentTabIndex] ?? null;
     const current = tab ? (this.tabPages.get(tab.page_id) ?? null) : null;
     this._setActivePage(current);
