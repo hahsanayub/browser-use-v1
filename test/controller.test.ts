@@ -169,6 +169,73 @@ describe('Controller Registry Tests', () => {
         "Cannot specify both 'domains' and 'allowed_domains' - they are aliases for the same parameter"
       );
     });
+
+    it('supports python-compatible simple signatures with special param injection', async () => {
+      const registry = new Registry();
+
+      registry.action('Simple signature action')(async function search_simple(
+        query: string,
+        browser_session: any,
+        page_url: string | null
+      ) {
+        return new ActionResult({
+          extracted_content: `${query}|${Boolean(browser_session)}|${page_url}`,
+        });
+      });
+
+      const browserSession = {
+        agent_current_page: {
+          url: vi.fn(() => 'https://example.com'),
+        },
+      };
+
+      const result = await registry.execute_action(
+        'search_simple',
+        { query: 'browser-use' },
+        { browser_session: browserSession as any }
+      );
+      expect(result.extracted_content).toBe(
+        'browser-use|true|https://example.com'
+      );
+
+      await expect(
+        registry.execute_action('search_simple', {}, {
+          browser_session: browserSession as any,
+        })
+      ).rejects.toThrow("search_simple() missing required parameter 'query'");
+    });
+
+    it('supports defaulted parameters for python-compatible simple signatures', async () => {
+      const registry = new Registry();
+
+      registry.action('Simple signature defaults')(async function greet(
+        name = 'world'
+      ) {
+        return new ActionResult({
+          extracted_content: `hello ${name}`,
+        });
+      });
+
+      const result = await registry.execute_action('greet', {});
+      expect(result.extracted_content).toBe('hello world');
+    });
+
+    it('raises clear error when required special params are missing in simple signatures', async () => {
+      const registry = new Registry();
+
+      registry.action('Needs browser session')(async function needs_browser(
+        query: string,
+        browser_session: any
+      ) {
+        return new ActionResult({
+          extracted_content: `${query}:${Boolean(browser_session)}`,
+        });
+      });
+
+      await expect(
+        registry.execute_action('needs_browser', { query: 'demo' })
+      ).rejects.toThrow('requires browser_session but none provided');
+    });
   });
 
   describe('Action Schemas', () => {

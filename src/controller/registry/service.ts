@@ -22,6 +22,10 @@ export interface SensitiveDataMap {
 export interface ExecuteActionContext<Context> {
   context?: Context;
   browser_session?: BrowserSession | null;
+  browser?: BrowserSession | null;
+  browser_context?: BrowserSession | null;
+  page_url?: string | null;
+  cdp_client?: unknown;
   page_extraction_llm?: BaseChatModel | null;
   extraction_schema?: Record<string, unknown> | null;
   file_system?: FileSystem | null;
@@ -46,6 +50,153 @@ export interface ActionOptions {
   page_filter?: ((page: Page) => boolean) | null;
   terminates_sequence?: boolean;
 }
+
+const SPECIAL_PARAM_NAMES = new Set([
+  'context',
+  'browser_session',
+  'browser',
+  'browser_context',
+  'page',
+  'page_url',
+  'cdp_client',
+  'page_extraction_llm',
+  'available_file_paths',
+  'has_sensitive_data',
+  'file_system',
+  'extraction_schema',
+  'sensitive_data',
+  'signal',
+]);
+
+interface ParsedFunctionParam {
+  name: string;
+  hasDefault: boolean;
+}
+
+const splitTopLevelParameters = (paramsSource: string): string[] => {
+  const segments: string[] = [];
+  let current = '';
+  let depthParen = 0;
+  let depthBrace = 0;
+  let depthBracket = 0;
+  let quote: '\'' | '"' | '`' | null = null;
+  let escaped = false;
+
+  const flush = () => {
+    const trimmed = current.trim();
+    if (trimmed) {
+      segments.push(trimmed);
+    }
+    current = '';
+  };
+
+  for (const char of paramsSource) {
+    if (escaped) {
+      current += char;
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      current += char;
+      escaped = true;
+      continue;
+    }
+
+    if (quote) {
+      current += char;
+      if (char === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (char === '\'' || char === '"' || char === '`') {
+      current += char;
+      quote = char;
+      continue;
+    }
+
+    if (char === '(') depthParen += 1;
+    else if (char === ')') depthParen -= 1;
+    else if (char === '{') depthBrace += 1;
+    else if (char === '}') depthBrace -= 1;
+    else if (char === '[') depthBracket += 1;
+    else if (char === ']') depthBracket -= 1;
+
+    if (
+      char === ',' &&
+      depthParen === 0 &&
+      depthBrace === 0 &&
+      depthBracket === 0
+    ) {
+      flush();
+      continue;
+    }
+    current += char;
+  }
+
+  flush();
+  return segments;
+};
+
+const extractFunctionParameters = (
+  fn: (...args: any[]) => unknown
+): ParsedFunctionParam[] | null => {
+  const source = fn.toString().trim();
+  if (!source) {
+    return null;
+  }
+
+  let paramsSource = '';
+  const arrowIndex = source.indexOf('=>');
+  if (arrowIndex !== -1) {
+    let lhs = source.slice(0, arrowIndex).trim();
+    if (lhs.startsWith('async ')) {
+      lhs = lhs.slice('async '.length).trim();
+    }
+    if (lhs.startsWith('(') && lhs.endsWith(')')) {
+      paramsSource = lhs.slice(1, -1);
+    } else {
+      paramsSource = lhs;
+    }
+  } else {
+    const openIndex = source.indexOf('(');
+    const closeIndex = source.indexOf(')', openIndex + 1);
+    if (openIndex === -1 || closeIndex === -1) {
+      return null;
+    }
+    paramsSource = source.slice(openIndex + 1, closeIndex);
+  }
+
+  const tokens = splitTopLevelParameters(paramsSource);
+  if (!tokens.length) {
+    return [];
+  }
+
+  const parsed: ParsedFunctionParam[] = [];
+  for (const token of tokens) {
+    if (
+      token.includes('{') ||
+      token.includes('}') ||
+      token.includes('[') ||
+      token.includes(']') ||
+      token.startsWith('...')
+    ) {
+      return null;
+    }
+    const eqIndex = token.indexOf('=');
+    const name = (eqIndex === -1 ? token : token.slice(0, eqIndex)).trim();
+    if (!name) {
+      return null;
+    }
+    parsed.push({
+      name,
+      hasDefault: eqIndex !== -1,
+    });
+  }
+
+  return parsed;
+};
 
 const isAbortError = (error: unknown): boolean =>
   error instanceof Error && error.name === 'AbortError';
@@ -142,7 +293,7 @@ export class Registry<Context = unknown> {
         "Cannot specify both 'domains' and 'allowed_domains' - they are aliases for the same parameter"
       );
     }
-    const schema = options.param_model ?? z.object({}).strict();
+    let schema = options.param_model ?? z.object({}).strict();
     const actionNameOverride = options.action_name ?? null;
     const domains = options.allowed_domains ?? options.domains ?? null;
     const pageFilter = options.page_filter ?? null;
@@ -154,17 +305,77 @@ export class Registry<Context = unknown> {
         return handler;
       }
 
+      let normalizedHandler: RegistryActionHandler<Params, Context> = handler;
+      if (!options.param_model) {
+        const parsedParams = extractFunctionParameters(handler as any);
+        const supportsCompatSignature = Boolean(
+          parsedParams &&
+            parsedParams.length > 0 &&
+            !(
+              parsedParams.length <= 2 &&
+              parsedParams[0]?.name === 'params'
+            )
+        );
+
+        if (supportsCompatSignature && parsedParams) {
+          const actionParams = parsedParams.filter(
+            (entry) => !SPECIAL_PARAM_NAMES.has(entry.name)
+          );
+
+          const shape = Object.fromEntries(
+            actionParams.map((entry) => [
+              entry.name,
+              entry.hasDefault ? z.any().optional() : z.any(),
+            ])
+          );
+          schema = z.object(shape).strict();
+
+          normalizedHandler = ((
+            params: Record<string, unknown>,
+            ctx: ExecuteActionContext<Context> & {
+              page?: Page | null;
+              has_sensitive_data?: boolean;
+            }
+          ) => {
+            const args = parsedParams.map((entry) => {
+              if (SPECIAL_PARAM_NAMES.has(entry.name)) {
+                const value = (ctx as Record<string, unknown>)[entry.name];
+                if (
+                  (value === null || value === undefined) &&
+                  !entry.hasDefault
+                ) {
+                  throw new Error(
+                    `Action ${actionName} requires ${entry.name} but none provided.`
+                  );
+                }
+                return value;
+              }
+
+              const value = (params as Record<string, unknown>)[entry.name];
+              if (value === undefined && !entry.hasDefault) {
+                throw new Error(
+                  `${actionName}() missing required parameter '${entry.name}'`
+                );
+              }
+              return value;
+            });
+
+            return (handler as (...args: unknown[]) => unknown)(...args);
+          }) as RegistryActionHandler<Params, Context>;
+        }
+      }
+
       const action = new RegisteredAction(
         actionName,
         description,
-        handler,
+        normalizedHandler,
         schema,
         domains,
         pageFilter,
         terminatesSequence
       );
       this.registry.register(action);
-      return handler;
+      return normalizedHandler as any;
     };
   }
 
@@ -246,6 +457,8 @@ export class Registry<Context = unknown> {
           browser: browser_session,
           browser_context: browser_session,
           page,
+          page_url: currentUrl,
+          cdp_client: (browser_session as any)?.cdp_client ?? null,
           page_extraction_llm,
           extraction_schema,
           file_system,
