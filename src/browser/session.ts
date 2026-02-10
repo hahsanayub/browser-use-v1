@@ -27,6 +27,7 @@ import {
   BrowserError,
   URLNotAllowedError,
 } from './views.js';
+import { DownloadStartedEvent, FileDownloadedEvent } from './events.js';
 import { DOMElementNode, DOMState, type SelectorMap } from '../dom/views.js';
 import { normalize_url } from './utils.js';
 import { DomService } from '../dom/service.js';
@@ -38,6 +39,7 @@ import {
 import { SessionManager } from './session-manager.js';
 import { DefaultActionWatchdog } from './watchdogs/default-action-watchdog.js';
 import { DOMWatchdog } from './watchdogs/dom-watchdog.js';
+import { DownloadsWatchdog } from './watchdogs/downloads-watchdog.js';
 import type { BaseWatchdog } from './watchdogs/base.js';
 
 const execAsync = promisify(exec);
@@ -222,6 +224,7 @@ export class BrowserSession {
     }
     this.attach_watchdogs([
       new DOMWatchdog({ browser_session: this }),
+      new DownloadsWatchdog({ browser_session: this }),
       new DefaultActionWatchdog({ browser_session: this }),
     ]);
     this._defaultWatchdogsAttached = true;
@@ -2135,10 +2138,23 @@ export class BrowserSession {
       await performClick();
       try {
         const download = await this._withAbort(downloadPromise, signal);
+        const downloadGuid = uuid7str();
         const suggested =
           typeof download.suggestedFilename === 'function'
             ? download.suggestedFilename()
             : 'download';
+        const downloadUrl =
+          typeof download.url === 'function'
+            ? download.url()
+            : (this.currentUrl ?? '');
+        await this.event_bus.dispatch(
+          new DownloadStartedEvent({
+            guid: downloadGuid,
+            url: downloadUrl,
+            suggested_filename: suggested,
+            auto_download: false,
+          })
+        );
         const uniqueFilename = await BrowserSession.get_unique_filename(
           downloadsDir,
           suggested
@@ -2147,7 +2163,24 @@ export class BrowserSession {
         if (typeof download.saveAs === 'function') {
           await download.saveAs(downloadPath);
         }
-        this.add_downloaded_file(downloadPath);
+        const stats = fs.existsSync(downloadPath)
+          ? fs.statSync(downloadPath)
+          : null;
+        const fileDownloadedResult = await this.event_bus.dispatch(
+          new FileDownloadedEvent({
+            guid: downloadGuid,
+            url: downloadUrl,
+            path: downloadPath,
+            file_name: uniqueFilename,
+            file_size: stats?.size ?? 0,
+            file_type: path.extname(uniqueFilename).replace('.', '') || null,
+            mime_type: null,
+            auto_download: false,
+          })
+        );
+        if (fileDownloadedResult.handler_results.length === 0) {
+          this.add_downloaded_file(downloadPath);
+        }
         return downloadPath;
       } catch (error) {
         if (this._isAbortError(error)) {
