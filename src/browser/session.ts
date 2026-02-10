@@ -37,6 +37,7 @@ import {
   BrowserStartEvent,
   BrowserStoppedEvent,
   BrowserStopEvent,
+  DialogOpenedEvent,
   DownloadStartedEvent,
   FileDownloadedEvent,
 } from './events.js';
@@ -617,6 +618,20 @@ export class BrowserSession {
           typeof dialog?.type === 'function' ? dialog.type() : 'alert';
         const message =
           typeof dialog?.message === 'function' ? dialog.message() : '';
+        try {
+          await this.event_bus.dispatch(
+            new DialogOpenedEvent({
+              dialog_type: dialogType,
+              message: String(message ?? ''),
+              url: this.currentUrl ?? 'about:blank',
+              frame_id: null,
+            })
+          );
+        } catch (error) {
+          this.logger.debug(
+            `Failed to dispatch DialogOpenedEvent: ${(error as Error).message}`
+          );
+        }
         this._captureClosedPopupMessage(dialogType, message);
         this._recordRecentEvent('javascript_dialog_closed', {
           url: this.currentUrl,
