@@ -1,8 +1,13 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { BrowserSession } from '../src/browser/session.js';
 import {
   BrowserStateRequestEvent,
+  ClickElementEvent,
   ClickCoordinateEvent,
+  FileDownloadedEvent,
   GetDropdownOptionsEvent,
   NavigateToUrlEvent,
   ScrollEvent,
@@ -12,7 +17,7 @@ import {
   SwitchTabEvent,
   WaitEvent,
 } from '../src/browser/events.js';
-import { DOMElementNode } from '../src/dom/views.js';
+import { DOMElementNode, DOMTextNode } from '../src/dom/views.js';
 import { AboutBlankWatchdog } from '../src/browser/watchdogs/aboutblank-watchdog.js';
 import { DefaultActionWatchdog } from '../src/browser/watchdogs/default-action-watchdog.js';
 import { CDPSessionWatchdog } from '../src/browser/watchdogs/cdp-session-watchdog.js';
@@ -343,5 +348,133 @@ describe('default action watchdog alignment', () => {
     );
 
     expect(selectSpy).toHaveBeenCalledWith(node, 'One');
+  });
+
+  it('returns validation_error when click target is a file input', async () => {
+    const session = new BrowserSession();
+    const watchdog = new DefaultActionWatchdog({ browser_session: session });
+    session.attach_watchdog(watchdog);
+
+    const node = new DOMElementNode(
+      true,
+      null,
+      'input',
+      '/html/body/input[1]',
+      { type: 'file' },
+      []
+    );
+    const result = await session.event_bus.dispatch_or_throw(
+      new ClickElementEvent({ node })
+    );
+
+    expect(result.event.event_result).toEqual({
+      validation_error:
+        'The target element is a file input. Use upload_file action instead of click.',
+    });
+  });
+
+  it('materializes print-button clicks to PDF via CDP and dispatches FileDownloadedEvent', async () => {
+    const downloadsDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'browser-use-default-action-print-')
+    );
+    try {
+      const session = new BrowserSession({
+        profile: {
+          downloads_path: downloadsDir,
+        },
+      });
+      const watchdog = new DefaultActionWatchdog({ browser_session: session });
+      session.attach_watchdog(watchdog);
+
+      const page = {
+        title: vi.fn(async () => 'Quarterly Report'),
+        url: vi.fn(() => 'https://example.com/print'),
+      } as any;
+      const cdpSend = vi.fn(async (method: string) => {
+        if (method === 'Page.printToPDF') {
+          return {
+            data: Buffer.from('%PDF-1.4 test').toString('base64'),
+          };
+        }
+        return {};
+      });
+      vi.spyOn(session, 'get_current_page').mockResolvedValue(page);
+      vi.spyOn(session, 'get_or_create_cdp_session').mockResolvedValue({
+        send: cdpSend,
+      } as any);
+
+      const fileEvents: FileDownloadedEvent[] = [];
+      session.event_bus.on(
+        'FileDownloadedEvent',
+        (event) => {
+          fileEvents.push(event as FileDownloadedEvent);
+        },
+        { handler_id: 'test.default-action.print.downloaded' }
+      );
+
+      const node = new DOMElementNode(
+        true,
+        null,
+        'button',
+        '/html/body/button[1]',
+        {},
+        []
+      );
+      node.children = [new DOMTextNode(true, node, 'Print report')];
+
+      const result = await session.event_bus.dispatch_or_throw(
+        new ClickElementEvent({ node })
+      );
+      const outputPath = result.event.event_result as string;
+
+      expect(cdpSend).toHaveBeenCalledWith('Page.printToPDF', {
+        printBackground: true,
+        preferCSSPageSize: true,
+      });
+      expect(typeof outputPath).toBe('string');
+      expect(outputPath.endsWith('.pdf')).toBe(true);
+      expect(fs.existsSync(outputPath)).toBe(true);
+      expect(fileEvents).toHaveLength(1);
+      expect(fileEvents[0].path).toBe(outputPath);
+      expect(fileEvents[0].mime_type).toBe('application/pdf');
+    } finally {
+      fs.rmSync(downloadsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to normal click when print-to-pdf fails', async () => {
+    const session = new BrowserSession();
+    const watchdog = new DefaultActionWatchdog({ browser_session: session });
+    session.attach_watchdog(watchdog);
+
+    vi.spyOn(session, 'get_current_page').mockResolvedValue({
+      title: vi.fn(async () => 'Print fallback'),
+      url: vi.fn(() => 'https://example.com/fallback'),
+    } as any);
+    vi.spyOn(session, 'get_or_create_cdp_session').mockResolvedValue({
+      send: vi.fn(async () => {
+        throw new Error('print unavailable');
+      }),
+    } as any);
+    const clickSpy = vi
+      .spyOn(session, '_click_element_node')
+      .mockResolvedValue(null);
+
+    const node = new DOMElementNode(
+      true,
+      null,
+      'button',
+      '/html/body/button[1]',
+      {
+        onclick: 'window.print()',
+      },
+      []
+    );
+    const result = await session.event_bus.dispatch_or_throw(
+      new ClickElementEvent({ node })
+    );
+
+    expect(clickSpy).toHaveBeenCalledWith(node);
+    expect(result.event.event_result).toBeNull();
   });
 });

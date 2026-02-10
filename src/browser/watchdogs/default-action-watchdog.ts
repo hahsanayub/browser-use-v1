@@ -1,7 +1,11 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   ClickCoordinateEvent,
   ClickElementEvent,
   CloseTabEvent,
+  FileDownloadedEvent,
   GetDropdownOptionsEvent,
   GoBackEvent,
   GoForwardEvent,
@@ -118,6 +122,20 @@ export class DefaultActionWatchdog extends BaseWatchdog {
   }
 
   async on_ClickElementEvent(event: ClickElementEvent) {
+    if (this.browser_session.is_file_input(event.node as any)) {
+      return {
+        validation_error:
+          'The target element is a file input. Use upload_file action instead of click.',
+      };
+    }
+
+    if (this._isPrintRelatedElement(event.node)) {
+      const pdfPath = await this._handlePrintButtonClick();
+      if (pdfPath) {
+        return pdfPath;
+      }
+    }
+
     return this.browser_session._click_element_node(event.node);
   }
 
@@ -155,5 +173,116 @@ export class DefaultActionWatchdog extends BaseWatchdog {
 
   async on_SelectDropdownOptionEvent(event: SelectDropdownOptionEvent) {
     return this.browser_session.select_dropdown_option(event.node, event.text);
+  }
+
+  private _isPrintRelatedElement(node: unknown) {
+    if (!node || typeof node !== 'object') {
+      return false;
+    }
+
+    const attributes =
+      'attributes' in (node as any) && (node as any).attributes
+        ? ((node as any).attributes as Record<string, string>)
+        : {};
+    const onclick = String(attributes.onclick ?? '').toLowerCase();
+    if (onclick.includes('print')) {
+      return true;
+    }
+
+    const textMethods: Array<unknown> = [
+      (node as any).get_all_text_till_next_clickable_element,
+      (node as any).get_all_children_text,
+    ];
+    for (const textMethod of textMethods) {
+      if (typeof textMethod !== 'function') {
+        continue;
+      }
+      try {
+        const text = String(textMethod.call(node, 2) ?? '').toLowerCase();
+        if (text.includes('print')) {
+          return true;
+        }
+      } catch {
+        // Ignore text extraction failures.
+      }
+    }
+
+    return false;
+  }
+
+  private async _handlePrintButtonClick() {
+    const page = await this.browser_session.get_current_page();
+    if (!page) {
+      return null;
+    }
+
+    try {
+      const cdpSession = await this.browser_session.get_or_create_cdp_session(
+        page
+      );
+      const result = await cdpSession.send?.('Page.printToPDF', {
+        printBackground: true,
+        preferCSSPageSize: true,
+      });
+      const pdfBase64 =
+        result && typeof result.data === 'string' ? result.data : null;
+      if (!pdfBase64) {
+        return null;
+      }
+
+      const downloadsPath =
+        this.browser_session.browser_profile.downloads_path || os.tmpdir();
+      fs.mkdirSync(downloadsPath, { recursive: true });
+
+      const title =
+        typeof page.title === 'function' ? await page.title() : 'document';
+      const suggestedName = this._sanitizeFilename(`${title || 'document'}.pdf`);
+      const uniqueFilename = await this._getUniqueFilename(
+        downloadsPath,
+        suggestedName
+      );
+      const finalPath = path.join(downloadsPath, uniqueFilename);
+      const content = Buffer.from(pdfBase64, 'base64');
+      fs.writeFileSync(finalPath, content);
+
+      await this.event_bus.dispatch(
+        new FileDownloadedEvent({
+          guid: null,
+          url: typeof page.url === 'function' ? page.url() : '',
+          path: finalPath,
+          file_name: uniqueFilename,
+          file_size: content.length,
+          file_type: 'pdf',
+          mime_type: 'application/pdf',
+          auto_download: false,
+        })
+      );
+
+      return finalPath;
+    } catch (error) {
+      this.browser_session.logger.debug(
+        `[DefaultActionWatchdog] Print-to-PDF failed: ${(error as Error).message}`
+      );
+      return null;
+    }
+  }
+
+  private async _getUniqueFilename(directory: string, filename: string) {
+    const parsed = path.parse(filename);
+    let candidate = filename;
+    let counter = 1;
+    while (fs.existsSync(path.join(directory, candidate))) {
+      candidate = `${parsed.name} (${counter})${parsed.ext}`;
+      counter += 1;
+    }
+    return candidate;
+  }
+
+  private _sanitizeFilename(filename: string) {
+    const sanitized = filename
+      .replace(/[\\/:*?"<>|]+/g, '_')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return sanitized || 'document.pdf';
   }
 }
