@@ -54,11 +54,39 @@ describe('local browser watchdog alignment', () => {
     const watchdog = new LocalBrowserWatchdog({ browser_session: session });
     session.attach_watchdog(watchdog);
 
+    const killEvents: BrowserKillEvent[] = [];
+    session.event_bus.on(
+      'BrowserKillEvent',
+      (event) => {
+        killEvents.push(event as BrowserKillEvent);
+      },
+      { handler_id: 'test.local-watchdog.stop.kill-event' }
+    );
+
     const killSpy = vi.spyOn(session, 'kill').mockResolvedValue();
 
     await session.event_bus.dispatch_or_throw(new BrowserStopEvent());
     await new Promise((resolve) => setTimeout(resolve, 0));
 
+    expect(killEvents).toHaveLength(1);
     expect(killSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not re-enter kill when BrowserStopEvent is emitted during stop()', async () => {
+    const session = new BrowserSession();
+    const watchdog = new LocalBrowserWatchdog({ browser_session: session });
+    session.attach_watchdog(watchdog);
+    (session as any).initialized = true;
+
+    vi.spyOn(session as any, '_shutdown_browser_session').mockImplementation(
+      async () => {
+        (session as any).initialized = false;
+      }
+    );
+    const killSpy = vi.spyOn(session, 'kill').mockResolvedValue();
+
+    await session.stop();
+
+    expect(killSpy).toHaveBeenCalledTimes(0);
   });
 });

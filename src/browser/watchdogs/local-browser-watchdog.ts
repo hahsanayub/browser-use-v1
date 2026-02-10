@@ -23,6 +23,9 @@ export class LocalBrowserWatchdog extends BaseWatchdog {
   }
 
   async on_BrowserKillEvent() {
+    if (this.browser_session.is_stopping) {
+      return;
+    }
     await this.browser_session.kill();
   }
 

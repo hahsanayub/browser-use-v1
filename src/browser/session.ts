@@ -840,6 +840,10 @@ export class BrowserSession {
     return this.ownsBrowserResources;
   }
 
+  get is_stopping(): boolean {
+    return this._stoppingPromise !== null;
+  }
+
   claim_agent(
     agentId: string,
     mode: 'exclusive' | 'shared' = 'exclusive'
