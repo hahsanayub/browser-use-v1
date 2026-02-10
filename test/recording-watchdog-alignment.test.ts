@@ -217,4 +217,68 @@ describe('recording watchdog alignment', () => {
 
     expect(page.off).toHaveBeenCalledWith('close', closeListeners[0]);
   });
+
+  it('captures CDP screencast frames to artifact file and tracks it on stop', async () => {
+    const tmpRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'browser-use-recording-cdp-')
+    );
+    try {
+      const session = new BrowserSession({
+        profile: {
+          record_video_dir: path.join(tmpRoot, 'videos'),
+        },
+      });
+      const page = {
+        on: vi.fn(),
+        off: vi.fn(),
+        url: vi.fn(() => 'https://example.com/record'),
+      } as any;
+      session.browser_context = {
+        pages: vi.fn(() => [page]),
+      } as any;
+      session.agent_current_page = page;
+
+      const cdpListeners = new Map<string, (payload: any) => void>();
+      const cdpSend = vi.fn(async () => ({}));
+      vi.spyOn(session, 'get_or_create_cdp_session').mockResolvedValue({
+        send: cdpSend,
+        on: (event: string, listener: (payload: any) => void) => {
+          cdpListeners.set(event, listener);
+        },
+        off: (event: string) => {
+          cdpListeners.delete(event);
+        },
+      } as any);
+
+      const watchdog = new RecordingWatchdog({ browser_session: session });
+      session.attach_watchdog(watchdog);
+
+      await session.event_bus.dispatch_or_throw(
+        new BrowserConnectedEvent({
+          cdp_url: 'http://127.0.0.1:9222',
+        })
+      );
+      expect(cdpSend).toHaveBeenCalledWith('Page.startScreencast', {
+        format: 'jpeg',
+        quality: 85,
+        everyNthFrame: 1,
+      });
+
+      cdpListeners.get('Page.screencastFrame')?.({
+        data: Buffer.from('frame').toString('base64'),
+        sessionId: 1,
+      });
+
+      await session.event_bus.dispatch_or_throw(new BrowserStopEvent());
+
+      expect(cdpSend).toHaveBeenCalledWith('Page.stopScreencast');
+      const artifacts = session
+        .get_downloaded_files()
+        .filter((entry) => entry.endsWith('.cdp-screencast.ndjson'));
+      expect(artifacts.length).toBeGreaterThan(0);
+      expect(fs.existsSync(artifacts[0])).toBe(true);
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
 });

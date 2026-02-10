@@ -5,6 +5,10 @@ export class ScreenshotWatchdog extends BaseWatchdog {
   static override LISTENS_TO = [ScreenshotEvent];
 
   async on_ScreenshotEvent(event: ScreenshotEvent) {
-    return this.browser_session.take_screenshot(event.full_page);
+    try {
+      return await this.browser_session.take_screenshot(event.full_page);
+    } finally {
+      await this.browser_session.remove_highlights();
+    }
   }
 }

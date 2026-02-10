@@ -12,12 +12,16 @@ describe('screenshot watchdog alignment', () => {
     const screenshotSpy = vi
       .spyOn(session, 'take_screenshot')
       .mockResolvedValue('base64-image-data');
+    const removeHighlightsSpy = vi
+      .spyOn(session, 'remove_highlights')
+      .mockResolvedValue();
 
     const result = await session.event_bus.dispatch_or_throw(
       new ScreenshotEvent({ full_page: true })
     );
 
     expect(screenshotSpy).toHaveBeenCalledWith(true);
+    expect(removeHighlightsSpy).toHaveBeenCalledTimes(1);
     expect(result.event.event_result).toBe('base64-image-data');
   });
 });
