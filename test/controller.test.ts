@@ -276,6 +276,25 @@ describe('Controller Registry Tests', () => {
         /^Action needs_browser requires browser_session but none provided\.$/
       );
     });
+
+    it('raises clear error when page_extraction_llm special param is missing in simple signatures', async () => {
+      const registry = new Registry();
+
+      registry.action('Needs extraction llm')(async function needs_extractor(
+        query: string,
+        page_extraction_llm: any
+      ) {
+        return new ActionResult({
+          extracted_content: `${query}:${Boolean(page_extraction_llm)}`,
+        });
+      });
+
+      await expect(
+        registry.execute_action('needs_extractor', { query: 'demo' })
+      ).rejects.toThrow(
+        /^Action needs_extractor requires page_extraction_llm but none provided\.$/
+      );
+    });
   });
 
   describe('Action Schemas', () => {
@@ -1242,6 +1261,13 @@ describe('Regression Coverage', () => {
         { browser_session: browserSession as any }
       )
     ).rejects.toThrow(/Invalid parameters .* for action click/);
+    await expect(
+      controller.registry.execute_action(
+        'click',
+        { coordinate_x: 42, coordinate_y: 84 },
+        { browser_session: browserSession as any }
+      )
+    ).rejects.toThrow(/coordinate_x/);
     expect(page.mouse.click).not.toHaveBeenCalled();
   });
 
