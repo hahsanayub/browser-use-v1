@@ -12,6 +12,7 @@ import {
   NavigateToUrlEvent,
   ScrollEvent,
   ScrollToTextEvent,
+  ScreenshotEvent,
   SelectDropdownOptionEvent,
   SendKeysEvent,
   SwitchTabEvent,
@@ -2900,7 +2901,15 @@ Context: ${context}`;
       throwIfAborted(signal);
 
       if (params.file_name) {
-        const screenshotB64 = await browser_session.take_screenshot?.(false);
+        const screenshotB64 = await dispatchBrowserEventIfAvailable<
+          string | null
+        >(
+          browser_session,
+          new ScreenshotEvent({
+            full_page: false,
+          }),
+          async () => (await browser_session.take_screenshot?.(false)) ?? null
+        );
         if (!screenshotB64) {
           return new ActionResult({
             error: 'Failed to capture screenshot.',

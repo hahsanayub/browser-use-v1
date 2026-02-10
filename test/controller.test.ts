@@ -100,6 +100,7 @@ import { SchemaOptimizer } from '../src/llm/schema.js';
 import { ActionResult } from '../src/agent/views.js';
 import {
   GetDropdownOptionsEvent,
+  ScreenshotEvent,
   ScrollToTextEvent,
   SelectDropdownOptionEvent,
 } from '../src/browser/events.js';
@@ -2380,6 +2381,51 @@ describe('Regression Coverage', () => {
       expect(result.error).toBeNull();
       expect(result.attachments).toHaveLength(1);
       expect(result.attachments?.[0]).toContain('capture.png');
+      expect(fs.existsSync(result.attachments?.[0] as string)).toBe(true);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('screenshot dispatches ScreenshotEvent when browser event bus is available', async () => {
+    const controller = new Controller();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-ss-'));
+    const dispatchSpy = vi.fn(
+      async (event: ScreenshotEvent) =>
+        ({
+          event: {
+            event_result: Buffer.from('fake_png_data').toString('base64'),
+            event_name: event.event_name,
+          },
+          handler_results: [{ handler_id: 'watchdog', result: null }],
+          errors: [],
+        }) as any
+    );
+    const browserSession = {
+      dispatch_browser_event: dispatchSpy,
+      take_screenshot: vi.fn(async () => null),
+    };
+    const fileSystem = {
+      get_dir: vi.fn(() => tempDir),
+    };
+
+    try {
+      const result = await controller.registry.execute_action(
+        'screenshot',
+        { file_name: 'capture-from-event.png' },
+        {
+          browser_session: browserSession as any,
+          file_system: fileSystem as any,
+        }
+      );
+
+      expect(dispatchSpy).toHaveBeenCalledTimes(1);
+      const dispatchedEvent = dispatchSpy.mock.calls[0]?.[0];
+      expect(dispatchedEvent).toBeInstanceOf(ScreenshotEvent);
+      expect(dispatchedEvent.full_page).toBe(false);
+      expect(browserSession.take_screenshot).not.toHaveBeenCalled();
+      expect(result.error).toBeNull();
+      expect(result.attachments?.[0]).toContain('capture-from-event.png');
       expect(fs.existsSync(result.attachments?.[0] as string)).toBe(true);
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
