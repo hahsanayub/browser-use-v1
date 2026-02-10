@@ -98,6 +98,7 @@ vi.mock('../src/agent/service.js', () => {
 });
 
 import { MCPServer } from '../src/mcp/server.js';
+import { BrowserStateRequestEvent } from '../src/browser/events.js';
 
 describe('MCPServer browser_click new_tab', () => {
   it('opens href targets in a new tab and reports tab index', async () => {
@@ -263,6 +264,62 @@ describe('MCPServer browser_get_state', () => {
       include_recent_events: true,
       cache_clickable_elements_hashes: true,
     });
+  });
+
+  it('dispatches BrowserStateRequestEvent when browser event bus is available', async () => {
+    const server = new MCPServer('test-mcp', '1.0.0');
+    const dispatchSpy = vi.fn(
+      async (event: BrowserStateRequestEvent) =>
+        ({
+          event: {
+            event_result: {
+              url: 'https://event.example',
+              title: 'From Event',
+              tabs: [],
+              page_info: null,
+              pixels_above: 0,
+              pixels_below: 0,
+              browser_errors: [],
+              loading_status: null,
+              recent_events: null,
+              pending_network_requests: [],
+              pagination_buttons: [],
+              closed_popup_messages: [],
+              screenshot: null,
+              element_tree: {
+                clickable_elements_to_string: () => '',
+              },
+              selector_map: {},
+            },
+            event_name: event.event_name,
+          },
+          handler_results: [{ handler_id: 'watchdog', result: null }],
+          errors: [],
+        }) as any
+    );
+    const getState = vi.fn(async () => {
+      throw new Error('fallback should not execute');
+    });
+    const browserSession = {
+      initialized: true,
+      start: vi.fn(),
+      dispatch_browser_event: dispatchSpy,
+      get_browser_state_with_recovery: getState,
+    };
+    (server as any).ensureBrowserSession = vi.fn(async () => browserSession);
+
+    const result = await (server as any).tools.browser_get_state.handler({
+      include_screenshot: false,
+      include_recent_events: true,
+    });
+
+    expect(dispatchSpy).toHaveBeenCalledTimes(1);
+    const dispatchedEvent = dispatchSpy.mock.calls[0]?.[0];
+    expect(dispatchedEvent).toBeInstanceOf(BrowserStateRequestEvent);
+    expect(dispatchedEvent.include_recent_events).toBe(true);
+    expect(getState).not.toHaveBeenCalled();
+    expect(result.url).toBe('https://event.example');
+    expect(result.title).toBe('From Event');
   });
 });
 

@@ -42,6 +42,7 @@ import type { Controller } from '../controller/service.js';
 import { Controller as DefaultController } from '../controller/service.js';
 import { Agent } from '../agent/service.js';
 import { BrowserSession } from '../browser/session.js';
+import { BrowserStateRequestEvent } from '../browser/events.js';
 import { BrowserProfile } from '../browser/profile.js';
 import { FileSystem } from '../filesystem/file-system.js';
 import type { BaseChatModel } from '../llm/base.js';
@@ -729,11 +730,29 @@ export class MCPServer {
         .default({ include_screenshot: false, include_recent_events: false }),
       async (args) => {
         const browserSession = await this.ensureBrowserSession();
-        const state = await browserSession.get_browser_state_with_recovery({
-          include_screenshot: Boolean(args?.include_screenshot),
-          include_recent_events: Boolean(args?.include_recent_events),
-          cache_clickable_elements_hashes: true,
-        });
+        let state: any = null;
+        if (
+          typeof (browserSession as any).dispatch_browser_event === 'function'
+        ) {
+          const dispatchResult = await (
+            browserSession as any
+          ).dispatch_browser_event(
+            new BrowserStateRequestEvent({
+              include_dom: true,
+              include_screenshot: Boolean(args?.include_screenshot),
+              include_recent_events: Boolean(args?.include_recent_events),
+            })
+          );
+          state = dispatchResult?.event?.event_result ?? null;
+        }
+
+        if (!state) {
+          state = await browserSession.get_browser_state_with_recovery({
+            include_screenshot: Boolean(args?.include_screenshot),
+            include_recent_events: Boolean(args?.include_recent_events),
+            cache_clickable_elements_hashes: true,
+          });
+        }
 
         return {
           url: state.url,
