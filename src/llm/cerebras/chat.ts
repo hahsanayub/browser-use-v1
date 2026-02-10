@@ -1,12 +1,14 @@
 import OpenAI from 'openai';
-import type { ChatCompletionMessageParam } from 'openai/resources/index.mjs';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ModelProviderError, ModelRateLimitError } from '../exceptions.js';
 import type { Message } from '../messages.js';
 import { SchemaOptimizer } from '../schema.js';
 import { ChatInvokeCompletion, type ChatInvokeUsage } from '../views.js';
-import { OpenAIMessageSerializer } from '../openai/serializer.js';
+import {
+  CerebrasMessageSerializer,
+  type CerebrasMessage,
+} from './serializer.js';
 
 export interface ChatCerebrasOptions {
   model?: string;
@@ -143,9 +145,9 @@ export class ChatCerebras implements BaseChatModel {
   }
 
   private appendJsonInstruction(
-    serializedMessages: ChatCompletionMessageParam[],
+    serializedMessages: CerebrasMessage[],
     schemaText: string
-  ): ChatCompletionMessageParam[] {
+  ): CerebrasMessage[] {
     const instruction =
       `\n\nPlease respond with a JSON object that follows this exact schema:\n` +
       `${schemaText}\n\n` +
@@ -186,7 +188,7 @@ export class ChatCerebras implements BaseChatModel {
     output_format?: { parse: (input: string) => T } | undefined,
     options: ChatInvokeOptions = {}
   ): Promise<ChatInvokeCompletion<T | string>> {
-    const serializer = new OpenAIMessageSerializer();
+    const serializer = new CerebrasMessageSerializer();
     const cerebrasMessages = serializer.serialize(messages);
 
     const modelParams: Record<string, unknown> = {};
@@ -227,7 +229,7 @@ export class ChatCerebras implements BaseChatModel {
       const response = await this.client.chat.completions.create(
         {
           model: this.model,
-          messages: requestMessages,
+          messages: requestMessages as any,
           ...modelParams,
         },
         options.signal ? { signal: options.signal } : undefined

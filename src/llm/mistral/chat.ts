@@ -3,9 +3,9 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
 import { ModelProviderError, ModelRateLimitError } from '../exceptions.js';
 import type { Message } from '../messages.js';
-import { SchemaOptimizer } from '../schema.js';
 import { ChatInvokeCompletion, type ChatInvokeUsage } from '../views.js';
 import { OpenAIMessageSerializer } from '../openai/serializer.js';
+import { MistralSchemaOptimizer } from './schema.js';
 
 export interface ChatMistralOptions {
   model?: string;
@@ -166,12 +166,13 @@ export class ChatMistral implements BaseChatModel {
           name: 'agent_output',
           target: 'jsonSchema7',
         });
-        const optimizedJsonSchema = SchemaOptimizer.createOptimizedJsonSchema(
-          rawJsonSchema as Record<string, unknown>,
-          {
-            removeMinItems: this.removeMinItemsFromSchema,
-            removeDefaults: this.removeDefaultsFromSchema,
-          }
+        const optimizedJsonSchema =
+          MistralSchemaOptimizer.createMistralCompatibleSchema(
+            rawJsonSchema as Record<string, unknown>,
+            {
+              removeMinItems: this.removeMinItemsFromSchema,
+              removeDefaults: this.removeDefaultsFromSchema,
+            }
         );
         responseFormat = {
           type: 'json_schema',
