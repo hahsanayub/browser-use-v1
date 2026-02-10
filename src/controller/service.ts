@@ -3651,8 +3651,17 @@ Context: ${context}`;
           }
           throw error;
         }
+        const message = String(error?.message ?? error ?? '');
+        if (
+          error instanceof Error &&
+          message === `Error executing action ${actionName} due to timeout.`
+        ) {
+          return new ActionResult({
+            error: `${actionName} was not executed due to timeout.`,
+          });
+        }
         return new ActionResult({
-          error: String(error?.message ?? error ?? ''),
+          error: message,
         });
       }
     }

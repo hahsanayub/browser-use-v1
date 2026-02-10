@@ -3040,4 +3040,26 @@ describe('Regression Coverage', () => {
     expect(result.error).toContain('Invalid action result type');
     expect(result.extracted_content).toBeNull();
   });
+
+  it('controller.act maps timeout errors to python c011 wording', async () => {
+    const controller = new Controller();
+
+    controller.registry.action('Custom timeout action')(
+      async function custom_timeout_action() {
+        const timeoutError = new Error('Slow action');
+        timeoutError.name = 'TimeoutError';
+        throw timeoutError;
+      }
+    );
+
+    const result = await controller.act(
+      { custom_timeout_action: {} },
+      { browser_session: {} as any }
+    );
+
+    expect(result.error).toBe(
+      'custom_timeout_action was not executed due to timeout.'
+    );
+    expect(result.extracted_content).toBeNull();
+  });
 });
