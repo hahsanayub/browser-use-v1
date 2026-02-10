@@ -32,7 +32,9 @@ import {
   URLNotAllowedError,
 } from './views.js';
 import {
+  BrowserConnectedEvent,
   BrowserLaunchEvent,
+  BrowserStoppedEvent,
   DownloadStartedEvent,
   FileDownloadedEvent,
 } from './events.js';
@@ -45,6 +47,7 @@ import {
   withDVDScreensaver,
 } from './dvd-screensaver.js';
 import { SessionManager } from './session-manager.js';
+import { CDPSessionWatchdog } from './watchdogs/cdp-session-watchdog.js';
 import { DefaultActionWatchdog } from './watchdogs/default-action-watchdog.js';
 import { DOMWatchdog } from './watchdogs/dom-watchdog.js';
 import { DownloadsWatchdog } from './watchdogs/downloads-watchdog.js';
@@ -255,6 +258,7 @@ export class BrowserSession {
     }
     this.attach_watchdogs([
       new LocalBrowserWatchdog({ browser_session: this }),
+      new CDPSessionWatchdog({ browser_session: this }),
       new DOMWatchdog({ browser_session: this }),
       new DownloadsWatchdog({ browser_session: this }),
       new DefaultActionWatchdog({ browser_session: this }),
@@ -1079,7 +1083,7 @@ export class BrowserSession {
     return `BrowserSession🆂 ${this._connectionDescriptor()} ${ownershipFlag}${String(this.id).slice(-2)}`;
   }
 
-  private get logger() {
+  get logger() {
     if (!this._logger) {
       this._logger = createLogger(
         `browser_use.browser.session.${this.id.slice(-4)}`
@@ -1210,6 +1214,11 @@ export class BrowserSession {
     this.logger.debug(
       `Started ${this.describe()} with profile ${this.browser_profile.toString()}`
     );
+    await this.event_bus.dispatch(
+      new BrowserConnectedEvent({
+        cdp_url: this.cdp_url ?? this.wss_url ?? 'playwright',
+      })
+    );
     return this;
   }
 
@@ -1317,8 +1326,6 @@ export class BrowserSession {
     this.initialized = false;
     this.attachedAgentId = null;
     this.attachedSharedAgentIds.clear();
-    this.detach_all_watchdogs();
-    await this.event_bus.stop();
 
     const closeWithTimeout = async (
       label: string,
@@ -3826,7 +3833,10 @@ export class BrowserSession {
     try {
       await this._stoppingPromise;
       this._recordRecentEvent('browser_stopped');
+      await this.event_bus.dispatch(new BrowserStoppedEvent());
     } finally {
+      this.detach_all_watchdogs();
+      await this.event_bus.stop();
       this._stoppingPromise = null;
     }
   }

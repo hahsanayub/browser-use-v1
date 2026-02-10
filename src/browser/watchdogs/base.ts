@@ -84,7 +84,7 @@ export abstract class BaseWatchdog {
     }
 
     this._attached = true;
-    this.on_attached();
+    this.onAttached();
   }
 
   detach_from_session() {
@@ -97,12 +97,12 @@ export abstract class BaseWatchdog {
     }
     this._registeredHandlers = [];
     this._attached = false;
-    this.on_detached();
+    this.onDetached();
   }
 
-  protected on_attached() {}
+  protected onAttached() {}
 
-  protected on_detached() {}
+  protected onDetached() {}
 
   private _collectHandlerMethods() {
     const methodNames = new Set<string>();
