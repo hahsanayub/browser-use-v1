@@ -1,8 +1,16 @@
-import { BrowserKillEvent, BrowserLaunchEvent } from '../events.js';
+import {
+  BrowserKillEvent,
+  BrowserLaunchEvent,
+  BrowserStopEvent,
+} from '../events.js';
 import { BaseWatchdog } from './base.js';
 
 export class LocalBrowserWatchdog extends BaseWatchdog {
-  static override LISTENS_TO = [BrowserLaunchEvent, BrowserKillEvent];
+  static override LISTENS_TO = [
+    BrowserLaunchEvent,
+    BrowserKillEvent,
+    BrowserStopEvent,
+  ];
 
   async on_BrowserLaunchEvent() {
     await this.browser_session.start();
@@ -16,5 +24,12 @@ export class LocalBrowserWatchdog extends BaseWatchdog {
 
   async on_BrowserKillEvent() {
     await this.browser_session.kill();
+  }
+
+  on_BrowserStopEvent() {
+    // Fire-and-forget to avoid blocking BrowserStopEvent handler completion.
+    void this.event_bus.dispatch(new BrowserKillEvent()).catch(() => {
+      // Ignore shutdown re-entrancy errors during stop lifecycle.
+    });
   }
 }

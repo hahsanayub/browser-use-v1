@@ -4401,10 +4401,10 @@ export class BrowserSession {
       return;
     }
 
-    this._stoppingPromise = (async () => {
+    this._stoppingPromise = Promise.resolve().then(async () => {
       await this.event_bus.dispatch(new BrowserStopEvent());
       await this._shutdown_browser_session();
-    })();
+    });
 
     try {
       await this._stoppingPromise;

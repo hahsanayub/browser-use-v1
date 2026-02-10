@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { BrowserSession } from '../src/browser/session.js';
-import { BrowserKillEvent, BrowserLaunchEvent } from '../src/browser/events.js';
+import {
+  BrowserKillEvent,
+  BrowserLaunchEvent,
+  BrowserStopEvent,
+} from '../src/browser/events.js';
 import { LocalBrowserWatchdog } from '../src/browser/watchdogs/local-browser-watchdog.js';
 
 describe('local browser watchdog alignment', () => {
@@ -43,5 +47,18 @@ describe('local browser watchdog alignment', () => {
 
     expect(startSpy).toHaveBeenCalledTimes(1);
     expect(launchResult).toEqual({ cdp_url: 'http://localhost:9333' });
+  });
+
+  it('emits BrowserKillEvent asynchronously on BrowserStopEvent', async () => {
+    const session = new BrowserSession();
+    const watchdog = new LocalBrowserWatchdog({ browser_session: session });
+    session.attach_watchdog(watchdog);
+
+    const killSpy = vi.spyOn(session, 'kill').mockResolvedValue();
+
+    await session.event_bus.dispatch_or_throw(new BrowserStopEvent());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(killSpy).toHaveBeenCalledTimes(1);
   });
 });
