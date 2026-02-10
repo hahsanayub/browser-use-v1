@@ -1,12 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { uuid7str } from '../utils.js';
+import { createLogger } from '../logging-config.js';
 
 const MAX_STRING_LENGTH = 100_000;
 const MAX_URL_LENGTH = 100_000;
 const MAX_TASK_LENGTH = 100_000;
 const MAX_COMMENT_LENGTH = 2_000;
 const MAX_FILE_CONTENT_SIZE = 50 * 1024 * 1024;
+const MAX_END_REASON_LENGTH = 100;
+
+const logger = createLogger('browser_use.agent.cloud_events');
 
 interface AgentReference {
   task_id: string;
@@ -264,6 +268,17 @@ export class CreateAgentStepEvent extends BaseEvent {
     const screenshot = browser_state_summary.screenshot
       ? `data:image/png;base64,${browser_state_summary.screenshot}`
       : null;
+
+    if (browser_state_summary.screenshot) {
+      logger.debug(
+        `Including screenshot in CreateAgentStepEvent, length: ${browser_state_summary.screenshot.length}`
+      );
+    } else {
+      logger.debug(
+        'No screenshot in browser_state_summary for CreateAgentStepEvent'
+      );
+    }
+
     return new CreateAgentStepEvent({
       device_id: getDeviceId(agent),
       agent_task_id: String(agent.task_id),
@@ -452,6 +467,41 @@ export class CreateAgentSessionEvent extends BaseEvent {
       is_source_api: this.is_source_api,
       browser_state: this.browser_state,
       browser_session_data: this.browser_session_data,
+    };
+  }
+}
+
+export class UpdateAgentSessionEvent extends BaseEvent {
+  browser_session_stopped: boolean | null;
+  browser_session_stopped_at: Date | null;
+  end_reason: string | null;
+
+  constructor(
+    init: Partial<UpdateAgentSessionEvent> & { id: string; user_id?: string }
+  ) {
+    super('UpdateAgentSessionEvent', init);
+    this.browser_session_stopped = init.browser_session_stopped ?? null;
+    this.browser_session_stopped_at = init.browser_session_stopped_at ?? null;
+    if (init.end_reason != null) {
+      const endReason = String(init.end_reason);
+      if (endReason.length > MAX_END_REASON_LENGTH) {
+        throw new Error(
+          `end_reason exceeds maximum length of ${MAX_END_REASON_LENGTH}`
+        );
+      }
+      this.end_reason = endReason;
+    } else {
+      this.end_reason = null;
+    }
+  }
+
+  override toJSON() {
+    return {
+      ...super.toJSON(),
+      browser_session_stopped: this.browser_session_stopped,
+      browser_session_stopped_at:
+        this.browser_session_stopped_at?.toISOString() ?? null,
+      end_reason: this.end_reason,
     };
   }
 }
