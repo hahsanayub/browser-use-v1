@@ -2395,6 +2395,32 @@ describe('Regression Coverage', () => {
     expect(result.error).toContain('available_file_paths');
   });
 
+  it('upload_file returns ActionResult error when index does not exist in selector map', async () => {
+    const controller = new Controller();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-upload-'));
+    const uploadPath = path.join(tempDir, 'resume.txt');
+    fs.writeFileSync(uploadPath, 'hello');
+
+    try {
+      const result = await controller.registry.execute_action(
+        'upload_file',
+        { index: 9, path: uploadPath },
+        {
+          browser_session: {
+            downloaded_files: [],
+            get_selector_map: vi.fn(async () => ({ 1: { xpath: '/html/body/input' } })),
+            find_file_upload_element_by_index: vi.fn(async () => null),
+          } as any,
+          available_file_paths: [uploadPath],
+        }
+      );
+
+      expect(result.error).toBe('Element with index 9 does not exist.');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('read_long_content blocks files outside available_file_paths', async () => {
     const controller = new Controller();
 

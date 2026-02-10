@@ -826,6 +826,15 @@ export class Controller<Context = unknown> {
         }
       }
 
+      if (typeof browser_session.get_selector_map === 'function') {
+        const selectorMap = await browser_session.get_selector_map({ signal });
+        if (!(params.index in (selectorMap ?? {}))) {
+          return new ActionResult({
+            error: `Element with index ${params.index} does not exist.`,
+          });
+        }
+      }
+
       const node = await browser_session.find_file_upload_element_by_index(
         params.index,
         3,
