@@ -20,7 +20,7 @@ Thank you for your interest in contributing to Browser-Use! This guide will help
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 22 (recommended; see `.nvmrc`)
 - pnpm
 - Git
 - A supported LLM API key (OpenAI, Anthropic, etc.)
@@ -31,6 +31,9 @@ Thank you for your interest in contributing to Browser-Use! This guide will help
 # Fork and clone the repository
 git clone https://github.com/YOUR_USERNAME/browser-use.git
 cd browser-use
+
+# Use the project Node version
+nvm use
 
 # Install dependencies
 pnpm install
