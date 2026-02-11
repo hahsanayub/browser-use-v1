@@ -301,6 +301,7 @@
     "googleapis": "^171.4.0",
     "gpt-tokenizer": "^3.4.0",
     "groq-sdk": "^0.37.0",
+    "minimatch": "^9.0.5",
     "ollama": "^0.6.3",
     "openai": "^6.18.0",
     "pdf-parse": "^2.4.5",
@@ -314,7 +315,6 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/adm-zip": "^0.5.7",
-    "@types/minimatch": "^6.0.0",
     "@types/node": "^25.2.2",
     "@types/pdf-parse": "^1.1.5",
     "@types/pdfkit": "^0.17.4",
