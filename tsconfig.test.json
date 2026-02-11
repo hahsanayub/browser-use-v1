@@ -7,16 +7,11 @@
   "include": ["test/**/*.ts", "src/**/*.d.ts"],
   "exclude": [
     "test/agent-constructor.test.ts",
-    "test/agent-final-response-after-failure.test.ts",
-    "test/agent-judge.test.ts",
-    "test/agent-message-compaction.test.ts",
     "test/agent-skills-alignment.test.ts",
     "test/agent.test.ts",
     "test/controller.test.ts",
     "test/integration-advanced.test.ts",
     "test/integration.test.ts",
-    "test/llm.test.ts",
-    "test/mcp-server.test.ts",
-    "test/skill-cli-alignment.test.ts"
+    "test/llm.test.ts"
   ]
 }

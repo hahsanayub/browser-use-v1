@@ -28,7 +28,7 @@ describe('Agent message compaction', () => {
     const compactionLlm = {
       ...createLlm('Summary of history', 'compact-model'),
       ainvoke: compactionInvoke,
-    } as BaseChatModel;
+    } as unknown as BaseChatModel;
     const agent = new Agent({
       task: 'test task',
       llm: createLlm(),
@@ -76,7 +76,7 @@ describe('Agent message compaction', () => {
     const compactionLlm = {
       ...createLlm('Should not be used', 'compact-model'),
       ainvoke: compactionInvoke,
-    } as BaseChatModel;
+    } as unknown as BaseChatModel;
     const agent = new Agent({
       task: 'test task',
       llm: createLlm(),

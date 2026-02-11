@@ -16,7 +16,13 @@ import {
 } from '../src/agent/judge.js';
 
 const createLlm = (completion: unknown, provider = 'test') => {
-  const ainvoke = vi.fn(async () => ({ completion, usage: null }));
+  const ainvoke = vi.fn(
+    async (
+      _messages: unknown[],
+      _outputFormat?: unknown,
+      _options?: Record<string, unknown>
+    ) => ({ completion, usage: null })
+  );
   const llm = {
     model: 'gpt-test',
     get provider() {

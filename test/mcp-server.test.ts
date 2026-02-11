@@ -291,7 +291,7 @@ describe('MCPServer browser_get_state', () => {
               },
               selector_map: {},
             },
-            event_name: event.event_name,
+            event_name: 'BrowserStateRequestEvent',
           },
           handler_results: [{ handler_id: 'watchdog', result: null }],
           errors: [],

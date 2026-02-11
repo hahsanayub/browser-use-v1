@@ -15,7 +15,13 @@ const createLlm = (): BaseChatModel =>
     get model_name() {
       return 'gpt-test';
     },
-    ainvoke: vi.fn(async () => ({ completion: 'ok', usage: null })),
+    ainvoke: vi.fn(
+      async (
+        _messages: unknown[],
+        _outputFormat?: unknown,
+        _options?: Record<string, unknown>
+      ) => ({ completion: 'ok', usage: null })
+    ),
   }) as unknown as BaseChatModel;
 
 const getContextMessageTexts = (agent: Agent) =>
@@ -84,12 +90,18 @@ describe('Agent final response after failure', () => {
   });
 
   it('uses done-only output schema when done-only enforcement is active', async () => {
-    const ainvoke = vi.fn(async () => ({
-      completion: {
-        action: [{ done: { success: true, text: 'final response' } }],
-      },
-      usage: null,
-    }));
+    const ainvoke = vi.fn(
+      async (
+        _messages: unknown[],
+        _outputFormat?: { schema: { safeParse: (value: unknown) => { success: boolean } } },
+        _options?: Record<string, unknown>
+      ) => ({
+        completion: {
+          action: [{ done: { success: true, text: 'final response' } }],
+        },
+        usage: null,
+      })
+    );
     const llm = {
       model: 'gpt-test',
       get provider() {
@@ -118,6 +130,10 @@ describe('Agent final response after failure', () => {
       ]);
 
       const outputFormat = ainvoke.mock.calls[0]?.[1];
+      expect(outputFormat).toBeDefined();
+      if (!outputFormat) {
+        throw new Error('missing output format');
+      }
       expect(
         outputFormat.schema.safeParse({
           action: [{ done: { success: true, text: 'ok' } }],

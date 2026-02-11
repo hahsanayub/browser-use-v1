@@ -53,7 +53,9 @@ describe('skill-cli alignment', () => {
 
   it('returns error response when click target index is not found', async () => {
     const session = new BrowserSession();
-    vi.spyOn(session, 'get_dom_element_by_index').mockResolvedValue(null);
+    vi.spyOn(session, 'get_dom_element_by_index').mockImplementation(
+      async () => null as any
+    );
     const registry = new SessionRegistry({
       session_factory: () => session,
     });
