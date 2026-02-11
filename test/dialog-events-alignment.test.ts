@@ -4,7 +4,7 @@ import { DialogOpenedEvent } from '../src/browser/events.js';
 
 describe('dialog events alignment', () => {
   it('emits DialogOpenedEvent and auto-accepts alert/confirm dialogs', async () => {
-    let dialogHandler: ((dialog: any) => Promise<void>) | null = null;
+    let dialogHandler: unknown = null;
     const page = {
       on: vi.fn((event: string, handler: (dialog: any) => Promise<void>) => {
         if (event === 'dialog') {
@@ -29,7 +29,11 @@ describe('dialog events alignment', () => {
     const accept = vi.fn(async () => {});
     const dismiss = vi.fn(async () => {});
 
-    await dialogHandler?.({
+    const handler = dialogHandler as ((dialog: any) => Promise<void>) | null;
+    if (!handler) {
+      throw new Error('dialog handler was not registered');
+    }
+    await handler({
       type: () => 'confirm',
       message: () => 'Proceed with checkout?',
       accept,
@@ -45,7 +49,7 @@ describe('dialog events alignment', () => {
   });
 
   it('emits DialogOpenedEvent and dismisses prompt dialogs by default', async () => {
-    let dialogHandler: ((dialog: any) => Promise<void>) | null = null;
+    let dialogHandler: unknown = null;
     const page = {
       on: vi.fn((event: string, handler: (dialog: any) => Promise<void>) => {
         if (event === 'dialog') {
@@ -70,7 +74,11 @@ describe('dialog events alignment', () => {
     const accept = vi.fn(async () => {});
     const dismiss = vi.fn(async () => {});
 
-    await dialogHandler?.({
+    const handler = dialogHandler as ((dialog: any) => Promise<void>) | null;
+    if (!handler) {
+      throw new Error('dialog handler was not registered');
+    }
+    await handler({
       type: () => 'prompt',
       message: () => 'Enter value',
       accept,
