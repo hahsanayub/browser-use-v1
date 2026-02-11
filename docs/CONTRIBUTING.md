@@ -102,25 +102,25 @@ Settings (`.vscode/settings.json`):
 
 ```bash
 # Build
-npm run build          # Build production
-npm run build:watch    # Build with watch mode
+pnpm build             # Build production
+pnpm build:watch       # Build with watch mode
 
 # Test
-npm test               # Run all tests
-npm run test:coverage  # Run tests with coverage
-npm run test:watch     # Watch mode
-npm run test:pack      # Validate packaged public exports
+pnpm test              # Run all tests
+pnpm test:coverage     # Run tests with coverage
+pnpm test:watch        # Watch mode
+pnpm test:pack         # Validate packaged public exports
 
 # Lint
-npm run lint           # Run ESLint
-npm run lint:fix       # Fix auto-fixable issues
+pnpm lint              # Run ESLint
+pnpm lint:fix          # Fix auto-fixable issues
 
 # Type check
-npm run typecheck      # Run TypeScript compiler check
+pnpm typecheck         # Run TypeScript compiler check
 
 # Format
-npm run format         # Format with Prettier
-npm run format:check   # Check formatting
+pnpm format            # Format with Prettier
+pnpm format:check      # Check formatting
 ```
 
 ---
@@ -353,19 +353,19 @@ describe('Registry', () => {
 
 ```bash
 # All tests
-npm test
+pnpm test
 
 # Specific file
-npm test -- test/controller.test.ts
+pnpm test test/controller.test.ts
 
 # With coverage
-npm run test:coverage
+pnpm test:coverage
 
 # Watch mode
-npm run test:watch
+pnpm test:watch
 
 # Validate published package exports
-npm run test:pack
+pnpm test:pack
 ```
 
 ### Writing Good Tests
@@ -433,11 +433,11 @@ it('should call LLM with correct parameters', async () => {
 3. **Run checks**
 
    ```bash
-   npm run lint
-   npm run typecheck
-   npm test
-   npm run build
-   npm run test:pack
+   pnpm lint
+   pnpm typecheck
+   pnpm test
+   pnpm build
+   pnpm test:pack
    ```
 
 4. **Commit with clear messages**

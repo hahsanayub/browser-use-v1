@@ -263,6 +263,7 @@
     "test:watch": "vitest --watch",
     "test:pack": "node scripts/smoke-pack.mjs",
     "typecheck": "tsc --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
     "prettier": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",

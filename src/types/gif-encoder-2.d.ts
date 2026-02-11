@@ -1,7 +1,5 @@
 declare module 'gif-encoder-2' {
-  import { CanvasRenderingContext2D } from 'canvas';
-
-  class GifEncoder {
+  class GIFEncoder {
     constructor(
       width: number,
       height: number,
@@ -9,18 +7,20 @@ declare module 'gif-encoder-2' {
       useOptimizer?: boolean,
       totalFrames?: number
     );
-    createReadStream(): NodeJS.ReadableStream;
-    start(): void;
     setDelay(delay: number): void;
     setQuality(quality: number): void;
     setRepeat(repeat: number): void;
     setTransparent(color: number): void;
-    addFrame(ctx: any): void;
+    start(): void;
+    addFrame(
+      ctx: CanvasRenderingContext2D | import('canvas').CanvasRenderingContext2D
+    ): void;
     finish(): void;
+    createReadStream(): NodeJS.ReadableStream;
     out: {
       getData(): Buffer;
     };
   }
 
-  export = GifEncoder;
+  export default GIFEncoder;
 }
