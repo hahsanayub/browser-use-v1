@@ -80,9 +80,7 @@ export interface SandboxOptions {
   cloud_proxy_country_code?: string | null;
   cloud_timeout?: number | null;
   fetch_impl?: typeof fetch;
-  on_browser_created?: (
-    event: BrowserCreatedData
-  ) => void | Promise<void>;
+  on_browser_created?: (event: BrowserCreatedData) => void | Promise<void>;
   on_instance_ready?: () => void | Promise<void>;
   on_log?: (event: LogData) => void | Promise<void>;
   on_result?: (event: ResultData) => void | Promise<void>;
@@ -92,10 +90,10 @@ export interface SandboxOptions {
 const shouldUseRemoteSandbox = (options: SandboxOptions) =>
   Boolean(
     options.server_url ||
-      options.api_key ||
-      options.cloud_profile_id ||
-      options.cloud_proxy_country_code ||
-      options.cloud_timeout
+    options.api_key ||
+    options.cloud_profile_id ||
+    options.cloud_proxy_country_code ||
+    options.cloud_timeout
   );
 
 export const sandbox =
@@ -195,7 +193,10 @@ export const sandbox =
         return;
       }
 
-      if (event.type === SSEEventType.ERROR && event.data instanceof ErrorData) {
+      if (
+        event.type === SSEEventType.ERROR &&
+        event.data instanceof ErrorData
+      ) {
         await maybeInvoke(options.on_error, event.data);
         throw new SandboxError(
           `Execution failed: ${event.data.error || 'unknown error'}`

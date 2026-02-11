@@ -15,9 +15,7 @@ export const format_browser_state_for_llm = async (
   const vars = Object.keys(namespace)
     .filter((key) => !key.startsWith('_'))
     .sort();
-  lines.push(
-    `**Available:** ${vars.length > 0 ? vars.join(', ') : '(none)'}`
-  );
+  lines.push(`**Available:** ${vars.length > 0 ? vars.join(', ') : '(none)'}`);
   lines.push('');
 
   const dom =

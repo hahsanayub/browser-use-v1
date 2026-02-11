@@ -28,9 +28,9 @@ describe('code-use alignment', () => {
     expect(blocks.python_0).toContain('print("a")');
     expect(blocks.dom_script).toContain('document.title');
 
-    expect(
-      detect_token_limit_issue('x'.repeat(10), 95, 100, null)[0]
-    ).toBe(true);
+    expect(detect_token_limit_issue('x'.repeat(10), 95, 100, null)[0]).toBe(
+      true
+    );
     expect(
       extract_url_from_task('Please open docs at https://example.com/docs')
     ).toBe('https://example.com/docs');

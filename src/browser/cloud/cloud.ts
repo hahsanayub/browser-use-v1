@@ -81,8 +81,7 @@ export class CloudBrowserClient {
   }
 
   private _create_request_body(request: CreateBrowserRequest) {
-    const profile_id =
-      request.profile_id ?? request.cloud_profile_id ?? null;
+    const profile_id = request.profile_id ?? request.cloud_profile_id ?? null;
     const proxy_country_code =
       request.proxy_country_code ?? request.cloud_proxy_country_code ?? null;
     const timeout = normalizeTimeout(

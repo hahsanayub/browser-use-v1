@@ -20,11 +20,7 @@ export class BrowserCreatedData {
   live_url: string;
   status: string;
 
-  constructor(init: {
-    session_id: string;
-    live_url: string;
-    status: string;
-  }) {
+  constructor(init: { session_id: string; live_url: string; status: string }) {
     this.session_id = init.session_id;
     this.live_url = init.live_url;
     this.status = init.status;
@@ -121,8 +117,7 @@ export class SSEEvent {
     } else if (type === SSEEventType.LOG) {
       data = new LogData({
         message: String(payload.message ?? ''),
-        level:
-          payload.level == null ? undefined : String(payload.level),
+        level: payload.level == null ? undefined : String(payload.level),
       });
     } else if (type === SSEEventType.RESULT) {
       data = new ResultData({
@@ -142,12 +137,9 @@ export class SSEEvent {
     } else if (type === SSEEventType.ERROR) {
       data = new ErrorData({
         error: String(payload.error ?? ''),
-        traceback:
-          payload.traceback == null ? null : String(payload.traceback),
+        traceback: payload.traceback == null ? null : String(payload.traceback),
         status_code:
-          payload.status_code == null
-            ? undefined
-            : Number(payload.status_code),
+          payload.status_code == null ? undefined : Number(payload.status_code),
       });
     } else {
       data = payload;

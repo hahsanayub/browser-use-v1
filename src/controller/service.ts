@@ -1999,8 +1999,6 @@ You will be given a query and the markdown of a webpage that has been filtered t
 								return { success: false, reason: 'Element not found by XPath' };
 							}
 
-							console.log('[SCROLL DEBUG] Starting direct container scroll for element:', targetElement.tagName);
-
 							// Try to find scrollable containers in the hierarchy (starting from element itself)
 							let currentElement = targetElement;
 							let scrollSuccess = false;
@@ -2013,12 +2011,6 @@ You will be given a query and the markdown of a webpage that has been filtered t
 								const computedStyle = window.getComputedStyle(currentElement);
 								const hasScrollableY = /(auto|scroll|overlay)/.test(computedStyle.overflowY);
 								const canScrollVertically = currentElement.scrollHeight > currentElement.clientHeight;
-
-								console.log('[SCROLL DEBUG] Checking element:', currentElement.tagName,
-									'hasScrollableY:', hasScrollableY,
-									'canScrollVertically:', canScrollVertically,
-									'scrollHeight:', currentElement.scrollHeight,
-									'clientHeight:', currentElement.clientHeight);
 
 								if (hasScrollableY && canScrollVertically) {
 									const beforeScroll = currentElement.scrollTop;
@@ -2040,14 +2032,10 @@ You will be given a query and the markdown of a webpage that has been filtered t
 									const afterScroll = currentElement.scrollTop;
 									const actualScrollDelta = afterScroll - beforeScroll;
 
-									console.log('[SCROLL DEBUG] Scroll attempt:', currentElement.tagName,
-										'before:', beforeScroll, 'after:', afterScroll, 'delta:', actualScrollDelta);
-
 									if (Math.abs(actualScrollDelta) > 0.5) {
 										scrollSuccess = true;
 										scrolledElement = currentElement;
 										scrollDelta = actualScrollDelta;
-										console.log('[SCROLL DEBUG] Successfully scrolled container:', currentElement.tagName, 'delta:', actualScrollDelta);
 										break;
 									}
 								}
@@ -2073,7 +2061,6 @@ You will be given a query and the markdown of a webpage that has been filtered t
 								};
 							} else {
 								// No container found or could scroll
-								console.log('[SCROLL DEBUG] No scrollable container found for element');
 								return {
 									success: false,
 									reason: 'No scrollable container found',

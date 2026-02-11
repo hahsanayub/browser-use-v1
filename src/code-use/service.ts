@@ -106,8 +106,7 @@ export class CodeAgent {
     const page = await this.browser_session.get_current_page();
     const state = new CodeAgentState({
       url: typeof page?.url === 'function' ? page.url() : null,
-      title:
-        typeof page?.title === 'function' ? await page.title() : null,
+      title: typeof page?.title === 'function' ? await page.title() : null,
     });
     const metadata = new CodeAgentStepMetadata({
       step_start_time: startedAt,
@@ -130,7 +129,9 @@ export class CodeAgent {
   }
 
   async run(max_steps = 100) {
-    const pending = this.session.cells.filter((cell) => cell.status === 'pending');
+    const pending = this.session.cells.filter(
+      (cell) => cell.status === 'pending'
+    );
     const toRun = pending.slice(0, Math.max(max_steps, 0));
     for (const cell of toRun) {
       await this.execute_cell(cell.source);

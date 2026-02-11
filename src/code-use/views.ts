@@ -203,12 +203,14 @@ export class NotebookSession {
   _complete_history: CodeAgentHistory[];
   _usage_summary: UsageSummary | null;
 
-  constructor(init: {
-    id?: string;
-    cells?: CodeCell[];
-    current_execution_count?: number;
-    namespace?: Record<string, unknown>;
-  } = {}) {
+  constructor(
+    init: {
+      id?: string;
+      cells?: CodeCell[];
+      current_execution_count?: number;
+      namespace?: Record<string, unknown>;
+    } = {}
+  ) {
     this.id = init.id ?? uuid7str();
     this.cells = init.cells ?? [];
     this.current_execution_count = init.current_execution_count ?? 0;

@@ -61,7 +61,7 @@ export const extract_url_from_task = (task: string) => {
   for (const pattern of patterns) {
     const found = withoutEmails.match(pattern) ?? [];
     for (const entry of found) {
-      const trimmed = entry.replace(/[.,;:!?()\[\]]+$/g, '');
+      const trimmed = entry.replace(/[.,;:!?()[\]]+$/g, '');
       matches.push(
         trimmed.startsWith('http://') || trimmed.startsWith('https://')
           ? trimmed

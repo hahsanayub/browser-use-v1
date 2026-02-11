@@ -60,8 +60,7 @@ export class CloudBrowserResponse {
     this.cdpUrl = String(payload.cdpUrl ?? payload.cdp_url ?? '');
     this.timeoutAt = String(payload.timeoutAt ?? payload.timeout_at ?? '');
     this.startedAt = String(payload.startedAt ?? payload.started_at ?? '');
-    this.finishedAt =
-      payload.finishedAt ?? payload.finished_at ?? null;
+    this.finishedAt = payload.finishedAt ?? payload.finished_at ?? null;
   }
 }
 
