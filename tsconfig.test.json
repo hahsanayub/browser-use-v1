@@ -12,7 +12,6 @@
     "test/agent-message-compaction.test.ts",
     "test/agent-skills-alignment.test.ts",
     "test/agent.test.ts",
-    "test/browser-cloud-alignment.test.ts",
     "test/controller.test.ts",
     "test/default-action-watchdog-alignment.test.ts",
     "test/dialog-events-alignment.test.ts",
@@ -23,7 +22,6 @@
     "test/mcp-controller-tools-alignment.test.ts",
     "test/mcp-server.test.ts",
     "test/permissions-watchdog-alignment.test.ts",
-    "test/sandbox-alignment.test.ts",
     "test/skill-cli-alignment.test.ts",
     "test/storage-state-watchdog-alignment.test.ts"
   ]

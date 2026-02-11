@@ -34,7 +34,7 @@ describe('sandbox alignment', () => {
 
   it('executes remote sandbox flow and returns result event payload', async () => {
     const onLog = vi.fn();
-    const fetchImpl = vi.fn(async () => {
+    const fetchImpl = vi.fn(async (_url?: string, _init?: RequestInit) => {
       return new Response(
         [
           `data: ${JSON.stringify({
@@ -75,7 +75,10 @@ describe('sandbox alignment', () => {
     expect(result).toBe('remote-ok');
     expect(onLog).toHaveBeenCalledTimes(1);
 
-    const [url, init] = fetchImpl.mock.calls[0];
+    expect(fetchImpl).toHaveBeenCalled();
+    const call = fetchImpl.mock.calls[0];
+    expect(call).toBeDefined();
+    const [url, init] = call as [string, RequestInit];
     expect(url).toBe('https://sandbox.example/stream');
     expect(init.headers).toMatchObject({
       'X-API-Key': 'sandbox-test-key',

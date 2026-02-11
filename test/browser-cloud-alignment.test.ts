@@ -13,7 +13,7 @@ describe('browser cloud alignment', () => {
   });
 
   it('creates a cloud browser and stores current session id', async () => {
-    const fetchImpl = vi.fn(async () => {
+    const fetchImpl = vi.fn(async (_url?: string, _init?: RequestInit) => {
       return new Response(
         JSON.stringify({
           id: 'browser-session-1',
@@ -43,7 +43,10 @@ describe('browser cloud alignment', () => {
     });
 
     expect(fetchImpl).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchImpl.mock.calls[0];
+    expect(fetchImpl).toHaveBeenCalled();
+    const call = fetchImpl.mock.calls[0];
+    expect(call).toBeDefined();
+    const [url, init] = call as [string, RequestInit];
     expect(url).toBe('https://api.browser-use.test/api/v2/browsers');
     expect(init.method).toBe('POST');
     expect(init.headers).toMatchObject({
