@@ -146,3 +146,9 @@ jobs:
         run: pnpm test:coverage
         env:
           CI: true
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage
+          if-no-files-found: error
