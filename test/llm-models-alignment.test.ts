@@ -9,6 +9,7 @@ describe('LLM models factory alignment', () => {
   const originalMistralApiKey = process.env.MISTRAL_API_KEY;
   const originalCerebrasApiKey = process.env.CEREBRAS_API_KEY;
   const originalVercelApiKey = process.env.VERCEL_API_KEY;
+  const originalGoogleApiKey = process.env.GOOGLE_API_KEY;
 
   beforeEach(() => {
     process.env.BROWSER_USE_API_KEY = 'test-bu-key';
@@ -18,6 +19,7 @@ describe('LLM models factory alignment', () => {
     process.env.MISTRAL_API_KEY = 'test-mistral-key';
     process.env.CEREBRAS_API_KEY = 'test-cerebras-key';
     process.env.VERCEL_API_KEY = 'test-vercel-key';
+    process.env.GOOGLE_API_KEY = 'test-google-key';
   });
 
   afterEach(() => {
@@ -55,6 +57,11 @@ describe('LLM models factory alignment', () => {
       delete process.env.VERCEL_API_KEY;
     } else {
       process.env.VERCEL_API_KEY = originalVercelApiKey;
+    }
+    if (originalGoogleApiKey === undefined) {
+      delete process.env.GOOGLE_API_KEY;
+    } else {
+      process.env.GOOGLE_API_KEY = originalGoogleApiKey;
     }
   });
 
