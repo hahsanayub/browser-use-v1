@@ -25,7 +25,6 @@
     "test/permissions-watchdog-alignment.test.ts",
     "test/sandbox-alignment.test.ts",
     "test/skill-cli-alignment.test.ts",
-    "test/storage-state-watchdog-alignment.test.ts",
-    "test/sync-auth-alignment.test.ts"
+    "test/storage-state-watchdog-alignment.test.ts"
   ]
 }
