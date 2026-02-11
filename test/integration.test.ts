@@ -181,6 +181,7 @@ const { DOMElementNode, DOMState } = await import('../src/dom/views.js');
 const { BrowserStateSummary } = await import('../src/browser/views.js');
 const { DomService } = await import('../src/dom/service.js');
 const { BrowserSession } = await import('../src/browser/session.js');
+const { ChatInvokeCompletion } = await import('../src/llm/views.js');
 const { ActionModel: RegistryActionModel } =
   await import('../src/controller/registry/views.js');
 
@@ -188,7 +189,13 @@ const { ActionModel: RegistryActionModel } =
 
 class MockLLM implements BaseChatModel {
   model = 'mock-model';
-  private readonly responses: Array<{ completion: any }>;
+  private readonly responses: Array<{
+    completion: any;
+    usage?: any;
+    thinking?: string | null;
+    redacted_thinking?: string | null;
+    stop_reason?: string | null;
+  }>;
   private readonly onInvoke?:
     | ((signal: AbortSignal | undefined) => void | Promise<void>)
     | undefined;
@@ -196,7 +203,13 @@ class MockLLM implements BaseChatModel {
   signals: Array<AbortSignal | undefined> = [];
 
   constructor(
-    responses: Array<{ completion: any }>,
+    responses: Array<{
+      completion: any;
+      usage?: any;
+      thinking?: string | null;
+      redacted_thinking?: string | null;
+      stop_reason?: string | null;
+    }>,
     onInvoke?:
       | ((signal: AbortSignal | undefined) => void | Promise<void>)
       | undefined
@@ -219,14 +232,21 @@ class MockLLM implements BaseChatModel {
     messages: any[],
     _output_format?: unknown,
     options?: { signal?: AbortSignal }
-  ) {
+  ): Promise<any> {
     this.calls.push(messages);
     this.signals.push(options?.signal);
     if (this.onInvoke) {
       await this.onInvoke(options?.signal);
     }
     const idx = Math.min(this.calls.length - 1, this.responses.length - 1);
-    return this.responses[idx] ?? { completion: { action: [] } };
+    const response = this.responses[idx] ?? { completion: { action: [] } };
+    return new ChatInvokeCompletion(
+      response.completion,
+      response.usage ?? null,
+      response.thinking ?? null,
+      response.redacted_thinking ?? null,
+      response.stop_reason ?? null
+    );
   }
 }
 
@@ -275,7 +295,9 @@ const createTestController = () => {
   return { registry } as any;
 };
 
-const createBrowserSessionStub = (initialUrl = 'https://start.test') => {
+const createBrowserSessionStub = (
+  initialUrl = 'https://start.test'
+): any => {
   let currentUrl = initialUrl;
   const navigateCalls: string[] = [];
 

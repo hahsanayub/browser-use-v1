@@ -176,6 +176,7 @@ const { ActionResult, AgentHistoryList } =
   await import('../src/agent/views.js');
 const { Controller } = await import('../src/controller/service.js');
 const { BrowserSession } = await import('../src/browser/session.js');
+const { ChatInvokeCompletion } = await import('../src/llm/views.js');
 const { ActionModel: RegistryActionModel } =
   await import('../src/controller/registry/views.js');
 
@@ -183,10 +184,24 @@ const { ActionModel: RegistryActionModel } =
 
 class MockLLM implements BaseChatModel {
   model = 'mock-model';
-  private readonly responses: Array<{ completion: any }>;
+  private readonly responses: Array<{
+    completion: any;
+    usage?: any;
+    thinking?: string | null;
+    redacted_thinking?: string | null;
+    stop_reason?: string | null;
+  }>;
   calls: any[][] = [];
 
-  constructor(responses: Array<{ completion: any }>) {
+  constructor(
+    responses: Array<{
+      completion: any;
+      usage?: any;
+      thinking?: string | null;
+      redacted_thinking?: string | null;
+      stop_reason?: string | null;
+    }>
+  ) {
     this.responses = responses;
   }
 
@@ -204,10 +219,17 @@ class MockLLM implements BaseChatModel {
     messages: any[],
     _output_format?: unknown,
     _options?: { signal?: AbortSignal }
-  ) {
+  ): Promise<any> {
     this.calls.push(messages);
     const idx = Math.min(this.calls.length - 1, this.responses.length - 1);
-    return this.responses[idx] ?? { completion: { action: [] } };
+    const response = this.responses[idx] ?? { completion: { action: [] } };
+    return new ChatInvokeCompletion(
+      response.completion,
+      response.usage ?? null,
+      response.thinking ?? null,
+      response.redacted_thinking ?? null,
+      response.stop_reason ?? null
+    );
   }
 }
 
