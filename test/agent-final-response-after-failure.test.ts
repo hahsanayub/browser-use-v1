@@ -93,7 +93,9 @@ describe('Agent final response after failure', () => {
     const ainvoke = vi.fn(
       async (
         _messages: unknown[],
-        _outputFormat?: { schema: { safeParse: (value: unknown) => { success: boolean } } },
+        _outputFormat?: {
+          schema: { safeParse: (value: unknown) => { success: boolean } };
+        },
         _options?: Record<string, unknown>
       ) => ({
         completion: {

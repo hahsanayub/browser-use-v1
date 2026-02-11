@@ -195,17 +195,15 @@ describe('Controller Registry Tests', () => {
     it('supports python-compatible simple signatures with special param injection', async () => {
       const registry = new Registry();
 
-      registry.action('Simple signature action')(
-        (async function search_simple(
-          query: string,
-          browser_session: any,
-          page_url: string | null
-        ) {
-          return new ActionResult({
-            extracted_content: `${query}|${Boolean(browser_session)}|${page_url}`,
-          });
-        }) as any
-      );
+      registry.action('Simple signature action')(async function search_simple(
+        query: string,
+        browser_session: any,
+        page_url: string | null
+      ) {
+        return new ActionResult({
+          extracted_content: `${query}|${Boolean(browser_session)}|${page_url}`,
+        });
+      } as any);
 
       const browserSession = {
         agent_current_page: {
@@ -3276,9 +3274,9 @@ describe('Regression Coverage', () => {
 
     expect(pageExtractionLlm.ainvoke).toHaveBeenCalled();
     const messages =
-      ((pageExtractionLlm.ainvoke.mock.calls[0] as unknown[] | undefined)?.[0] as
-        | Array<{ text?: string }>
-        | undefined) ?? [];
+      ((
+        pageExtractionLlm.ainvoke.mock.calls[0] as unknown[] | undefined
+      )?.[0] as Array<{ text?: string }> | undefined) ?? [];
     const systemPrompt = messages[0]?.text ?? '';
     const userPrompt = messages[1]?.text ?? '';
     expect(systemPrompt).toContain('JSON Schema');

@@ -295,9 +295,7 @@ const createTestController = () => {
   return { registry } as any;
 };
 
-const createBrowserSessionStub = (
-  initialUrl = 'https://start.test'
-): any => {
+const createBrowserSessionStub = (initialUrl = 'https://start.test'): any => {
   let currentUrl = initialUrl;
   const navigateCalls: string[] = [];
 

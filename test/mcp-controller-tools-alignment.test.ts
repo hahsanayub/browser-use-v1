@@ -2,11 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const connectMock = vi.fn(async () => undefined);
 const registerToToolsMock = vi.fn(
-  async (
-    _tools: unknown,
-    _filter?: string[],
-    _prefix?: string
-  ) => undefined
+  async (_tools: unknown, _filter?: string[], _prefix?: string) => undefined
 );
 const disconnectMock = vi.fn(async () => undefined);
 const isConnectedMock = vi.fn(() => false);

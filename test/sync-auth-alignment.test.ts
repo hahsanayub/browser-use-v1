@@ -26,9 +26,9 @@ describe('DeviceAuthClient alignment', () => {
   });
 
   it('sends empty agent_session_id when none is provided', async () => {
-    const post = vi.fn(
-      async (_url?: string, _form?: URLSearchParams) => ({ data: {} })
-    );
+    const post = vi.fn(async (_url?: string, _form?: URLSearchParams) => ({
+      data: {},
+    }));
     const client = new DeviceAuthClient('https://api.example.com', {
       post,
     } as any);

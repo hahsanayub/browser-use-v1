@@ -62,33 +62,34 @@ import { ActionResult } from '../src/agent/views.js';
 // Helper to create agent settings (since it's an interface)
 const createAgentSettings = (
   overrides: Partial<AgentSettings> = {}
-): AgentSettings => ({
-  use_vision: true,
-  include_recent_events: false,
-  vision_detail_level: 'auto',
-  save_conversation_path: null,
-  save_conversation_path_encoding: null,
-  max_failures: 3,
-  generate_gif: false,
-  override_system_message: null,
-  extend_system_message: null,
-  include_attributes: [],
-  max_actions_per_step: 5,
-  use_thinking: false,
-  flash_mode: false,
-  use_judge: true,
-  ground_truth: null,
-  enable_planning: true,
-  planning_replan_on_stall: 3,
-  planning_exploration_limit: 5,
-  max_history_items: 100,
-  llm_timeout: 60000,
-  final_response_after_failure: true,
-  message_compaction: null,
-  loop_detection_window: 20,
-  loop_detection_enabled: true,
-  ...overrides,
-} as AgentSettings);
+): AgentSettings =>
+  ({
+    use_vision: true,
+    include_recent_events: false,
+    vision_detail_level: 'auto',
+    save_conversation_path: null,
+    save_conversation_path_encoding: null,
+    max_failures: 3,
+    generate_gif: false,
+    override_system_message: null,
+    extend_system_message: null,
+    include_attributes: [],
+    max_actions_per_step: 5,
+    use_thinking: false,
+    flash_mode: false,
+    use_judge: true,
+    ground_truth: null,
+    enable_planning: true,
+    planning_replan_on_stall: 3,
+    planning_exploration_limit: 5,
+    max_history_items: 100,
+    llm_timeout: 60000,
+    final_response_after_failure: true,
+    message_compaction: null,
+    loop_detection_window: 20,
+    loop_detection_enabled: true,
+    ...overrides,
+  }) as AgentSettings;
 
 describe('Agent Sensitive Data Handling', () => {
   describe('Sensitive Data Configuration', () => {
