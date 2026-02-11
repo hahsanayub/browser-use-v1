@@ -138,9 +138,8 @@ describe('Agent full judge alignment', () => {
     const { llm: mainLlm, ainvoke: mainInvoke } = createLlm(
       '{"is_correct": true, "reason": ""}'
     );
-    const { llm: judgeLlm, ainvoke: judgeInvoke } = createLlm(
-      '{"verdict": false}'
-    );
+    const { llm: judgeLlm, ainvoke: judgeInvoke } =
+      createLlm('{"verdict": false}');
 
     const agent = new Agent({
       task: 'Extract all required fields',
@@ -226,7 +225,13 @@ describe('Agent full judge alignment', () => {
                 extracted_content: 'done',
               }),
             ],
-            new BrowserStateHistory('https://example.com', 'Example', [], [], null),
+            new BrowserStateHistory(
+              'https://example.com',
+              'Example',
+              [],
+              [],
+              null
+            ),
             null
           )
         );

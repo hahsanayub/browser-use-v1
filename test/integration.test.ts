@@ -175,16 +175,14 @@ vi.mock('../src/llm/messages.js', () => {
 const { Agent } = await import('../src/agent/service.js');
 const { ActionResult } = await import('../src/agent/views.js');
 const { Registry } = await import('../src/controller/registry/service.js');
-const { GoToUrlActionSchema, DoneActionSchema } = await import(
-  '../src/controller/views.js'
-);
+const { GoToUrlActionSchema, DoneActionSchema } =
+  await import('../src/controller/views.js');
 const { DOMElementNode, DOMState } = await import('../src/dom/views.js');
 const { BrowserStateSummary } = await import('../src/browser/views.js');
 const { DomService } = await import('../src/dom/service.js');
 const { BrowserSession } = await import('../src/browser/session.js');
-const { ActionModel: RegistryActionModel } = await import(
-  '../src/controller/registry/views.js'
-);
+const { ActionModel: RegistryActionModel } =
+  await import('../src/controller/registry/views.js');
 
 (globalThis as any).ActionModel = RegistryActionModel;
 

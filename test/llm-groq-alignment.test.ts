@@ -76,7 +76,10 @@ describe('ChatGroq alignment', () => {
       removeDefaultsFromSchema: true,
     });
 
-    const response = await llm.ainvoke([new UserMessage('extract')], schema as any);
+    const response = await llm.ainvoke(
+      [new UserMessage('extract')],
+      schema as any
+    );
     const request = groqCreateMock.mock.calls[0]?.[0] ?? {};
     const schemaPayload = request.response_format?.json_schema?.schema;
 
@@ -88,13 +91,18 @@ describe('ChatGroq alignment', () => {
   });
 
   it('falls back to json_object mode for non-json-schema models', async () => {
-    groqCreateMock.mockResolvedValue(buildResponse(JSON.stringify({ value: 'ok' })));
+    groqCreateMock.mockResolvedValue(
+      buildResponse(JSON.stringify({ value: 'ok' }))
+    );
     const schema = z.object({ value: z.string() });
     const llm = new ChatGroq({
       model: 'llama-3.1-70b-versatile',
     });
 
-    const response = await llm.ainvoke([new UserMessage('extract')], schema as any);
+    const response = await llm.ainvoke(
+      [new UserMessage('extract')],
+      schema as any
+    );
     const request = groqCreateMock.mock.calls[0]?.[0] ?? {};
 
     expect(request.response_format?.type).toBe('json_object');

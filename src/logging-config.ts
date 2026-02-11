@@ -37,9 +37,7 @@ const normalizeLogLevel = (
     return fallback;
   }
   const normalized = candidate.toLowerCase();
-  return normalized in LEVEL_PRIORITY
-    ? (normalized as LogLevel)
-    : fallback;
+  return normalized in LEVEL_PRIORITY ? (normalized as LogLevel) : fallback;
 };
 
 const formatMessage = (level: LogLevel, name: string, message: string) => {
@@ -54,7 +52,11 @@ const formatMessage = (level: LogLevel, name: string, message: string) => {
 const formatFileMessage = (level: LogLevel, name: string, message: string) =>
   `${new Date().toISOString()} ${formatMessage(level, name, message)}`;
 
-const writePayload = (stream: SupportedStream, level: LogLevel, payload: string) => {
+const writePayload = (
+  stream: SupportedStream,
+  level: LogLevel,
+  payload: string
+) => {
   if ('write' in stream) {
     stream.write(`${payload}\n`);
     return;

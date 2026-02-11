@@ -25,9 +25,9 @@ describe('tools extraction schema utils alignment', () => {
     expect(() => schemaDictToZodSchema({ type: 'string' })).toThrow(
       'Top-level schema must have type "object"'
     );
-    expect(() => schemaDictToZodSchema({ type: 'object', properties: {} })).toThrow(
-      'Top-level schema must have at least one property'
-    );
+    expect(() =>
+      schemaDictToZodSchema({ type: 'object', properties: {} })
+    ).toThrow('Top-level schema must have at least one property');
   });
 
   it('builds zod schema with python-aligned defaults for optional fields', () => {
@@ -136,6 +136,8 @@ describe('tools extraction schema utils alignment', () => {
     expect(resolveDefaultForSchema({ type: 'boolean' })).toBe(false);
     expect(resolveDefaultForSchema({ type: 'array' })).toEqual([]);
     expect(resolveDefaultForSchema({ type: 'string', enum: ['x'] })).toBeNull();
-    expect(resolveDefaultForSchema({ type: 'number', nullable: true })).toBeNull();
+    expect(
+      resolveDefaultForSchema({ type: 'number', nullable: true })
+    ).toBeNull();
   });
 });

@@ -238,25 +238,28 @@ export async function isTargetExtension(target: any): Promise<{
   extension_id: string | null;
   manifest_version: string;
 }> {
-  let target_type: string | null = null;
-  let target_ctx: any = null;
-  let target_url: string | null = null;
-
-  try {
-    target_type = await target.type();
-    target_ctx = (await target.worker?.()) || (await target.page?.()) || null;
-    target_url =
-      (await target.url?.()) || (target_ctx ? await target_ctx.url() : null);
-  } catch (error: any) {
-    if (error.message?.includes('No target with given id found')) {
-      // Target already closed
-      target_type = 'closed';
-      target_ctx = null;
-      target_url = 'about:closed';
-    } else {
+  const targetInfo = await (async () => {
+    try {
+      const target_type = await target.type();
+      const target_ctx =
+        (await target.worker?.()) || (await target.page?.()) || null;
+      const target_url =
+        (await target.url?.()) || (target_ctx ? await target_ctx.url() : null);
+      return { target_type, target_ctx, target_url };
+    } catch (error: any) {
+      if (error.message?.includes('No target with given id found')) {
+        // Target already closed
+        return {
+          target_type: 'closed' as const,
+          target_ctx: null,
+          target_url: 'about:closed',
+        };
+      }
       throw error;
     }
-  }
+  })();
+
+  const { target_type, target_ctx, target_url } = targetInfo;
 
   const target_is_bg = ['service_worker', 'background_page'].includes(
     target_type || ''

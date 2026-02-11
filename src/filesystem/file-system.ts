@@ -101,7 +101,8 @@ export async function extractPdfTextByPage(buffer: Buffer): Promise<{
       let totalChars = 0;
       for (let pageNumber = 1; pageNumber <= numPages; pageNumber += 1) {
         const pageResult = await parser.getText({ partial: [pageNumber] });
-        const text = typeof pageResult?.text === 'string' ? pageResult.text : '';
+        const text =
+          typeof pageResult?.text === 'string' ? pageResult.text : '';
         pageTexts.push(text);
         totalChars += text.length;
       }
@@ -278,7 +279,10 @@ const buildDocxDocumentXml = (content: string) => {
 
 const buildDocxBuffer = (content: string): Buffer => {
   const zip = new AdmZip();
-  zip.addFile('[Content_Types].xml', Buffer.from(DOCX_CONTENT_TYPES_XML, 'utf-8'));
+  zip.addFile(
+    '[Content_Types].xml',
+    Buffer.from(DOCX_CONTENT_TYPES_XML, 'utf-8')
+  );
   zip.addFile('_rels/.rels', Buffer.from(DOCX_ROOT_RELS_XML, 'utf-8'));
   zip.addFile(
     'word/_rels/document.xml.rels',
@@ -308,9 +312,7 @@ const readDocxText = (fileBuffer: Buffer): string => {
     if (!textMatches.length) {
       return '';
     }
-    return textMatches
-      .map((match) => decodeXmlText(match[1] ?? ''))
-      .join('');
+    return textMatches.map((match) => decodeXmlText(match[1] ?? '')).join('');
   });
 
   return lines.join('\n').trim();
@@ -662,7 +664,10 @@ export class FileSystem {
     return file ? file.read() : null;
   }
 
-  async read_file_structured(filename: string, externalFile = false): Promise<{
+  async read_file_structured(
+    filename: string,
+    externalFile = false
+  ): Promise<{
     message: string;
     images: Array<{ name: string; data: string }> | null;
   }> {
@@ -713,7 +718,11 @@ export class FileSystem {
 
           if (totalChars <= MAX_CHARS) {
             const contentParts: string[] = [];
-            for (let pageNumber = 1; pageNumber <= pageTexts.length; pageNumber += 1) {
+            for (
+              let pageNumber = 1;
+              pageNumber <= pageTexts.length;
+              pageNumber += 1
+            ) {
               const text = pageTexts[pageNumber - 1] ?? '';
               if (!text.trim()) {
                 continue;
@@ -729,7 +738,11 @@ export class FileSystem {
 
           const wordToPages = new Map<string, Set<number>>();
           const pageWords = new Map<number, Set<string>>();
-          for (let pageNumber = 1; pageNumber <= pageTexts.length; pageNumber += 1) {
+          for (
+            let pageNumber = 1;
+            pageNumber <= pageTexts.length;
+            pageNumber += 1
+          ) {
             const text = pageTexts[pageNumber - 1] ?? '';
             const words = new Set(
               (text.toLowerCase().match(/\b[a-zA-Z]{4,}\b/g) ?? []).map(
@@ -770,7 +783,8 @@ export class FileSystem {
             }
           }
 
-          const contentParts: Array<{ pageNumber: number; content: string }> = [];
+          const contentParts: Array<{ pageNumber: number; content: string }> =
+            [];
           let charsUsed = 0;
           const pagesIncluded: number[] = [];
           const pagesIncludedSet = new Set<number>();
@@ -807,7 +821,9 @@ export class FileSystem {
           }
 
           contentParts.sort((a, b) => a.pageNumber - b.pageNumber);
-          const extractedText = contentParts.map((part) => part.content).join('\n\n');
+          const extractedText = contentParts
+            .map((part) => part.content)
+            .join('\n\n');
 
           let truncationNote = '';
           const pagesNotShown = numPages - pagesIncluded.length;
@@ -840,7 +856,11 @@ export class FileSystem {
           return result;
         }
 
-        if (extension === 'jpg' || extension === 'jpeg' || extension === 'png') {
+        if (
+          extension === 'jpg' ||
+          extension === 'jpeg' ||
+          extension === 'png'
+        ) {
           const fileBuffer = await fsp.readFile(filename);
           result.message = `Read image file ${filename}.`;
           result.images = [
@@ -852,8 +872,7 @@ export class FileSystem {
           return result;
         }
 
-        result.message =
-          `Error: Cannot read file ${filename} as ${extension} extension is not supported.`;
+        result.message = `Error: Cannot read file ${filename} as ${extension} extension is not supported.`;
         return result;
       } catch (error: any) {
         if (error?.code === 'ENOENT') {
@@ -897,8 +916,7 @@ export class FileSystem {
       const sanitizeNote = wasSanitized
         ? `Note: filename was auto-corrected from '${originalFilename}' to '${resolved}'. `
         : '';
-      result.message =
-        `${sanitizeNote}Read from file ${resolved}.\n<content>\n${content}\n</content>`;
+      result.message = `${sanitizeNote}Read from file ${resolved}.\n<content>\n${content}\n</content>`;
       return result;
     } catch (error) {
       result.message =
@@ -918,10 +936,7 @@ export class FileSystem {
     const originalFilename = filename;
     const [resolved, wasSanitized] = this.resolveFilename(filename);
     if (!this.isValidFilename(resolved)) {
-      return buildFilenameErrorMessage(
-        filename,
-        this.get_allowed_extensions()
-      );
+      return buildFilenameErrorMessage(filename, this.get_allowed_extensions());
     }
     filename = resolved;
 
@@ -943,10 +958,7 @@ export class FileSystem {
     const originalFilename = filename;
     const [resolved, wasSanitized] = this.resolveFilename(filename);
     if (!this.isValidFilename(resolved)) {
-      return buildFilenameErrorMessage(
-        filename,
-        this.get_allowed_extensions()
-      );
+      return buildFilenameErrorMessage(filename, this.get_allowed_extensions());
     }
     filename = resolved;
 
@@ -976,10 +988,7 @@ export class FileSystem {
     const originalFilename = filename;
     const [resolved, wasSanitized] = this.resolveFilename(filename);
     if (!this.isValidFilename(resolved)) {
-      return buildFilenameErrorMessage(
-        filename,
-        this.get_allowed_extensions()
-      );
+      return buildFilenameErrorMessage(filename, this.get_allowed_extensions());
     }
     filename = resolved;
     if (!oldStr) {

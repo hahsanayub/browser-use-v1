@@ -218,7 +218,8 @@ export const construct_simple_judge_messages = (
 ): Message[] => {
   const task_truncated = truncateText(options.task, 20000);
   const final_result_truncated = truncateText(options.final_result, 20000);
-  const current_date = options.current_date ?? new Date().toISOString().slice(0, 10);
+  const current_date =
+    options.current_date ?? new Date().toISOString().slice(0, 10);
 
   const system_prompt = `You are a strict verifier checking whether a browser automation agent actually completed its task.
 

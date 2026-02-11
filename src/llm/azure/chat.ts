@@ -1,10 +1,7 @@
 import { AzureOpenAI } from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources/index.mjs';
 import type { BaseChatModel, ChatInvokeOptions } from '../base.js';
-import {
-  ModelProviderError,
-  ModelRateLimitError,
-} from '../exceptions.js';
+import { ModelProviderError, ModelRateLimitError } from '../exceptions.js';
 import type { Message } from '../messages.js';
 import { OpenAIMessageSerializer } from '../openai/serializer.js';
 import { ResponsesAPIMessageSerializer } from '../openai/responses-serializer.js';
@@ -138,9 +135,7 @@ export class ChatAzure implements BaseChatModel {
       deployment,
       azureADTokenProvider:
         azureAdTokenProvider ??
-        (azureAdToken
-          ? async () => String(azureAdToken)
-          : undefined),
+        (azureAdToken ? async () => String(azureAdToken) : undefined),
       timeout: timeout ?? undefined,
       maxRetries,
       defaultHeaders: defaultHeaders ?? undefined,
@@ -363,9 +358,19 @@ export class ChatAzure implements BaseChatModel {
   ): Promise<ChatInvokeCompletion<T | string>> {
     const zodSchemaCandidate = this.getZodSchemaCandidate(output_format);
     if (this.shouldUseResponsesApi()) {
-      return this.invokeResponses(messages, output_format, zodSchemaCandidate, options);
+      return this.invokeResponses(
+        messages,
+        output_format,
+        zodSchemaCandidate,
+        options
+      );
     }
-    return this.invokeChatCompletions(messages, output_format, zodSchemaCandidate, options);
+    return this.invokeChatCompletions(
+      messages,
+      output_format,
+      zodSchemaCandidate,
+      options
+    );
   }
 
   private async invokeChatCompletions<T>(
@@ -449,7 +454,13 @@ export class ChatAzure implements BaseChatModel {
         }
       }
 
-      return new ChatInvokeCompletion(completion, usage, null, null, stopReason);
+      return new ChatInvokeCompletion(
+        completion,
+        usage,
+        null,
+        null,
+        stopReason
+      );
     } catch (error: any) {
       if (error?.status === 429) {
         throw new ModelRateLimitError(
@@ -564,7 +575,13 @@ export class ChatAzure implements BaseChatModel {
         }
       }
 
-      return new ChatInvokeCompletion(completion, usage, null, null, stopReason);
+      return new ChatInvokeCompletion(
+        completion,
+        usage,
+        null,
+        null,
+        stopReason
+      );
     } catch (error: any) {
       if (error?.status === 429) {
         throw new ModelRateLimitError(

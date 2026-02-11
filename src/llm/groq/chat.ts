@@ -209,7 +209,13 @@ export class ChatGroq implements BaseChatModel {
         }
       }
 
-      return new ChatInvokeCompletion(completion, usage, null, null, stopReason);
+      return new ChatInvokeCompletion(
+        completion,
+        usage,
+        null,
+        null,
+        stopReason
+      );
     } catch (error: any) {
       if (error?.status === 429) {
         throw new ModelRateLimitError(

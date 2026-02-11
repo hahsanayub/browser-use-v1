@@ -10,7 +10,11 @@ import {
 
 type ResponsesInputPart =
   | { type: 'input_text'; text: string }
-  | { type: 'input_image'; image_url: string; detail?: 'auto' | 'low' | 'high' };
+  | {
+      type: 'input_image';
+      image_url: string;
+      detail?: 'auto' | 'low' | 'high';
+    };
 
 export type ResponsesInputMessage = {
   role: 'user' | 'system' | 'assistant';
@@ -62,7 +66,10 @@ export class ResponsesAPIMessageSerializer {
 
     if (message instanceof AssistantMessage) {
       if (message.content == null) {
-        if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+        if (
+          Array.isArray(message.tool_calls) &&
+          message.tool_calls.length > 0
+        ) {
           const toolCallText = message.tool_calls
             .map(
               (toolCall) =>

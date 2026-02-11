@@ -75,7 +75,10 @@ describe('OpenAI responses serializer alignment', () => {
       new AssistantMessage({
         content: null,
         tool_calls: [
-          new ToolCall('tool-call-1', new FunctionCall('open_url', '{"url":"https://example.com"}')),
+          new ToolCall(
+            'tool-call-1',
+            new FunctionCall('open_url', '{"url":"https://example.com"}')
+          ),
         ],
       }),
     ]);

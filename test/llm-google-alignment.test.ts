@@ -289,7 +289,7 @@ describe('Google LLM alignment', () => {
     const request = generateContentMock.mock.calls[0]?.[0] ?? {};
 
     expect(request.systemInstruction).toBeUndefined();
-    expect((request.contents[0].parts[0].text as string)).toContain('sys prompt');
+    expect(request.contents[0].parts[0].text as string).toContain('sys prompt');
     expect(request.generationConfig.responseMimeType).toBe('application/json');
     expect(request.generationConfig.responseSchema).toBeDefined();
     expect((response.completion as any).value).toBe('ok');
@@ -305,14 +305,17 @@ describe('Google LLM alignment', () => {
       supportsStructuredOutput: false,
     });
 
-    const response = await llm.ainvoke([new UserMessage('extract')], schema as any);
+    const response = await llm.ainvoke(
+      [new UserMessage('extract')],
+      schema as any
+    );
     const request = generateContentMock.mock.calls[0]?.[0] ?? {};
 
     expect(request.generationConfig.responseMimeType).toBeUndefined();
     expect(request.generationConfig.responseSchema).toBeUndefined();
-    expect(
-      (request.contents?.[0]?.parts?.[1]?.text as string) ?? ''
-    ).toContain('Please respond with a valid JSON object that matches this schema');
+    expect((request.contents?.[0]?.parts?.[1]?.text as string) ?? '').toContain(
+      'Please respond with a valid JSON object that matches this schema'
+    );
     expect((response.completion as any).value).toBe('fallback');
   });
 

@@ -229,7 +229,13 @@ export class ChatOpenRouter implements BaseChatModel {
         }
       }
 
-      return new ChatInvokeCompletion(completion, usage, null, null, stopReason);
+      return new ChatInvokeCompletion(
+        completion,
+        usage,
+        null,
+        null,
+        stopReason
+      );
     } catch (error: any) {
       if (error?.status === 429) {
         throw new ModelProviderError(

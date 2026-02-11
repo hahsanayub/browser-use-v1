@@ -95,8 +95,12 @@ export class StorageStateWatchdog extends BaseWatchdog {
     await this.event_bus.dispatch(
       new StorageStateSavedEvent({
         path: targetPath,
-        cookies_count: Array.isArray(merged.cookies) ? merged.cookies.length : 0,
-        origins_count: Array.isArray(merged.origins) ? merged.origins.length : 0,
+        cookies_count: Array.isArray(merged.cookies)
+          ? merged.cookies.length
+          : 0,
+        origins_count: Array.isArray(merged.origins)
+          ? merged.origins.length
+          : 0,
       })
     );
   }
@@ -258,19 +262,27 @@ export class StorageStateWatchdog extends BaseWatchdog {
     const toCookieKey = (cookie: any) =>
       `${String(cookie?.name ?? '')}::${String(cookie?.domain ?? '')}::${String(cookie?.path ?? '')}`;
 
-    for (const cookie of Array.isArray(existing.cookies) ? existing.cookies : []) {
+    for (const cookie of Array.isArray(existing.cookies)
+      ? existing.cookies
+      : []) {
       mergedCookies.set(toCookieKey(cookie), cookie);
     }
-    for (const cookie of Array.isArray(incoming.cookies) ? incoming.cookies : []) {
+    for (const cookie of Array.isArray(incoming.cookies)
+      ? incoming.cookies
+      : []) {
       mergedCookies.set(toCookieKey(cookie), cookie);
     }
 
     const mergedOrigins = new Map<string, unknown>();
     const toOriginKey = (origin: any) => String(origin?.origin ?? '');
-    for (const origin of Array.isArray(existing.origins) ? existing.origins : []) {
+    for (const origin of Array.isArray(existing.origins)
+      ? existing.origins
+      : []) {
       mergedOrigins.set(toOriginKey(origin), origin);
     }
-    for (const origin of Array.isArray(incoming.origins) ? incoming.origins : []) {
+    for (const origin of Array.isArray(incoming.origins)
+      ? incoming.origins
+      : []) {
       mergedOrigins.set(toOriginKey(origin), origin);
     }
 
@@ -281,24 +293,25 @@ export class StorageStateWatchdog extends BaseWatchdog {
   }
 
   private async _applyOriginsStorage(origins: OriginState[]) {
-    const browserContext = this.browser_session.browser_context as
-      | {
-          newPage?: () => Promise<{
-            goto?: (url: string, options?: Record<string, unknown>) => Promise<unknown>;
-            evaluate?: (
-              fn: (payload: {
-                localStorageEntries: Array<{ name: string; value: string }>;
-                sessionStorageEntries: Array<{ name: string; value: string }>;
-              }) => void,
-              arg: {
-                localStorageEntries: Array<{ name: string; value: string }>;
-                sessionStorageEntries: Array<{ name: string; value: string }>;
-              }
-            ) => Promise<unknown>;
-            close?: () => Promise<unknown>;
-          }>;
-        }
-      | null;
+    const browserContext = this.browser_session.browser_context as {
+      newPage?: () => Promise<{
+        goto?: (
+          url: string,
+          options?: Record<string, unknown>
+        ) => Promise<unknown>;
+        evaluate?: (
+          fn: (payload: {
+            localStorageEntries: Array<{ name: string; value: string }>;
+            sessionStorageEntries: Array<{ name: string; value: string }>;
+          }) => void,
+          arg: {
+            localStorageEntries: Array<{ name: string; value: string }>;
+            sessionStorageEntries: Array<{ name: string; value: string }>;
+          }
+        ) => Promise<unknown>;
+        close?: () => Promise<unknown>;
+      }>;
+    } | null;
 
     if (!browserContext?.newPage) {
       return;
@@ -306,7 +319,9 @@ export class StorageStateWatchdog extends BaseWatchdog {
 
     for (const originState of origins) {
       const origin =
-        typeof originState?.origin === 'string' ? originState.origin.trim() : '';
+        typeof originState?.origin === 'string'
+          ? originState.origin.trim()
+          : '';
       if (!origin || !/^https?:\/\//i.test(origin)) {
         continue;
       }
@@ -317,26 +332,30 @@ export class StorageStateWatchdog extends BaseWatchdog {
       const sessionStorageEntries = this._normalizeStorageEntries(
         originState?.sessionStorage
       );
-      if (localStorageEntries.length === 0 && sessionStorageEntries.length === 0) {
+      if (
+        localStorageEntries.length === 0 &&
+        sessionStorageEntries.length === 0
+      ) {
         continue;
       }
 
-      let page:
-        | {
-            goto?: (url: string, options?: Record<string, unknown>) => Promise<unknown>;
-            evaluate?: (
-              fn: (payload: {
-                localStorageEntries: Array<{ name: string; value: string }>;
-                sessionStorageEntries: Array<{ name: string; value: string }>;
-              }) => void,
-              arg: {
-                localStorageEntries: Array<{ name: string; value: string }>;
-                sessionStorageEntries: Array<{ name: string; value: string }>;
-              }
-            ) => Promise<unknown>;
-            close?: () => Promise<unknown>;
+      let page: {
+        goto?: (
+          url: string,
+          options?: Record<string, unknown>
+        ) => Promise<unknown>;
+        evaluate?: (
+          fn: (payload: {
+            localStorageEntries: Array<{ name: string; value: string }>;
+            sessionStorageEntries: Array<{ name: string; value: string }>;
+          }) => void,
+          arg: {
+            localStorageEntries: Array<{ name: string; value: string }>;
+            sessionStorageEntries: Array<{ name: string; value: string }>;
           }
-        | null = null;
+        ) => Promise<unknown>;
+        close?: () => Promise<unknown>;
+      } | null = null;
 
       try {
         page = await browserContext.newPage();

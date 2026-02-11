@@ -67,7 +67,13 @@ describe('Agent simple judge alignment', () => {
               extracted_content: 'Only extracted 2 rows',
             }),
           ],
-          new BrowserStateHistory('https://example.com', 'Example', [], [], null),
+          new BrowserStateHistory(
+            'https://example.com',
+            'Example',
+            [],
+            [],
+            null
+          ),
           null
         )
       );
@@ -101,7 +107,13 @@ describe('Agent simple judge alignment', () => {
               extracted_content: 'Task failed',
             }),
           ],
-          new BrowserStateHistory('https://example.com', 'Example', [], [], null),
+          new BrowserStateHistory(
+            'https://example.com',
+            'Example',
+            [],
+            [],
+            null
+          ),
           null
         )
       );

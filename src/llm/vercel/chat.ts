@@ -56,7 +56,8 @@ export class ChatVercel implements BaseChatModel {
     const {
       model = 'openai/gpt-4o',
       apiKey = process.env.VERCEL_API_KEY,
-      baseURL = process.env.VERCEL_BASE_URL || 'https://ai-gateway.vercel.sh/v1',
+      baseURL = process.env.VERCEL_BASE_URL ||
+        'https://ai-gateway.vercel.sh/v1',
       timeout = null,
       temperature = null,
       maxTokens = null,
@@ -133,7 +134,9 @@ export class ChatVercel implements BaseChatModel {
     return Object.keys(payload).length > 0 ? payload : undefined;
   }
 
-  private cloneMessages(messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]) {
+  private cloneMessages(
+    messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
+  ) {
     return messages.map((message: any) => ({
       ...message,
       content: Array.isArray(message?.content)
@@ -156,7 +159,10 @@ export class ChatVercel implements BaseChatModel {
       if (typeof cloned[0].content === 'string') {
         cloned[0].content = `${cloned[0].content}${instruction}`;
       } else if (Array.isArray(cloned[0].content)) {
-        cloned[0].content = [...cloned[0].content, { type: 'text', text: instruction }];
+        cloned[0].content = [
+          ...cloned[0].content,
+          { type: 'text', text: instruction },
+        ];
       } else {
         cloned[0].content = instruction;
       }
@@ -168,7 +174,10 @@ export class ChatVercel implements BaseChatModel {
         if (typeof cloned[i].content === 'string') {
           cloned[i].content = `${cloned[i].content}${instruction}`;
         } else if (Array.isArray(cloned[i].content)) {
-          cloned[i].content = [...cloned[i].content, { type: 'text', text: instruction }];
+          cloned[i].content = [
+            ...cloned[i].content,
+            { type: 'text', text: instruction },
+          ];
         } else {
           cloned[i].content = instruction;
         }
@@ -384,7 +393,13 @@ export class ChatVercel implements BaseChatModel {
         }
       }
 
-      return new ChatInvokeCompletion(completion, usage, null, null, stopReason);
+      return new ChatInvokeCompletion(
+        completion,
+        usage,
+        null,
+        null,
+        stopReason
+      );
     } catch (error: any) {
       if (error?.status === 429) {
         throw new ModelRateLimitError(

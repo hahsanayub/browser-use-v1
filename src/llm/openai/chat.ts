@@ -300,29 +300,31 @@ export class ChatOpenAI implements BaseChatModel {
 
       let completion: T | string = content;
       if (output_format) {
-        try {
-          if (zodSchemaCandidate) {
-            const parsedJson = JSON.parse(content);
-            const output = output_format as any;
-            if (
-              output &&
-              typeof output === 'object' &&
-              output.schema &&
-              typeof output.schema.parse === 'function'
-            ) {
-              completion = output.schema.parse(parsedJson);
-            } else {
-              completion = (output_format as any).parse(parsedJson);
-            }
+        if (zodSchemaCandidate) {
+          const parsedJson = JSON.parse(content);
+          const output = output_format as any;
+          if (
+            output &&
+            typeof output === 'object' &&
+            output.schema &&
+            typeof output.schema.parse === 'function'
+          ) {
+            completion = output.schema.parse(parsedJson);
           } else {
-            completion = (output_format as any).parse(content);
+            completion = (output_format as any).parse(parsedJson);
           }
-        } catch (error) {
-          throw error;
+        } else {
+          completion = (output_format as any).parse(content);
         }
       }
 
-      return new ChatInvokeCompletion(completion, usage, null, null, stopReason);
+      return new ChatInvokeCompletion(
+        completion,
+        usage,
+        null,
+        null,
+        stopReason
+      );
     } catch (error: any) {
       // Handle OpenAI-specific errors
       if (error?.status === 429) {

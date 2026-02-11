@@ -239,8 +239,8 @@ describe('AgentMessagePrompt browser state enrichment', () => {
 
     const userMessage = prompt.get_user_message(false) as any;
     expect(Array.isArray(userMessage.content)).toBe(true);
-    const imageParts = userMessage.content.filter(
-      (part: any) => part?.image_url?.url?.startsWith?.('data:image/png;base64,')
+    const imageParts = userMessage.content.filter((part: any) =>
+      part?.image_url?.url?.startsWith?.('data:image/png;base64,')
     );
     expect(imageParts).toHaveLength(1);
   });
@@ -251,7 +251,13 @@ describe('AgentMessagePrompt browser state enrichment', () => {
     const browserState = new BrowserStateSummary(domState, {
       url: 'https://example.com/file.pdf',
       title: 'PDF Viewer',
-      tabs: [{ page_id: 0, url: 'https://example.com/file.pdf', title: 'PDF Viewer' }],
+      tabs: [
+        {
+          page_id: 0,
+          url: 'https://example.com/file.pdf',
+          title: 'PDF Viewer',
+        },
+      ],
       is_pdf_viewer: true,
     });
 

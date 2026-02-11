@@ -31,7 +31,9 @@ import { FileSystem } from '../src/filesystem/file-system.js';
 
 describe('FileSystem PDF external read alignment', () => {
   it('returns full page-tagged content when PDF fits budget', async () => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-fs-pdf-'));
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'browser-use-fs-pdf-')
+    );
     const fileSystem = new FileSystem(tempDir, false);
     const pdfPath = path.join(tempDir, 'small.pdf');
     fs.writeFileSync(pdfPath, 'fake-pdf');
@@ -39,9 +41,7 @@ describe('FileSystem PDF external read alignment', () => {
 
     try {
       const result = await fileSystem.read_file_structured(pdfPath, true);
-      expect(result.message).toContain(
-        `Read from file ${pdfPath} (2 pages,`
-      );
+      expect(result.message).toContain(`Read from file ${pdfPath} (2 pages,`);
       expect(result.message).toContain('--- Page 1 ---');
       expect(result.message).toContain('Executive summary');
       expect(result.message).toContain('--- Page 2 ---');
@@ -56,7 +56,9 @@ describe('FileSystem PDF external read alignment', () => {
   });
 
   it('uses relevance-prioritized truncation for oversized PDFs', async () => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-fs-pdf-'));
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'browser-use-fs-pdf-')
+    );
     const fileSystem = new FileSystem(tempDir, false);
     const pdfPath = path.join(tempDir, 'large.pdf');
     fs.writeFileSync(pdfPath, 'fake-pdf');
@@ -68,9 +70,7 @@ describe('FileSystem PDF external read alignment', () => {
 
     try {
       const result = await fileSystem.read_file_structured(pdfPath, true);
-      expect(result.message).toContain(
-        `Read from file ${pdfPath} (3 pages,`
-      );
+      expect(result.message).toContain(`Read from file ${pdfPath} (3 pages,`);
       expect(result.message).toContain('--- Page 1 ---');
       expect(result.message).toContain('[Showing');
       expect(result.message).toContain('Skipped pages:');

@@ -93,7 +93,8 @@ export class SystemPrompt {
       this.promptTemplate = readPromptTemplate(templateName);
     } catch (error) {
       throw new Error(
-        `Failed to load system prompt template: ${(error as Error).message}`
+        `Failed to load system prompt template: ${(error as Error).message}`,
+        { cause: error }
       );
     }
   }
@@ -140,7 +141,9 @@ export class AgentMessagePrompt {
   private readonly screenshots: string[];
   private readonly visionDetailLevel: 'auto' | 'low' | 'high';
   private readonly includeRecentEvents: boolean;
-  private readonly sampleImages: Array<ContentPartTextParam | ContentPartImageParam>;
+  private readonly sampleImages: Array<
+    ContentPartTextParam | ContentPartImageParam
+  >;
   private readonly readStateImages: Array<Record<string, unknown>>;
   private readonly llmScreenshotSize: [number, number] | null;
   private readonly unavailableSkillsInfo: string | null;
@@ -301,8 +304,8 @@ export class AgentMessagePrompt {
       : '';
     const recentEventsText =
       this.includeRecentEvents && this.browserState.recent_events
-      ? `Recent browser events: ${this.browserState.recent_events}\n`
-      : '';
+        ? `Recent browser events: ${this.browserState.recent_events}\n`
+        : '';
 
     let closedPopupsText = '';
     if (

@@ -159,7 +159,10 @@ describe('ChatOpenAI alignment', () => {
       dontForceStructuredOutput: true,
     });
 
-    const response = await llm.ainvoke([new UserMessage('user')], schema as any);
+    const response = await llm.ainvoke(
+      [new UserMessage('user')],
+      schema as any
+    );
     const request = openaiCreateMock.mock.calls[0]?.[0] ?? {};
 
     expect(request.response_format).toBeUndefined();
@@ -173,8 +176,8 @@ describe('ChatOpenAI alignment', () => {
     });
     const llm = new ChatOpenAI({ model: 'gpt-4o' });
 
-    await expect(llm.ainvoke([new UserMessage('hello')])).rejects.toBeInstanceOf(
-      ModelRateLimitError
-    );
+    await expect(
+      llm.ainvoke([new UserMessage('hello')])
+    ).rejects.toBeInstanceOf(ModelRateLimitError);
   });
 });

@@ -114,7 +114,9 @@ export class ChatGoogle implements BaseChatModel {
       ...(project ? { project } : {}),
       ...(location ? { location } : {}),
       ...(httpOptions ? { httpOptions } : {}),
-      ...(resolvedGoogleAuthOptions ? { googleAuthOptions: resolvedGoogleAuthOptions } : {}),
+      ...(resolvedGoogleAuthOptions
+        ? { googleAuthOptions: resolvedGoogleAuthOptions }
+        : {}),
     };
 
     this.client = new GoogleGenAI(clientOptions as any);
@@ -222,8 +224,7 @@ export class ChatGoogle implements BaseChatModel {
     ) {
       const validKeys = new Set(Object.keys(cleaned.properties));
       cleaned.required = cleaned.required.filter(
-        (name: unknown) =>
-          typeof name === 'string' && validKeys.has(name)
+        (name: unknown) => typeof name === 'string' && validKeys.has(name)
       );
     }
 
@@ -269,7 +270,11 @@ export class ChatGoogle implements BaseChatModel {
     ) {
       return 429;
     }
-    if (/(service unavailable|internal server error|bad gateway|503|502|500)/.test(message)) {
+    if (
+      /(service unavailable|internal server error|bad gateway|503|502|500)/.test(
+        message
+      )
+    ) {
       return 503;
     }
     if (/(forbidden|403)/.test(message)) {
@@ -417,11 +422,7 @@ export class ChatGoogle implements BaseChatModel {
         : (entry as any)?.parts,
     }));
 
-    if (
-      output_format &&
-      cleanSchemaForJson &&
-      !this.supportsStructuredOutput
-    ) {
+    if (output_format && cleanSchemaForJson && !this.supportsStructuredOutput) {
       const jsonInstruction =
         '\n\nPlease respond with a valid JSON object that matches this schema: ' +
         JSON.stringify(cleanSchemaForJson);

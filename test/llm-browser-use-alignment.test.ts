@@ -41,11 +41,10 @@ describe('ChatBrowserUse alignment', () => {
       fetchImplementation: fetchMock as unknown as typeof fetch,
     });
 
-    const result = await llm.ainvoke(
-      [new UserMessage('hello')],
-      undefined,
-      { request_type: 'judge', session_id: 'session-123' }
-    );
+    const result = await llm.ainvoke([new UserMessage('hello')], undefined, {
+      request_type: 'judge',
+      session_id: 'session-123',
+    });
 
     expect(result.completion).toBe('ok');
     expect(result.usage?.total_tokens).toBe(5);
@@ -88,7 +87,9 @@ describe('ChatBrowserUse alignment', () => {
   it('retries retryable status codes and succeeds on later attempt', async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(createFetchResponse(429, { detail: 'rate limited' }))
+      .mockResolvedValueOnce(
+        createFetchResponse(429, { detail: 'rate limited' })
+      )
       .mockResolvedValueOnce(createFetchResponse(200, { completion: 'ok' }));
     const llm = new ChatBrowserUse({
       fetchImplementation: fetchMock as unknown as typeof fetch,
@@ -113,9 +114,9 @@ describe('ChatBrowserUse alignment', () => {
       maxRetries: 2,
     });
 
-    await expect(llm.ainvoke([new UserMessage('hello')])).rejects.toBeInstanceOf(
-      ModelRateLimitError
-    );
+    await expect(
+      llm.ainvoke([new UserMessage('hello')])
+    ).rejects.toBeInstanceOf(ModelRateLimitError);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 

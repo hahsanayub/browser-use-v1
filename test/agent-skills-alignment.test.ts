@@ -183,8 +183,18 @@ describe('Agent skills alignment', () => {
           title: 'Private Area',
           description: 'Needs authenticated cookie',
           parameters: [
-            { name: 'session_id', type: 'cookie', required: true, description: 'Login first' },
-            { name: 'already_present', type: 'cookie', required: true, description: 'Already set' },
+            {
+              name: 'session_id',
+              type: 'cookie',
+              required: true,
+              description: 'Login first',
+            },
+            {
+              name: 'already_present',
+              type: 'cookie',
+              required: true,
+              description: 'Already set',
+            },
           ],
           output_schema: null,
         },

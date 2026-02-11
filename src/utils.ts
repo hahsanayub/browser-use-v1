@@ -22,11 +22,9 @@ type MinimatchFn = (
   options?: Record<string, unknown>
 ) => boolean;
 
-const minimatch = (
-  (minimatchModule as any).minimatch ??
+const minimatch = ((minimatchModule as any).minimatch ??
   (minimatchModule as any).default ??
-  minimatchModule
-) as MinimatchFn;
+  minimatchModule) as MinimatchFn;
 
 type Callback = (() => void) | undefined;
 
@@ -332,13 +330,16 @@ export const check_latest_browser_use_version = async (): Promise<
   timeout.unref?.();
 
   try {
-    const response = await fetch('https://registry.npmjs.org/browser-use/latest', {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-      },
-      signal: controller.signal,
-    });
+    const response = await fetch(
+      'https://registry.npmjs.org/browser-use/latest',
+      {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+        },
+        signal: controller.signal,
+      }
+    );
     if (!response.ok) {
       return null;
     }

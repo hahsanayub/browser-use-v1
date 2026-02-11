@@ -28,10 +28,7 @@ import {
 } from '../src/dom/views.js';
 import { HistoryTreeProcessor } from '../src/dom/history-tree-processor/service.js';
 
-const createLlm = (
-  model = 'gpt-test',
-  provider = 'test'
-): BaseChatModel =>
+const createLlm = (model = 'gpt-test', provider = 'test'): BaseChatModel =>
   ({
     model,
     get provider() {
@@ -170,7 +167,9 @@ describe('Agent constructor browser session alignment', () => {
       llm: createLlm(),
     });
 
-    expect(agent.settings.include_attributes).toEqual(DEFAULT_INCLUDE_ATTRIBUTES);
+    expect(agent.settings.include_attributes).toEqual(
+      DEFAULT_INCLUDE_ATTRIBUTES
+    );
 
     await agent.close();
   });
@@ -425,7 +424,9 @@ describe('Agent constructor browser session alignment', () => {
     expect(agent.state.last_result).toBeNull();
     expect(
       warningSpy.mock.calls.some(([message]) =>
-        String(message).includes('The agent was interrupted mid-step - Agent paused')
+        String(message).includes(
+          'The agent was interrupted mid-step - Agent paused'
+        )
       )
     ).toBe(true);
 
@@ -637,7 +638,11 @@ describe('Agent constructor browser session alignment', () => {
 
   it('retries model output generation with fallback llm after rate limit', async () => {
     const primaryInvoke = vi.fn(async () => {
-      throw new ModelRateLimitError('Rate limit exceeded', 429, 'primary-model');
+      throw new ModelRateLimitError(
+        'Rate limit exceeded',
+        429,
+        'primary-model'
+      );
     });
     const fallbackInvoke = vi.fn(async () => ({
       completion: {
@@ -737,9 +742,7 @@ describe('Agent constructor browser session alignment', () => {
       ainvoke: vi.fn(async (messages: any[]) => {
         seenMessages.push(messages);
         const promptText =
-          typeof messages?.[0]?.content === 'string'
-            ? messages[0].content
-            : '';
+          typeof messages?.[0]?.content === 'string' ? messages[0].content : '';
         return {
           completion: {
             thinking: null,
@@ -847,7 +850,10 @@ describe('Agent constructor browser session alignment', () => {
       llm: createLlm(),
     });
     let currentUrl = 'https://start.test';
-    vi.spyOn(agent.browser_session as any, 'get_current_page').mockImplementation(
+    vi.spyOn(
+      agent.browser_session as any,
+      'get_current_page'
+    ).mockImplementation(
       async () =>
         ({
           url: () => currentUrl,
@@ -878,7 +884,10 @@ describe('Agent constructor browser session alignment', () => {
     });
     let currentUrl = 'https://same.test';
     (agent.browser_session as any).agent_focus_target_id = 100;
-    vi.spyOn(agent.browser_session as any, 'get_current_page').mockImplementation(
+    vi.spyOn(
+      agent.browser_session as any,
+      'get_current_page'
+    ).mockImplementation(
       async () =>
         ({
           url: () => currentUrl,
@@ -1306,8 +1315,12 @@ describe('Agent constructor browser session alignment', () => {
       output_model_schema: outputSchema as any,
     });
 
-    const messageManagerTask = String((agent as any)._message_manager?.task ?? '');
-    expect(messageManagerTask).toContain('Expected output format: ResultSchema');
+    const messageManagerTask = String(
+      (agent as any)._message_manager?.task ?? ''
+    );
+    expect(messageManagerTask).toContain(
+      'Expected output format: ResultSchema'
+    );
     expect(messageManagerTask).toContain('"answer"');
 
     await agent.close();
@@ -1437,9 +1450,9 @@ describe('Agent constructor browser session alignment', () => {
       '<initial_user_request>Original task instructions</initial_user_request>\n<follow_up_user_request> Collect pricing details </follow_up_user_request>'
     );
 
-    const lastHistoryItem = (messageManager as any).state.agent_history_items.at(
-      -1
-    );
+    const lastHistoryItem = (
+      messageManager as any
+    ).state.agent_history_items.at(-1);
     expect(lastHistoryItem?.system_message).toBe(
       '<follow_up_user_request> Collect pricing details </follow_up_user_request>'
     );
@@ -1542,7 +1555,9 @@ describe('Agent constructor browser session alignment', () => {
 
     const multiActSpy = vi
       .spyOn(agent, 'multi_act')
-      .mockResolvedValue([new ActionResult({ extracted_content: 'ok' })] as any);
+      .mockResolvedValue([
+        new ActionResult({ extracted_content: 'ok' }),
+      ] as any);
     const logAgentEventSpy = vi
       .spyOn(agent as any, '_log_agent_event')
       .mockImplementation(() => {});
@@ -1564,7 +1579,8 @@ describe('Agent constructor browser session alignment', () => {
     });
 
     const messageManager = (agent as any)._message_manager;
-    const initialHistoryLength = (messageManager as any).state.agent_history_items.length;
+    const initialHistoryLength = (messageManager as any).state
+      .agent_history_items.length;
     messageManager.prepare_step_state(
       createBrowserStateSummary(),
       null,
@@ -1587,7 +1603,9 @@ describe('Agent constructor browser session alignment', () => {
     expect((messageManager as any).state.agent_history_items).toHaveLength(
       initialHistoryLength + 1
     );
-    const stepZeroHistoryItem = (messageManager as any).state.agent_history_items.at(-1);
+    const stepZeroHistoryItem = (
+      messageManager as any
+    ).state.agent_history_items.at(-1);
     expect(stepZeroHistoryItem?.action_results).toContain('Result');
     expect(stepZeroHistoryItem?.action_results).toContain(
       'Persisted action memory'
@@ -1610,7 +1628,9 @@ describe('Agent constructor browser session alignment', () => {
       new AgentStepInfo(1, 10)
     );
 
-    const lastHistoryItem = (messageManager as any).state.agent_history_items.at(-1);
+    const lastHistoryItem = (
+      messageManager as any
+    ).state.agent_history_items.at(-1);
     expect(lastHistoryItem?.action_results).toContain('Result');
     expect(lastHistoryItem?.action_results).toContain(
       'Persisted action memory'
@@ -1659,12 +1679,13 @@ describe('Agent constructor browser session alignment', () => {
   });
 
   it('throws when max_history_items is set to 5 or less', () => {
-    expect(() =>
-      new Agent({
-        task: 'Invalid history limit',
-        llm: createLlm(),
-        max_history_items: 5,
-      } as any)
+    expect(
+      () =>
+        new Agent({
+          task: 'Invalid history limit',
+          llm: createLlm(),
+          max_history_items: 5,
+        } as any)
     ).toThrow('max_history_items must be null or greater than 5');
   });
 
@@ -1692,7 +1713,9 @@ describe('Agent constructor browser session alignment', () => {
     );
     expect(systemMessageText).toContain(secret);
 
-    messageManager._add_context_message(new UserMessage(`Context has ${secret}`));
+    messageManager._add_context_message(
+      new UserMessage(`Context has ${secret}`)
+    );
     const lastContextMessageText = String(
       (messageManager as any).state.history.context_messages.at(-1)?.text ?? ''
     );
@@ -1820,9 +1843,7 @@ describe('Agent constructor browser session alignment', () => {
     });
 
     const executeContext = executeActionSpy.mock.calls[0]?.[2];
-    expect(executeContext?.extraction_schema).toEqual(
-      explicitExtractionSchema
-    );
+    expect(executeContext?.extraction_schema).toEqual(explicitExtractionSchema);
 
     await agent.close();
   });
@@ -2017,7 +2038,11 @@ describe('Agent constructor browser session alignment', () => {
       new ActionResult({ extracted_content: 'replayed step' }),
     ]);
     vi.spyOn(agent as any, '_generate_rerun_summary').mockResolvedValue(
-      new ActionResult({ is_done: true, success: true, extracted_content: 'ok' })
+      new ActionResult({
+        is_done: true,
+        success: true,
+        extracted_content: 'ok',
+      })
     );
 
     const history = {
@@ -2050,7 +2075,11 @@ describe('Agent constructor browser session alignment', () => {
       new ActionResult({ extracted_content: 'replayed step' }),
     ]);
     vi.spyOn(agent as any, '_generate_rerun_summary').mockResolvedValue(
-      new ActionResult({ is_done: true, success: true, extracted_content: 'ok' })
+      new ActionResult({
+        is_done: true,
+        success: true,
+        extracted_content: 'ok',
+      })
     );
 
     const history = {
@@ -2084,7 +2113,11 @@ describe('Agent constructor browser session alignment', () => {
 
     const warningSpy = vi.spyOn(agent.logger, 'warning');
     vi.spyOn(agent as any, '_generate_rerun_summary').mockResolvedValue(
-      new ActionResult({ is_done: true, success: false, extracted_content: 'summary' })
+      new ActionResult({
+        is_done: true,
+        success: false,
+        extracted_content: 'summary',
+      })
     );
 
     const history = {
@@ -2103,7 +2136,9 @@ describe('Agent constructor browser session alignment', () => {
     expect(result).toHaveLength(2);
     expect(
       warningSpy.mock.calls.some((call) =>
-        String(call[0] ?? '').includes('Initial actions: No action to replay, skipping')
+        String(call[0] ?? '').includes(
+          'Initial actions: No action to replay, skipping'
+        )
       )
     ).toBe(true);
 
@@ -2271,7 +2306,9 @@ describe('Agent constructor browser session alignment', () => {
     });
     const executeSpy = vi
       .spyOn(agent as any, '_execute_history_step')
-      .mockResolvedValue([new ActionResult({ extracted_content: 'should not run' })]);
+      .mockResolvedValue([
+        new ActionResult({ extracted_content: 'should not run' }),
+      ]);
     const history = {
       history: [
         {
@@ -2282,7 +2319,9 @@ describe('Agent constructor browser session alignment', () => {
           metadata: {
             step_number: 1,
           },
-          result: [new ActionResult({ error: 'element not found in previous run' })],
+          result: [
+            new ActionResult({ error: 'element not found in previous run' }),
+          ],
         },
       ],
     } as any;
@@ -2308,7 +2347,9 @@ describe('Agent constructor browser session alignment', () => {
       .mockRejectedValueOnce(new Error('first failure'))
       .mockRejectedValueOnce(new Error('second failure'))
       .mockResolvedValue([new ActionResult({ extracted_content: 'ok' })]);
-    const sleepSpy = vi.spyOn(agent as any, '_sleep').mockResolvedValue(undefined);
+    const sleepSpy = vi
+      .spyOn(agent as any, '_sleep')
+      .mockResolvedValue(undefined);
 
     const history = {
       history: [
@@ -2344,7 +2385,11 @@ describe('Agent constructor browser session alignment', () => {
       .mockRejectedValueOnce(new Error('second failure'));
     vi.spyOn(agent as any, '_sleep').mockResolvedValue(undefined);
     vi.spyOn(agent as any, '_generate_rerun_summary').mockResolvedValue(
-      new ActionResult({ is_done: true, success: false, extracted_content: 'summary' })
+      new ActionResult({
+        is_done: true,
+        success: false,
+        extracted_content: 'summary',
+      })
     );
 
     const history = {
@@ -2511,7 +2556,10 @@ describe('Agent constructor browser session alignment', () => {
       llm,
     });
 
-    vi.spyOn(agent.browser_session as any, 'get_current_page').mockResolvedValue({
+    vi.spyOn(
+      agent.browser_session as any,
+      'get_current_page'
+    ).mockResolvedValue({
       url: () => 'https://example.com/path',
       content: vi.fn(
         async () => '<html><body><h1>Title</h1><p>Hello world</p></body></html>'
@@ -2528,7 +2576,9 @@ describe('Agent constructor browser session alignment', () => {
 
     expect(ainvoke).toHaveBeenCalledTimes(1);
     const messages = ainvoke.mock.calls[0]?.[0] as any[];
-    expect(String(messages?.[1]?.content ?? '')).toContain('Content processed:');
+    expect(String(messages?.[1]?.content ?? '')).toContain(
+      'Content processed:'
+    );
     expect(String(messages?.[1]?.content ?? '')).toContain('HTML chars');
     expect(result.extracted_content).toContain(
       '<url>\nhttps://example.com/path\n</url>'
@@ -2544,13 +2594,15 @@ describe('Agent constructor browser session alignment', () => {
       llm: createLlm(),
     });
 
-    vi.spyOn(agent.browser_session as any, 'get_browser_state_with_recovery')
-      .mockResolvedValue({
-        element_tree: {
-          clickable_elements_to_string: () => '',
-        },
-        selector_map: {},
-      } as any);
+    vi.spyOn(
+      agent.browser_session as any,
+      'get_browser_state_with_recovery'
+    ).mockResolvedValue({
+      element_tree: {
+        clickable_elements_to_string: () => '',
+      },
+      selector_map: {},
+    } as any);
     const multiActSpy = vi
       .spyOn(agent, 'multi_act')
       .mockResolvedValue([
@@ -2598,9 +2650,9 @@ describe('Agent constructor browser session alignment', () => {
       expect.anything(),
       null
     );
-    expect(results.map((result: ActionResult) => result.extracted_content)).toEqual(
-      ['clicked menu button', 'ai extracted content']
-    );
+    expect(
+      results.map((result: ActionResult) => result.extracted_content)
+    ).toEqual(['clicked menu button', 'ai extracted content']);
 
     await agent.close();
   });
@@ -2611,13 +2663,15 @@ describe('Agent constructor browser session alignment', () => {
       llm: createLlm(),
     });
 
-    vi.spyOn(agent.browser_session as any, 'get_browser_state_with_recovery')
-      .mockResolvedValue({
-        element_tree: {
-          clickable_elements_to_string: () => '',
-        },
-        selector_map: {},
-      } as any);
+    vi.spyOn(
+      agent.browser_session as any,
+      'get_browser_state_with_recovery'
+    ).mockResolvedValue({
+      element_tree: {
+        clickable_elements_to_string: () => '',
+      },
+      selector_map: {},
+    } as any);
     const sleepSpy = vi
       .spyOn(agent as any, '_sleep')
       .mockResolvedValue(undefined);
@@ -2660,13 +2714,15 @@ describe('Agent constructor browser session alignment', () => {
     const waitSpy = vi
       .spyOn(agent as any, '_waitForMinimumElements')
       .mockResolvedValue(null);
-    vi.spyOn(agent.browser_session as any, 'get_browser_state_with_recovery')
-      .mockResolvedValue({
-        element_tree: {
-          clickable_elements_to_string: () => '',
-        },
-        selector_map: {},
-      } as any);
+    vi.spyOn(
+      agent.browser_session as any,
+      'get_browser_state_with_recovery'
+    ).mockResolvedValue({
+      element_tree: {
+        clickable_elements_to_string: () => '',
+      },
+      selector_map: {},
+    } as any);
     vi.spyOn(agent, 'multi_act').mockResolvedValue([
       new ActionResult({ extracted_content: 'done' }),
     ]);
@@ -2777,7 +2833,9 @@ describe('Agent constructor browser session alignment', () => {
 
     const executeSpy = vi
       .spyOn(agent as any, '_execute_history_step')
-      .mockResolvedValueOnce([new ActionResult({ extracted_content: 'opened' })])
+      .mockResolvedValueOnce([
+        new ActionResult({ extracted_content: 'opened' }),
+      ])
       .mockRejectedValueOnce(
         new Error('Could not find matching element for action 0')
       )
@@ -2787,7 +2845,9 @@ describe('Agent constructor browser session alignment', () => {
       .mockResolvedValueOnce([
         new ActionResult({ extracted_content: 'menu item clicked' }),
       ]);
-    const sleepSpy = vi.spyOn(agent as any, '_sleep').mockResolvedValue(undefined);
+    const sleepSpy = vi
+      .spyOn(agent as any, '_sleep')
+      .mockResolvedValue(undefined);
 
     const clickAction = {
       get_index: () => 1,

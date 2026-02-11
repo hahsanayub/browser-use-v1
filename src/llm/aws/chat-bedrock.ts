@@ -194,7 +194,8 @@ export class ChatBedrockConverse implements BaseChatModel {
     options: ChatInvokeOptions = {}
   ): Promise<ChatInvokeCompletion<T | string>> {
     const serializer = new AWSBedrockMessageSerializer();
-    const [bedrockMessages, systemMessage] = serializer.serializeMessages(messages);
+    const [bedrockMessages, systemMessage] =
+      serializer.serializeMessages(messages);
     const zodSchemaCandidate = this.getZodSchemaCandidate(output_format);
 
     let toolConfig: any = undefined;

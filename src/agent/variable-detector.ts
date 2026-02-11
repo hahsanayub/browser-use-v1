@@ -47,7 +47,9 @@ const detectFromAttributes = (
   ];
   const combined = semanticFields.join(' ').toLowerCase();
 
-  if (['address', 'street', 'addr'].some((needle) => combined.includes(needle))) {
+  if (
+    ['address', 'street', 'addr'].some((needle) => combined.includes(needle))
+  ) {
     if (combined.includes('billing')) return ['billing_address', null];
     if (combined.includes('shipping')) return ['shipping_address', null];
     return ['address', null];
@@ -89,7 +91,9 @@ const detectFromAttributes = (
     return ['state', null];
   }
   if (combined.includes('country')) return ['country', null];
-  if (['zip', 'postal', 'postcode'].some((needle) => combined.includes(needle))) {
+  if (
+    ['zip', 'postal', 'postcode'].some((needle) => combined.includes(needle))
+  ) {
     return ['zip_code', 'postal_code'];
   }
   if (combined.includes('company') || combined.includes('organization')) {
@@ -205,7 +209,9 @@ export const detect_variables_in_history = (
     if (!Array.isArray(actions)) {
       continue;
     }
-    const interactedElements = Array.isArray(historyItem?.state?.interacted_element)
+    const interactedElements = Array.isArray(
+      historyItem?.state?.interacted_element
+    )
       ? historyItem.state.interacted_element
       : [];
 

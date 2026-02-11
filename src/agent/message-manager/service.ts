@@ -44,9 +44,9 @@ export class MessageManager {
     private readonly visionDetailLevel: 'auto' | 'low' | 'high' = 'auto',
     private readonly includeToolCallExamples = false,
     private readonly includeRecentEvents = false,
-    private readonly sampleImages:
-      | Array<ContentPartTextParam | ContentPartImageParam>
-      | null = null,
+    private readonly sampleImages: Array<
+      ContentPartTextParam | ContentPartImageParam
+    > | null = null,
     private readonly llmScreenshotSize: [number, number] | null = null
   ) {
     if (this.maxHistoryItems != null && this.maxHistoryItems <= 5) {
@@ -71,8 +71,8 @@ export class MessageManager {
       return (
         compactedPrefix +
         this.state.agent_history_items
-        .map((item) => item.to_string())
-        .join('\n')
+          .map((item) => item.to_string())
+          .join('\n')
       );
     }
 
@@ -81,8 +81,8 @@ export class MessageManager {
       return (
         compactedPrefix +
         this.state.agent_history_items
-        .map((item) => item.to_string())
-        .join('\n')
+          .map((item) => item.to_string())
+          .join('\n')
       );
     }
 
@@ -154,18 +154,17 @@ export class MessageManager {
 
     const MAX_CONTENT_SIZE = 60000;
     if (this.state.read_state_description.length > MAX_CONTENT_SIZE) {
-      this.state.read_state_description =
-        `${this.state.read_state_description.slice(0, MAX_CONTENT_SIZE)}\n... [Content truncated at 60k characters]`;
+      this.state.read_state_description = `${this.state.read_state_description.slice(0, MAX_CONTENT_SIZE)}\n... [Content truncated at 60k characters]`;
     }
-    this.state.read_state_description = this.state.read_state_description.trim();
+    this.state.read_state_description =
+      this.state.read_state_description.trim();
 
     let normalizedActionResults = actionResults
       ? `Result\n${actionResults}`.trim()
       : null;
     if (normalizedActionResults) {
       if (normalizedActionResults.length > MAX_CONTENT_SIZE) {
-        normalizedActionResults =
-          `${normalizedActionResults.slice(0, MAX_CONTENT_SIZE)}\n... [Content truncated at 60k characters]`;
+        normalizedActionResults = `${normalizedActionResults.slice(0, MAX_CONTENT_SIZE)}\n... [Content truncated at 60k characters]`;
       }
     }
 
@@ -303,7 +302,9 @@ export class MessageManager {
         `<previous_compacted_memory>\n${this.state.compacted_memory}\n</previous_compacted_memory>`
       );
     }
-    compactionSections.push(`<agent_history>\n${fullHistoryText}\n</agent_history>`);
+    compactionSections.push(
+      `<agent_history>\n${fullHistoryText}\n</agent_history>`
+    );
     if (settings.include_read_state && this.state.read_state_description) {
       compactionSections.push(
         `<read_state>\n${this.state.read_state_description}\n</read_state>`
@@ -312,7 +313,9 @@ export class MessageManager {
     let compactionInput = compactionSections.join('\n\n');
 
     if (this.sensitiveData) {
-      const filtered = this.filterSensitiveData(new UserMessage(compactionInput));
+      const filtered = this.filterSensitiveData(
+        new UserMessage(compactionInput)
+      );
       compactionInput = filtered.text;
     }
 
@@ -325,7 +328,7 @@ export class MessageManager {
       systemPrompt += ` Keep under ${settings.summary_max_chars} characters if possible.`;
     }
 
-    let summary = '';
+    let summary: string;
     try {
       const response = await llm.ainvoke([
         new SystemMessage(systemPrompt),
@@ -345,7 +348,10 @@ export class MessageManager {
       return false;
     }
 
-    if (settings.summary_max_chars && summary.length > settings.summary_max_chars) {
+    if (
+      settings.summary_max_chars &&
+      summary.length > settings.summary_max_chars
+    ) {
       summary = `${summary.slice(0, settings.summary_max_chars).trimEnd()}…`;
     }
 

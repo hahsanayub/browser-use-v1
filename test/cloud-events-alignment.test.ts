@@ -7,7 +7,9 @@ import {
 } from '../src/agent/cloud-events.js';
 
 describe('cloud events alignment', () => {
-  const oversizedBase64 = 'a'.repeat(Math.floor((50 * 1024 * 1024 * 4) / 3) + 2);
+  const oversizedBase64 = 'a'.repeat(
+    Math.floor((50 * 1024 * 1024 * 4) / 3) + 2
+  );
 
   it('CreateAgentStepEvent.fromAgentStep includes screenshot as data URL', () => {
     const event = CreateAgentStepEvent.fromAgentStep(

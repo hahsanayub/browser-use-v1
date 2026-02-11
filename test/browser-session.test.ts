@@ -225,7 +225,8 @@ describe('BrowserSession Basic Operations', () => {
       expect(
         dispatchSpy.mock.calls.some(
           ([event]) =>
-            event instanceof DownloadProgressEvent && event.state === 'completed'
+            event instanceof DownloadProgressEvent &&
+            event.state === 'completed'
         )
       ).toBe(true);
     } finally {
@@ -404,10 +405,7 @@ describe('BrowserSession Basic Operations', () => {
             },
           ];
         }
-        if (
-          source.includes('viewportWidth') &&
-          source.includes('pageHeight')
-        ) {
+        if (source.includes('viewportWidth') && source.includes('pageHeight')) {
           return {
             viewportWidth: 1280,
             viewportHeight: 720,
@@ -448,9 +446,7 @@ describe('BrowserSession Basic Operations', () => {
 
       expect(summary.recent_events).toContain('"event_type":"tab_switched"');
       expect(summary.pending_network_requests).toHaveLength(1);
-      expect(summary.pending_network_requests[0]?.url).toContain(
-        '/api/items'
-      );
+      expect(summary.pending_network_requests[0]?.url).toContain('/api/items');
       expect(summary.pagination_buttons).toHaveLength(1);
       expect(summary.pagination_buttons[0]?.button_type).toBe('next');
       expect((session as any)._original_viewport_size).toEqual([1280, 720]);

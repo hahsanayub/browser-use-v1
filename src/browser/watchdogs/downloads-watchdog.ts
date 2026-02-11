@@ -256,12 +256,15 @@ export class DownloadsWatchdog extends BaseWatchdog {
     on_progress: ((info: DownloadProgressInfo) => void) | null = null,
     on_complete: ((info: DownloadCompleteInfo) => void) | null = null
   ) {
-    const { on_start, on_progress: resolvedProgress, on_complete: resolvedEnd } =
-      this._normalizeCallbackRegistration(
-        on_start_or_options,
-        on_progress,
-        on_complete
-      );
+    const {
+      on_start,
+      on_progress: resolvedProgress,
+      on_complete: resolvedEnd,
+    } = this._normalizeCallbackRegistration(
+      on_start_or_options,
+      on_progress,
+      on_complete
+    );
     if (on_start) {
       this._downloadStartCallbacks.push(on_start);
     }
@@ -285,12 +288,15 @@ export class DownloadsWatchdog extends BaseWatchdog {
     on_progress: ((info: DownloadProgressInfo) => void) | null = null,
     on_complete: ((info: DownloadCompleteInfo) => void) | null = null
   ) {
-    const { on_start, on_progress: resolvedProgress, on_complete: resolvedEnd } =
-      this._normalizeCallbackRegistration(
-        on_start_or_options,
-        on_progress,
-        on_complete
-      );
+    const {
+      on_start,
+      on_progress: resolvedProgress,
+      on_complete: resolvedEnd,
+    } = this._normalizeCallbackRegistration(
+      on_start_or_options,
+      on_progress,
+      on_complete
+    );
     if (on_start) {
       this._downloadStartCallbacks = this._downloadStartCallbacks.filter(
         (callback) => callback !== on_start
@@ -504,9 +510,12 @@ export class DownloadsWatchdog extends BaseWatchdog {
     }
 
     try {
-      const responseBody = await this._cdpSession.send('Network.getResponseBody', {
-        requestId,
-      });
+      const responseBody = await this._cdpSession.send(
+        'Network.getResponseBody',
+        {
+          requestId,
+        }
+      );
       const body =
         typeof responseBody?.body === 'string' ? responseBody.body : '';
       if (!body) {
@@ -557,11 +566,11 @@ export class DownloadsWatchdog extends BaseWatchdog {
   }
 
   private _resolveSuggestedFilename(contentDisposition: string, url: string) {
-    const filenameMatch = /filename\\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i.exec(
-      contentDisposition
-    );
-    const fromHeader =
-      filenameMatch?.[1] || filenameMatch?.[2] || '';
+    const filenameMatch =
+      /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(
+        contentDisposition
+      );
+    const fromHeader = filenameMatch?.[1] || filenameMatch?.[2] || '';
     const candidate = decodeURIComponent(fromHeader || '').trim();
     if (candidate) {
       return this._sanitizeFilename(candidate);
@@ -583,7 +592,7 @@ export class DownloadsWatchdog extends BaseWatchdog {
   private _sanitizeFilename(filename: string) {
     const sanitized = filename
       .replace(/[\\/:*?"<>|]+/g, '_')
-      .replace(/\\s+/g, ' ')
+      .replace(/\s+/g, ' ')
       .trim();
     return sanitized || 'download';
   }

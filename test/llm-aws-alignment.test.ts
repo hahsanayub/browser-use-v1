@@ -118,7 +118,10 @@ describe('AWS Bedrock alignment', () => {
       removeDefaultsFromSchema: true,
     });
 
-    const result = await llm.ainvoke([new UserMessage('extract')], schema as any);
+    const result = await llm.ainvoke(
+      [new UserMessage('extract')],
+      schema as any
+    );
     const request = converseCommandCtorMock.mock.calls[0]?.[0] ?? {};
 
     expect(request.toolConfig).toBeDefined();
@@ -139,7 +142,10 @@ describe('AWS Bedrock alignment', () => {
       maxRetries: 5,
     });
 
-    await llm.ainvoke([new SystemMessage('system context'), new UserMessage('hello')]);
+    await llm.ainvoke([
+      new SystemMessage('system context'),
+      new UserMessage('hello'),
+    ]);
 
     expect(bedrockCtorMock.mock.calls[0]?.[0]).toMatchObject({
       region: 'us-east-1',

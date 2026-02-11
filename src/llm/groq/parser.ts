@@ -119,7 +119,9 @@ export function tryParseGroqFailedGeneration<T>(
 
     if (err instanceof SyntaxError) {
       logger.warning(`Failed to parse model output: ${err.message}`);
-      throw new Error(`Could not parse response. ${err.message}`);
+      throw new Error(`Could not parse response. ${err.message}`, {
+        cause: err,
+      });
     }
 
     const errorMessage = error.message || String(error);

@@ -174,7 +174,10 @@ describe('OpenAI-compatible providers alignment', () => {
       model: 'openai/gpt-oss-120b',
     });
 
-    const response = await llm.ainvoke([new UserMessage('extract')], schema as any);
+    const response = await llm.ainvoke(
+      [new UserMessage('extract')],
+      schema as any
+    );
     const request = openaiCreateMock.mock.calls[0]?.[0] ?? {};
     const lastMessage = request.messages?.[request.messages.length - 1];
     const contentText =
@@ -202,7 +205,10 @@ describe('OpenAI-compatible providers alignment', () => {
       removeDefaultsFromSchema: true,
     });
 
-    const response = await llm.ainvoke([new UserMessage('extract')], schema as any);
+    const response = await llm.ainvoke(
+      [new UserMessage('extract')],
+      schema as any
+    );
     const request = openaiCreateMock.mock.calls[0]?.[0] ?? {};
     const schemaPayload = request.response_format?.json_schema?.schema;
 
@@ -224,7 +230,10 @@ describe('OpenAI-compatible providers alignment', () => {
       seed: 9,
     });
 
-    const response = await llm.ainvoke([new UserMessage('extract')], schema as any);
+    const response = await llm.ainvoke(
+      [new UserMessage('extract')],
+      schema as any
+    );
     const request = openaiCreateMock.mock.calls[0]?.[0] ?? {};
 
     expect(request.model).toBe('deepseek-chat');
@@ -257,7 +266,10 @@ describe('OpenAI-compatible providers alignment', () => {
       fetchOptions: { cache: 'no-store' },
     });
 
-    const response = await llm.ainvoke([new UserMessage('extract')], schema as any);
+    const response = await llm.ainvoke(
+      [new UserMessage('extract')],
+      schema as any
+    );
     const request = openaiCreateMock.mock.calls[0]?.[0] ?? {};
 
     expect(request.model).toBe('mistral-medium-latest');
@@ -289,7 +301,10 @@ describe('OpenAI-compatible providers alignment', () => {
       temperature: 0.2,
     });
 
-    const response = await llm.ainvoke([new UserMessage('extract this')], schema as any);
+    const response = await llm.ainvoke(
+      [new UserMessage('extract this')],
+      schema as any
+    );
     const request = openaiCreateMock.mock.calls[0]?.[0] ?? {};
     const lastMessage = request.messages?.[request.messages.length - 1];
     const contentText =

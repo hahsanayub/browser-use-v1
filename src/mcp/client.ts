@@ -393,7 +393,11 @@ export class MCPClient {
     toolFilter?: string[],
     prefix?: string
   ): Promise<void> {
-    await this.registerToTools(controller as unknown as Pick<Tools, 'registry'>, toolFilter, prefix);
+    await this.registerToTools(
+      controller as unknown as Pick<Tools, 'registry'>,
+      toolFilter,
+      prefix
+    );
   }
 
   private _registerToolAsAction(
@@ -415,7 +419,6 @@ export class MCPClient {
       }
 
       const startTime = Date.now() / 1000;
-      let errorMsg: string | null = null;
 
       try {
         // Call the MCP tool
@@ -429,7 +432,7 @@ export class MCPClient {
           long_term_memory: `Used MCP tool '${tool.name}' from ${this.serverName}`,
         });
       } catch (error) {
-        errorMsg = error instanceof Error ? error.message : String(error);
+        const errorMsg = error instanceof Error ? error.message : String(error);
         logger.error(`MCP tool '${tool.name}' failed: ${errorMsg}`);
         return new ActionResult({
           error: `MCP tool '${tool.name}' failed: ${errorMsg}`,

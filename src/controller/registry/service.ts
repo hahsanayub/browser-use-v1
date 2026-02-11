@@ -79,7 +79,7 @@ const splitTopLevelParameters = (paramsSource: string): string[] => {
   let depthParen = 0;
   let depthBrace = 0;
   let depthBracket = 0;
-  let quote: '\'' | '"' | '`' | null = null;
+  let quote: "'" | '"' | '`' | null = null;
   let escaped = false;
 
   const flush = () => {
@@ -110,7 +110,7 @@ const splitTopLevelParameters = (paramsSource: string): string[] => {
       continue;
     }
 
-    if (char === '\'' || char === '"' || char === '`') {
+    if (char === "'" || char === '"' || char === '`') {
       current += char;
       quote = char;
       continue;
@@ -147,7 +147,7 @@ const extractFunctionParameters = (
     return null;
   }
 
-  let paramsSource = '';
+  let paramsSource: string;
   const arrowIndex = source.indexOf('=>');
   if (arrowIndex !== -1) {
     let lhs = source.slice(0, arrowIndex).trim();
@@ -336,11 +336,11 @@ export class Registry<Context = unknown> {
       if (!options.param_model) {
         const supportsCompatSignature = Boolean(
           parsedHandlerParams &&
-            parsedHandlerParams.length > 0 &&
-            !(
-              parsedHandlerParams.length <= 2 &&
-              parsedHandlerParams[0]?.name === 'params'
-            )
+          parsedHandlerParams.length > 0 &&
+          !(
+            parsedHandlerParams.length <= 2 &&
+            parsedHandlerParams[0]?.name === 'params'
+          )
         );
 
         if (supportsCompatSignature && parsedHandlerParams) {
@@ -507,7 +507,10 @@ export class Registry<Context = unknown> {
             throw createAbortError(signal?.reason ?? error);
           }
           if (isTimeoutError(error)) {
-            throw new Error(`Error executing action ${action_name} due to timeout.`);
+            throw new Error(
+              `Error executing action ${action_name} due to timeout.`,
+              { cause: error }
+            );
           }
           if (isSpecialContextMissingError(error)) {
             throw error;

@@ -293,7 +293,11 @@ export const normalizeStructuredDataBySchema = (
     return normalized;
   }
 
-  if (typeList.includes('array') && Array.isArray(value) && isRecord(schema.items)) {
+  if (
+    typeList.includes('array') &&
+    Array.isArray(value) &&
+    isRecord(schema.items)
+  ) {
     return value.map((item) =>
       normalizeStructuredDataBySchema(item, schema.items)
     );

@@ -197,7 +197,9 @@ const normalizeActionForHash = (
   }
 
   if (action_name === 'input' || action_name === 'input_text') {
-    const text = String(params.text ?? '').trim().toLowerCase();
+    const text = String(params.text ?? '')
+      .trim()
+      .toLowerCase();
     return `input|${String(params.index ?? '')}|${text}`;
   }
 
@@ -226,7 +228,10 @@ export const compute_action_hash = (
   params: Record<string, unknown>
 ) => {
   const normalized = normalizeActionForHash(action_name, params);
-  return createHash('sha256').update(normalized, 'utf8').digest('hex').slice(0, 12);
+  return createHash('sha256')
+    .update(normalized, 'utf8')
+    .digest('hex')
+    .slice(0, 12);
 };
 
 export class ActionLoopDetector {
@@ -335,17 +340,18 @@ export interface MessageCompactionSettings {
   compaction_llm: BaseChatModel | null;
 }
 
-export const defaultMessageCompactionSettings = (): MessageCompactionSettings => ({
-  enabled: true,
-  compact_every_n_steps: 15,
-  trigger_char_count: 40000,
-  trigger_token_count: null,
-  chars_per_token: 4,
-  keep_last_items: 6,
-  summary_max_chars: 6000,
-  include_read_state: false,
-  compaction_llm: null,
-});
+export const defaultMessageCompactionSettings =
+  (): MessageCompactionSettings => ({
+    enabled: true,
+    compact_every_n_steps: 15,
+    trigger_char_count: 40000,
+    trigger_token_count: null,
+    chars_per_token: 4,
+    keep_last_items: 6,
+    summary_max_chars: 6000,
+    include_read_state: false,
+    compaction_llm: null,
+  });
 
 export const normalizeMessageCompactionSettings = (
   settings: Partial<MessageCompactionSettings> | MessageCompactionSettings
@@ -355,10 +361,7 @@ export const normalizeMessageCompactionSettings = (
     ...settings,
   };
 
-  if (
-    merged.trigger_char_count != null &&
-    merged.trigger_token_count != null
-  ) {
+  if (merged.trigger_char_count != null && merged.trigger_token_count != null) {
     throw new Error(
       'Set trigger_char_count or trigger_token_count for message_compaction, not both.'
     );
@@ -643,8 +646,9 @@ export class AgentOutput {
           ? data.current_plan_item
           : null,
       plan_update: Array.isArray(data.plan_update)
-        ? data.plan_update
-            .filter((item: unknown): item is string => typeof item === 'string')
+        ? data.plan_update.filter(
+            (item: unknown): item is string => typeof item === 'string'
+          )
         : null,
       action: actions,
     });
@@ -802,10 +806,17 @@ export class AgentHistory {
   }
 
   toJSON(
-    sensitive_data: Record<string, string | Record<string, string>> | null = null
+    sensitive_data: Record<
+      string,
+      string | Record<string, string>
+    > | null = null
   ) {
     let modelOutput = this.model_output?.toJSON() ?? null;
-    if (modelOutput && Array.isArray((modelOutput as any).action) && sensitive_data) {
+    if (
+      modelOutput &&
+      Array.isArray((modelOutput as any).action) &&
+      sensitive_data
+    ) {
       (modelOutput as any).action = (modelOutput as any).action.map(
         (action: Record<string, unknown>) =>
           Object.prototype.hasOwnProperty.call(action, 'input')
@@ -1136,7 +1147,10 @@ export class AgentHistoryList<TStructured = unknown> {
 
   save_to_file(
     filepath: string,
-    sensitive_data: Record<string, string | Record<string, string>> | null = null
+    sensitive_data: Record<
+      string,
+      string | Record<string, string>
+    > | null = null
   ) {
     const dir = path.dirname(filepath);
     fs.mkdirSync(dir, { recursive: true });
@@ -1162,41 +1176,44 @@ export class AgentHistoryList<TStructured = unknown> {
   ): AgentHistoryList {
     const historyItems = ((payload as { history?: any[] }).history ?? []).map(
       (entry) => {
-      const modelOutput = entry.model_output
-        ? outputModel.fromJSON(entry.model_output)
-        : null;
-      const result = (entry.result ?? []).map(
-        (item: ActionResultInit) => new ActionResult(item)
-      );
-      const state = new (BrowserStateHistory as any)(
-        entry.state?.url ?? '',
-        entry.state?.title ?? '',
-        entry.state?.tabs ?? [],
-        entry.state?.interacted_element ?? [],
-        entry.state?.screenshot_path ?? null
-      ) as BrowserStateHistory;
-      const metadata = entry.metadata
-        ? new StepMetadata(
-            entry.metadata.step_start_time,
-            entry.metadata.step_end_time,
-            entry.metadata.step_number,
-            entry.metadata.step_interval ?? null
-          )
-        : null;
-      return new AgentHistory(
-        modelOutput,
-        result,
-        state,
-        metadata,
-        entry.state_message ?? null
-      );
+        const modelOutput = entry.model_output
+          ? outputModel.fromJSON(entry.model_output)
+          : null;
+        const result = (entry.result ?? []).map(
+          (item: ActionResultInit) => new ActionResult(item)
+        );
+        const state = new (BrowserStateHistory as any)(
+          entry.state?.url ?? '',
+          entry.state?.title ?? '',
+          entry.state?.tabs ?? [],
+          entry.state?.interacted_element ?? [],
+          entry.state?.screenshot_path ?? null
+        ) as BrowserStateHistory;
+        const metadata = entry.metadata
+          ? new StepMetadata(
+              entry.metadata.step_start_time,
+              entry.metadata.step_end_time,
+              entry.metadata.step_number,
+              entry.metadata.step_interval ?? null
+            )
+          : null;
+        return new AgentHistory(
+          modelOutput,
+          result,
+          state,
+          metadata,
+          entry.state_message ?? null
+        );
       }
     );
     return new AgentHistoryList(historyItems);
   }
 
   toJSON(
-    sensitive_data: Record<string, string | Record<string, string>> | null = null
+    sensitive_data: Record<
+      string,
+      string | Record<string, string>
+    > | null = null
   ) {
     return {
       history: this.history.map((item) => item.toJSON(sensitive_data)),
@@ -1204,7 +1221,10 @@ export class AgentHistoryList<TStructured = unknown> {
   }
 
   model_dump(
-    sensitive_data: Record<string, string | Record<string, string>> | null = null
+    sensitive_data: Record<
+      string,
+      string | Record<string, string>
+    > | null = null
   ) {
     return this.toJSON(sensitive_data);
   }

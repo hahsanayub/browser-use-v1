@@ -187,7 +187,8 @@ export class ChatAnthropic implements BaseChatModel {
     options: ChatInvokeOptions = {}
   ): Promise<ChatInvokeCompletion<T | string>> {
     const serializer = new AnthropicMessageSerializer();
-    const [anthropicMessages, systemPrompt] = serializer.serializeMessages(messages);
+    const [anthropicMessages, systemPrompt] =
+      serializer.serializeMessages(messages);
     const zodSchemaCandidate = this.getZodSchemaCandidate(output_format);
 
     let tools: Anthropic.Tool[] | undefined = undefined;
@@ -283,7 +284,13 @@ export class ChatAnthropic implements BaseChatModel {
       const usage = this.getUsage(response);
       const stopReason = (response as any).stop_reason ?? null;
 
-      return new ChatInvokeCompletion(completion, usage, null, null, stopReason);
+      return new ChatInvokeCompletion(
+        completion,
+        usage,
+        null,
+        null,
+        stopReason
+      );
     } catch (error: any) {
       if (error instanceof RateLimitError || error?.status === 429) {
         throw new ModelRateLimitError(

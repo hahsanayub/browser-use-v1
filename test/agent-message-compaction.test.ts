@@ -4,10 +4,7 @@ import { Agent } from '../src/agent/service.js';
 import { AgentStepInfo } from '../src/agent/views.js';
 import { HistoryItem } from '../src/agent/message-manager/views.js';
 
-const createLlm = (
-  completion = 'ok',
-  model = 'gpt-test'
-): BaseChatModel =>
+const createLlm = (completion = 'ok', model = 'gpt-test'): BaseChatModel =>
   ({
     model,
     get provider() {
@@ -50,15 +47,7 @@ describe('Agent message compaction', () => {
 
     try {
       agent.state.message_manager_state.agent_history_items.push(
-        new HistoryItem(
-          1,
-          'ok',
-          'memory',
-          'goal',
-          'A'.repeat(120),
-          null,
-          null
-        )
+        new HistoryItem(1, 'ok', 'memory', 'goal', 'A'.repeat(120), null, null)
       );
 
       await (agent as any)._maybe_compact_messages(new AgentStepInfo(2, 20));
@@ -70,9 +59,9 @@ describe('Agent message compaction', () => {
       expect(agent.state.message_manager_state.agent_history_items.length).toBe(
         2
       );
-      expect((agent as any)._message_manager.agent_history_description).toContain(
-        '<compacted_memory>'
-      );
+      expect(
+        (agent as any)._message_manager.agent_history_description
+      ).toContain('<compacted_memory>');
       expect(compactionInvoke).toHaveBeenCalledTimes(1);
     } finally {
       await agent.close();
@@ -106,15 +95,7 @@ describe('Agent message compaction', () => {
 
     try {
       agent.state.message_manager_state.agent_history_items.push(
-        new HistoryItem(
-          1,
-          'ok',
-          'memory',
-          'goal',
-          'B'.repeat(120),
-          null,
-          null
-        )
+        new HistoryItem(1, 'ok', 'memory', 'goal', 'B'.repeat(120), null, null)
       );
 
       await (agent as any)._maybe_compact_messages(new AgentStepInfo(2, 20));

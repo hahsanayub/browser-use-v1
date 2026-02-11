@@ -20,7 +20,9 @@ export class AWSBedrockMessageSerializer {
     return this.serializeMessages(messages)[0];
   }
 
-  serializeMessages(messages: Message[]): [BedrockMessage[], BedrockSystemMessage?] {
+  serializeMessages(
+    messages: Message[]
+  ): [BedrockMessage[], BedrockSystemMessage?] {
     const bedrockMessages: BedrockMessage[] = [];
     let systemMessage: BedrockSystemMessage | undefined = undefined;
 
@@ -46,7 +48,9 @@ export class AWSBedrockMessageSerializer {
       .map((part) => ({ text: part.text }));
   }
 
-  private serializeImageContent(part: ContentPartImageParam): BedrockContentBlock {
+  private serializeImageContent(
+    part: ContentPartImageParam
+  ): BedrockContentBlock {
     const url = part.image_url.url;
     if (!url.startsWith('data:')) {
       throw new Error(`Unsupported image URL format: ${url}`);

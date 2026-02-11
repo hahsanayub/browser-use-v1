@@ -66,7 +66,8 @@ export class ChatBrowserUse implements BaseChatModel {
     const {
       model = 'bu-latest',
       apiKey = process.env.BROWSER_USE_API_KEY,
-      baseUrl = process.env.BROWSER_USE_LLM_URL ?? 'https://llm.api.browser-use.com',
+      baseUrl = process.env.BROWSER_USE_LLM_URL ??
+        'https://llm.api.browser-use.com',
       timeout = 120,
       maxRetries = 5,
       retryBaseDelay = 1.0,
@@ -75,7 +76,8 @@ export class ChatBrowserUse implements BaseChatModel {
       fetchImplementation = fetch,
     } = options;
 
-    const isValidModel = VALID_MODELS.has(model) || model.startsWith('browser-use/');
+    const isValidModel =
+      VALID_MODELS.has(model) || model.startsWith('browser-use/');
     if (!isValidModel) {
       throw new Error(
         `Invalid model: '${model}'. Must be one of bu-latest, bu-1-0, bu-2-0 or start with 'browser-use/'`
@@ -373,7 +375,7 @@ export class ChatBrowserUse implements BaseChatModel {
         const statusCode =
           error instanceof HttpStatusError
             ? error.statusCode
-            : (error as any)?.statusCode ?? null;
+            : ((error as any)?.statusCode ?? null);
         const retryableHttp =
           typeof statusCode === 'number' &&
           RETRYABLE_STATUS_CODES.has(statusCode);

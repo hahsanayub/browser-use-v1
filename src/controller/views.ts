@@ -22,12 +22,11 @@ export const WaitActionSchema = z.object({
 });
 export type WaitAction = z.infer<typeof WaitActionSchema>;
 
-export const ClickElementActionSchema = z
-  .object({
-    index: z.number().int().min(1).optional(),
-    coordinate_x: z.number().int().optional(),
-    coordinate_y: z.number().int().optional(),
-  });
+export const ClickElementActionSchema = z.object({
+  index: z.number().int().min(1).optional(),
+  coordinate_x: z.number().int().optional(),
+  coordinate_y: z.number().int().optional(),
+});
 export type ClickElementAction = z.infer<typeof ClickElementActionSchema>;
 
 export const ClickElementActionIndexOnlySchema = z.object({

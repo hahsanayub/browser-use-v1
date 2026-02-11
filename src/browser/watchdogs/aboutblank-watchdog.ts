@@ -59,7 +59,8 @@ export class AboutBlankWatchdog extends BaseWatchdog {
     try {
       await this._injectDvdScreensaverOverlay();
     } catch (error) {
-      injectionError = (error as Error).message || 'DVD overlay injection failed';
+      injectionError =
+        (error as Error).message || 'DVD overlay injection failed';
     }
 
     await this.event_bus.dispatch(

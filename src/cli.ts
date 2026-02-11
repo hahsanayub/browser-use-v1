@@ -287,19 +287,13 @@ export const parseCliArgs = (argv: string[]): ParsedCliArgs => {
       i = nextIndex;
       continue;
     }
-    if (
-      arg === '--proxy-username' ||
-      arg.startsWith('--proxy-username=')
-    ) {
+    if (arg === '--proxy-username' || arg.startsWith('--proxy-username=')) {
       const { value, nextIndex } = takeOptionValue(arg, i, argv);
       parsed.proxy_username = value;
       i = nextIndex;
       continue;
     }
-    if (
-      arg === '--proxy-password' ||
-      arg.startsWith('--proxy-password=')
-    ) {
+    if (arg === '--proxy-password' || arg.startsWith('--proxy-password=')) {
       const { value, nextIndex } = takeOptionValue(arg, i, argv);
       parsed.proxy_password = value;
       i = nextIndex;

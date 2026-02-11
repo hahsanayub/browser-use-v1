@@ -105,9 +105,9 @@ describe('Allowed Domains Security', () => {
       }),
     });
 
-    expect((session as any)._is_url_allowed('https://www.evil.example.com')).toBe(
-      false
-    );
+    expect(
+      (session as any)._is_url_allowed('https://www.evil.example.com')
+    ).toBe(false);
     expect((session as any)._is_url_allowed('https://safe.example.com')).toBe(
       true
     );

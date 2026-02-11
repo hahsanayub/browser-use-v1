@@ -327,7 +327,11 @@ describe('DOMHistoryElement', () => {
       null,
       'button',
       '/html/body/button',
-      { id: 'submit-btn', class: 'primary focus', 'aria-label': 'Submit order' },
+      {
+        id: 'submit-btn',
+        class: 'primary focus',
+        'aria-label': 'Submit order',
+      },
       []
     );
     domElement.highlight_index = 5;

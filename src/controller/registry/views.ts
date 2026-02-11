@@ -45,10 +45,10 @@ export class RegisteredAction {
 
     const hideStructuredDoneSuccess = Boolean(
       this.name === 'done' &&
-        schemaShape &&
-        typeof schemaShape === 'object' &&
-        Object.prototype.hasOwnProperty.call(schemaShape, 'data') &&
-        Object.prototype.hasOwnProperty.call(schemaShape, 'success')
+      schemaShape &&
+      typeof schemaShape === 'object' &&
+      Object.prototype.hasOwnProperty.call(schemaShape, 'data') &&
+      Object.prototype.hasOwnProperty.call(schemaShape, 'success')
     );
     if (hideStructuredDoneSuccess) {
       skipKeys.add('success');
@@ -56,9 +56,9 @@ export class RegisteredAction {
 
     const hideExtractOutputSchema = Boolean(
       this.name === 'extract_structured_data' &&
-        schemaShape &&
-        typeof schemaShape === 'object' &&
-        Object.prototype.hasOwnProperty.call(schemaShape, 'output_schema')
+      schemaShape &&
+      typeof schemaShape === 'object' &&
+      Object.prototype.hasOwnProperty.call(schemaShape, 'output_schema')
     );
     if (hideExtractOutputSchema) {
       skipKeys.add('output_schema');

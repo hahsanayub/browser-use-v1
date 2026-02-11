@@ -21,7 +21,9 @@ describe('FileSystem docx support', () => {
     try {
       const content = '# Quarterly Report\nRevenue up 12%\n\nMargin stable';
       const writeResult = await fileSystem.write_file('report.docx', content);
-      expect(writeResult).toContain('Data written to file report.docx successfully.');
+      expect(writeResult).toContain(
+        'Data written to file report.docx successfully.'
+      );
 
       const fullPath = path.join(fileSystem.get_dir(), 'report.docx');
       expect(fs.existsSync(fullPath)).toBe(true);

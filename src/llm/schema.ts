@@ -52,10 +52,7 @@ export class SchemaOptimizer {
         for (const [key, value] of Object.entries(obj)) {
           if (key === '$defs' || key === 'additionalProperties') continue;
           if (key === 'title' && !inProperties) continue;
-          if (
-            removeMinItems &&
-            (key === 'minItems' || key === 'min_items')
-          ) {
+          if (removeMinItems && (key === 'minItems' || key === 'min_items')) {
             continue;
           }
           if (removeDefaults && key === 'default') continue;
@@ -149,7 +146,10 @@ export class SchemaOptimizer {
       Object.values(obj).forEach(stripStructuredDoneSuccess);
     };
 
-    const stripExtractOutputSchema = (obj: any, parentKey: string | null = null) => {
+    const stripExtractOutputSchema = (
+      obj: any,
+      parentKey: string | null = null
+    ) => {
       if (Array.isArray(obj)) {
         obj.forEach((item) => stripExtractOutputSchema(item, parentKey));
         return;

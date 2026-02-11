@@ -84,10 +84,7 @@ export class PopupsWatchdog extends BaseWatchdog {
     this._dialogListenersRegistered.clear();
   }
 
-  private async _handleJavascriptDialog(
-    payload: any,
-    session: CDPSessionLike
-  ) {
+  private async _handleJavascriptDialog(payload: any, session: CDPSessionLike) {
     const dialogType =
       typeof payload?.type === 'string' ? payload.type : 'alert';
     const message = typeof payload?.message === 'string' ? payload.message : '';

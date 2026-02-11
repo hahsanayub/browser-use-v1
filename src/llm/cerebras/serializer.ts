@@ -11,7 +11,9 @@ import {
 export type CerebrasMessage = Record<string, unknown>;
 
 export class CerebrasMessageSerializer {
-  private serializeContent(content: unknown): string | Record<string, unknown>[] {
+  private serializeContent(
+    content: unknown
+  ): string | Record<string, unknown>[] {
     if (content == null) {
       return '';
     }

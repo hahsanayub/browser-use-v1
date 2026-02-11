@@ -180,11 +180,7 @@ export class AnthropicMessageSerializer {
             return content;
           }
           const first = content[0];
-          if (
-            first &&
-            first.type === 'text' &&
-            !(first as any).cache_control
-          ) {
+          if (first && first.type === 'text' && !(first as any).cache_control) {
             return first.text;
           }
           return content;
@@ -378,25 +374,25 @@ export class AnthropicMessageSerializer {
           message.content === null
             ? null
             : typeof message.content === 'string'
-            ? message.content
-            : message.content.map((part) => {
-                if (part instanceof ContentPartTextParam) {
-                  return new ContentPartTextParam(part.text);
-                }
-                if (part instanceof ContentPartRefusalParam) {
-                  return new ContentPartRefusalParam(part.refusal);
-                }
-                if (part instanceof ContentPartImageParam) {
-                  return new ContentPartImageParam(
-                    new ImageURL(
-                      part.image_url.url,
-                      part.image_url.detail,
-                      part.image_url.media_type
-                    )
-                  );
-                }
-                return part;
-              }),
+              ? message.content
+              : message.content.map((part) => {
+                  if (part instanceof ContentPartTextParam) {
+                    return new ContentPartTextParam(part.text);
+                  }
+                  if (part instanceof ContentPartRefusalParam) {
+                    return new ContentPartRefusalParam(part.refusal);
+                  }
+                  if (part instanceof ContentPartImageParam) {
+                    return new ContentPartImageParam(
+                      new ImageURL(
+                        part.image_url.url,
+                        part.image_url.detail,
+                        part.image_url.media_type
+                      )
+                    );
+                  }
+                  return part;
+                }),
         tool_calls: message.tool_calls
           ? message.tool_calls.map(
               (toolCall) =>
@@ -421,10 +417,18 @@ export class AnthropicMessageSerializer {
   private _cloneContent(
     content:
       | string
-      | (ContentPartTextParam | ContentPartImageParam | ContentPartRefusalParam)[]
+      | (
+          | ContentPartTextParam
+          | ContentPartImageParam
+          | ContentPartRefusalParam
+        )[]
   ):
     | string
-    | (ContentPartTextParam | ContentPartImageParam | ContentPartRefusalParam)[] {
+    | (
+        | ContentPartTextParam
+        | ContentPartImageParam
+        | ContentPartRefusalParam
+      )[] {
     if (typeof content === 'string') {
       return content;
     }

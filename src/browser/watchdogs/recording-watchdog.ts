@@ -229,8 +229,7 @@ export class RecordingWatchdog extends BaseWatchdog {
       const stream = fs.createWriteStream(filePath, { flags: 'a' });
 
       const handler = (payload: any) => {
-        const frameData =
-          typeof payload?.data === 'string' ? payload.data : '';
+        const frameData = typeof payload?.data === 'string' ? payload.data : '';
         if (frameData && this._cdpScreencastStream) {
           this._cdpScreencastStream.write(
             `${JSON.stringify({

@@ -209,7 +209,8 @@ export class HistoryTreeProcessor {
       const exact = process_node(
         tree,
         (candidate) =>
-          this.compute_element_hash(candidate) === dom_history_element.element_hash
+          this.compute_element_hash(candidate) ===
+          dom_history_element.element_hash
       );
       if (exact) {
         return exact;
@@ -220,7 +221,8 @@ export class HistoryTreeProcessor {
       const stable = process_node(
         tree,
         (candidate) =>
-          this.compute_stable_hash(candidate) === dom_history_element.stable_hash
+          this.compute_stable_hash(candidate) ===
+          dom_history_element.stable_hash
       );
       if (stable) {
         return stable;
@@ -239,13 +241,19 @@ export class HistoryTreeProcessor {
     dom_element: DOMElementNode
   ) {
     if (dom_history_element.element_hash) {
-      if (this.compute_element_hash(dom_element) === dom_history_element.element_hash) {
+      if (
+        this.compute_element_hash(dom_element) ===
+        dom_history_element.element_hash
+      ) {
         return true;
       }
     }
 
     if (dom_history_element.stable_hash) {
-      if (this.compute_stable_hash(dom_element) === dom_history_element.stable_hash) {
+      if (
+        this.compute_stable_hash(dom_element) ===
+        dom_history_element.stable_hash
+      ) {
         return true;
       }
     }

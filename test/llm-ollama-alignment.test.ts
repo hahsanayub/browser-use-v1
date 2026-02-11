@@ -70,7 +70,10 @@ describe('ChatOllama alignment', () => {
     const schema = z.object({ value: z.string() });
     const llm = new ChatOllama('qwen2.5:latest');
 
-    const response = await llm.ainvoke([new UserMessage('extract')], schema as any);
+    const response = await llm.ainvoke(
+      [new UserMessage('extract')],
+      schema as any
+    );
     const request = ollamaChatMock.mock.calls[0]?.[0] ?? {};
 
     expect(typeof request.format).toBe('object');

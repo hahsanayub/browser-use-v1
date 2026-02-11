@@ -76,7 +76,9 @@ const convertPythonModelPart = (modelPart: string): string => {
     return modelPart.replace('llama3_3', 'llama-3.3').replace(/_/g, '-');
   }
   if (modelPart.includes('llama_4_scout')) {
-    return modelPart.replace('llama_4_scout', 'llama-4-scout').replace(/_/g, '-');
+    return modelPart
+      .replace('llama_4_scout', 'llama-4-scout')
+      .replace(/_/g, '-');
   }
   if (modelPart.includes('llama_4_maverick')) {
     return modelPart
@@ -269,7 +271,8 @@ const buildProviderModel = (
     case 'azure':
       return new ChatAzure({
         model,
-        apiKey: process.env.AZURE_OPENAI_KEY ?? process.env.AZURE_OPENAI_API_KEY,
+        apiKey:
+          process.env.AZURE_OPENAI_KEY ?? process.env.AZURE_OPENAI_API_KEY,
         endpoint: process.env.AZURE_OPENAI_ENDPOINT,
       });
     case 'ollama':
@@ -360,10 +363,7 @@ export const getLlmByName = (modelName: string): BaseChatModel => {
       );
     }
     if (provider === 'browser-use') {
-      return buildProviderModel(
-        'browser-use',
-        modelPart.replace(/_/g, '/')
-      );
+      return buildProviderModel('browser-use', modelPart.replace(/_/g, '/'));
     }
     if (AVAILABLE_PROVIDERS.includes(provider as any)) {
       return buildProviderModel(

@@ -8,9 +8,7 @@ describe('AgentError.format_error alignment', () => {
     );
 
     const formatted = AgentError.format_error(error);
-    expect(formatted).toContain(
-      'LLM response missing required fields: action'
-    );
+    expect(formatted).toContain('LLM response missing required fields: action');
     expect(formatted).toContain(
       'The previous response had an invalid output structure.'
     );

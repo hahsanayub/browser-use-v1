@@ -93,7 +93,10 @@ describe('ChatDeepSeek alignment', () => {
     const schema = z.object({ value: z.string() });
     const llm = new ChatDeepSeek({ model: 'deepseek-chat' });
 
-    const response = await llm.ainvoke([new UserMessage('extract')], schema as any);
+    const response = await llm.ainvoke(
+      [new UserMessage('extract')],
+      schema as any
+    );
     const request = deepseekCreateMock.mock.calls[0]?.[0] ?? {};
 
     expect(request.tools).toHaveLength(1);
@@ -110,12 +113,9 @@ describe('ChatDeepSeek alignment', () => {
     deepseekCreateMock.mockResolvedValue(buildTextResponse('{"value":"ok"}'));
 
     const llm = new ChatDeepSeek({ model: 'deepseek-chat' });
-    const response = await llm.ainvoke(
-      [new UserMessage('extract')],
-      {
-        parse: (input: string) => input,
-      }
-    );
+    const response = await llm.ainvoke([new UserMessage('extract')], {
+      parse: (input: string) => input,
+    });
 
     const request = deepseekCreateMock.mock.calls[0]?.[0] ?? {};
     expect(request.response_format).toEqual({ type: 'json_object' });

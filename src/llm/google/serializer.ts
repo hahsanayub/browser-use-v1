@@ -65,7 +65,11 @@ export class GoogleMessageSerializer {
       }
     }
 
-    if (includeSystemInUser && systemParts.length > 0 && !injectedSystemIntoUser) {
+    if (
+      includeSystemInUser &&
+      systemParts.length > 0 &&
+      !injectedSystemIntoUser
+    ) {
       contents.unshift({
         role: 'user',
         parts: [{ text: systemParts.join('\n\n') }],
@@ -132,16 +136,20 @@ export class GoogleMessageSerializer {
 
       if (message.tool_calls) {
         message.tool_calls.forEach((toolCall) => {
-          let args: Record<string, unknown> | null = null;
+          let args: Record<string, unknown>;
           try {
-            args = JSON.parse(toolCall.functionCall.arguments);
+            const parsed = JSON.parse(toolCall.functionCall.arguments);
+            args =
+              parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+                ? (parsed as Record<string, unknown>)
+                : {};
           } catch {
-            args = null;
+            args = {};
           }
           parts.push({
             functionCall: {
               name: toolCall.functionCall.name,
-              args: args ?? {},
+              args,
             },
           });
         });

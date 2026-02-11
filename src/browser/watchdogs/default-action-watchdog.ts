@@ -73,8 +73,7 @@ export class DefaultActionWatchdog extends BaseWatchdog {
       }
 
       const latestTab = tabs[tabs.length - 1];
-      identifier =
-        latestTab.target_id ?? latestTab.tab_id ?? latestTab.page_id;
+      identifier = latestTab.target_id ?? latestTab.tab_id ?? latestTab.page_id;
     }
 
     const page = await this.browser_session.switch_to_tab(identifier);
@@ -217,9 +216,8 @@ export class DefaultActionWatchdog extends BaseWatchdog {
     }
 
     try {
-      const cdpSession = await this.browser_session.get_or_create_cdp_session(
-        page
-      );
+      const cdpSession =
+        await this.browser_session.get_or_create_cdp_session(page);
       const result = await cdpSession.send?.('Page.printToPDF', {
         printBackground: true,
         preferCSSPageSize: true,
@@ -236,7 +234,9 @@ export class DefaultActionWatchdog extends BaseWatchdog {
 
       const title =
         typeof page.title === 'function' ? await page.title() : 'document';
-      const suggestedName = this._sanitizeFilename(`${title || 'document'}.pdf`);
+      const suggestedName = this._sanitizeFilename(
+        `${title || 'document'}.pdf`
+      );
       const uniqueFilename = await this._getUniqueFilename(
         downloadsPath,
         suggestedName

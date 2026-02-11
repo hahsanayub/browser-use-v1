@@ -70,9 +70,9 @@ describe('BrowserProfile alignment with latest py-browser-use defaults', () => {
 
     expect(profile.config.allowed_domains).toBeInstanceOf(Set);
     expect(profile.config.prohibited_domains).toBeInstanceOf(Set);
-    expect((profile.config.allowed_domains as Set<string>).has(domains[0])).toBe(
-      true
-    );
+    expect(
+      (profile.config.allowed_domains as Set<string>).has(domains[0])
+    ).toBe(true);
   });
 
   it('creates a unique default downloads_path when none is provided', async () => {

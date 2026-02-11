@@ -21,7 +21,9 @@ describe('TokenCost alignment', () => {
     const smart = await tokenCost.getModelPricing('smart');
 
     expect(latest?.input_cost_per_token).toBe(canonical?.input_cost_per_token);
-    expect(latest?.output_cost_per_token).toBe(canonical?.output_cost_per_token);
+    expect(latest?.output_cost_per_token).toBe(
+      canonical?.output_cost_per_token
+    );
     expect(latest?.cache_read_input_token_cost).toBe(
       canonical?.cache_read_input_token_cost
     );

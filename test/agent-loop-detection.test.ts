@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { BaseChatModel } from '../src/llm/base.js';
 import { Agent } from '../src/agent/service.js';
-import {
-  ActionLoopDetector,
-  compute_action_hash,
-} from '../src/agent/views.js';
+import { ActionLoopDetector, compute_action_hash } from '../src/agent/views.js';
 
 const createLlm = (): BaseChatModel =>
   ({
@@ -126,7 +123,11 @@ describe('Agent loop detection integration', () => {
           { model_dump: () => ({ wait: { seconds: 1 } }) },
           { model_dump: () => ({ done: { text: 'ok', success: true } }) },
           { model_dump: () => ({ go_back: {} }) },
-          { model_dump: () => ({ search_google: { query: 'site:example.com' } }) },
+          {
+            model_dump: () => ({
+              search_google: { query: 'site:example.com' },
+            }),
+          },
         ],
       } as any;
 

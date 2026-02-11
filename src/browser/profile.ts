@@ -567,7 +567,7 @@ export class BrowserProfile {
                 .map(normalizeDomainEntry)
                 .filter(Boolean)
             )
-        : defaults.allowed_domains,
+          : defaults.allowed_domains,
       prohibited_domains: Array.isArray(init.prohibited_domains)
         ? optimizeDomainList(init.prohibited_domains)
         : init.prohibited_domains instanceof Set
@@ -576,7 +576,7 @@ export class BrowserProfile {
                 .map(normalizeDomainEntry)
                 .filter(Boolean)
             )
-        : defaults.prohibited_domains,
+          : defaults.prohibited_domains,
       window_position: init.window_position ?? defaults.window_position,
     };
     this.options.id = init.id ?? uuid7str();
@@ -686,7 +686,7 @@ export class BrowserProfile {
     const hasStorageState = this.options.storage_state !== null;
     const hasUserDataDir = Boolean(
       this.options.user_data_dir &&
-        !this.options.user_data_dir.toLowerCase().includes('tmp')
+      !this.options.user_data_dir.toLowerCase().includes('tmp')
     );
     const hasCookiesFile = this.options.cookies_file !== null;
     const staticSource = hasCookiesFile
@@ -707,8 +707,8 @@ export class BrowserProfile {
   private warnUserDataDirNonDefault() {
     const isNotDefault = Boolean(
       this.options.executable_path ||
-        (this.options.channel &&
-          this.options.channel !== BROWSERUSE_DEFAULT_CHANNEL)
+      (this.options.channel &&
+        this.options.channel !== BROWSERUSE_DEFAULT_CHANNEL)
     );
     if (
       this.options.user_data_dir === CONFIG.BROWSER_USE_DEFAULT_USER_DATA_DIR &&

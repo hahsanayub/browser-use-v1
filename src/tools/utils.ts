@@ -1,7 +1,9 @@
 import { DOMElementNode } from '../dom/views.js';
 
 const normalizeBoolLike = (value: string | undefined) => {
-  const normalized = String(value ?? '').trim().toLowerCase();
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase();
   return normalized === 'true' || normalized === 'checked' || normalized === '';
 };
 
@@ -48,7 +50,9 @@ export const getClickDescription = (node: DOMElementNode): string => {
         !child.is_visible
     ) as DOMElementNode | undefined;
     if (hiddenCheckboxChild) {
-      const isChecked = normalizeBoolLike(hiddenCheckboxChild.attributes.checked);
+      const isChecked = normalizeBoolLike(
+        hiddenCheckboxChild.attributes.checked
+      );
       parts.push(`checkbox-state=${isChecked ? 'checked' : 'unchecked'}`);
     }
   }

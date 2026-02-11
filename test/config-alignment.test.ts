@@ -56,7 +56,9 @@ describe('Config alignment with latest py-browser-use defaults', () => {
   });
 
   it('creates default config with gpt-4.1-mini as the default LLM model', async () => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-config-'));
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'browser-use-config-')
+    );
     try {
       await withEnv(
         {
@@ -78,7 +80,9 @@ describe('Config alignment with latest py-browser-use defaults', () => {
   });
 
   it('maps proxy env vars into browser_profile.proxy in load_browser_use_config', async () => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-config-'));
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'browser-use-config-')
+    );
     try {
       await withEnv(
         {
@@ -105,7 +109,9 @@ describe('Config alignment with latest py-browser-use defaults', () => {
   });
 
   it('maps BROWSER_USE_DISABLE_EXTENSIONS into enable_default_extensions', async () => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-config-'));
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'browser-use-config-')
+    );
     try {
       await withEnv(
         {
@@ -136,7 +142,9 @@ describe('Config alignment with latest py-browser-use defaults', () => {
   });
 
   it('maps DEFAULT_LLM to llm.model when provider-specific override is absent', async () => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-config-'));
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'browser-use-config-')
+    );
     try {
       await withEnv(
         {

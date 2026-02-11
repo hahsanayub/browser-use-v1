@@ -86,7 +86,8 @@ export class ChatAnthropicBedrock implements BaseChatModel {
     this.removeDefaultsFromSchema = config.removeDefaultsFromSchema ?? false;
 
     const region = config.region || process.env.AWS_REGION || 'us-east-1';
-    const awsSessionToken = config.awsSessionToken || process.env.AWS_SESSION_TOKEN;
+    const awsSessionToken =
+      config.awsSessionToken || process.env.AWS_SESSION_TOKEN;
     const credentials =
       config.awsAccessKeyId && config.awsSecretAccessKey
         ? {
@@ -99,7 +100,9 @@ export class ChatAnthropicBedrock implements BaseChatModel {
     this.client = new BedrockRuntimeClient({
       region,
       ...(credentials ? { credentials } : {}),
-      ...(config.maxRetries !== undefined ? { maxAttempts: config.maxRetries } : {}),
+      ...(config.maxRetries !== undefined
+        ? { maxAttempts: config.maxRetries }
+        : {}),
     });
   }
 
@@ -218,7 +221,10 @@ export class ChatAnthropicBedrock implements BaseChatModel {
               if (block.source?.type === 'base64') {
                 return {
                   image: {
-                    format: String(block.source.media_type || 'image/jpeg').split('/')[1] ?? 'jpeg',
+                    format:
+                      String(block.source.media_type || 'image/jpeg').split(
+                        '/'
+                      )[1] ?? 'jpeg',
                     source: {
                       bytes: Buffer.from(block.source.data ?? '', 'base64'),
                     },

@@ -37,14 +37,14 @@ import { BrowserProfile, DEFAULT_BROWSER_PROFILE } from '../browser/profile.js';
 import type { Browser, BrowserContext, Page } from '../browser/types.js';
 import { HistoryTreeProcessor } from '../dom/history-tree-processor/service.js';
 import { DOMHistoryElement } from '../dom/history-tree-processor/view.js';
-import { DEFAULT_INCLUDE_ATTRIBUTES, type DOMElementNode } from '../dom/views.js';
+import {
+  DEFAULT_INCLUDE_ATTRIBUTES,
+  type DOMElementNode,
+} from '../dom/views.js';
 import { extractCleanMarkdownFromHtml } from '../dom/markdown-extractor.js';
 import type { BaseChatModel } from '../llm/base.js';
 import { ChatBrowserUse } from '../llm/browser-use/chat.js';
-import {
-  ModelProviderError,
-  ModelRateLimitError,
-} from '../llm/exceptions.js';
+import { ModelProviderError, ModelRateLimitError } from '../llm/exceptions.js';
 import {
   AssistantMessage,
   ContentPartImageParam,
@@ -236,9 +236,7 @@ interface AgentConstructorParams<Context, AgentStructuredOutput> {
   extraction_schema?: Record<string, unknown> | null;
   use_vision?: boolean | 'auto';
   include_recent_events?: boolean;
-  sample_images?:
-    | Array<ContentPartTextParam | ContentPartImageParam>
-    | null;
+  sample_images?: Array<ContentPartTextParam | ContentPartImageParam> | null;
   llm_screenshot_size?: [number, number] | null;
   save_conversation_path?: string | null;
   save_conversation_path_encoding?: BufferEncoding | null;
@@ -289,7 +287,9 @@ const ensureDir = (target: string) => {
   }
 };
 
-const resolve_agent_llm = (llm: BaseChatModel | null | undefined): BaseChatModel => {
+const resolve_agent_llm = (
+  llm: BaseChatModel | null | undefined
+): BaseChatModel => {
   if (llm) {
     return llm;
   }
@@ -327,7 +327,9 @@ const get_model_timeout = (llm: BaseChatModel): number => {
 const defaultAgentOptions = () => ({
   use_vision: true,
   include_recent_events: false,
-  sample_images: null as Array<ContentPartTextParam | ContentPartImageParam> | null,
+  sample_images: null as Array<
+    ContentPartTextParam | ContentPartImageParam
+  > | null,
   llm_screenshot_size: null as [number, number] | null,
   save_conversation_path: null,
   save_conversation_path_encoding: 'utf-8' as BufferEncoding,
@@ -617,9 +619,7 @@ export class Agent<
       }
       const [width, height] = resolvedLlmScreenshotSize;
       if (!Number.isInteger(width) || !Number.isInteger(height)) {
-        throw new Error(
-          'llm_screenshot_size dimensions must be integers'
-        );
+        throw new Error('llm_screenshot_size dimensions must be integers');
       }
       if (width < 100 || height < 100) {
         throw new Error(
@@ -653,15 +653,15 @@ export class Agent<
         'Cannot specify both "tools" and "controller". Use "tools" only.'
       );
     }
-    const resolvedController = (tools ?? controller ??
+    const resolvedController = (tools ??
+      controller ??
       new DefaultController({
         exclude_actions: use_vision !== 'auto' ? ['screenshot'] : [],
         display_files_in_done_text,
       })) as Controller<Context>;
 
-    const toolsOutputModel = this._getToolsOutputModelSchema(
-      resolvedController
-    );
+    const toolsOutputModel =
+      this._getToolsOutputModelSchema(resolvedController);
     let resolvedOutputModelSchema = output_model_schema ?? null;
     if (
       resolvedOutputModelSchema &&
@@ -688,7 +688,8 @@ export class Agent<
     this.task = this._enhanceTaskWithSchema(task, this.output_model_schema);
     this.sensitive_data = sensitive_data;
     this.controller = resolvedController;
-    const setCoordinateClicking = (this.controller as any)?.set_coordinate_clicking;
+    const setCoordinateClicking = (this.controller as any)
+      ?.set_coordinate_clicking;
     if (typeof setCoordinateClicking === 'function') {
       const modelName = String((this.llm as any)?.model ?? '').toLowerCase();
       const supportsCoordinateClicking = [
@@ -697,16 +698,15 @@ export class Agent<
         'gemini-3-pro',
         'browser-use/',
       ].some((pattern) => modelName.includes(pattern));
-      setCoordinateClicking.call(
-        this.controller,
-        supportsCoordinateClicking
-      );
+      setCoordinateClicking.call(this.controller, supportsCoordinateClicking);
     }
 
     const structuredOutputActionSchema =
       this._resolveStructuredOutputActionSchema(this.output_model_schema);
     if (structuredOutputActionSchema) {
-      this.controller.use_structured_output_action(structuredOutputActionSchema);
+      this.controller.use_structured_output_action(
+        structuredOutputActionSchema
+      );
     }
 
     if (skills && skill_ids) {
@@ -731,7 +731,9 @@ export class Agent<
       }
     }
     let resolvedInitialActions = initial_actions;
-    const hasFollowUpState = Boolean(params.injected_agent_state?.follow_up_task);
+    const hasFollowUpState = Boolean(
+      params.injected_agent_state?.follow_up_task
+    );
     if (
       directly_open_url &&
       !hasFollowUpState &&
@@ -2030,7 +2032,10 @@ export class Agent<
             return new ActionResult({ error: 'SkillService not initialized' });
           }
 
-          if (!browser_session || typeof browser_session.get_cookies !== 'function') {
+          if (
+            !browser_session ||
+            typeof browser_session.get_cookies !== 'function'
+          ) {
             return new ActionResult({
               error: 'Skill execution requires an active BrowserSession.',
             });
@@ -2096,7 +2101,9 @@ export class Agent<
               error instanceof Error
                 ? `${error.name}: ${error.message}`
                 : String(error);
-            return new ActionResult({ error: `Skill execution error: ${message}` });
+            return new ActionResult({
+              error: `Skill execution error: ${message}`,
+            });
           }
         }
       );
@@ -2186,7 +2193,9 @@ export class Agent<
         return '';
       }
 
-      const lines: string[] = ['Unavailable Skills (missing required cookies):'];
+      const lines: string[] = [
+        'Unavailable Skills (missing required cookies):',
+      ];
       for (const skillInfo of unavailableSkills) {
         const skillObj = skills.find((entry) => entry.id === skillInfo.id);
         const slug = skillObj
@@ -2205,7 +2214,9 @@ export class Agent<
     } catch (error) {
       this.logger.error(
         `Error getting unavailable skills info: ${
-          error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+          error instanceof Error
+            ? `${error.name}: ${error.message}`
+            : String(error)
         }`
       );
       return '';
@@ -2264,8 +2275,7 @@ export class Agent<
     const result = await this.multi_act(this.initial_actions);
 
     if (result.length > 0 && this.initial_url && result[0]?.long_term_memory) {
-      result[0].long_term_memory =
-        `Found initial url and automatically loaded it. ${result[0].long_term_memory}`;
+      result[0].long_term_memory = `Found initial url and automatically loaded it. ${result[0].long_term_memory}`;
     }
 
     this.state.last_result = result;
@@ -2295,13 +2305,7 @@ export class Agent<
     );
 
     this.history.add_item(
-      new AgentHistory(
-        modelOutput,
-        result,
-        stateHistory,
-        metadata,
-        null
-      )
+      new AgentHistory(modelOutput, result, stateHistory, metadata, null)
     );
     this.logger.debug('📝 Saved initial actions to history as step 0');
     this.logger.debug('✅ Initial actions completed');
@@ -2404,7 +2408,9 @@ export class Agent<
           await on_step_start(this);
         }
 
-        this.logger.debug(`🚶 Starting step ${currentStep + 1}/${max_steps}...`);
+        this.logger.debug(
+          `🚶 Starting step ${currentStep + 1}/${max_steps}...`
+        );
         const step_info = new AgentStepInfo(currentStep, max_steps);
         const stepAbortController = new AbortController();
 
@@ -2414,7 +2420,9 @@ export class Agent<
             this.settings.step_timeout ?? 0,
             () => stepAbortController.abort()
           );
-          this.logger.debug(`✅ Completed step ${currentStep + 1}/${max_steps}`);
+          this.logger.debug(
+            `✅ Completed step ${currentStep + 1}/${max_steps}`
+          );
         } catch (error) {
           const message =
             error instanceof Error ? error.message : String(error);
@@ -2440,7 +2448,8 @@ export class Agent<
           this.state.consecutive_failures += 1;
           this.state.last_result = [
             new ActionResult({
-              error: message || `Unhandled step error at step ${currentStep + 1}`,
+              error:
+                message || `Unhandled step error at step ${currentStep + 1}`,
             }),
           ];
         }
@@ -2697,7 +2706,9 @@ export class Agent<
     return browser_state_summary;
   }
 
-  private async _maybe_compact_messages(step_info: AgentStepInfo | null = null) {
+  private async _maybe_compact_messages(
+    step_info: AgentStepInfo | null = null
+  ) {
     const settings = this.settings.message_compaction;
     if (!settings || !settings.enabled) {
       return;
@@ -2766,7 +2777,8 @@ export class Agent<
     } catch (error) {
       if (error instanceof ExecutionTimeoutError) {
         throw new Error(
-          `LLM call timed out after ${this.settings.llm_timeout} seconds. Keep your thinking and output short.`
+          `LLM call timed out after ${this.settings.llm_timeout} seconds. Keep your thinking and output short.`,
+          { cause: error }
         );
       }
       throw error;
@@ -2832,7 +2844,11 @@ export class Agent<
       );
     }
 
-    if (lastResult && lastResult.length > 0 && lastResult[lastResult.length - 1]?.is_done) {
+    if (
+      lastResult &&
+      lastResult.length > 0 &&
+      lastResult[lastResult.length - 1]?.is_done
+    ) {
       const finalResult = lastResult[lastResult.length - 1];
       const success = Boolean(finalResult.success);
       const renderedContent =
@@ -3123,13 +3139,15 @@ export class Agent<
     signal: AbortSignal | null = null
   ) {
     if (!this.browser_session) {
-      return new ActionResult({ error: 'AI step failed: BrowserSession missing' });
+      return new ActionResult({
+        error: 'AI step failed: BrowserSession missing',
+      });
     }
 
     const llm = aiStepLlm ?? this.llm;
 
-    let content = '';
-    let statsSummary = '';
+    let content: string;
+    let statsSummary: string;
     let currentUrl = '';
     try {
       const page = await this.browser_session.get_current_page?.();
@@ -3169,7 +3187,8 @@ export class Agent<
     let screenshotB64: string | null = null;
     if (includeScreenshot) {
       try {
-        screenshotB64 = (await this.browser_session.take_screenshot?.(false)) ?? null;
+        screenshotB64 =
+          (await this.browser_session.take_screenshot?.(false)) ?? null;
       } catch (error) {
         this.logger.warning(
           `Failed to capture screenshot for ai_step: ${
@@ -3269,7 +3288,10 @@ export class Agent<
         const savedInterval = historyItem.metadata?.step_interval;
         let stepDelay = delay_between_actions;
         let delaySource = `using default delay=${this._formatDelaySeconds(stepDelay)}`;
-        if (typeof savedInterval === 'number' && Number.isFinite(savedInterval)) {
+        if (
+          typeof savedInterval === 'number' &&
+          Number.isFinite(savedInterval)
+        ) {
           stepDelay = Math.min(savedInterval, max_step_interval);
           if (savedInterval > max_step_interval) {
             delaySource = `capped to ${this._formatDelaySeconds(stepDelay)} (saved was ${savedInterval.toFixed(1)}s)`;
@@ -3404,10 +3426,13 @@ export class Agent<
               const failure = new ActionResult({ error: message });
               results.push(failure);
               if (!skip_failures) {
-                throw new Error(message);
+                throw new Error(message, { cause: error });
               }
             } else {
-              const retryDelay = Math.min(5 * 2 ** Math.max(attempt - 1, 0), 30);
+              const retryDelay = Math.min(
+                5 * 2 ** Math.max(attempt - 1, 0),
+                30
+              );
               this.logger.warning(
                 `${stepName} failed (attempt ${attempt}/${max_retries}), retrying in ${retryDelay}s...`
               );
@@ -3648,13 +3673,12 @@ export class Agent<
 
     while ((Date.now() - start) / 1000 < timeoutSeconds) {
       this._throwIfAborted(signal);
-      const state = await this.browser_session.get_browser_state_with_recovery?.(
-        {
+      const state =
+        await this.browser_session.get_browser_state_with_recovery?.({
           cache_clickable_elements_hashes: false,
           include_screenshot: false,
           signal,
-        }
-      );
+        });
       lastState = state ?? null;
       const currentCount = Object.keys(state?.selector_map ?? {}).length;
       if (currentCount >= minElements) {
@@ -3698,7 +3722,11 @@ export class Agent<
       typeof (action as any).model_dump === 'function'
         ? (action as any).model_dump()
         : action;
-    if (!modelDump || typeof modelDump !== 'object' || Array.isArray(modelDump)) {
+    if (
+      !modelDump ||
+      typeof modelDump !== 'object' ||
+      Array.isArray(modelDump)
+    ) {
       return null;
     }
 
@@ -3720,7 +3748,11 @@ export class Agent<
       typeof (action as any).model_dump === 'function'
         ? (action as any).model_dump()
         : action;
-    if (!modelDump || typeof modelDump !== 'object' || Array.isArray(modelDump)) {
+    if (
+      !modelDump ||
+      typeof modelDump !== 'object' ||
+      Array.isArray(modelDump)
+    ) {
       return null;
     }
     const actionName = Object.keys(modelDump)[0];
@@ -4008,7 +4040,9 @@ export class Agent<
         ) {
           currentNode = node;
           matchLevel = 'AX_NAME';
-          this.logger.info(`Element matched at AX_NAME fallback: ${targetAxName}`);
+          this.logger.info(
+            `Element matched at AX_NAME fallback: ${targetAxName}`
+          );
           break;
         }
       }
@@ -4121,7 +4155,9 @@ export class Agent<
     for (const [varName, newValue] of Object.entries(variables)) {
       const detected = detectedVars[varName];
       if (!detected) {
-        this.logger.warning(`Variable "${varName}" not found in history, skipping substitution`);
+        this.logger.warning(
+          `Variable "${varName}" not found in history, skipping substitution`
+        );
         continue;
       }
       valueReplacements[detected.original_value] = newValue;
@@ -4140,13 +4176,21 @@ export class Agent<
         continue;
       }
 
-      for (let actionIndex = 0; actionIndex < historyItem.model_output.action.length; actionIndex += 1) {
+      for (
+        let actionIndex = 0;
+        actionIndex < historyItem.model_output.action.length;
+        actionIndex += 1
+      ) {
         const action = historyItem.model_output.action[actionIndex];
         const actionPayload =
           typeof (action as any).model_dump === 'function'
             ? (action as any).model_dump()
             : action;
-        if (!actionPayload || typeof actionPayload !== 'object' || Array.isArray(actionPayload)) {
+        if (
+          !actionPayload ||
+          typeof actionPayload !== 'object' ||
+          Array.isArray(actionPayload)
+        ) {
           continue;
         }
 
@@ -4172,7 +4216,9 @@ export class Agent<
     return clonedHistory;
   }
 
-  private _clone_history_for_substitution(history: AgentHistoryList): AgentHistoryList {
+  private _clone_history_for_substitution(
+    history: AgentHistoryList
+  ): AgentHistoryList {
     const payload = history.toJSON();
     const historyItems = (payload.history ?? []).map((entry: any) => {
       const modelOutput = entry.model_output
@@ -4351,7 +4397,10 @@ export class Agent<
         );
       }
 
-      if (this.skill_service && typeof this.skill_service.close === 'function') {
+      if (
+        this.skill_service &&
+        typeof this.skill_service.close === 'function'
+      ) {
         try {
           await this.skill_service.close();
         } catch (error) {
@@ -4566,8 +4615,7 @@ export class Agent<
     const include_trace = this.logger.level === 'debug';
     const error_msg = AgentError.format_error(error, include_trace);
     const maxTotalFailures = this._max_total_failures();
-    const prefix =
-      `❌ Result failed ${this.state.consecutive_failures + 1}/${maxTotalFailures} times: `;
+    const prefix = `❌ Result failed ${this.state.consecutive_failures + 1}/${maxTotalFailures} times: `;
     this.state.consecutive_failures += 1;
 
     const isFinalFailure = this.state.consecutive_failures >= maxTotalFailures;
@@ -4708,9 +4756,7 @@ export class Agent<
       if (this.state.plan.length > 0) {
         this.state.plan[0].status = 'current';
       }
-      this.logger.info(
-        `📋 Plan updated with ${this.state.plan.length} steps`
-      );
+      this.logger.info(`📋 Plan updated with ${this.state.plan.length} steps`);
       return;
     }
 
@@ -4771,8 +4817,7 @@ export class Agent<
       return;
     }
     if (
-      this.state.consecutive_failures <
-      this.settings.planning_replan_on_stall
+      this.state.consecutive_failures < this.settings.planning_replan_on_stall
     ) {
       return;
     }
@@ -4823,7 +4868,10 @@ export class Agent<
   }
 
   private _update_loop_detector_actions() {
-    if (!this.settings.loop_detection_enabled || !this.state.last_model_output) {
+    if (
+      !this.settings.loop_detection_enabled ||
+      !this.state.last_model_output
+    ) {
       return;
     }
     const exemptActions = new Set(['wait', 'done', 'go_back']);
@@ -4858,14 +4906,16 @@ export class Agent<
     const elementCount = browser_state_summary.selector_map
       ? Object.keys(browser_state_summary.selector_map).length
       : 0;
-    let domText = '';
-    try {
-      domText =
-        browser_state_summary.element_tree?.clickable_elements_to_string?.() ??
-        '';
-    } catch {
-      domText = '';
-    }
+    const domText = (() => {
+      try {
+        return (
+          browser_state_summary.element_tree?.clickable_elements_to_string?.() ??
+          ''
+        );
+      } catch {
+        return '';
+      }
+    })();
     this.state.loop_detector.record_page_state(url, domText, elementCount);
   }
 
@@ -4897,12 +4947,14 @@ export class Agent<
   }
 
   private async _run_simple_judge() {
-    const lastHistoryItem = this.history.history[this.history.history.length - 1];
+    const lastHistoryItem =
+      this.history.history[this.history.history.length - 1];
     if (!lastHistoryItem || !lastHistoryItem.result.length) {
       return;
     }
 
-    const lastResult = lastHistoryItem.result[lastHistoryItem.result.length - 1];
+    const lastResult =
+      lastHistoryItem.result[lastHistoryItem.result.length - 1];
     if (!lastResult.is_done || !lastResult.success) {
       return;
     }
@@ -4994,11 +5046,13 @@ export class Agent<
   }
 
   private async _judge_and_log() {
-    const lastHistoryItem = this.history.history[this.history.history.length - 1];
+    const lastHistoryItem =
+      this.history.history[this.history.history.length - 1];
     if (!lastHistoryItem || !lastHistoryItem.result.length) {
       return;
     }
-    const lastResult = lastHistoryItem.result[lastHistoryItem.result.length - 1];
+    const lastResult =
+      lastHistoryItem.result[lastHistoryItem.result.length - 1];
     if (!lastResult.is_done) {
       return;
     }
@@ -5032,7 +5086,9 @@ export class Agent<
     this.logger.info(judgeLog);
   }
 
-  private _replace_urls_in_text(text: string): [string, Record<string, string>] {
+  private _replace_urls_in_text(
+    text: string
+  ): [string, Record<string, string>] {
     const replacedUrls: Record<string, string> = {};
     const shortenedText = text.replace(URL_PATTERN, (originalUrl) => {
       const queryStart = originalUrl.indexOf('?');
@@ -5149,7 +5205,9 @@ export class Agent<
     if (!value || typeof value !== 'object') {
       return value;
     }
-    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+    for (const [key, nested] of Object.entries(
+      value as Record<string, unknown>
+    )) {
       (value as Record<string, unknown>)[key] =
         this._replace_shortened_urls_in_value(nested, urlReplacements);
     }
@@ -5181,7 +5239,8 @@ export class Agent<
         parsedCompletion = JSON.parse(jsonText);
       } catch (error) {
         throw new Error(
-          `Failed to parse LLM completion as JSON: ${String(error)}`
+          `Failed to parse LLM completion as JSON: ${String(error)}`,
+          { cause: error }
         );
       }
     }
@@ -5239,7 +5298,9 @@ export class Agent<
         }
       );
       this._throwIfAborted(signal);
-      const parsed = this._parseCompletionPayload((completion as any).completion);
+      const parsed = this._parseCompletionPayload(
+        (completion as any).completion
+      );
       if (Object.keys(urlReplacements).length) {
         this._replace_shortened_urls_in_value(parsed, urlReplacements);
       }
@@ -5313,8 +5374,8 @@ export class Agent<
         ? value.filter((item): item is string => typeof item === 'string')
         : null;
     const AgentOutputModel = this._enforceDoneOnlyForCurrentStep
-      ? this.DoneAgentOutput ?? this.AgentOutput ?? AgentOutput
-      : this.AgentOutput ?? AgentOutput;
+      ? (this.DoneAgentOutput ?? this.AgentOutput ?? AgentOutput)
+      : (this.AgentOutput ?? AgentOutput);
     return new AgentOutputModel({
       thinking: toNullableString(parsed_completion?.thinking),
       evaluation_previous_goal: toNullableString(
@@ -5523,7 +5584,7 @@ export class Agent<
         error instanceof Error
           ? error.name || 'Error'
           : typeof error === 'object' && error !== null
-            ? (error as any).constructor?.name ?? 'Error'
+            ? ((error as any).constructor?.name ?? 'Error')
             : 'Error';
       const message = error instanceof Error ? error.message : String(error);
       const errorContext = context ? ` ${context}` : '';

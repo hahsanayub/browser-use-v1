@@ -185,7 +185,7 @@ export class ChatMistral implements BaseChatModel {
               removeMinItems: this.removeMinItemsFromSchema,
               removeDefaults: this.removeDefaultsFromSchema,
             }
-        );
+          );
         responseFormat = {
           type: 'json_schema',
           json_schema: {
@@ -230,7 +230,13 @@ export class ChatMistral implements BaseChatModel {
         }
       }
 
-      return new ChatInvokeCompletion(completion, usage, null, null, stopReason);
+      return new ChatInvokeCompletion(
+        completion,
+        usage,
+        null,
+        null,
+        stopReason
+      );
     } catch (error: any) {
       if (error?.status === 429) {
         throw new ModelRateLimitError(

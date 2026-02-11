@@ -48,7 +48,10 @@ vi.mock('@anthropic-ai/sdk', () => {
 });
 
 import { ChatAnthropic } from '../src/llm/anthropic/chat.js';
-import { ModelProviderError, ModelRateLimitError } from '../src/llm/exceptions.js';
+import {
+  ModelProviderError,
+  ModelRateLimitError,
+} from '../src/llm/exceptions.js';
 import { SystemMessage, UserMessage } from '../src/llm/messages.js';
 
 const buildResponse = (content: any[]) => ({
@@ -71,7 +74,9 @@ describe('ChatAnthropic alignment', () => {
   });
 
   it('passes python-aligned client options and invoke params', async () => {
-    const fetchMock = vi.fn(async () => new Response()) as unknown as typeof fetch;
+    const fetchMock = vi.fn(
+      async () => new Response()
+    ) as unknown as typeof fetch;
 
     const llm = new ChatAnthropic({
       model: 'claude-sonnet-4-20250514',
@@ -133,16 +138,27 @@ describe('ChatAnthropic alignment', () => {
       removeDefaultsFromSchema: true,
     });
 
-    const result = await llm.ainvoke([new UserMessage('extract')], schema as any);
+    const result = await llm.ainvoke(
+      [new UserMessage('extract')],
+      schema as any
+    );
     const request = anthropicMock.anthropicCreateMock.mock.calls[0]?.[0] ?? {};
 
     expect(request.tools).toHaveLength(1);
     expect(request.tool_choice).toEqual({ type: 'tool', name: 'response' });
     expect(request.tools[0].cache_control).toEqual({ type: 'ephemeral' });
-    expect(JSON.stringify(request.tools[0].input_schema)).not.toContain('title');
-    expect(JSON.stringify(request.tools[0].input_schema)).not.toContain('minItems');
-    expect(JSON.stringify(request.tools[0].input_schema)).not.toContain('min_items');
-    expect(JSON.stringify(request.tools[0].input_schema)).not.toContain('"default"');
+    expect(JSON.stringify(request.tools[0].input_schema)).not.toContain(
+      'title'
+    );
+    expect(JSON.stringify(request.tools[0].input_schema)).not.toContain(
+      'minItems'
+    );
+    expect(JSON.stringify(request.tools[0].input_schema)).not.toContain(
+      'min_items'
+    );
+    expect(JSON.stringify(request.tools[0].input_schema)).not.toContain(
+      '"default"'
+    );
     expect((result.completion as any).items).toEqual(['alpha']);
     expect(result.usage?.prompt_cached_tokens).toBe(2);
     expect(result.usage?.prompt_cache_creation_tokens).toBe(1);
@@ -169,29 +185,35 @@ describe('ChatAnthropic alignment', () => {
       new anthropicMock.RateLimitError('too many requests')
     );
     const llm = new ChatAnthropic();
-    await expect(llm.ainvoke([new UserMessage('hello')])).rejects.toBeInstanceOf(
-      ModelRateLimitError
-    );
+    await expect(
+      llm.ainvoke([new UserMessage('hello')])
+    ).rejects.toBeInstanceOf(ModelRateLimitError);
 
     anthropicMock.anthropicCreateMock.mockRejectedValueOnce(
       new anthropicMock.APIConnectionError('network down')
     );
-    await expect(llm.ainvoke([new UserMessage('hello')])).rejects.toMatchObject({
-      name: 'ModelProviderError',
-      statusCode: 502,
-    });
+    await expect(llm.ainvoke([new UserMessage('hello')])).rejects.toMatchObject(
+      {
+        name: 'ModelProviderError',
+        statusCode: 502,
+      }
+    );
 
     anthropicMock.anthropicCreateMock.mockRejectedValueOnce(
       new anthropicMock.APIError('server bad', 503)
     );
-    await expect(llm.ainvoke([new UserMessage('hello')])).rejects.toMatchObject({
-      name: 'ModelProviderError',
-      statusCode: 503,
-    });
-
-    anthropicMock.anthropicCreateMock.mockRejectedValueOnce(new Error('unknown'));
-    await expect(llm.ainvoke([new UserMessage('hello')])).rejects.toBeInstanceOf(
-      ModelProviderError
+    await expect(llm.ainvoke([new UserMessage('hello')])).rejects.toMatchObject(
+      {
+        name: 'ModelProviderError',
+        statusCode: 503,
+      }
     );
+
+    anthropicMock.anthropicCreateMock.mockRejectedValueOnce(
+      new Error('unknown')
+    );
+    await expect(
+      llm.ainvoke([new UserMessage('hello')])
+    ).rejects.toBeInstanceOf(ModelProviderError);
   });
 });

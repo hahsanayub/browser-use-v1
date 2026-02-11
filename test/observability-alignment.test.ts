@@ -2,14 +2,19 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import Module from 'node:module';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 
 const require = createRequire(import.meta.url);
 
-const mockRoot = path.resolve(
-  process.cwd(),
-  '.tmp-vitest-observability-lmnr'
-);
+const mockRoot = path.resolve(process.cwd(), '.tmp-vitest-observability-lmnr');
 const mockNodeModules = path.join(mockRoot, 'node_modules');
 const mockLmnrDir = path.join(mockNodeModules, 'lmnr');
 const mockLmnrIndex = path.join(mockLmnrDir, 'index.js');
@@ -77,7 +82,9 @@ describe('observability alignment', () => {
   it('observe forwards python-aligned default tags when lmnr is available', async () => {
     process.env.LMNR_LOGGING_LEVEL = 'info';
     const { observe } = await importObservability();
-    const wrapped = observe({ name: 'test-observe' })((value: number) => value + 1);
+    const wrapped = observe({ name: 'test-observe' })(
+      (value: number) => value + 1
+    );
     const lmnr = require('lmnr') as any;
 
     expect(wrapped(1)).toBe(2);
@@ -89,7 +96,9 @@ describe('observability alignment', () => {
   it('observe_debug traces only in debug mode with observe_debug tag', async () => {
     process.env.LMNR_LOGGING_LEVEL = 'debug';
     const { observe_debug } = await importObservability();
-    const wrapped = observe_debug({ name: 'debug-only' })((value: number) => value + 1);
+    const wrapped = observe_debug({ name: 'debug-only' })(
+      (value: number) => value + 1
+    );
     const lmnr = require('lmnr') as any;
 
     expect(wrapped(1)).toBe(2);
@@ -101,7 +110,9 @@ describe('observability alignment', () => {
   it('observe_debug is a no-op outside debug mode', async () => {
     process.env.LMNR_LOGGING_LEVEL = 'info';
     const { observe_debug } = await importObservability();
-    const wrapped = observe_debug({ name: 'debug-only' })((value: number) => value + 1);
+    const wrapped = observe_debug({ name: 'debug-only' })(
+      (value: number) => value + 1
+    );
     const lmnr = require('lmnr') as any;
 
     expect(wrapped(1)).toBe(2);

@@ -85,7 +85,8 @@ export class CloudSync {
       }
 
       Object.assign(headers, this.auth_client.get_headers());
-      (event as any).device_id = (event as any).device_id ?? this.auth_client.device_id;
+      (event as any).device_id =
+        (event as any).device_id ?? this.auth_client.device_id;
 
       const payload =
         typeof (event as any)?.toJSON === 'function'

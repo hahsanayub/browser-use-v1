@@ -59,7 +59,9 @@ const createHistory = () => {
 
   const step1 = new AgentHistory(
     new AgentOutput({
-      action: [new ActionModel({ input: { index: 1, text: 'old@example.com' } })],
+      action: [
+        new ActionModel({ input: { index: 1, text: 'old@example.com' } }),
+      ],
     }),
     [new ActionResult({ extracted_content: 'ok' })],
     new BrowserStateHistory(
@@ -96,7 +98,9 @@ describe('Agent variable alignment', () => {
 
     const attrPriority = _private_for_tests.detectVariableType(
       'Test',
-      new DOMHistoryElement('input', '//*[@id="test"]', 1, [], { type: 'email' })
+      new DOMHistoryElement('input', '//*[@id="test"]', 1, [], {
+        type: 'email',
+      })
     );
     expect(attrPriority).toEqual(['email', 'email']);
   });
@@ -116,14 +120,18 @@ describe('Agent variable alignment', () => {
       }
     ) as AgentHistoryList;
 
-    const originalStep1 = (originalHistory.history[0].model_output!.action[0] as any)
-      .model_dump().input.text;
-    const originalStep2 = (originalHistory.history[1].model_output!.action[0] as any)
-      .model_dump().input.text;
-    const substitutedStep1 = (substituted.history[0].model_output!.action[0] as any)
-      .model_dump().input.text;
-    const substitutedStep2 = (substituted.history[1].model_output!.action[0] as any)
-      .model_dump().input.text;
+    const originalStep1 = (
+      originalHistory.history[0].model_output!.action[0] as any
+    ).model_dump().input.text;
+    const originalStep2 = (
+      originalHistory.history[1].model_output!.action[0] as any
+    ).model_dump().input.text;
+    const substitutedStep1 = (
+      substituted.history[0].model_output!.action[0] as any
+    ).model_dump().input.text;
+    const substitutedStep2 = (
+      substituted.history[1].model_output!.action[0] as any
+    ).model_dump().input.text;
 
     expect(originalStep1).toBe('old@example.com');
     expect(originalStep2).toBe('John');
@@ -142,17 +150,16 @@ describe('Agent variable alignment', () => {
     const historyPath = path.join(tempDir, 'AgentHistory.json');
     history.save_to_file(historyPath);
 
-    const rerunSpy = vi
-      .spyOn(agent, 'rerun_history')
-      .mockResolvedValueOnce([]);
+    const rerunSpy = vi.spyOn(agent, 'rerun_history').mockResolvedValueOnce([]);
 
     await agent.load_and_rerun(historyPath, {
       variables: { email: 'loaded@example.com' },
     });
 
     const passedHistory = rerunSpy.mock.calls[0]?.[0] as AgentHistoryList;
-    const updatedText = (passedHistory.history[0].model_output!.action[0] as any)
-      .model_dump().input.text;
+    const updatedText = (
+      passedHistory.history[0].model_output!.action[0] as any
+    ).model_dump().input.text;
     expect(updatedText).toBe('loaded@example.com');
 
     fs.rmSync(tempDir, { recursive: true, force: true });
@@ -187,9 +194,9 @@ describe('Agent variable alignment', () => {
       '<secret>password</secret>'
     );
     expect(serialized.history[0].result[0].extracted_content).toBe(password);
-    expect(serialized.history[1].model_output.action[0].search_google.query).toBe(
-      password
-    );
+    expect(
+      serialized.history[1].model_output.action[0].search_google.query
+    ).toBe(password);
 
     fs.rmSync(tempDir, { recursive: true, force: true });
   });

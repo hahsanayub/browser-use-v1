@@ -347,7 +347,9 @@ export class DomService {
 
       const text = node.get_all_text_till_next_clickable_element().trim();
       const textLower = text.toLowerCase();
-      const ariaLabel = String(node.attributes?.['aria-label'] ?? '').toLowerCase();
+      const ariaLabel = String(
+        node.attributes?.['aria-label'] ?? ''
+      ).toLowerCase();
       const title = String(node.attributes?.title ?? '').toLowerCase();
       const className = String(node.attributes?.class ?? '').toLowerCase();
       const role = String(node.attributes?.role ?? '').toLowerCase();

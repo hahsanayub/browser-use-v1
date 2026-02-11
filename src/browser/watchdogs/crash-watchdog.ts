@@ -147,10 +147,7 @@ export class CrashWatchdog extends BaseWatchdog {
     });
   }
 
-  private _detachPageListeners(
-    page: PageLike,
-    listeners: PageListenerBundle
-  ) {
+  private _detachPageListeners(page: PageLike, listeners: PageListenerBundle) {
     if (typeof page.off === 'function') {
       page.off('crash', listeners.crash);
       page.off('request', listeners.request);
@@ -264,7 +261,8 @@ export class CrashWatchdog extends BaseWatchdog {
       typeof request?.url === 'function'
         ? request.url()
         : (this.browser_session.active_tab?.url ?? '');
-    const method = typeof request?.method === 'function' ? request.method() : 'GET';
+    const method =
+      typeof request?.method === 'function' ? request.method() : 'GET';
     this._requestIds.set(requestObject, requestId);
     this._pendingRequests.set(requestId, {
       url: typeof url === 'string' ? url : '',
@@ -341,7 +339,8 @@ export class CrashWatchdog extends BaseWatchdog {
   }
 
   private async _checkPageResponsiveness() {
-    const page = (await this.browser_session.get_current_page()) as PageLike | null;
+    const page =
+      (await this.browser_session.get_current_page()) as PageLike | null;
     if (!page?.evaluate) {
       return;
     }
@@ -369,7 +368,10 @@ export class CrashWatchdog extends BaseWatchdog {
           error_type: 'TargetUnresponsive',
           message: (error as Error).message || 'Target became unresponsive',
           details: {
-            url: this._safePageUrl(page) ?? this.browser_session.active_tab?.url ?? '',
+            url:
+              this._safePageUrl(page) ??
+              this.browser_session.active_tab?.url ??
+              '',
             timeout_ms: timeoutMs,
           },
         })

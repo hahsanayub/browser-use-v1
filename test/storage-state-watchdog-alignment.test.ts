@@ -233,12 +233,12 @@ describe('storage state watchdog alignment', () => {
       const merged = JSON.parse(fs.readFileSync(storagePath, 'utf-8'));
       expect(merged.cookies).toHaveLength(2);
       expect(merged.origins).toHaveLength(2);
-      expect(
-        merged.cookies.some((cookie: any) => cookie.name === 'old')
-      ).toBe(true);
-      expect(
-        merged.cookies.some((cookie: any) => cookie.name === 'new')
-      ).toBe(true);
+      expect(merged.cookies.some((cookie: any) => cookie.name === 'old')).toBe(
+        true
+      );
+      expect(merged.cookies.some((cookie: any) => cookie.name === 'new')).toBe(
+        true
+      );
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }

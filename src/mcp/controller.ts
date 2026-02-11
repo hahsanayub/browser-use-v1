@@ -38,7 +38,8 @@ export class MCPToolWrapper {
       await this.client.connect();
     }
 
-    const targetTools = tools ?? ({ registry: this.registry } as Pick<Tools, 'registry'>);
+    const targetTools =
+      tools ?? ({ registry: this.registry } as Pick<Tools, 'registry'>);
     await this.client.registerToTools(targetTools, toolFilter, prefix);
   }
 

@@ -48,8 +48,8 @@ describe('markdown extractor alignment', () => {
     const chunks = chunkMarkdownByStructure(content, 80, 5, 0);
     expect(chunks.length).toBeGreaterThan(1);
 
-    const continuation = chunks.find(
-      (chunk) => chunk.overlap_prefix.includes('| Metric | Value |')
+    const continuation = chunks.find((chunk) =>
+      chunk.overlap_prefix.includes('| Metric | Value |')
     );
     expect(continuation).toBeDefined();
     expect(continuation?.overlap_prefix).toContain('| --- | --- |');

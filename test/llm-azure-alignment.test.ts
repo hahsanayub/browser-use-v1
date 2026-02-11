@@ -145,7 +145,10 @@ describe('ChatAzure alignment', () => {
       removeDefaultsFromSchema: true,
     });
 
-    const response = await llm.ainvoke([new UserMessage('extract')], schema as any);
+    const response = await llm.ainvoke(
+      [new UserMessage('extract')],
+      schema as any
+    );
     const request = responsesCreateMock.mock.calls[0]?.[0] ?? {};
     const schemaPayload = request.text?.format?.schema;
 
@@ -201,7 +204,9 @@ describe('ChatAzure alignment', () => {
     await llm.ainvoke([
       new UserMessage([
         new ContentPartTextParam('hello'),
-        new ContentPartImageParam(new ImageURL('https://example.com/image.png', 'low')),
+        new ContentPartImageParam(
+          new ImageURL('https://example.com/image.png', 'low')
+        ),
       ]),
     ]);
 
