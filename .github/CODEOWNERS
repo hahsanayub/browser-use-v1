@@ -1,0 +1,6 @@
+* @unadlib
+
+# CI/CD and release controls
+.github/workflows/* @unadlib
+package.json @unadlib
+pnpm-lock.yaml @unadlib
