@@ -241,7 +241,6 @@ describe('downloads watchdog alignment', () => {
       const session = new BrowserSession({
         profile: {
           downloads_path: downloadsDir,
-          auto_download_pdfs: true,
         },
       });
       const watchdog = new DownloadsWatchdog({ browser_session: session });

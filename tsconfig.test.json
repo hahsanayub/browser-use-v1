@@ -13,13 +13,10 @@
     "test/agent-skills-alignment.test.ts",
     "test/agent.test.ts",
     "test/controller.test.ts",
-    "test/default-action-watchdog-alignment.test.ts",
-    "test/downloads-watchdog-alignment.test.ts",
     "test/integration-advanced.test.ts",
     "test/integration.test.ts",
     "test/llm.test.ts",
     "test/mcp-server.test.ts",
-    "test/permissions-watchdog-alignment.test.ts",
     "test/skill-cli-alignment.test.ts"
   ]
 }

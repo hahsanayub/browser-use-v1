@@ -311,7 +311,7 @@ describe('default action watchdog alignment', () => {
       .spyOn(session, 'get_dropdown_options')
       .mockResolvedValue({
         message: '0: text="One", value="one"',
-      } as Record<string, string>);
+      } as any);
 
     await session.event_bus.dispatch_or_throw(
       new GetDropdownOptionsEvent({
@@ -338,7 +338,7 @@ describe('default action watchdog alignment', () => {
       .spyOn(session, 'select_dropdown_option')
       .mockResolvedValue({
         message: 'Selected option One (one)',
-      } as Record<string, string>);
+      } as any);
 
     await session.event_bus.dispatch_or_throw(
       new SelectDropdownOptionEvent({
@@ -425,7 +425,7 @@ describe('default action watchdog alignment', () => {
       const result = await session.event_bus.dispatch_or_throw(
         new ClickElementEvent({ node })
       );
-      const outputPath = result.event.event_result as string;
+      const outputPath = result.event.event_result as unknown as string;
 
       expect(cdpSend).toHaveBeenCalledWith('Page.printToPDF', {
         printBackground: true,

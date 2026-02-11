@@ -22,8 +22,9 @@ describe('permissions watchdog alignment', () => {
         detach: cdpDetach,
       })),
     } as any;
+    const grantPermissions = vi.fn(async () => {});
     session.browser_context = {
-      grantPermissions: vi.fn(async () => {}),
+      grantPermissions,
     } as any;
 
     const watchdog = new PermissionsWatchdog({ browser_session: session });
@@ -37,7 +38,7 @@ describe('permissions watchdog alignment', () => {
       permissions: ['geolocation'],
     });
     expect(cdpDetach).toHaveBeenCalledTimes(1);
-    expect(session.browser_context.grantPermissions).not.toHaveBeenCalled();
+    expect(grantPermissions).not.toHaveBeenCalled();
   });
 
   it('grants configured browser permissions on browser connected', async () => {
