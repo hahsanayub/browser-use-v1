@@ -21,7 +21,7 @@ Thank you for your interest in contributing to Browser-Use! This guide will help
 ### Prerequisites
 
 - Node.js 18+
-- npm or pnpm
+- pnpm
 - Git
 - A supported LLM API key (OpenAI, Anthropic, etc.)
 
@@ -33,7 +33,7 @@ git clone https://github.com/YOUR_USERNAME/browser-use.git
 cd browser-use
 
 # Install dependencies
-npm install
+pnpm install
 
 # Install Playwright browsers
 npx playwright install chromium
@@ -43,10 +43,10 @@ cp .env.example .env
 # Edit .env with your API keys
 
 # Run tests
-npm test
+pnpm test
 
 # Build the project
-npm run build
+pnpm build
 ```
 
 ---

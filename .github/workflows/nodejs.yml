@@ -19,17 +19,21 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.1
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-      - name: yarn install and verify
+          cache: pnpm
+      - name: pnpm install and verify
         run: |
-          yarn install --frozen-lockfile
-          yarn lint
-          yarn typecheck
-          yarn build
-          yarn test
-          yarn test:pack
+          pnpm install --frozen-lockfile
+          pnpm lint
+          pnpm typecheck
+          pnpm build
+          pnpm test
+          pnpm test:pack
         env:
           CI: true

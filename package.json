@@ -244,6 +244,7 @@
   "publishConfig": {
     "access": "public"
   },
+  "packageManager": "pnpm@10.28.1",
   "engines": {
     "node": ">=18.0.0"
   },
@@ -262,7 +263,7 @@
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
     "prettier": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "commit": "yarn git-cz",
+    "commit": "pnpm exec git-cz",
     "postinstall": "playwright install chromium",
     "postinstall:ci": "playwright install --with-deps chromium"
   },
@@ -333,5 +334,12 @@
     "commitizen": {
       "path": "cz-conventional-changelog"
     }
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "canvas",
+      "esbuild",
+      "protobufjs"
+    ]
   }
 }

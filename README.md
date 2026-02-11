@@ -396,23 +396,23 @@ const agent = new Agent({
 
 ```bash
 # Install dependencies
-npm install
+pnpm install
 
 # Build
-npm run build
+pnpm build
 
 # Run tests
-npm test
+pnpm test
 
 # Lint & format
-npm run lint
-npm run prettier
+pnpm lint
+pnpm prettier
 
 # Type checking
-npm run typecheck
+pnpm typecheck
 
 # Run an example
-npx tsx examples/simple-search.ts
+pnpm exec tsx examples/simple-search.ts
 ```
 
 ## Requirements

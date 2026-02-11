@@ -121,7 +121,7 @@ async function main() {
     console.log(
       '  2. Add your AZURE_OPENAI_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY'
     );
-    console.log('  3. Run: yarn tsx examples/search-wikipedia.ts');
+    console.log('  3. Run: pnpm exec tsx examples/search-wikipedia.ts');
     process.exit(1);
   }
 

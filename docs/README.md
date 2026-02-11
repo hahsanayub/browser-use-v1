@@ -37,9 +37,6 @@ Browser-Use enables AI agents to autonomously control web browsers, making decis
 # Using npm
 npm install browser-use
 
-# Using yarn
-yarn add browser-use
-
 # Using pnpm
 pnpm add browser-use
 ```
