@@ -81,14 +81,14 @@ const createAgentSettings = (
   enable_planning: true,
   planning_replan_on_stall: 3,
   planning_exploration_limit: 5,
-  max_steps: 100,
+  max_history_items: 100,
   llm_timeout: 60000,
   final_response_after_failure: true,
   message_compaction: null,
   loop_detection_window: 20,
   loop_detection_enabled: true,
   ...overrides,
-});
+} as AgentSettings);
 
 describe('Agent Sensitive Data Handling', () => {
   describe('Sensitive Data Configuration', () => {
@@ -227,29 +227,29 @@ describe('Agent Settings', () => {
   it('creates settings with defaults', () => {
     const settings = createAgentSettings();
 
-    expect(settings.max_steps).toBeDefined();
+    expect(settings.max_history_items).toBeDefined();
     expect(settings.use_vision).toBeDefined();
     expect(settings.include_recent_events).toBe(false);
   });
 
   it('overrides default settings', () => {
     const settings = createAgentSettings({
-      max_steps: 50,
+      max_history_items: 50,
       use_vision: false,
       max_actions_per_step: 5,
     });
 
-    expect(settings.max_steps).toBe(50);
+    expect(settings.max_history_items).toBe(50);
     expect(settings.use_vision).toBe(false);
     expect(settings.max_actions_per_step).toBe(5);
   });
 
-  it('validates max_steps', () => {
+  it('validates max_history_items', () => {
     const settings = createAgentSettings({
-      max_steps: 100,
+      max_history_items: 100,
     });
 
-    expect(settings.max_steps).toBeGreaterThan(0);
+    expect(settings.max_history_items).toBeGreaterThan(0);
   });
 });
 

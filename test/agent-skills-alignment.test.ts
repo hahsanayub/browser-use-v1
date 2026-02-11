@@ -43,18 +43,21 @@ describe('Agent skills alignment', () => {
     ]);
 
     const skillService: SkillService = {
-      get_all_skills: vi.fn(async () => [
-        {
-          id: 'skill-weather',
-          title: 'Get Weather Data',
-          description: 'Fetch weather for a city',
-          parameters: [
-            { name: 'city', type: 'string', required: true },
-            { name: 'auth_token', type: 'cookie', required: true },
-          ],
-          output_schema: null,
-        },
-      ]),
+      get_all_skills: vi.fn(
+        async () =>
+          [
+            {
+              id: 'skill-weather',
+              title: 'Get Weather Data',
+              description: 'Fetch weather for a city',
+              parameters: [
+                { name: 'city', type: 'string', required: true },
+                { name: 'auth_token', type: 'cookie', required: true },
+              ],
+              output_schema: null,
+            },
+          ] as any
+      ),
       execute_skill: vi.fn(async ({ skill_id, parameters, cookies }) => ({
         success: true,
         result: {
@@ -125,15 +128,20 @@ describe('Agent skills alignment', () => {
     vi.spyOn(browserSession, 'get_cookies').mockResolvedValue([] as any);
 
     const skillService: SkillService = {
-      get_all_skills: vi.fn(async () => [
-        {
-          id: 'skill-private',
-          title: 'Private Skill',
-          description: 'Needs auth cookie',
-          parameters: [{ name: 'session_id', type: 'cookie', required: true }],
-          output_schema: null,
-        },
-      ]),
+      get_all_skills: vi.fn(
+        async () =>
+          [
+            {
+              id: 'skill-private',
+              title: 'Private Skill',
+              description: 'Needs auth cookie',
+              parameters: [
+                { name: 'session_id', type: 'cookie', required: true },
+              ],
+              output_schema: null,
+            },
+          ] as any
+      ),
       execute_skill: vi.fn(async () => {
         throw new MissingCookieException('session_id', 'Login required first');
       }),
@@ -170,35 +178,38 @@ describe('Agent skills alignment', () => {
     ]);
 
     const skillService: SkillService = {
-      get_all_skills: vi.fn(async () => [
-        {
-          id: 'skill-open',
-          title: 'Open Skill',
-          description: 'No cookies required',
-          parameters: [{ name: 'query', type: 'string', required: true }],
-          output_schema: null,
-        },
-        {
-          id: 'skill-private',
-          title: 'Private Area',
-          description: 'Needs authenticated cookie',
-          parameters: [
+      get_all_skills: vi.fn(
+        async () =>
+          [
             {
-              name: 'session_id',
-              type: 'cookie',
-              required: true,
-              description: 'Login first',
+              id: 'skill-open',
+              title: 'Open Skill',
+              description: 'No cookies required',
+              parameters: [{ name: 'query', type: 'string', required: true }],
+              output_schema: null,
             },
             {
-              name: 'already_present',
-              type: 'cookie',
-              required: true,
-              description: 'Already set',
+              id: 'skill-private',
+              title: 'Private Area',
+              description: 'Needs authenticated cookie',
+              parameters: [
+                {
+                  name: 'session_id',
+                  type: 'cookie',
+                  required: true,
+                  description: 'Login first',
+                },
+                {
+                  name: 'already_present',
+                  type: 'cookie',
+                  required: true,
+                  description: 'Already set',
+                },
+              ],
+              output_schema: null,
             },
-          ],
-          output_schema: null,
-        },
-      ]),
+          ] as any
+      ),
       execute_skill: vi.fn(async () => ({ success: true, result: null })),
       close: vi.fn(async () => {}),
     };

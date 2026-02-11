@@ -230,9 +230,13 @@ describe('Schema Optimizer', () => {
 
       const optimized = SchemaOptimizer.createOptimizedJsonSchema(schema);
 
-      expect(optimized.properties.user).toBeDefined();
-      expect(optimized.properties.user.properties).toHaveProperty('name');
-      expect(optimized.properties.user.properties).toHaveProperty('email');
+      expect((optimized as any).properties.user).toBeDefined();
+      expect((optimized as any).properties.user.properties).toHaveProperty(
+        'name'
+      );
+      expect((optimized as any).properties.user.properties).toHaveProperty(
+        'email'
+      );
     });
 
     it('handles arrays', () => {
@@ -248,7 +252,7 @@ describe('Schema Optimizer', () => {
 
       const optimized = SchemaOptimizer.createOptimizedJsonSchema(schema);
 
-      expect(optimized.properties.items.type).toBe('array');
+      expect((optimized as any).properties.items.type).toBe('array');
     });
 
     it('preserves descriptions', () => {
@@ -264,7 +268,7 @@ describe('Schema Optimizer', () => {
 
       const optimized = SchemaOptimizer.createOptimizedJsonSchema(schema);
 
-      expect(optimized.properties.url.description).toBe(
+      expect((optimized as any).properties.url.description).toBe(
         'The URL to navigate to'
       );
     });
@@ -298,7 +302,7 @@ describe('Schema Optimizer', () => {
 
       const optimized = SchemaOptimizer.createOptimizedJsonSchema(schema);
 
-      expect(optimized.properties.direction.enum).toEqual([
+      expect((optimized as any).properties.direction.enum).toEqual([
         'up',
         'down',
         'left',
@@ -554,8 +558,9 @@ describe('Message Serialization Patterns', () => {
       }),
     ];
 
-    expect(messages[1].tool_calls).toBeDefined();
-    expect(messages[1].tool_calls).toHaveLength(1);
+    const assistant = messages[1] as AssistantMessage;
+    expect(assistant.tool_calls).toBeDefined();
+    expect(assistant.tool_calls).toHaveLength(1);
   });
 });
 
