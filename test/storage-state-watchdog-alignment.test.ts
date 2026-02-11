@@ -132,7 +132,15 @@ describe('storage state watchdog alignment', () => {
       );
 
       const goto = vi.fn(async () => {});
-      const evaluate = vi.fn(async () => {});
+      const evaluate = vi.fn(
+        async (
+          _fn: unknown,
+          _payload: {
+            localStorageEntries: Array<{ name: string; value: string }>;
+            sessionStorageEntries: Array<{ name: string; value: string }>;
+          }
+        ) => {}
+      );
       const close = vi.fn(async () => {});
       const newPage = vi.fn(async () => ({
         goto,
@@ -161,7 +169,13 @@ describe('storage state watchdog alignment', () => {
         timeout: 5000,
       });
       expect(evaluate).toHaveBeenCalledTimes(1);
-      const payload = evaluate.mock.calls[0][1];
+      const call = evaluate.mock.calls[0];
+      expect(call).toBeDefined();
+      const payload = call?.[1];
+      expect(payload).toBeDefined();
+      if (!payload) {
+        throw new Error('missing evaluate payload');
+      }
       expect(payload.localStorageEntries).toEqual([
         { name: 'token', value: 'abc' },
       ]);

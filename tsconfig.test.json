@@ -22,7 +22,6 @@
     "test/mcp-controller-tools-alignment.test.ts",
     "test/mcp-server.test.ts",
     "test/permissions-watchdog-alignment.test.ts",
-    "test/skill-cli-alignment.test.ts",
-    "test/storage-state-watchdog-alignment.test.ts"
+    "test/skill-cli-alignment.test.ts"
   ]
 }
