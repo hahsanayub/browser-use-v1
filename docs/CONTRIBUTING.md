@@ -110,6 +110,7 @@ pnpm test              # Run all tests
 pnpm test:coverage     # Run tests with coverage
 pnpm test:watch        # Watch mode
 pnpm test:pack         # Validate packaged public exports
+pnpm check             # Full local CI gate (lint/typecheck/tests/pack)
 
 # Lint
 pnpm lint              # Run ESLint
@@ -433,11 +434,7 @@ it('should call LLM with correct parameters', async () => {
 3. **Run checks**
 
    ```bash
-   pnpm lint
-   pnpm typecheck
-   pnpm test
-   pnpm build
-   pnpm test:pack
+   pnpm check
    ```
 
 4. **Commit with clear messages**
