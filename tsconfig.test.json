@@ -4,9 +4,5 @@
     "types": ["node", "vitest/globals"],
     "noEmit": true
   },
-  "include": ["test/**/*.ts", "src/**/*.d.ts"],
-  "exclude": [
-    "test/agent-constructor.test.ts",
-    "test/controller.test.ts"
-  ]
+  "include": ["test/**/*.ts", "src/**/*.d.ts"]
 }

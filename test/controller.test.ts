@@ -195,15 +195,17 @@ describe('Controller Registry Tests', () => {
     it('supports python-compatible simple signatures with special param injection', async () => {
       const registry = new Registry();
 
-      registry.action('Simple signature action')(async function search_simple(
-        query: string,
-        browser_session: any,
-        page_url: string | null
-      ) {
-        return new ActionResult({
-          extracted_content: `${query}|${Boolean(browser_session)}|${page_url}`,
-        });
-      });
+      registry.action('Simple signature action')(
+        (async function search_simple(
+          query: string,
+          browser_session: any,
+          page_url: string | null
+        ) {
+          return new ActionResult({
+            extracted_content: `${query}|${Boolean(browser_session)}|${page_url}`,
+          });
+        }) as any
+      );
 
       const browserSession = {
         agent_current_page: {
@@ -1227,7 +1229,7 @@ describe('Regression Coverage', () => {
     const dispatchSpy = vi.fn(async (event: ScrollToTextEvent) => ({
       event: {
         event_result: null,
-        event_name: event.event_name,
+        event_type: event.event_type,
       },
       handler_results: [{ handler_id: 'watchdog', result: null }],
       errors: [],
@@ -1333,7 +1335,7 @@ describe('Regression Coverage', () => {
   it('search action defaults to duckduckgo and navigates current tab', async () => {
     const controller = new Controller();
     const browserSession = {
-      navigate_to: vi.fn(async () => {}),
+      navigate_to: vi.fn(async (_url: string) => {}),
       create_new_tab: vi.fn(async () => {}),
     };
 
@@ -2001,7 +2003,7 @@ describe('Regression Coverage', () => {
               message: '0: text="United States", value="us"',
               long_term_memory: 'Found dropdown options for index 1.',
             },
-            event_name: event.event_name,
+            event_type: event.event_type,
           },
           handler_results: [{ handler_id: 'watchdog', result: null }],
           errors: [],
@@ -2037,7 +2039,7 @@ describe('Regression Coverage', () => {
               message: 'Selected option United Kingdom (uk)',
               long_term_memory: 'Selected option United Kingdom (uk)',
             },
-            event_name: event.event_name,
+            event_type: event.event_type,
           },
           handler_results: [{ handler_id: 'watchdog', result: null }],
           errors: [],
@@ -2395,7 +2397,7 @@ describe('Regression Coverage', () => {
         ({
           event: {
             event_result: Buffer.from('fake_png_data').toString('base64'),
-            event_name: event.event_name,
+            event_type: event.event_type,
           },
           handler_results: [{ handler_id: 'watchdog', result: null }],
           errors: [],
@@ -3273,7 +3275,10 @@ describe('Regression Coverage', () => {
     );
 
     expect(pageExtractionLlm.ainvoke).toHaveBeenCalled();
-    const messages = pageExtractionLlm.ainvoke.mock.calls[0]?.[0] ?? [];
+    const messages =
+      ((pageExtractionLlm.ainvoke.mock.calls[0] as unknown[] | undefined)?.[0] as
+        | Array<{ text?: string }>
+        | undefined) ?? [];
     const systemPrompt = messages[0]?.text ?? '';
     const userPrompt = messages[1]?.text ?? '';
     expect(systemPrompt).toContain('JSON Schema');

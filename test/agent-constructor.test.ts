@@ -664,11 +664,11 @@ describe('Agent constructor browser session alignment', () => {
     const primary = {
       ...createLlm('primary-model'),
       ainvoke: primaryInvoke,
-    } as BaseChatModel;
+    } as unknown as BaseChatModel;
     const fallback = {
       ...createLlm('fallback-model'),
       ainvoke: fallbackInvoke,
-    } as BaseChatModel;
+    } as unknown as BaseChatModel;
     const agent = new Agent({
       task: 'fallback invoke retry',
       llm: primary,
@@ -697,27 +697,33 @@ describe('Agent constructor browser session alignment', () => {
   });
 
   it('passes session_id into llm invoke options for model output generation', async () => {
-    const invokeMock = vi.fn(async () => ({
-      completion: {
-        thinking: null,
-        evaluation_previous_goal: 'none',
-        memory: 'none',
-        next_goal: 'finish',
-        action: [
-          {
-            done: {
-              text: 'Task completed',
-              success: true,
+    const invokeMock = vi.fn(
+      async (
+        _messages: unknown[],
+        _outputFormat?: unknown,
+        _options?: Record<string, unknown>
+      ) => ({
+        completion: {
+          thinking: null,
+          evaluation_previous_goal: 'none',
+          memory: 'none',
+          next_goal: 'finish',
+          action: [
+            {
+              done: {
+                text: 'Task completed',
+                success: true,
+              },
             },
-          },
-        ],
-      },
-      usage: null,
-    }));
+          ],
+        },
+        usage: null,
+      })
+    );
     const llm = {
       ...createLlm('primary-model'),
       ainvoke: invokeMock,
-    } as BaseChatModel;
+    } as unknown as BaseChatModel;
     const agent = new Agent({
       task: 'session id forwarding',
       llm,
@@ -728,7 +734,9 @@ describe('Agent constructor browser session alignment', () => {
       null
     );
 
-    const invokeOptions = invokeMock.mock.calls[0]?.[2] ?? {};
+    const invokeOptions = (invokeMock.mock.calls[0]?.[2] ?? {}) as {
+      session_id?: string;
+    };
     expect(invokeOptions.session_id).toBe(agent.session_id);
 
     await agent.close();
@@ -761,7 +769,7 @@ describe('Agent constructor browser session alignment', () => {
           usage: null,
         };
       }),
-    } as BaseChatModel;
+    } as unknown as BaseChatModel;
     const agent = new Agent({
       task: 'url shortening',
       llm,
@@ -861,7 +869,7 @@ describe('Agent constructor browser session alignment', () => {
     );
     const executeActionSpy = vi
       .spyOn(agent.controller.registry as any, 'execute_action')
-      .mockImplementation(async (_name: string, _params: any) => {
+      .mockImplementation(async (..._args: unknown[]) => {
         currentUrl = 'https://changed.test';
         return new ActionResult({ extracted_content: 'ok' });
       });
@@ -1770,7 +1778,9 @@ describe('Agent constructor browser session alignment', () => {
       check_for_new_elements: false,
     });
 
-    const executeContext = executeActionSpy.mock.calls[0]?.[2];
+    const executeContext = executeActionSpy.mock.calls[0]?.[2] as
+      | { extraction_schema?: unknown }
+      | undefined;
     expect(executeContext?.extraction_schema).toEqual(
       outputSchema.model_json_schema()
     );
@@ -1797,7 +1807,9 @@ describe('Agent constructor browser session alignment', () => {
       check_for_new_elements: false,
     });
 
-    const executeContext = executeActionSpy.mock.calls[0]?.[2];
+    const executeContext = executeActionSpy.mock.calls[0]?.[2] as
+      | { extraction_schema?: unknown }
+      | undefined;
     expect(executeContext?.extraction_schema).toMatchObject({
       type: 'object',
       properties: {
@@ -1842,7 +1854,9 @@ describe('Agent constructor browser session alignment', () => {
       check_for_new_elements: false,
     });
 
-    const executeContext = executeActionSpy.mock.calls[0]?.[2];
+    const executeContext = executeActionSpy.mock.calls[0]?.[2] as
+      | { extraction_schema?: unknown }
+      | undefined;
     expect(executeContext?.extraction_schema).toEqual(explicitExtractionSchema);
 
     await agent.close();
@@ -2540,10 +2554,16 @@ describe('Agent constructor browser session alignment', () => {
   });
 
   it('uses markdown extraction stats and page URL in _execute_ai_step (python c011 parity)', async () => {
-    const ainvoke = vi.fn(async () => ({
-      completion: 'ai result',
-      usage: null,
-    }));
+    const ainvoke = vi.fn(
+      async (
+        _messages: unknown[],
+        _outputFormat?: unknown,
+        _options?: Record<string, unknown>
+      ) => ({
+        completion: 'ai result',
+        usage: null,
+      })
+    );
     const llm = {
       model: 'gpt-test',
       provider: 'test',
@@ -2575,7 +2595,8 @@ describe('Agent constructor browser session alignment', () => {
     );
 
     expect(ainvoke).toHaveBeenCalledTimes(1);
-    const messages = ainvoke.mock.calls[0]?.[0] as any[];
+    const messages =
+      ((ainvoke.mock.calls[0] as unknown[] | undefined)?.[0] as any[]) ?? [];
     expect(String(messages?.[1]?.content ?? '')).toContain(
       'Content processed:'
     );
