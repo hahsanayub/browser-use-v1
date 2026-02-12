@@ -1,12 +1,13 @@
 import type {
   Browser as PlaywrightBrowser,
+  BrowserContextOptions,
   BrowserContext as PlaywrightBrowserContext,
   ElementHandle as PlaywrightElementHandle,
   FrameLocator as PlaywrightFrameLocator,
+  LaunchOptions,
   Page as PlaywrightPage,
   Locator as PlaywrightLocator,
 } from 'playwright';
-import type { BrowserContextOptions, LaunchOptions } from 'playwright-core';
 
 // Export Playwright types directly
 export type Browser = PlaywrightBrowser;

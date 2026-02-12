@@ -7,7 +7,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { google } from 'googleapis';
-import type { GaxiosResponse } from 'gaxios';
 import type { gmail_v1 } from 'googleapis';
 import { createLogger } from '../../logging-config.js';
 import { CONFIG } from '../../config.js';
