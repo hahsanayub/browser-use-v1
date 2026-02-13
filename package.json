@@ -249,7 +249,7 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "build": "node scripts/clean-dist.mjs && tsc && node scripts/copy-dom-tree.mjs",
+    "build": "node scripts/clean-dist.mjs && tsc && node scripts/copy-dom-tree.mjs && node scripts/copy-md-files.mjs",
     "build:watch": "tsc --watch --preserveWatchOutput",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
